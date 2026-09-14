@@ -37,6 +37,12 @@ public class MineProfileResponse {
     /** 个人简介 */
     private String intro;
 
+    /** 联系手机；更新时 null 不改，空串表示明确清空。 */
+    private String contactPhone;
+
+    /** 联系微信；更新时 null 不改，空串表示明确清空。 */
+    private String contactWechat;
+
     /** 个人标签 */
     private List<MineProfileTagDTO> tags;
 }

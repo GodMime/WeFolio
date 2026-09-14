@@ -95,7 +95,7 @@ class TeamVideoCarouselComponentTest {
     @Test
     void configShouldContainOnlyDisplayOptionsAndIdentifiers() {
         assertFields(TeamVideoCarouselComponentConfig.class,
-                "title", "items", "showTitle", "showSwipeHint");
+                "title", "showComponentTitle", "items", "showTitle", "showSwipeHint", "displayStyle", "showDescription");
         assertFields(TeamVideoCarouselComponentConfig.Item.class, "memberUserId", "workId");
     }
 
@@ -112,9 +112,9 @@ class TeamVideoCarouselComponentTest {
         JSONObject normalized = validator().normalizeAndValidate(raw, context());
 
         assertThat(normalized.toJSONString()).isEqualTo(
-                "{\"title\":\"团队影像\",\"items\":[{\"memberUserId\":2,\"workId\":102},"
+                "{\"title\":\"团队影像\",\"showComponentTitle\":true,\"items\":[{\"memberUserId\":2,\"workId\":102},"
                         + "{\"memberUserId\":1,\"workId\":101},{\"memberUserId\":3,\"workId\":103}],"
-                        + "\"showTitle\":true,\"showSwipeHint\":true}");
+                        + "\"showTitle\":true,\"showSwipeHint\":true,\"displayStyle\":\"STACKED\",\"showDescription\":false}");
     }
 
     /**
@@ -129,6 +129,28 @@ class TeamVideoCarouselComponentTest {
         JSONObject normalized = validator().normalizeAndValidate(raw, context());
 
         assertThat(normalized.getString("title")).isEqualTo("视频作品");
+    }
+
+    /** 组件标题开关缺省或空值开启，关闭仍保留标题与默认回填，独立于作品标题开关。 */
+    @Test
+    void componentTitleSwitchShouldKeepTextAndDefaultEnabledThroughValidationAndRendering() {
+        stubValidResources();
+        for (Boolean showComponentTitle : new Boolean[]{null, true, false}) {
+            for (String title : List.of("团队影像", "  ")) {
+                JSONObject raw = config(title, item(1L, 101L), item(2L, 102L), item(3L, 103L));
+                raw.put("showComponentTitle", showComponentTitle);
+                raw.put("showTitle", false);
+
+                JSONObject normalized = validator().normalizeAndValidate(raw, context());
+                JSONObject rendered = renderer().render(raw, context());
+
+                for (JSONObject result : List.of(normalized, rendered)) {
+                    assertThat(result).containsEntry("showComponentTitle", !Boolean.FALSE.equals(showComponentTitle))
+                            .containsEntry("title", title.isBlank() ? "视频作品" : title)
+                            .containsEntry("showTitle", false);
+                }
+            }
+        }
     }
 
     /**
@@ -246,6 +268,7 @@ class TeamVideoCarouselComponentTest {
 
         assertThat(rendered).isNotNull();
         assertThat(rendered.getString("title")).isEqualTo("视频作品");
+        assertThat(rendered.getBooleanValue("showComponentTitle")).isTrue();
         assertThat(rendered.getBooleanValue("showTitle")).isTrue();
         assertThat(rendered.getBooleanValue("showSwipeHint")).isTrue();
         assertThat(rendered.getJSONArray("items")).isEqualTo(rendered.getJSONArray("works"));

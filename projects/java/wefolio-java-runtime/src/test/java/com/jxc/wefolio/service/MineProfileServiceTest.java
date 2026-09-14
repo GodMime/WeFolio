@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.common.auth.AuthContext;
+import com.jxc.wefolio.config.AuthTokenProperties;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dto.MineProfileAssetUploadTicketRequest;
 import com.jxc.wefolio.dto.MineProfileAssetUploadTicketResponse;
@@ -67,7 +68,7 @@ class MineProfileServiceTest {
                 """);
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         MineProfileResponse response = service.getProfile();
 
@@ -96,7 +97,7 @@ class MineProfileServiceTest {
         user.setProfileTags("[\"高端婚礼\",\"双语主持\"]");
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         MineProfileResponse response = service.getProfile();
 
@@ -125,7 +126,7 @@ class MineProfileServiceTest {
         when(cosService.headObject("WF8392/others/avatar-20260703141000-a1b2c3d4.jpg"))
                 .thenReturn(new CosService.ObjectHead("image/jpeg", 1024L));
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -156,7 +157,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("新名字");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -186,7 +187,7 @@ class MineProfileServiceTest {
         when(cosService.headObject("WF8392/others/wechat-qr-20260703140512-a1b2c3d4.png"))
                 .thenReturn(new CosService.ObjectHead("image/png", 1200L));
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         MineProfileResponse response = service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -208,7 +209,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("林安");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<UserEntity> entityCaptor = ArgumentCaptor.forClass(UserEntity.class);
@@ -224,7 +225,7 @@ class MineProfileServiceTest {
         user.setProfileTags("[,]");
         when(userEntityMapper.selectById(7L)).thenReturn(user);
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         MineProfileResponse response = service.getProfile();
 
         assertThat(response.getTags()).isEmpty();
@@ -241,7 +242,7 @@ class MineProfileServiceTest {
                 tag(" 高端婚礼 ", "#2d5f9a")
         ));
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -254,7 +255,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setTags((List) List.of(tag("高端婚礼", "#123456")));
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -311,7 +312,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setTags((List) List.of(tag("舞台灯光", "#36516e")));
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         JSONArray tags = JSON.parseArray(user.getProfileTags());
@@ -338,7 +339,7 @@ class MineProfileServiceTest {
         request.setMimeType("image/jpeg");
         request.setFileSize(1024L);
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         MineProfileAssetUploadTicketResponse response = service.createProfileAssetUploadTicket(request);
 
         assertThat(response.getAssetType()).isEqualTo("AVATAR");
@@ -366,7 +367,7 @@ class MineProfileServiceTest {
         request.setMimeType("image/png");
         request.setFileSize(200L * 1024L);
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         MineProfileAssetUploadTicketResponse response = service.createProfileAssetUploadTicket(request);
 
         assertThat(response.getAssetType()).isEqualTo("WECHAT_QR");
@@ -383,7 +384,7 @@ class MineProfileServiceTest {
         request.setMimeType("image/png");
         request.setFileSize(300L * 1024L);
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.createProfileAssetUploadTicket(request))
                 .isInstanceOf(BusinessException.class)
@@ -402,7 +403,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260701120000-a1b2c3d4.png");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -427,7 +428,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getWechatQrUpdateCount()).isEqualTo(3);
@@ -447,7 +448,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -463,7 +464,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -485,7 +486,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setWechatQrUrl("https://cos.example.com/WF8392/others/wechat-qr-20260703140512-f6e7d8c9.png");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getWechatQrUpdateCount()).isEqualTo(1);
@@ -497,7 +498,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setWechatQrUrl("https://cos.example.com/WF9999/others/wechat-qr-20260703140512-f6e7d8c9.png");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -518,7 +519,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141000-a1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -545,7 +546,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141100-b1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getAvatarUpdateCount()).isEqualTo(4);
@@ -572,7 +573,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141200-c1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getAvatarUpdateCount()).isEqualTo(1);
@@ -598,7 +599,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141300-d1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getAvatarUpdateCount()).isEqualTo(1);
@@ -617,7 +618,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://example.com/avatar.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -639,7 +640,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -662,7 +663,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141400-e1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getAvatarUpdateCount()).isEqualTo(10);
@@ -680,7 +681,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://cos.example.com/WF8392/others/avatar-20260703141500-f1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -699,7 +700,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl(avatarUrl);
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         assertThat(user.getAvatarUrl()).isEqualTo(avatarUrl);
@@ -712,7 +713,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setAvatarUrl("https://cos.example.com/WF9999/others/avatar-20260703141600-a1b2c3d4.jpg");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -729,7 +730,7 @@ class MineProfileServiceTest {
         MineProfileUpdateRequest request = new MineProfileUpdateRequest();
         request.setNickname("新名字");
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
         service.updateProfile(request);
 
         ArgumentCaptor<Wrapper<UserEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
@@ -757,7 +758,7 @@ class MineProfileServiceTest {
                 tag("第十一个超长标签", "#0f766e")
         ));
 
-        MineProfileService service = new MineProfileService(userEntityMapper, cosService);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
 
         assertThatThrownBy(() -> service.updateProfile(request))
                 .isInstanceOf(BusinessException.class)
@@ -776,6 +777,92 @@ class MineProfileServiceTest {
         user.setIntro("10 年婚礼主持经验");
         user.setStatus("ACTIVE");
         return user;
+    }
+
+    /** 未设置手机跟随登录手机，明确清空后不再回填。 */
+    @Test void contactPhoneDefaultsOnlyWhenNeverSet() {
+        UserEntity user = activeUser(); user.setPhoneNumber("13800138000");
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
+        assertThat(service.getProfile().getContactPhone()).isEqualTo("13800138000");
+        user.setPhoneNumber("13900139000");
+        assertThat(service.getProfile().getContactPhone()).isEqualTo("13900139000");
+        user.setContactPhoneCiphertext("");
+        assertThat(service.getProfile().getContactPhone()).isEmpty();
+    }
+
+    /** 单项手机密文损坏时读资料仍成功，健康微信保留，告警不输出联系值或密文。 */
+    @Test void brokenPhoneFallsBackWithoutExposingContactValues(CapturedOutput output) {
+        UserEntity user = activeUser(); user.setPhoneNumber("13800138000");
+        user.setContactPhoneCiphertext("broken-phone-ciphertext");
+        String wechat = contactCrypto().encryptWechat("private-wechat"); user.setContactWechatCiphertext(wechat);
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        var response = new MineProfileService(contactCrypto(), userEntityMapper, cosService).getProfile();
+        assertThat(response.getContactPhone()).isEqualTo("13800138000");
+        assertThat(response.getContactWechat()).isEqualTo("private-wechat");
+        assertThat(user.getContactPhoneCiphertext()).isEqualTo("broken-phone-ciphertext");
+        assertThat(output.getOut()).contains("userId=7", "field=contact_phone_ciphertext")
+                .doesNotContain("13800138000", "private-wechat", wechat, "broken-phone-ciphertext");
+    }
+
+    /** 旧端更新无关资料时，损坏微信仅降级为空，既有密文和健康手机都不被覆盖。 */
+    @Test void brokenWechatDoesNotFailLegacyProfileUpdate(CapturedOutput output) {
+        UserEntity user = activeUser(); user.setContactPhoneCiphertext(contactCrypto().encryptPhone("13900139000"));
+        user.setContactWechatCiphertext("broken-wechat-ciphertext");
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        var request = new MineProfileUpdateRequest(); request.setIntro("更新简介");
+        var response = new MineProfileService(contactCrypto(), userEntityMapper, cosService).updateProfile(request);
+        assertThat(response.getContactPhone()).isEqualTo("13900139000");
+        assertThat(response.getContactWechat()).isEmpty(); assertThat(response.getIntro()).isEqualTo("更新简介");
+        assertThat(user.getContactWechatCiphertext()).isEqualTo("broken-wechat-ciphertext");
+        assertThat(output.getOut()).contains("field=contact_wechat_ciphertext")
+                .doesNotContain("13900139000", "broken-wechat-ciphertext", user.getContactPhoneCiphertext());
+    }
+
+    /** 联系字段读取不掩盖系统密钥缺失等配置错误。 */
+    @Test void contactReadPreservesSystemConfigurationFailure() {
+        UserEntity user = activeUser(); user.setContactPhoneCiphertext(contactCrypto().encryptPhone("13800138000"));
+        when(userEntityMapper.selectById(7L)).thenReturn(user);
+        var crypto = new UserContactCryptoService(new EncryptedAuthTokenService(new AuthTokenProperties()));
+        assertThatThrownBy(() -> new MineProfileService(crypto, userEntityMapper, cosService).getProfile())
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(com.jxc.wefolio.message.MiniappAuthMessage.TOKEN_SECRET_MISSING_MESSAGE);
+    }
+
+    /** 新字段 trim 保存加密，旧请求和 null 不覆盖，明确清空保留哨兵。 */
+    @Test void contactFieldsRoundTripAndLegacyUpdatesKeepSavedValues() {
+        UserEntity user = activeUser(); when(userEntityMapper.selectById(7L)).thenReturn(user);
+        when(userEntityMapper.update(any(UserEntity.class), any(Wrapper.class))).thenReturn(1);
+        MineProfileService service = new MineProfileService(contactCrypto(), userEntityMapper, cosService);
+        MineProfileUpdateRequest request = new MineProfileUpdateRequest();
+        request.setContactPhone(" 13800138000 "); request.setContactWechat(" 小映 ");
+        MineProfileResponse saved = service.updateProfile(request);
+        assertThat(saved.getContactPhone()).isEqualTo("13800138000"); assertThat(saved.getContactWechat()).isEqualTo("小映");
+        assertThat(user.getContactPhoneCiphertext()).startsWith("wf-user-contact-phone:").doesNotContain("13800138000");
+        String phoneCiphertext = user.getContactPhoneCiphertext(), wechatCiphertext = user.getContactWechatCiphertext();
+        MineProfileUpdateRequest legacy = new MineProfileUpdateRequest(); legacy.setIntro("旧端改简介");
+        service.updateProfile(legacy);
+        assertThat(user.getContactPhoneCiphertext()).isEqualTo(phoneCiphertext); assertThat(user.getContactWechatCiphertext()).isEqualTo(wechatCiphertext);
+        request.setContactPhone(""); request.setContactWechat(""); service.updateProfile(request);
+        assertThat(user.getContactPhoneCiphertext()).isEmpty(); assertThat(service.getProfile().getContactWechat()).isEmpty();
+    }
+
+    /** 联系字段拒绝原始换行和控制符，支持多字节码点长度。 */
+    @Test void validatesContactLengthAndControlCharacters() {
+        assertThat(PortfolioContactInfoConfigSupport.phone("😀".repeat(32))).hasSize(64);
+        assertThatThrownBy(() -> PortfolioContactInfoConfigSupport.phone("😀".repeat(33))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> PortfolioContactInfoConfigSupport.wechat("a".repeat(65))).isInstanceOf(BusinessException.class);
+        for (String value : List.of("a\nb", "a\rb", "a\tb", "\na", "a\u2028b")) {
+            assertThatThrownBy(() -> PortfolioContactInfoConfigSupport.wechat(value)).isInstanceOf(BusinessException.class);
+        }
+    }
+
+    /** 使用固定测试密钥验证真实三态资料加密。 */
+    private UserContactCryptoService contactCrypto() {
+        AuthTokenProperties properties = new AuthTokenProperties();
+        properties.setSecret("profile-contact-test-secret");
+        return new UserContactCryptoService(new EncryptedAuthTokenService(properties));
     }
 
     private JSONObject tag(String content, String color) {

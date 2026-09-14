@@ -152,7 +152,7 @@ class TeamSingleWorkComponentTest {
         JSONObject normalized = validator.normalizeAndValidate(raw, CONTEXT);
 
         assertThat(normalized.keySet())
-                .containsExactly("memberUserId", "workId", "showTitle", "showDescription");
+                .containsExactly("memberUserId", "workId", "showTitle", "showDescription", "openMode", "detailOptions");
         assertThat(normalized.getBooleanValue("showTitle")).isFalse();
         assertThat(normalized.getBooleanValue("showDescription")).isTrue();
 

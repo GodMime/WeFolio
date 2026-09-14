@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio.component.singlework;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
@@ -82,6 +83,8 @@ public class TeamSingleWorkComponentValidator {
         normalized.setWorkId(parsePositiveLong(config.get("workId")));
         normalized.setShowTitle(parseBoolean(config.get("showTitle"), true));
         normalized.setShowDescription(parseBoolean(config.get("showDescription"), false));
+        normalized.setOpenMode(PortfolioComponentDisplayOptionsSupport.openMode(config));
+        normalized.setDetailOptions(PortfolioComponentDisplayOptionsSupport.detailOptions(config));
         return normalized;
     }
 

@@ -5,6 +5,16 @@ package com.jxc.wefolio.message;
  */
 public interface MineProfileMessage {
 
+    /** 联系字段格式错误。 */
+    String CONTACT_FORMAT_INVALID = "联系信息不能包含换行或控制字符";
+    /** 联系手机长度错误。 */
+    String CONTACT_PHONE_LENGTH_INVALID = "联系手机最多 32 个字符";
+    /** 联系微信长度错误。 */
+    String CONTACT_WECHAT_LENGTH_INVALID = "联系微信最多 64 个字符";
+    /** 联系资料加解密受控错误，不向外暴露原文。 */
+    String CONTACT_CRYPTO_INVALID = "联系资料处理失败，请重试";
+
+
     /** 资料图片为空提示 */
     String PROFILE_ASSET_REQUIRED_MESSAGE = "资料图片不能为空";
 

@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service.teamportfolio.component.textsection;
 
+import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.service.PortfolioTextBackgroundConfigSupport;
@@ -79,6 +80,9 @@ public class TeamTextSectionComponentRenderer {
         source.put(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY, fontSizeRpx);
         source.put(PortfolioTextColorSupport.COLOR_CONFIG_KEY,
                 PortfolioTextColorSupport.forRender(source.get(PortfolioTextColorSupport.COLOR_CONFIG_KEY)));
+        var lineHeight = PortfolioTextLineHeightSupport.forRender(source);
+        if (lineHeight == null) { source.remove(PortfolioTextLineHeightSupport.LINE_HEIGHT); }
+        else { source.put(PortfolioTextLineHeightSupport.LINE_HEIGHT, lineHeight); }
         JSONObject result;
         try {
             TeamTextSectionComponentConfig componentConfig =

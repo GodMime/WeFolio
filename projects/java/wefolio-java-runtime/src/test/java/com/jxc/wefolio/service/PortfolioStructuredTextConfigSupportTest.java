@@ -2,12 +2,17 @@ package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONWriter;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
+import com.jxc.wefolio.service.teamportfolio.component.structuredtextsection.TeamStructuredTextSectionComponentValidator;
 import org.junit.jupiter.api.Test;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +41,27 @@ class PortfolioStructuredTextConfigSupportTest {
         assertThat(result.getString("backgroundTreatment")).isEqualTo("GRADIENT");
     }
 
+    /** 个人与团队各类文字区块接受扩大后的字号边界及相邻整数，保存与展示保持一致。 */
+    @Test void acceptsSharedFontSizeRangeForAllTextBlocks() {
+        for (boolean team : List.of(false,true)) {
+            for (String type : List.of("TITLE","PARAGRAPH","LIST","HINT")) {
+                for (int size : List.of(10,11,19,20,48,49,95,96)) {
+                    JSONObject source = textConfig(type,size);
+                    JSONObject normalized = normalize(source,team);
+                    assertThat(normalized.getJSONArray("blocks").getJSONObject(0))
+                            .containsEntry("fontSizeRpx",size);
+                    JSONObject rendered = new JSONObject(PortfolioStructuredTextConfigSupport.forRender(normalized,team));
+                    assertThat(rendered.getJSONArray("blocks").getJSONObject(0))
+                            .containsEntry("fontSizeRpx",size);
+                }
+                for (Object size : Arrays.asList(9,97,10.5,"10",null)) {
+                    assertThatThrownBy(() -> normalize(textConfig(type,size),team))
+                            .as("team=%s, type=%s, size=%s",team,type,size).isInstanceOf(BusinessException.class);
+                }
+            }
+        }
+    }
+
     /** 留白只保留适用字段，列表剔除临时普通内容。 */
     @Test void stripsInapplicableFields() {
         JSONObject result = normalize("""
@@ -47,6 +73,37 @@ class PortfolioStructuredTextConfigSupportTest {
         assertThat(result.getJSONArray("blocks").getJSONObject(0)).containsEntry("heightRpx",32)
                 .doesNotContainKeys("content","fontSizeRpx","color");
         assertThat(result.getJSONArray("blocks").getJSONObject(1)).doesNotContainKey("content");
+    }
+
+    /** 个人与团队留白支持扩大的高度范围，保存及展示保留旧客户端上下间距。 */
+    @Test void acceptsSpacerHeightUpTo512AndPreservesLegacyMargins() {
+        for (boolean team : List.of(false,true)) {
+            for (int height : List.of(0,128,132,508,512)) {
+                JSONObject source = spacerConfig(height);
+                JSONObject normalized = normalize(source,team);
+                JSONObject spacer = normalized.getJSONArray("blocks").getJSONObject(0);
+                assertThat(spacer).containsEntry("heightRpx",height)
+                        .containsEntry("marginTopRpx",128).containsEntry("marginBottomRpx",16);
+                JSONObject rendered = new JSONObject(PortfolioStructuredTextConfigSupport.forRender(normalized,team));
+                assertThat(rendered.getJSONArray("blocks").getJSONObject(0)).isEqualTo(spacer);
+            }
+        }
+    }
+
+    /** 留白高度仍须为范围内整数且符合步进，上下间距不能随留白高度放宽。 */
+    @Test void rejectsInvalidSpacerHeightAndRetainsMarginLimits() {
+        for (boolean team : List.of(false,true)) {
+            for (Object height : Arrays.asList(-4,2,513,516,512.5,"512",null)) {
+                assertThatThrownBy(() -> normalize(spacerConfig(height),team))
+                        .as("team=%s, height=%s",team,height).isInstanceOf(BusinessException.class);
+            }
+            for (String margin : List.of("marginTopRpx","marginBottomRpx")) {
+                JSONObject source = spacerConfig(512);
+                source.getJSONArray("blocks").getJSONObject(0).put(margin,132);
+                assertThatThrownBy(() -> normalize(source,team))
+                        .as("team=%s, margin=%s",team,margin).isInstanceOf(BusinessException.class);
+            }
+        }
     }
 
     /** 字号、间距、颜色、标识和内容边界不能静默回填。 */
@@ -112,6 +169,32 @@ class PortfolioStructuredTextConfigSupportTest {
             config.put("backgroundWorkId",invalid);
             assertThatThrownBy(() -> normalize(config.toJSONString())).isInstanceOf(BusinessException.class);
         }
+    }
+
+    /** 构造单个非空文字区块，列表使用条目字段。 */
+    private JSONObject textConfig(String type,Object size) {
+        JSONObject block = new JSONObject();
+        block.put("blockKey","text"); block.put("type",type); block.put("fontSizeRpx",size);
+        if ("LIST".equals(type)) { block.put("items",List.of("文字")); }
+        else { block.put("content","文字"); }
+        return new JSONObject(Map.of("blocks",List.of(block)));
+    }
+
+    /** 构造带旧客户端上下间距的留白及非空正文。 */
+    private JSONObject spacerConfig(Object height) {
+        JSONObject config = JSON.parseObject("""
+                {"blocks":[{"blockKey":"space","type":"SPACER","marginTopRpx":128,"marginBottomRpx":16},
+                {"blockKey":"body","type":"PARAGRAPH","content":"正文"}]}
+                """);
+        config.getJSONArray("blocks").getJSONObject(0).put("heightRpx",height);
+        return config;
+    }
+
+    /** 分别通过个人和团队实际保存入口验证共享规则。 */
+    private JSONObject normalize(JSONObject source,boolean team) {
+        if (!team) { return normalize(JSON.toJSONString(source,JSONWriter.Feature.WriteNulls)); }
+        return new TeamStructuredTextSectionComponentValidator(mock(TeamTextBackgroundSupport.class))
+                .normalizeAndValidate(source,new TeamPortfolioComponentContext(1,2,3));
     }
 
     /** 使用实际组件入口，确保共享规则已接入保存流程。 */

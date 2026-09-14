@@ -91,9 +91,11 @@ public final class PortfolioTextBackgroundConfigSupport {
         }
     }
 
-    /** 背景仅允许图片和动图。 */
+    /** 背景允许图片、动图和视频，具体播放行为由展示端处理。 */
     public static boolean supportsMedia(String mediaType) {
-        return MediaTypeDict.IMAGE.getCode().equals(mediaType) || MediaTypeDict.ANIMATION.getCode().equals(mediaType);
+        return MediaTypeDict.IMAGE.getCode().equals(mediaType)
+                || MediaTypeDict.ANIMATION.getCode().equals(mediaType)
+                || MediaTypeDict.VIDEO.getCode().equals(mediaType);
     }
 
     /** 拒绝非法背景配置。 */

@@ -28,6 +28,12 @@ public class MineProfileUpdateRequest {
     /** 个人简介 */
     private String intro;
 
+    /** 联系手机；更新时 null 不改，空串表示明确清空。 */
+    private String contactPhone;
+
+    /** 联系微信；更新时 null 不改，空串表示明确清空。 */
+    private String contactWechat;
+
     /** 个人标签；兼容旧字符串数组和新对象数组 */
     private List<?> tags;
 }

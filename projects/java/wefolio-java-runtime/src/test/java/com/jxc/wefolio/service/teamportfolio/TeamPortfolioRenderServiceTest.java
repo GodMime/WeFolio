@@ -67,6 +67,72 @@ class TeamPortfolioRenderServiceTest {
     @Mock private TeamQrContactComponentRenderer qrRenderer;
     @Mock private TeamVideoCarouselComponentRenderer videoCarouselRenderer;
 
+    /** 团队联系信息展示补历史无边框默认值，开启和关闭时均透传完整外观配置。 */
+    @Test
+    void rendersContactBorderSettingsAndLegacyDefaults() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var contact = component("contact", TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true);
+        contact.setConfig(JSONObject.of("contactPhone", "123"));
+        var input = config(List.of(contact));
+        assertThat(service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData())
+                .containsEntry("contactBorder", false).containsEntry("contactBorderWidthRpx", 1)
+                .containsEntry("contactBorderColor", "AUTO").containsEntry("horizontalMarginRpx", 0)
+                .containsEntry("verticalMarginRpx", 0);
+        for (boolean enabled : List.of(false, true)) {
+            contact.setConfig(JSONObject.of("contactPhone", "123", "contactBorder", enabled, "contactBorderWidthRpx", 8,
+                    "contactBorderColor", "#aabbcc", "horizontalMarginRpx", 96, "verticalMarginRpx", 24));
+            assertThat(service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData())
+                    .containsEntry("contactPhone", "123").containsEntry("contactBorder", enabled)
+                    .containsEntry("contactBorderWidthRpx", 8).containsEntry("contactBorderColor", "#AABBCC")
+                    .containsEntry("horizontalMarginRpx", 96).containsEntry("verticalMarginRpx", 24);
+        }
+    }
+
+    /** 团队网格渲染补旧版默认值，并完整透传作者设置的外侧留白。 */
+    @Test void rendersGridOuterMarginsAndLegacyDefaults() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        var input = config(List.of(grid));
+        var values = service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData();
+        assertThat(values).containsEntry("horizontalMarginRpx", 0).containsEntry("verticalMarginRpx", 0);
+        values.put("horizontalMarginRpx", 96); values.put("verticalMarginRpx", 24); grid.setConfig(values);
+        assertThat(service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData())
+                .containsEntry("columns", 2).containsEntry("horizontalMarginRpx", 96).containsEntry("verticalMarginRpx", 24);
+    }
+
+    /** 团队展示保留跨八行的合并单元格及原文，配置序列化后不截断新增行。 */
+    @Test void rendersEightRowGridWithoutTruncation() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        grid.setConfig(JSONObject.of("rows", 8, "columns", 1, "columnWeights", List.of(1),
+                "rowMinHeightsRpx", List.of(180, 180, 180, 180, 180, 180, 180, 180),
+                "cells", List.of(Map.of("cellKey", "merged", "row", 0, "column", 0, "rowSpan", 8, "columnSpan", 1,
+                        "blocks", List.of(Map.of("blockKey", "block", "runs", List.of(Map.of("runKey", "run", "text", "八行文字"))))))));
+        var rendered = service().render(JSON.toJSONString(config(List.of(grid))), context)
+                .getComponents().getFirst().getData();
+        assertThat(rendered).containsEntry("rows", 8).containsEntry("columns", 1);
+        assertThat(rendered.getJSONArray("rowMinHeightsRpx")).hasSize(8);
+        assertThat(rendered.getJSONArray("cells").getJSONObject(0)).containsEntry("rowSpan", 8);
+        assertThat(rendered.getJSONArray("cells").getJSONObject(0).getJSONArray("blocks").getJSONObject(0)
+                .getJSONArray("runs").getJSONObject(0)).containsEntry("text", "八行文字");
+    }
+
+    /** 边框开关不影响已保存宽度颜色的渲染透传，旧配置仍返回主题色默认值。 */
+    @Test void rendersGridBorderOptionsAndLegacyDefaults() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        var input = config(List.of(grid));
+        var defaults = service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData();
+        assertThat(defaults).containsEntry("cellBorderWidthRpx", 1).containsEntry("cellBorderColor", "AUTO");
+        for (boolean enabled : List.of(false, true)) {
+            defaults.put("cellBorder", enabled); defaults.put("cellBorderWidthRpx", 8); defaults.put("cellBorderColor", "#aabbcc");
+            grid.setConfig(defaults);
+            assertThat(service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData())
+                    .containsEntry("cellBorder", enabled).containsEntry("cellBorderWidthRpx", 8)
+                    .containsEntry("cellBorderColor", "#AABBCC");
+        }
+    }
+
     /**
      * 渲染仅分发已启用的团队组件，并保持其稳定排序。
      */
@@ -89,6 +155,8 @@ class TeamPortfolioRenderServiceTest {
         assertThat(render.getTitle()).isEqualTo("团队作品集");
         assertThat(render.getComponents()).extracting(TeamPortfolioRenderDto.Component::getComponentType)
                 .containsExactly(
+                        TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(),
+                        TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(),
                         TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode(),
                         TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
                         TeamPortfolioComponentTypeDict.QR_CONTACT.getCode(),
@@ -102,7 +170,13 @@ class TeamPortfolioRenderServiceTest {
                         TeamPortfolioComponentTypeDict.CAROUSEL.getCode(),
                         TeamPortfolioComponentTypeDict.TEAM_PROFILE.getCode());
         assertThat(render.getComponents()).allSatisfy(component ->
-                assertThat(component.getData().getString("renderer")).isEqualTo(component.getComponentType()));
+                {
+                    if (TeamPortfolioComponentTypeDict.TEXT_GRID.getCode().equals(component.getComponentType())) {
+                        assertThat(component.getData().getJSONArray("cells")).hasSize(4);
+                    } else if (TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode().equals(component.getComponentType())) {
+                        assertThat(component.getData()).containsKeys("contactPhone", "contactWechat");
+                    } else { assertThat(component.getData().getString("renderer")).isEqualTo(component.getComponentType()); }
+                });
         verify(teamProfileRenderer).render(any(JSONObject.class), eq(context));
         verify(carouselRenderer).render(any(JSONObject.class), eq(context));
         verify(singleWorkRenderer).render(any(JSONObject.class), eq(context));

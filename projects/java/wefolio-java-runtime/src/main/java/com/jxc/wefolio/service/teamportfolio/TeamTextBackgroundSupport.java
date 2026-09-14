@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.JoinStatusDict;
+import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
@@ -143,12 +144,16 @@ public class TeamTextBackgroundSupport {
         return work != null && memberId.equals(work.getUserId()) ? work : null;
     }
 
-    /** 输出原始图片或动图及其比例尺寸。 */
+    /** 输出原始背景媒体及其尺寸，视频另附可选封面。 */
     private PortfolioRenderDto.BackgroundWork snapshot(WorkEntity work) {
         if (work.getMediaObjectKey() == null || work.getMediaObjectKey().isBlank()) { return null; }
         PortfolioRenderDto.BackgroundWork result = new PortfolioRenderDto.BackgroundWork();
         result.setWorkId(work.getId()); result.setMediaType(work.getMediaType());
         result.setUrl(cosService.publicUrl(work.getMediaObjectKey()));
+        if (MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())
+                && work.getCoverObjectKey() != null && !work.getCoverObjectKey().isBlank()) {
+            result.setPosterUrl(cosService.publicUrl(work.getCoverObjectKey()));
+        }
         result.setWidth(work.getWidth()); result.setHeight(work.getHeight());
         return result;
     }

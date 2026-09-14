@@ -105,7 +105,9 @@ public class MinePortfolioService {
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.HYPERLINK, "通过展示作品跳转作品集或复制分享内容"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询公开档期"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
-            new ComponentLibraryDefinition(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式")
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.TEXT_GRID, "自定义行列、合并单元格和混合文字样式"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.CONTACT_INFO, "展示并复制联系手机和联系微信")
     );
 
     /** 作品集积分业务类型 */

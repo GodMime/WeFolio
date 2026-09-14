@@ -5,6 +5,8 @@ import com.jxc.wefolio.service.PortfolioBackgroundAudioService;
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioContactInfoConfigSupport;
+import com.jxc.wefolio.service.PortfolioTextGridConfigNormalizer;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioRenderDto;
@@ -339,6 +341,8 @@ public class TeamPortfolioRenderService {
     ) {
         JSONObject config = componentConfig == null ? new JSONObject() : componentConfig;
         return switch (componentType) {
+            case TEXT_GRID -> new JSONObject(PortfolioTextGridConfigNormalizer.normalize(config));
+            case CONTACT_INFO -> new JSONObject(PortfolioContactInfoConfigSupport.normalize(config));
             case TEAM_PROFILE -> teamProfileRenderer.render(config, context);
             case CAROUSEL -> carouselRenderer.render(config, context);
             case SINGLE_WORK -> singleWorkRenderer.render(config, context);

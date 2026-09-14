@@ -102,6 +102,16 @@ class MineTeamPortfolioServiceTest {
     @Test
     void componentLibraryShouldGateVideoCarouselAtRevisionThree() {
         TestContext context = context(true);
+        var previousTypes = context.service.getComponentLibrary(4).stream()
+                .map(MineTeamPortfolioService.ComponentLibraryItem::componentType).toList();
+        assertThat(context.service.getComponentLibrary(5))
+                .extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
+                .containsExactlyElementsOf(java.util.stream.Stream.concat(previousTypes.stream(),
+                        java.util.stream.Stream.of("TEXT_GRID", "CONTACT_INFO")).toList());
+        assertThat(context.service.getComponentLibrary(5)).extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
+                .contains("CONTACT_INFO", "TEXT_GRID");
+        assertThat(context.service.getComponentLibrary(4)).extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
+                .doesNotContain("CONTACT_INFO", "TEXT_GRID");
         assertThat(context.service.getComponentLibrary(4))
                 .extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
                 .contains(TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode());
@@ -109,6 +119,7 @@ class MineTeamPortfolioServiceTest {
                 .extracting(MineTeamPortfolioService.ComponentLibraryItem::componentType)
                 .doesNotContain(TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode());
         List<String> originalTypes = java.util.Arrays.stream(TeamPortfolioComponentTypeDict.values())
+                .filter(type -> type.getIntroducedAtRevision() <= 2)
                 .map(TeamPortfolioComponentTypeDict::getCode)
                 .filter(type -> !"VIDEO_CAROUSEL".equals(type))
                 .filter(type -> !"STRUCTURED_TEXT_SECTION".equals(type))

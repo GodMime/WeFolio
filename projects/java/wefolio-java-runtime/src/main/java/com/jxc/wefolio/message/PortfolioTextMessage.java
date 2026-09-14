@@ -2,6 +2,8 @@ package com.jxc.wefolio.message;
 
 /** 普通及结构化文字新增规则提示。 */
 public interface PortfolioTextMessage {
+    /** 行高必须为允许范围内的精确十分之一倍数。 */
+    String LINE_HEIGHT_INVALID = "行间距须为0.5至3.0之间的数值，步长0.1";
     /** 普通文字颜色配置非法。 */
     String COLOR_INVALID = "文字颜色仅支持自动或六位十六进制颜色";
     /** 结构化配置非法。 */

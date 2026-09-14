@@ -4,6 +4,8 @@ import com.jxc.wefolio.common.PortfolioBackgroundAudioSupport;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioContactInfoConfigSupport;
+import com.jxc.wefolio.service.PortfolioTextGridConfigNormalizer;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
@@ -223,6 +225,15 @@ public class TeamPortfolioConfigValidator {
     ) {
         TeamPortfolioConfigDto validated = normalizeForDraft(normalizedDraftConfig, null, context);
         PortfolioBackgroundAudioSupport.validateForPublish(validated.getBackgroundAudio());
+        for (var location : TeamPortfolioComponentTraversal.listComponentLocations(validated)) {
+            var component = location.component();
+            if (component == null || !Boolean.TRUE.equals(component.getEnabled())) { continue; }
+            if (TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode().equals(component.getComponentType())) {
+                PortfolioContactInfoConfigSupport.validateForPublish(component.getConfig());
+            } else if (TeamPortfolioComponentTypeDict.TEXT_GRID.getCode().equals(component.getComponentType())) {
+                PortfolioTextGridConfigNormalizer.validateForPublish(component.getConfig());
+            }
+        }
         if (!Boolean.TRUE.equals(validated.getBottomNav().getEnabled())) {
             return validated;
         }
@@ -461,6 +472,8 @@ public class TeamPortfolioConfigValidator {
     ) {
         JSONObject config = componentConfig == null ? new JSONObject() : componentConfig;
         return switch (componentType) {
+            case TEXT_GRID -> new JSONObject(PortfolioTextGridConfigNormalizer.normalize(config));
+            case CONTACT_INFO -> new JSONObject(PortfolioContactInfoConfigSupport.normalize(config));
             case TEAM_PROFILE -> teamProfileValidator.normalizeAndValidate(config, context);
             case CAROUSEL -> carouselValidator.normalizeAndValidate(config, context);
             case SINGLE_WORK -> singleWorkValidator.normalizeAndValidate(config, context);

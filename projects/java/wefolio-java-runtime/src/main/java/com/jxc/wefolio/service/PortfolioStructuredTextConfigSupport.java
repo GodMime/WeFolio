@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
+import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.PortfolioTextBlockTypeDict;
 import com.jxc.wefolio.dict.PortfolioTextFontWeightDict;
 import com.jxc.wefolio.dict.PortfolioTextAlignmentDict;
@@ -53,6 +55,8 @@ public final class PortfolioStructuredTextConfigSupport {
     private static final int MAX_ITEMS = 10;
     /** 最大文字码点数。 */
     private static final int MAX_CONTENT = 2000;
+    /** 留白高度上限，独立于普通区块上下间距。 */
+    private static final int MAX_SPACER_HEIGHT_RPX = 512;
     /** 工具类不允许实例化。 */
     private PortfolioStructuredTextConfigSupport() { }
 
@@ -78,7 +82,10 @@ public final class PortfolioStructuredTextConfigSupport {
             result.put(BOTTOM,integer(block,BOTTOM,type == PortfolioTextBlockTypeDict.HINT
                     || type == PortfolioTextBlockTypeDict.SPACER ? 0 : 16,0,128,4));
             if (type == PortfolioTextBlockTypeDict.SPACER) {
-                result.put(HEIGHT,integer(block,HEIGHT,32,0,128,4));
+                if (block.containsKey(PortfolioTextLineHeightSupport.LINE_HEIGHT)) {
+                    throw new BusinessException(PortfolioTextMessage.LINE_HEIGHT_INVALID);
+                }
+                result.put(HEIGHT,integer(block,HEIGHT,32,0,MAX_SPACER_HEIGHT_RPX,4));
             } else {
                 hasContent = true;
                 if (type == PortfolioTextBlockTypeDict.LIST) {
@@ -98,7 +105,9 @@ public final class PortfolioStructuredTextConfigSupport {
                 Object font = value(block,FONT,PortfolioTextFontFamilyDict.SYSTEM.getCode());
                 if (!(font instanceof String name) || PortfolioTextFontFamilyDict.fromCode(name) == null) { throw invalid(); }
                 result.put(FONT,font);
-                result.put(SIZE,integer(block,SIZE,defaultSize(type),20,96,1));
+                result.put(SIZE,integer(block,SIZE,defaultSize(type),
+                        PortfolioTextTypographyConstants.FONT_SIZE_MIN_RPX,
+                        PortfolioTextTypographyConstants.FONT_SIZE_MAX_RPX,1));
                 Object weight = value(block,WEIGHT,(type == PortfolioTextBlockTypeDict.TITLE
                         ? PortfolioTextFontWeightDict.BOLD : PortfolioTextFontWeightDict.NORMAL).getCode());
                 if (PortfolioTextFontWeightDict.fromCode(weight) == null) { throw invalid(); }
@@ -111,6 +120,7 @@ public final class PortfolioStructuredTextConfigSupport {
                 Object alignment = value(block,ALIGNMENT,PortfolioTextAlignmentDict.LEFT.getCode());
                 if (PortfolioTextAlignmentDict.fromCode(alignment) == null) { throw invalid(); }
                 result.put(ALIGNMENT,alignment);
+                PortfolioTextLineHeightSupport.normalizeOptional(block,result);
             }
             normalizedBlocks.add(result);
         }

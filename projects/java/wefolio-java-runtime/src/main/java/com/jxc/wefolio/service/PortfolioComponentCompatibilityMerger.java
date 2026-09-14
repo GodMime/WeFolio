@@ -1,6 +1,9 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
+import com.jxc.wefolio.common.PortfolioDividerColorSupport;
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 
 import java.util.ArrayList;
@@ -9,6 +12,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -48,6 +52,7 @@ public final class PortfolioComponentCompatibilityMerger {
             return merged;
         }
         int incomingRevision = effectiveRevision(incomingConfig.getEditorSchemaRevision());
+        protectComponentFields(merged, existingDraftConfig, incomingRevision);
         Set<String> protectedKeys = collectProtectedKeys(existingDraftConfig, incomingRevision);
         if (protectedKeys.isEmpty()) {
             return merged;
@@ -58,6 +63,30 @@ public final class PortfolioComponentCompatibilityMerger {
                 merged.getComponents(), existingDraftConfig.getComponents(), incomingRevision));
         mergeNavigationLists(merged, existingDraftConfig, incomingRevision);
         return merged;
+    }
+
+    /** 在类型合并之前按全配置的键与类型匹配字段，支持跨菜单移动。 */
+    private static void protectComponentFields(PortfolioConfigDto merged, PortfolioConfigDto existing, int revision) {
+        Map<String, PortfolioConfigDto.Component> byKey = new HashMap<>();
+        for (var location : PortfolioComponentTraversal.listComponentLocations(existing)) {
+            var component = location.component();
+            if (component != null) { byKey.put(component.getComponentKey(), component); }
+        }
+        for (var location : PortfolioComponentTraversal.listComponentLocations(merged)) {
+            var component = location.component();
+            if (component == null) { continue; }
+            var saved = byKey.get(component.getComponentKey());
+            if (saved != null && Objects.equals(component.getComponentType(), saved.getComponentType())) {
+                component.setConfig(component.getConfig() == null ? new LinkedHashMap<>() : copyConfigMap(component.getConfig()));
+                PortfolioTextLineHeightSupport.protectMissing(component.getConfig(), saved.getConfig(), component.getComponentType());
+                PortfolioComponentDisplayOptionsSupport.protect(component.getConfig(), saved.getConfig(),
+                        component.getComponentType(), PortfolioComponentDisplayOptionsSupport.EditorType.PERSONAL, revision);
+                if (PortfolioComponentTypeDict.DIVIDER.getCode().equals(component.getComponentType())) {
+                    PortfolioDividerColorSupport.protectHexColor(component.getConfig(), saved.getConfig(), revision,
+                            PortfolioDividerColorSupport.PERSONAL_HEX_COLOR_REVISION);
+                }
+            }
+        }
     }
 
     /** 合并各底部导航菜单中的受保护组件。 */
@@ -345,11 +374,22 @@ public final class PortfolioComponentCompatibilityMerger {
         copy.setEditorSchemaRevision(source.getEditorSchemaRevision());
         copy.setShare(copyShare(source.getShare()));
         copy.setStyle(copyStyle(source.getStyle()));
+        copy.setBackgroundAudio(copyBackgroundAudio(source.getBackgroundAudio()));
         copy.setComponents(safeList(source.getComponents()).stream()
                 .filter(Objects::nonNull)
                 .map(PortfolioComponentCompatibilityMerger::copyComponent)
                 .toList());
         copy.setBottomNav(copyBottomNav(source.getBottomNav()));
+        return copy;
+    }
+
+    /** 保留音频三态并复制配置，不能在组件合并时丢失顶层合并结果。 */
+    private static BackgroundAudioConfigDto copyBackgroundAudio(BackgroundAudioConfigDto source) {
+        if (source == null) { return null; }
+        BackgroundAudioConfigDto copy = new BackgroundAudioConfigDto();
+        copy.setEnabled(source.getEnabled());
+        copy.setWorkId(source.getWorkId());
+        copy.setDisplayStyle(source.getDisplayStyle());
         return copy;
     }
 
@@ -372,6 +412,7 @@ public final class PortfolioComponentCompatibilityMerger {
         }
         PortfolioConfigDto.Style copy = new PortfolioConfigDto.Style();
         copy.setBackgroundColor(source.getBackgroundColor());
+        copy.setComponentSpacingRpx(source.getComponentSpacingRpx());
         return copy;
     }
 
@@ -422,7 +463,7 @@ public final class PortfolioComponentCompatibilityMerger {
         if (source == null) {
             return null;
         }
-        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        Map<String, Object> copy = new LinkedHashMap<>();
         source.forEach((key, value) -> copy.put(key, copyConfigValue(value)));
         return copy;
     }
@@ -430,7 +471,7 @@ public final class PortfolioComponentCompatibilityMerger {
     /** 递归复制组件配置值。 */
     private static Object copyConfigValue(Object value) {
         if (value instanceof Map<?, ?> map) {
-            Map<Object, Object> copy = new java.util.LinkedHashMap<>();
+            Map<Object, Object> copy = new LinkedHashMap<>();
             map.forEach((key, item) -> copy.put(key, copyConfigValue(item)));
             return copy;
         }

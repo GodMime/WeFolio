@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 import com.jxc.wefolio.common.PortfolioTextColorSupport;
 
 import com.alibaba.fastjson2.JSON;
@@ -262,16 +263,14 @@ public class PortfolioRenderService {
         render.setMaintenanceText(maintenanceText);
         render.setVisitRecordId(visitRecordId);
         if (underMaintenance) {
-            render.setStyle(buildStyle(PortfolioConfigDto.DEFAULT_BACKGROUND_COLOR));
+            render.setStyle(buildStyle(null));
             render.setComponents(List.of());
             render.setBottomNav(buildDisabledBottomNav());
             return render;
         }
         Long ownerId = portfolio == null ? null : portfolio.getOwnerId();
         render.setBackgroundAudio(backgroundAudioService.renderPersonal(config == null ? null : config.getBackgroundAudio(), ownerId));
-        render.setStyle(buildStyle(config == null || config.getStyle() == null
-                ? null
-                : config.getStyle().getBackgroundColor()));
+        render.setStyle(buildStyle(config == null ? null : config.getStyle()));
         HyperlinkRenderContext hyperlinkContext = buildHyperlinkRenderContext(ownerId, preview, config);
         Map<Long, WorkEntity> backgroundWorks = loadTextBackgroundWorks(ownerId, config);
         render.setComponents(buildComponents(
@@ -312,13 +311,16 @@ public class PortfolioRenderService {
     /**
      * 构建页面样式。
      *
-     * @param configuredBackgroundColor 配置背景色
+     * @param configuredStyle 配置页面样式
      * @return 页面渲染样式
      */
-    private PortfolioRenderDto.Style buildStyle(String configuredBackgroundColor) {
-        String backgroundColor = normalizeBackgroundColor(configuredBackgroundColor);
+    private PortfolioRenderDto.Style buildStyle(PortfolioConfigDto.Style configuredStyle) {
+        String backgroundColor = normalizeBackgroundColor(configuredStyle == null
+                ? null : configuredStyle.getBackgroundColor());
         PortfolioRenderDto.Style style = new PortfolioRenderDto.Style();
         style.setBackgroundColor(backgroundColor);
+        style.setComponentSpacingRpx(PortfolioComponentSpacingSupport.normalize(configuredStyle == null
+                ? null : configuredStyle.getComponentSpacingRpx()));
         style.setThemeMode(resolveThemeMode(backgroundColor));
         return style;
     }
@@ -427,11 +429,16 @@ public class PortfolioRenderService {
             return render;
         }
         switch (componentType) {
+            case TEXT_GRID -> render.setTextGrid(PortfolioTextGridConfigNormalizer.normalize(componentConfig));
+            case CONTACT_INFO -> render.setContactInfo(PortfolioContactInfoConfigSupport.normalize(componentConfig));
             case CAROUSEL -> render.setWorks(buildWorks(
                     ownerId,
                     asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS)),
                     CAROUSEL_MEDIA_TYPES));
             case VIDEO_CAROUSEL -> {
+                render.setDisplayStyle(PortfolioComponentDisplayOptionsSupport.displayStyle(componentConfig));
+                render.setShowDescription(PortfolioComponentDisplayOptionsSupport.showDescription(componentConfig));
+                render.setShowComponentTitle(PortfolioComponentDisplayOptionsSupport.showComponentTitle(componentConfig));
                 render.setWorks(buildWorks(
                         ownerId,
                         asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS)),
@@ -640,6 +647,8 @@ public class PortfolioRenderService {
             Map<String, Object> componentConfig
     ) {
         applyWorkDisplayOptions(render, componentConfig);
+        render.setOpenMode(PortfolioComponentDisplayOptionsSupport.openMode(componentConfig));
+        render.setDetailOptions(PortfolioComponentDisplayOptionsSupport.detailOptions(componentConfig));
         Long workId = asLong(componentConfig.get(CONFIG_KEY_WORK_ID));
         if (workId == null || workId <= 0L) {
             return;
@@ -803,6 +812,7 @@ public class PortfolioRenderService {
      * @return 个人资料
      */
     private PortfolioRenderDto.Profile buildProfile(Map<String, Object> componentConfig) {
+        componentConfig = PortfolioProfileConfigSupport.normalize(componentConfig);
         Map<String, Object> profileConfig = asObjectMap(componentConfig.get(CONFIG_KEY_PROFILE));
         PortfolioRenderDto.Profile profile = new PortfolioRenderDto.Profile();
         profile.setAvatarUrl(asString(profileConfig.get(PROFILE_KEY_AVATAR_URL)));
@@ -813,6 +823,12 @@ public class PortfolioRenderService {
         profile.setWechatQrUrl(asString(profileConfig.get(PROFILE_KEY_WECHAT_QR_URL)));
         profile.setVisibleFields(asObjectMap(componentConfig.get(CONFIG_KEY_VISIBLE_FIELDS)));
         profile.setTags(buildTags(profileConfig.get(CONFIG_KEY_TAGS)));
+        profile.setProfileLayout((String) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_LAYOUT));
+        profile.setProfileBorder((Boolean) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_BORDER));
+        profile.setProfileBorderWidthRpx((Integer) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX));
+        profile.setProfileBorderColor((String) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR));
+        profile.setProfileHorizontalMarginRpx((Integer) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX));
+        profile.setProfileVerticalMarginRpx((Integer) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX));
         return profile;
     }
 
@@ -903,6 +919,7 @@ public class PortfolioRenderService {
                 componentConfig.get(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY)));
         textSection.setColor(PortfolioTextColorSupport.forRender(
                 componentConfig.get(PortfolioTextColorSupport.COLOR_CONFIG_KEY)));
+        textSection.setLineHeight(PortfolioTextLineHeightSupport.forRender(componentConfig));
         return textSection;
     }
 
@@ -934,10 +951,15 @@ public class PortfolioRenderService {
         target.setBackgroundWorkId(workId);
         WorkEntity work = workId == null ? null : works.get(workId);
         if (enabled && work != null && PortfolioTextBackgroundConfigSupport.supportsMedia(work.getMediaType())
+                && (!MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())
+                    || WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus()))
                 && hasText(work.getMediaObjectKey())) {
             PortfolioRenderDto.BackgroundWork background = new PortfolioRenderDto.BackgroundWork();
             background.setWorkId(work.getId()); background.setMediaType(work.getMediaType());
             background.setUrl(cosService.publicUrl(work.getMediaObjectKey()));
+            if (MediaTypeDict.VIDEO.getCode().equals(work.getMediaType()) && hasText(work.getCoverObjectKey())) {
+                background.setPosterUrl(cosService.publicUrl(work.getCoverObjectKey()));
+            }
             background.setWidth(work.getWidth()); background.setHeight(work.getHeight());
             target.setBackgroundWork(background);
         }

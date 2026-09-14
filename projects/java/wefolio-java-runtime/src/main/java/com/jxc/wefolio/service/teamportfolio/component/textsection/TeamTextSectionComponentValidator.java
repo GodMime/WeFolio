@@ -2,6 +2,7 @@ package com.jxc.wefolio.service.teamportfolio.component.textsection;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.service.PortfolioTextBackgroundConfigSupport;
+import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 import com.jxc.wefolio.common.PortfolioTextColorSupport;
 import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
 import lombok.RequiredArgsConstructor;
@@ -105,6 +106,7 @@ public class TeamTextSectionComponentValidator {
         componentConfig.setFontFamily(fontFamily);
         componentConfig.setFontSizeRpx(fontSizeRpx);
         componentConfig.setColor(PortfolioTextColorSupport.normalize(source.get(PortfolioTextColorSupport.COLOR_CONFIG_KEY)));
+        componentConfig.setLineHeight(PortfolioTextLineHeightSupport.readOptional(source));
         JSONObject result = JSON.parseObject(JSON.toJSONString(componentConfig));
         result.putAll(PortfolioTextBackgroundConfigSupport.normalize(source,true,true));
         backgroundSupport.validate(result,context);

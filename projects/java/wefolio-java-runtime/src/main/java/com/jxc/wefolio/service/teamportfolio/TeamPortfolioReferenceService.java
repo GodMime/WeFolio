@@ -178,6 +178,7 @@ public class TeamPortfolioReferenceService {
             TeamPortfolioComponentContext context
     ) {
         return switch (componentType) {
+            case TEXT_GRID, CONTACT_INFO -> List.of();
             case TEAM_PROFILE -> teamProfileExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case CAROUSEL -> carouselExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case SINGLE_WORK -> singleWorkExtractor.extract(componentKey, componentPath, normalizedConfig, context);

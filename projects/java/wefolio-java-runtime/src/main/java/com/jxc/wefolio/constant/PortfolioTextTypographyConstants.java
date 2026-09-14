@@ -1,15 +1,15 @@
 package com.jxc.wefolio.constant;
 
 /**
- * 作品集文字说明排版常量。
+ * 作品集文字组件共享字号范围与文字说明默认排版常量。
  */
 public final class PortfolioTextTypographyConstants {
 
     /** 最小字号，单位 rpx。 */
-    public static final int FONT_SIZE_MIN_RPX = 20;
+    public static final int FONT_SIZE_MIN_RPX = 10;
 
     /** 最大字号，单位 rpx。 */
-    public static final int FONT_SIZE_MAX_RPX = 48;
+    public static final int FONT_SIZE_MAX_RPX = 96;
 
     /** 新建文字说明组件默认字号，单位 rpx。 */
     public static final int NEW_COMPONENT_FONT_SIZE_RPX = 28;

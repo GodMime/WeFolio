@@ -419,6 +419,17 @@ class MinePortfolioServiceTest {
 
     @Test
     void componentLibraryShouldGateEachEntryByItsIntroducedRevision() {
+        var previousTypes = service().getComponentLibrary(5).getComponents().stream()
+                .map(item -> item.getComponentType()).toList();
+        assertThat(service().getComponentLibrary(6).getComponents()).extracting("componentType")
+                .containsExactlyElementsOf(java.util.stream.Stream.concat(previousTypes.stream(),
+                        java.util.stream.Stream.of("TEXT_GRID", "CONTACT_INFO")).toList());
+        assertThat(service().getComponentLibrary(6).getComponents())
+                .extracting("componentType").contains("CONTACT_INFO", "TEXT_GRID");
+        assertThat(service().getComponentLibrary(5).getComponents())
+                .extracting("componentType").doesNotContain("CONTACT_INFO", "TEXT_GRID");
+        assertThat(service().getComponentLibrary(null).getComponents())
+                .extracting("componentType").doesNotContain("CONTACT_INFO", "TEXT_GRID");
         assertThat(service().getComponentLibrary(5).getComponents())
                 .extracting("componentType").contains(PortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode());
         assertThat(service().getComponentLibrary(4).getComponents())

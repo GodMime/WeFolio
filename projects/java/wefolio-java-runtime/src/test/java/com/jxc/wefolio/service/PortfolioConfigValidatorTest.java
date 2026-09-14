@@ -7,6 +7,7 @@ import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
+import com.jxc.wefolio.dict.PortfolioProfileLayoutDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
@@ -36,6 +37,410 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class PortfolioConfigValidatorTest {
+
+    /** 联系信息边框经过草稿序列化、发布及旧版编辑跨菜单移动后仍保留完整设置。 */
+    @Test
+    void contactBorderSurvivesDraftPublishAndLegacyMenuMove() {
+        var appearance = Map.<String, Object>of("contactBorder", true, "contactBorderWidthRpx", 8,
+                "contactBorderColor", "#AABBCC", "horizontalMarginRpx", 32, "verticalMarginRpx", 24);
+        var values = new LinkedHashMap<>(appearance);
+        values.put("contactPhone", "123"); values.put("contactBorderColor", "#aabbcc");
+        var input = config(component("contact", PortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true, values));
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var saved = JSON.parseObject(JSON.toJSONString(validator().normalizeForDraft(7L, input, null)), PortfolioConfigDto.class);
+        assertThat(saved.getComponents().getFirst().getConfig()).containsAllEntriesOf(appearance);
+        validator().validateForPublish(7L, saved);
+        for (boolean explicitDefaults : List.of(false, true)) {
+            var editedValues = new LinkedHashMap<String, Object>(); editedValues.put("contactPhone", "456");
+            if (explicitDefaults) { editedValues.putAll(PortfolioContactInfoConfigSupport.normalize(Map.of())); editedValues.put("contactPhone", "456"); }
+            var edited = component("contact", PortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true, editedValues);
+            var incoming = navigationConfig("#FFFFFF",
+                    component("other", PortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true, Map.of("contactWechat", "小映")), List.of(edited));
+            incoming.setEditorSchemaRevision(12);
+            var merged = validator().normalizeForDraft(7L, incoming, saved);
+            assertThat(merged.getBottomNav().getItems().get(1).getComponents().getFirst().getConfig())
+                    .containsAllEntriesOf(appearance).containsEntry("contactPhone", "456");
+            assertThat(editedValues).doesNotContainEntry("contactBorder", true);
+            incoming.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+            var current = validator().normalizeForDraft(7L, incoming, saved);
+            assertThat(current.getBottomNav().getItems().get(1).getComponents().getFirst().getConfig())
+                    .containsEntry("contactBorder", false).containsEntry("horizontalMarginRpx", 0);
+        }
+        values.put("contactBorder", false);
+        input.getComponents().getFirst().setConfig(values);
+        assertThat(validator().normalizeForDraft(7L, input, saved).getComponents().getFirst().getConfig())
+                .containsEntry("contactBorder", false).containsEntry("contactBorderWidthRpx", 8)
+                .containsEntry("contactBorderColor", "#AABBCC").containsEntry("horizontalMarginRpx", 32)
+                .containsEntry("verticalMarginRpx", 24);
+    }
+
+    /** 根组件与菜单组件中的新增外观显式空值都必须经过真实草稿入口拒绝。 */
+    @Test
+    void rejectsExplicitNullContactAppearanceInRootAndMenu() {
+        for (String field : PortfolioContactInfoConfigSupport.APPEARANCE_FIELDS) {
+            for (boolean inMenu : List.of(false, true)) {
+                var values = new LinkedHashMap<String, Object>(); values.put("contactPhone", "123"); values.put(field, null);
+                var contact = component("contact", PortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true, values);
+                var input = inMenu ? navigationConfig("#FFFFFF",
+                        component("other", PortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true, Map.of("contactWechat", "小映")),
+                        List.of(contact)) : config(contact);
+                input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+                assertThatThrownBy(() -> validator().normalizeForDraft(7L, input, null))
+                        .as("联系信息外观显式空值 %s，菜单位 %s", field, inMenu).isInstanceOf(BusinessException.class)
+                        .hasMessageContaining(PortfolioMessage.COMPONENT_DISPLAY_OPTIONS_INVALID);
+            }
+        }
+    }
+
+    /** 组件间距保存后保留零值和上下界，经草稿序列化、重新读取与发布校验仍保持一致。 */
+    @Test
+    void componentSpacingShouldSurviveDraftPersistenceAndPublish() {
+        for (int spacing : List.of(0, 23, 32, 96)) {
+            PortfolioConfigDto incoming = navigationConfig("#151515",
+                    component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                    List.of());
+            incoming.getStyle().setComponentSpacingRpx(spacing);
+            PortfolioConfigDto saved = JSON.parseObject(
+                    JSON.toJSONString(validator().normalizeForDraft(7L, incoming, null)), PortfolioConfigDto.class);
+
+            assertThat(saved.getStyle().getComponentSpacingRpx()).isEqualTo(spacing);
+            saved.getBottomNav().setEnabled(false);
+            validator().validateForPublish(7L, saved);
+            assertThat(validator().normalizeForDraft(7L, saved, null).getStyle().getComponentSpacingRpx())
+                    .isEqualTo(spacing);
+        }
+    }
+
+    /** 新旧配置缺省和越界组件间距均回退三十二，且不修改原请求。 */
+    @Test
+    void componentSpacingShouldDefaultMissingAndInvalidValuesWithoutChangingRequest() {
+        PortfolioConfigDto incoming = navigationConfig("#151515",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of());
+        assertThat(incoming.getStyle().getComponentSpacingRpx()).isNull();
+        assertThat(validator().normalizeForDraft(7L, incoming, null).getStyle().getComponentSpacingRpx())
+                .isEqualTo(32);
+        for (int spacing : List.of(-1, 97, Integer.MIN_VALUE, Integer.MAX_VALUE)) {
+            incoming.getStyle().setComponentSpacingRpx(spacing);
+            assertThat(validator().normalizeForDraft(7L, incoming, null).getStyle().getComponentSpacingRpx())
+                    .isEqualTo(32);
+            assertThat(incoming.getStyle().getComponentSpacingRpx()).isEqualTo(spacing);
+        }
+        incoming.setStyle(null);
+        assertThat(validator().normalizeForDraft(7L, incoming, null).getStyle().getComponentSpacingRpx())
+                .isEqualTo(32);
+        incoming.setEditorSchemaRevision(null);
+        assertThat(validator().normalizeForDraft(7L, incoming, null).getStyle().getComponentSpacingRpx())
+                .isEqualTo(32);
+    }
+
+    /** 旧编辑器保存时保留草稿间距，仍允许编辑已支持的背景色，且不回写任一输入对象。 */
+    @Test
+    void previousEditorsShouldPreserveComponentSpacing() {
+        PortfolioConfigDto existing = navigationConfig("#151515",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of());
+        existing.getStyle().setComponentSpacingRpx(64);
+        for (Integer revision : new Integer[]{null, 1, 2, 11}) {
+            for (Integer incomingSpacing : new Integer[]{null, 0}) {
+                PortfolioConfigDto incoming = navigationConfig("#FFFFFF",
+                        component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                        List.of());
+                incoming.setEditorSchemaRevision(revision);
+                incoming.getStyle().setComponentSpacingRpx(incomingSpacing);
+
+                PortfolioConfigDto merged = validator().normalizeForDraft(7L, incoming, existing);
+
+                assertThat(merged.getEditorSchemaRevision()).isEqualTo(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+                assertThat(merged.getStyle().getComponentSpacingRpx()).isEqualTo(64);
+                assertThat(merged.getStyle().getBackgroundColor())
+                        .isEqualTo(revision != null && revision >= 2 ? "#FFFFFF" : "#151515");
+                assertThat(incoming.getStyle().getComponentSpacingRpx()).isEqualTo(incomingSpacing);
+                assertThat(existing.getStyle().getComponentSpacingRpx()).isEqualTo(64);
+            }
+        }
+    }
+
+    /** 当前编辑器可以显式取消间距，也可以省略可选字段恢复默认值。 */
+    @Test
+    void currentEditorShouldOverrideComponentSpacingAndUseDefaultWhenOmitted() {
+        PortfolioConfigDto existing = navigationConfig("#151515",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of());
+        existing.getStyle().setComponentSpacingRpx(96);
+        PortfolioConfigDto incoming = navigationConfig("#FFFFFF",
+                component("c_profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of());
+        incoming.getStyle().setComponentSpacingRpx(0);
+        assertThat(validator().normalizeForDraft(7L, incoming, existing).getStyle().getComponentSpacingRpx())
+                .isEqualTo(0);
+        incoming.getStyle().setComponentSpacingRpx(null);
+        assertThat(validator().normalizeForDraft(7L, incoming, existing).getStyle().getComponentSpacingRpx())
+                .isEqualTo(32);
+        assertThat(existing.getStyle().getComponentSpacingRpx()).isEqualTo(96);
+    }
+
+    /** 资料卡留白经过草稿序列化和发布保留，版本十可改边框但不能覆盖未知留白。 */
+    @Test void profileMarginsSurviveSerializationPublishAndPreviousEditorSave() {
+        var input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true,
+                Map.of("profile", Map.of("displayName", "竞成"),
+                        PortfolioProfileConfigSupport.PROFILE_LAYOUT, PortfolioProfileLayoutDict.HORIZONTAL.getCode(),
+                        PortfolioProfileConfigSupport.PROFILE_BORDER, true,
+                        PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX, 96,
+                        PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX, 24)));
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var saved = JSON.parseObject(JSON.toJSONString(validator().normalizeForDraft(7L, input, null)), PortfolioConfigDto.class);
+        assertThat(saved.getComponents().getFirst().getConfig())
+                .containsEntry(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX, 96)
+                .containsEntry(PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX, 24);
+        validator().validateForPublish(7L, saved);
+        for (boolean explicitDefault : List.of(false, true)) {
+            Map<String, Object> values = new LinkedHashMap<>(Map.of("profile", Map.of("displayName", "新名字"),
+                    PortfolioProfileConfigSupport.PROFILE_BORDER, false,
+                    PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX, 4,
+                    PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR, "#aabbcc"));
+            if (explicitDefault) {
+                values.put(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX, 32);
+                values.put(PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX, 0);
+            }
+            input.setEditorSchemaRevision(10); input.getComponents().getFirst().setConfig(values);
+            assertThat(validator().normalizeForDraft(7L, input, saved).getComponents().getFirst().getConfig())
+                    .containsEntry("profile", Map.of("displayName", "新名字"))
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER, false)
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX, 4)
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR, "#AABBCC")
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX, 96)
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX, 24);
+        }
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        input.getComponents().getFirst().getConfig().put(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX, 0);
+        input.getComponents().getFirst().getConfig().put(PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX, 96);
+        for (boolean border : List.of(false, true)) {
+            input.getComponents().getFirst().getConfig().put(PortfolioProfileConfigSupport.PROFILE_BORDER, border);
+            var updated = validator().normalizeForDraft(7L, input, saved);
+            assertThat(updated.getComponents().getFirst().getConfig())
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER, border)
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX, 0)
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX, 96);
+            validator().validateForPublish(7L, updated);
+        }
+        assertThat(saved.getComponents().getFirst().getConfig())
+                .containsEntry(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX, 96)
+                .containsEntry(PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX, 24);
+    }
+
+    /** 当前编辑器显式提交非法资料卡留白，在真实草稿与发布入口均不得变成默认值。 */
+    @Test void rejectsInvalidProfileMarginsInDraftAndPublish() {
+        for (String field : List.of(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX,
+                PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX)) {
+            for (Object value : new Object[]{1.5, null}) {
+                Map<String, Object> values = new LinkedHashMap<>(Map.of(PortfolioProfileConfigSupport.PROFILE_BORDER, false));
+                values.put(field, value);
+                var input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, values));
+                input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+                assertThatThrownBy(() -> validator().normalizeForDraft(7L, input, null))
+                        .isInstanceOf(BusinessException.class).hasMessage(PortfolioMessage.COMPONENT_DISPLAY_OPTIONS_INVALID);
+                assertThatThrownBy(() -> validator().validateForPublish(7L, input))
+                        .isInstanceOf(BusinessException.class).hasMessage(PortfolioMessage.COMPONENT_DISPLAY_OPTIONS_INVALID);
+            }
+        }
+    }
+
+    /** 资料卡边框经过草稿序列化与发布校验保留，旧编辑器仍可改布局但不能覆盖未知边框。 */
+    @Test void profileBorderSurvivesSerializationPublishAndLegacySave() {
+        var input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true,
+                Map.of("profile", Map.of("displayName", "竞成"), "visibleFields", Map.of("bio", false),
+                        PortfolioProfileConfigSupport.PROFILE_LAYOUT, PortfolioProfileLayoutDict.HORIZONTAL.getCode(),
+                        PortfolioProfileConfigSupport.PROFILE_BORDER, true,
+                        PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX, 12,
+                        PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR, "#aabbcc")));
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var saved = JSON.parseObject(JSON.toJSONString(validator().normalizeForDraft(7L, input, null)), PortfolioConfigDto.class);
+        assertThat(saved.getComponents().getFirst().getConfig())
+                .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER, true)
+                .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX, 12)
+                .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR, "#AABBCC")
+                .containsEntry("visibleFields", Map.of("bio", false));
+        validator().validateForPublish(7L, saved);
+        for (boolean explicitDefault : List.of(false, true)) {
+            Map<String, Object> values = new LinkedHashMap<>(Map.of("profile", Map.of("displayName", "新名字"),
+                    PortfolioProfileConfigSupport.PROFILE_LAYOUT, PortfolioProfileLayoutDict.VERTICAL.getCode()));
+            if (explicitDefault) {
+                values.put(PortfolioProfileConfigSupport.PROFILE_BORDER, false);
+                values.put(PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX, 1);
+                values.put(PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR, "AUTO");
+            }
+            input.setEditorSchemaRevision(9); input.getComponents().getFirst().setConfig(values);
+            assertThat(validator().normalizeForDraft(7L, input, saved).getComponents().getFirst().getConfig())
+                    .containsEntry("profile", Map.of("displayName", "新名字"))
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_LAYOUT, PortfolioProfileLayoutDict.VERTICAL.getCode())
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER, true)
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX, 12)
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR, "#AABBCC");
+        }
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        input.getComponents().getFirst().setConfig(new LinkedHashMap<>(saved.getComponents().getFirst().getConfig()));
+        for (boolean enabled : List.of(false, true)) {
+            input.getComponents().getFirst().getConfig().put(PortfolioProfileConfigSupport.PROFILE_BORDER, enabled);
+            var updated = validator().normalizeForDraft(7L, input, saved);
+            assertThat(updated.getComponents().getFirst().getConfig())
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER, enabled)
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX, 12)
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR, "#AABBCC");
+            validator().validateForPublish(7L, updated);
+        }
+        assertThat(saved.getComponents().getFirst().getConfig()).containsEntry(PortfolioProfileConfigSupport.PROFILE_BORDER, true);
+    }
+
+    /** 当前编辑器显式提交非法边框值，在真实草稿与发布入口均不得变成默认值。 */
+    @Test void rejectsInvalidProfileBordersInDraftAndPublish() {
+        Map<String, Object> invalidValues = Map.of(PortfolioProfileConfigSupport.PROFILE_BORDER, "false",
+                PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX, 13,
+                PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR, "#FFF");
+        invalidValues.forEach((field, invalid) -> {
+            for (Object value : new Object[]{invalid, null}) {
+                Map<String, Object> values = new LinkedHashMap<>(Map.of(PortfolioProfileConfigSupport.PROFILE_BORDER, false));
+                values.put(field, value);
+                var input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, values));
+                input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+                assertThatThrownBy(() -> validator().normalizeForDraft(7L, input, null))
+                        .isInstanceOf(BusinessException.class).hasMessage(PortfolioMessage.COMPONENT_DISPLAY_OPTIONS_INVALID);
+                assertThatThrownBy(() -> validator().validateForPublish(7L, input))
+                        .isInstanceOf(BusinessException.class).hasMessage(PortfolioMessage.COMPONENT_DISPLAY_OPTIONS_INVALID);
+            }
+        });
+    }
+
+    /** 个人资料布局经过草稿和 JSON 往返保留，旧编辑器更新资料不覆盖未知布局。 */
+    @Test void profileLayoutSurvivesDraftPublishAndLegacySave() {
+        var input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true,
+                Map.of("profile", Map.of("displayName", "竞成"), PortfolioProfileConfigSupport.PROFILE_LAYOUT,
+                        PortfolioProfileLayoutDict.HORIZONTAL.getCode())));
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var saved = JSON.parseObject(JSON.toJSONString(validator().normalizeForDraft(7L, input, null)), PortfolioConfigDto.class);
+        assertThat(saved.getComponents().getFirst().getConfig())
+                .containsEntry(PortfolioProfileConfigSupport.PROFILE_LAYOUT, PortfolioProfileLayoutDict.HORIZONTAL.getCode());
+        validator().validateForPublish(7L, saved);
+        for (boolean explicitDefault : List.of(false, true)) {
+            Map<String, Object> values = new LinkedHashMap<>(Map.of("profile", Map.of("displayName", "新名字")));
+            if (explicitDefault) { values.put(PortfolioProfileConfigSupport.PROFILE_LAYOUT, PortfolioProfileLayoutDict.VERTICAL.getCode()); }
+            input.setEditorSchemaRevision(8); input.getComponents().getFirst().setConfig(values);
+            var legacy = validator().normalizeForDraft(7L, input, saved);
+            assertThat(legacy.getComponents().getFirst().getConfig()).containsEntry("profile", Map.of("displayName", "新名字"))
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_LAYOUT, PortfolioProfileLayoutDict.HORIZONTAL.getCode());
+            input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+            assertThat(validator().normalizeForDraft(7L, input, saved).getComponents().getFirst().getConfig())
+                    .containsEntry(PortfolioProfileConfigSupport.PROFILE_LAYOUT, PortfolioProfileLayoutDict.VERTICAL.getCode());
+        }
+        input.getComponents().getFirst().getConfig().put(PortfolioProfileConfigSupport.PROFILE_LAYOUT, null);
+        assertThatThrownBy(() -> validator().normalizeForDraft(7L, input, saved)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> validator().validateForPublish(7L, input)).isInstanceOf(BusinessException.class);
+    }
+
+    /** 双列网格留白保存并可发布，旧编辑器缺省或回传默认值不会覆盖已有设置。 */
+    @Test void gridMarginsSurviveDraftPublishAndLegacySave() {
+        JSONObject values = JSON.parseObject(JSON.toJSONString(PortfolioTextGridConfigNormalizer.normalize(Map.of())));
+        values.getJSONArray("cells").getJSONObject(0).getJSONArray("blocks").getJSONObject(0)
+                .getJSONArray("runs").getJSONObject(0).put("text", "双列文字");
+        values.put("horizontalMarginRpx", 32); values.put("verticalMarginRpx", 24);
+        var input = config(component("grid", PortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true, values));
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var saved = JSON.parseObject(JSON.toJSONString(validator().normalizeForDraft(7L, input, null)), PortfolioConfigDto.class);
+        assertThat(saved.getComponents().getFirst().getConfig()).containsEntry("horizontalMarginRpx", 32)
+                .containsEntry("verticalMarginRpx", 24);
+        validator().validateForPublish(7L, saved);
+        for (boolean explicitDefault : List.of(false, true)) {
+            if (explicitDefault) { values.put("horizontalMarginRpx", 0); values.put("verticalMarginRpx", 0); }
+            else { values.remove("horizontalMarginRpx"); values.remove("verticalMarginRpx"); }
+            input.setEditorSchemaRevision(8); input.getComponents().getFirst().setConfig(values);
+            assertThat(validator().normalizeForDraft(7L, input, saved).getComponents().getFirst().getConfig())
+                    .containsEntry("columns", 2).containsEntry("horizontalMarginRpx", 32).containsEntry("verticalMarginRpx", 24);
+            input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+            assertThat(validator().normalizeForDraft(7L, input, saved).getComponents().getFirst().getConfig())
+                    .containsEntry("horizontalMarginRpx", 0).containsEntry("verticalMarginRpx", 0);
+        }
+        for (String field : List.of("horizontalMarginRpx", "verticalMarginRpx")) {
+            values.put(field, null);
+            assertThatThrownBy(() -> validator().normalizeForDraft(7L, input, saved)).isInstanceOf(BusinessException.class);
+            assertThatThrownBy(() -> validator().validateForPublish(7L, input)).isInstanceOf(BusinessException.class);
+            values.put(field, 0);
+        }
+    }
+
+    /** 八行合并网格经过个人草稿保存和 JSON 往返后仍保留完整跨度并允许发布。 */
+    @Test void eightRowGridSurvivesDraftSerializationAndPublishValidation() {
+        Map<String, Object> values = Map.of("rows", 8, "columns", 1, "columnWeights", List.of(1),
+                "rowMinHeightsRpx", List.of(180, 180, 180, 180, 180, 180, 180, 180),
+                "cells", List.of(Map.of("cellKey", "merged", "row", 0, "column", 0, "rowSpan", 8, "columnSpan", 1,
+                        "blocks", List.of(Map.of("blockKey", "block", "runs", List.of(Map.of("runKey", "run", "text", "八行文字")))))));
+        var input = config(component("grid", PortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true, values));
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var saved = JSON.parseObject(JSON.toJSONString(validator().normalizeForDraft(7L, input, null)), PortfolioConfigDto.class);
+        var savedGrid = JSON.parseObject(JSON.toJSONString(saved.getComponents().getFirst().getConfig()));
+        assertThat(savedGrid).containsEntry("rows", 8).containsEntry("columns", 1);
+        assertThat(savedGrid.getJSONArray("rowMinHeightsRpx")).hasSize(8);
+        assertThat(savedGrid.getJSONArray("cells").getJSONObject(0)).containsEntry("rowSpan", 8);
+        validator().validateForPublish(7L, saved);
+    }
+
+    /** 新边框字段经过真实草稿入口和 JSON 往返保留，上一版编辑器保存不清空。 */
+    @Test void gridBorderOptionsSurviveDraftSerializationAndPreviousEditorSave() {
+        Map<String, Object> values = PortfolioTextGridConfigNormalizer.normalize(Map.of());
+        values.put("cellBorder", true); values.put("cellBorderWidthRpx", 8); values.put("cellBorderColor", "#aabbcc");
+        var input = config(component("grid", PortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true, values));
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var saved = JSON.parseObject(JSON.toJSONString(validator().normalizeForDraft(7L, input, null)), PortfolioConfigDto.class);
+        assertThat(saved.getComponents().getFirst().getConfig()).containsEntry("cellBorderWidthRpx", 8)
+                .containsEntry("cellBorderColor", "#AABBCC");
+        values.remove("cellBorderWidthRpx"); values.remove("cellBorderColor"); values.put("cellBorder", false);
+        input.getComponents().getFirst().setConfig(values);
+        input.setEditorSchemaRevision(6);
+        var legacySave = validator().normalizeForDraft(7L, input, saved);
+        assertThat(legacySave.getComponents().getFirst().getConfig()).containsEntry("cellBorder", false)
+                .containsEntry("cellBorderWidthRpx", 8).containsEntry("cellBorderColor", "#AABBCC");
+        input.setEditorSchemaRevision(PortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        values.put("cellBorderWidthRpx", null);
+        assertThatThrownBy(() -> validator().normalizeForDraft(7L, input, saved))
+                .isInstanceOf(BusinessException.class).hasMessage(PortfolioMessage.TEXT_GRID_INVALID);
+        values.remove("cellBorderWidthRpx"); values.put("cellBorderColor", null);
+        assertThatThrownBy(() -> validator().normalizeForDraft(7L, input, saved))
+                .isInstanceOf(BusinessException.class).hasMessage(PortfolioMessage.TEXT_GRID_INVALID);
+    }
+
+    /** 新纯文本组件草稿结构往返，启用发布要求非空，菜单同样检查。 */
+    @Test void newTextComponentsValidateDraftAndPublication() {
+        PortfolioConfigDto input = navigationConfig("#FFFFFF",
+                component("contact", PortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true, Map.of("contactPhone", " 123 ")),
+                List.of(component("grid", PortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true, Map.of())));
+        PortfolioConfigDto draft = validator().normalize(7L, input);
+        assertThat(draft.getComponents().getFirst().getConfig()).containsEntry("contactPhone", "123").containsEntry("contactWechat", "");
+        assertThatThrownBy(() -> validator().validateForPublish(7L, draft)).isInstanceOf(BusinessException.class).hasMessage("请至少添加一处文字");
+        JSONObject grid = JSON.parseObject(JSON.toJSONString(draft.getBottomNav().getItems().get(1).getComponents().getFirst().getConfig()));
+        grid.getJSONArray("cells").getJSONObject(0).getJSONArray("blocks").getJSONObject(0).getJSONArray("runs").getJSONObject(0).put("text", "主持经验");
+        draft.getBottomNav().getItems().get(1).getComponents().getFirst().setConfig(grid);
+        validator().validateForPublish(7L, draft);
+        draft.getComponents().getFirst().setConfig(Map.of());
+        assertThatThrownBy(() -> validator().validateForPublish(7L, draft)).isInstanceOf(BusinessException.class).hasMessage("请至少填写一项联系信息");
+    }
+
+    /** 新单作选项经过真实校验，在旧版本和音频显式关闭组合中保留。 */
+    @Test void protectsDetailOptionsTogetherWithAudioPresenceRule() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(work(11L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode())));
+        PortfolioConfigDto existing = config(component("single", PortfolioComponentTypeDict.SINGLE_WORK.getCode(), 1000, true,
+                Map.of("workId", 11L, "openMode", "DETAIL_PAGE", "detailOptions", Map.of("showTitle", false, "showDescription", true))));
+        existing.setEditorSchemaRevision(6);
+        existing.setBackgroundAudio(new BackgroundAudioConfigDto()); existing.getBackgroundAudio().setEnabled(true);
+        for (Integer revision : new Integer[]{null, 5}) {
+            PortfolioConfigDto incoming = config(component("single", PortfolioComponentTypeDict.SINGLE_WORK.getCode(), 1000, true,
+                    Map.of("workId", 11L, "showDescription", false)));
+            incoming.setEditorSchemaRevision(revision);
+            PortfolioConfigDto kept = validator().normalizeForDraft(7L, incoming, existing);
+            assertThat(kept.getComponents().getFirst().getConfig()).containsEntry("openMode", "DETAIL_PAGE").containsEntry("showDescription", false);
+            assertThat(kept.getBackgroundAudio().getEnabled()).isTrue();
+            incoming.setBackgroundAudio(new BackgroundAudioConfigDto());
+            assertThat(validator().normalizeForDraft(7L, incoming, existing).getBackgroundAudio().getEnabled()).isFalse();
+        }
+    }
 
     /** 背景字段缺省保留，显式提交直接生效，不依赖能力头。 */
     @Test
@@ -231,6 +636,8 @@ class PortfolioConfigValidatorTest {
 
         assertThat(normalized.getComponents().getFirst().getConfig()).containsExactly(
                 Map.entry("title", "一二三四五六七八九十"),
+                Map.entry("displayStyle", "STACKED"), Map.entry("showDescription", false),
+                Map.entry("showComponentTitle", true),
                 Map.entry("workIds", List.of(13L, 11L, 12L)),
                 Map.entry("showTitle", true),
                 Map.entry("showSwipeHint", true)
@@ -288,6 +695,32 @@ class PortfolioConfigValidatorTest {
 
         assertThat(normalized.getComponents().getFirst().getConfig())
                 .containsEntry("title", "视频作品");
+    }
+
+    /** 组件标题开关缺省或空值默认开启，显式关闭保留文字且不改变作品标题开关。 */
+    @Test
+    void videoCarouselShouldKeepComponentTitleIndependentAndDefaultEnabled() {
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                video(11L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(12L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                video(13L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode())
+        ));
+        for (Boolean showComponentTitle : new Boolean[]{null, true, false}) {
+            for (String title : List.of("婚礼电影", "  ")) {
+                PortfolioConfigDto config = videoCarouselConfig(List.of(11L, 12L, 13L));
+                Map<String, Object> values = config.getComponents().getFirst().getConfig();
+                values.put("title", title);
+                values.put("showComponentTitle", showComponentTitle);
+                values.put("showTitle", false);
+
+                Map<String, Object> normalized = validator().normalize(7L, config)
+                        .getComponents().getFirst().getConfig();
+
+                assertThat(normalized).containsEntry("showComponentTitle", !Boolean.FALSE.equals(showComponentTitle))
+                        .containsEntry("title", title.isBlank() ? "视频作品" : title)
+                        .containsEntry("showTitle", false);
+            }
+        }
     }
 
     /**
@@ -424,12 +857,14 @@ class PortfolioConfigValidatorTest {
         assertThat(normalizedImage.getComponents().get(0).getConfig())
                 .containsExactly(
                         Map.entry("workId", 11L),
+                        Map.entry("openMode", "INLINE"), Map.entry("detailOptions", Map.of("showTitle", true, "showDescription", true)),
                         Map.entry("showTitle", true),
                         Map.entry("showDescription", false)
                 );
         assertThat(normalizedVideo.getComponents().get(0).getConfig())
                 .containsExactly(
                         Map.entry("workId", 12L),
+                        Map.entry("openMode", "INLINE"), Map.entry("detailOptions", Map.of("showTitle", true, "showDescription", true)),
                         Map.entry("showTitle", false),
                         Map.entry("showDescription", true)
                 );
@@ -856,7 +1291,7 @@ class PortfolioConfigValidatorTest {
     @Test
     void textSectionShouldAcceptSupportedFontsAndExactIntegerSizeBoundaries() {
         for (String fontFamily : List.of("SYSTEM", "WECHAT_SANS_SS")) {
-            for (Integer fontSizeRpx : List.of(20, 48)) {
+            for (Integer fontSizeRpx : List.of(10, 11, 19, 20, 48, 49, 95, 96)) {
                 Map<String, Object> textConfig = new LinkedHashMap<>();
                 textConfig.put("content", "服务说明");
                 textConfig.put("alignment", "CENTER");
@@ -923,7 +1358,7 @@ class PortfolioConfigValidatorTest {
      */
     @Test
     void textSectionShouldRejectNonExactOrOutOfRangeFontSize() {
-        for (Object invalid : List.of(28.5D, "28", 19, 49, 2147483648L)) {
+        for (Object invalid : List.of(28.5D, "28", 9, 97, 2147483648L)) {
             Map<String, Object> textConfig = new LinkedHashMap<>();
             textConfig.put("content", "服务说明");
             textConfig.put("fontSizeRpx", invalid);
@@ -936,7 +1371,7 @@ class PortfolioConfigValidatorTest {
                     textConfig
             ))))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessage("文字说明字号必须为20至48之间的整数");
+                    .hasMessage("文字说明字号必须为10至96之间的整数");
         }
     }
 
@@ -949,7 +1384,7 @@ class PortfolioConfigValidatorTest {
         invalidAlignment.put("content", "服务说明");
         invalidAlignment.put("alignment", "JUSTIFY");
         invalidAlignment.put("fontFamily", "UNKNOWN");
-        invalidAlignment.put("fontSizeRpx", 19);
+        invalidAlignment.put("fontSizeRpx", 9);
 
         assertThatThrownBy(() -> validator().normalize(7L, config(component(
                 "c_text",
@@ -1003,6 +1438,26 @@ class PortfolioConfigValidatorTest {
         assertThat(defaultNormalized.getComponents().get(0).getConfig())
                 .containsEntry("color", "GRAY")
                 .containsEntry("heightPx", 16);
+    }
+
+    /** 新增六位颜色可保存并规范化，历史枚举继续原样接受。 */
+    @Test
+    void dividerShouldAcceptHexAndPreserveLegacyColors() {
+        Map<String, String> colors = Map.of("#000000", "#000000", "#FFFFFF", "#FFFFFF",
+                "#f5f6f8", "#F5F6F8", "#12aBcD", "#12ABCD", "BLACK", "BLACK",
+                "WHITE", "WHITE", "GRAY", "GRAY", "TRANSPARENT", "TRANSPARENT");
+        colors.forEach((source, expected) -> {
+            var incoming = config(component("c_divider", PortfolioComponentTypeDict.DIVIDER.getCode(),
+                    1000, true, Map.of("color", source, "heightPx", 24)));
+            assertThat(validator().normalize(7L, incoming).getComponents().getFirst().getConfig())
+                    .containsEntry("color", expected).containsEntry("heightPx", 24);
+        });
+        for (String invalid : List.of("#FFF", "#FFFFFF00", "#GG0000", "red", "rgb(0,0,0)", "#FFFFFF;background:red")) {
+            var incoming = config(component("c_divider", PortfolioComponentTypeDict.DIVIDER.getCode(),
+                    1000, true, Map.of("color", invalid)));
+            assertThatThrownBy(() -> validator().normalize(7L, incoming))
+                    .isInstanceOf(BusinessException.class).hasMessage("分割线颜色不支持");
+        }
     }
 
     /**

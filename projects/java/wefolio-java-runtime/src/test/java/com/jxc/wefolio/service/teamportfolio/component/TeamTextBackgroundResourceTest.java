@@ -2,8 +2,10 @@ package com.jxc.wefolio.service.teamportfolio.component;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
+import com.jxc.wefolio.dict.ReferenceTypeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
@@ -15,6 +17,7 @@ import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.message.PortfolioTextMessage;
 import com.jxc.wefolio.service.CosService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
 import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
@@ -35,6 +38,16 @@ import static org.mockito.Mockito.*;
 
 /** 两类团队文字背景的权限矩阵、独立引用与失效显示测试。 */
 class TeamTextBackgroundResourceTest {
+    /** 视频原资源对象键。 */
+    private static final String VIDEO_KEY = "background.mp4";
+    /** 可播放的视频资源地址。 */
+    private static final String VIDEO_URL = "https://cdn.example/background.mp4";
+    /** 视频封面对象键。 */
+    private static final String POSTER_KEY = "static-cover.jpg";
+    /** 视频封面资源地址。 */
+    private static final String POSTER_URL = "https://cdn.example/static-cover.jpg";
+    /** 可选视频封面展示字段。 */
+    private static final String POSTER_FIELD = "posterUrl";
     /** 成员持久化边界。 */
     private final TeamMemberEntityMapper members = mock(TeamMemberEntityMapper.class);
     /** 账号持久化边界。 */
@@ -79,7 +92,8 @@ class TeamTextBackgroundResourceTest {
                 JSONObject data = render(structured,normalized,context);
                 JSONObject snapshot = JSON.parseObject(JSON.toJSONString(data.get("backgroundWork")));
                 assertThat(snapshot).containsEntry("url","https://cdn.example/original.gif")
-                        .containsEntry("width",600).containsEntry("height",900).containsEntry("mediaType",media.getCode());
+                        .containsEntry("width",600).containsEntry("height",900).containsEntry("mediaType",media.getCode())
+                        .doesNotContainKey(POSTER_FIELD);
                 assertThat(data).containsEntry("backgroundInvalid",false);
                 if (structured) {
                     assertThat(data.getJSONArray("blocks").getJSONObject(0).getString("color")).isEqualTo("AUTO");
@@ -95,25 +109,78 @@ class TeamTextBackgroundResourceTest {
         verify(cos,never()).publicUrl("static-cover.jpg");
     }
 
-    /** 授权、入队、账号、作品状态、审核、实际拥有者、视频任一不合法均拒绝。 */
+    /** 两类文字接受视频背景，引用快照保留可播放原资源且封面可以缺省。 */
+    @Test void bothComponentsAcceptVideosAndPreserveOptionalPosterInReferences() throws Exception {
+        work.setMediaType(MediaTypeDict.VIDEO.getCode()); work.setMediaObjectKey(VIDEO_KEY);
+        when(cos.publicUrl(VIDEO_KEY)).thenReturn(VIDEO_URL);
+        when(cos.publicUrl(POSTER_KEY)).thenReturn(POSTER_URL);
+        for (boolean structured : List.of(false,true)) {
+            for (String poster : new String[]{POSTER_KEY,null," "}) {
+                work.setCoverObjectKey(poster);
+                JSONObject normalized = normalize(structured,input());
+                assertThat(normalized).containsEntry("backgroundWorkId",11L).containsEntry("backgroundMemberUserId",7L)
+                        .doesNotContainKeys("backgroundWork","backgroundInvalid");
+                JSONObject rendered = render(structured,normalized,context);
+                assertThat(rendered).containsEntry("backgroundEnabled",true).containsEntry("backgroundInvalid",false);
+                JSONObject snapshot = JSON.parseObject(new ObjectMapper().writeValueAsString(rendered.get("backgroundWork")));
+                assertThat(snapshot).containsEntry("url",VIDEO_URL).containsEntry("mediaType",MediaTypeDict.VIDEO.getCode())
+                        .containsEntry("width",600).containsEntry("height",900);
+                List<PortfolioReferenceEntity> references = extract(structured,normalized);
+                assertThat(references).hasSize(1);
+                assertThat(references.getFirst().getReferenceId()).isEqualTo(11L);
+                assertThat(references.getFirst().getReferenceType()).isEqualTo(ReferenceTypeDict.WORK.getCode());
+                assertThat(references.getFirst().getComponentPath()).isEqualTo("bottomNav.items[1].components[0].config.backgroundWorkId");
+                JSONObject referenceSnapshot = JSON.parseObject(references.getFirst().getSnapshotJson());
+                assertThat(referenceSnapshot).containsEntry("url",VIDEO_URL).containsEntry("mediaType",MediaTypeDict.VIDEO.getCode());
+                if (POSTER_KEY.equals(poster)) {
+                    assertThat(snapshot).containsEntry(POSTER_FIELD,POSTER_URL);
+                    assertThat(referenceSnapshot).containsEntry(POSTER_FIELD,POSTER_URL);
+                } else {
+                    assertThat(snapshot).doesNotContainKey(POSTER_FIELD);
+                    assertThat(referenceSnapshot.get(POSTER_FIELD)).isNull();
+                }
+            }
+        }
+    }
+
+    /** 图片和视频均遵守授权、入队、账号、状态、审核、作者与媒体类型校验。 */
     @Test void rejectsEachPermissionAndMediaFailureAndHidesUnauthorizedUrl() {
         List<Runnable> invalidators = List.of(() -> member.setAllowWorks(0),
                 () -> member.setJoinStatus(JoinStatusDict.REMOVED.getCode()), () -> member.setTeamId(9L),
                 () -> user.setStatus(UserStatusDict.DISABLED.getCode()), () -> work.setUserId(8L),
                 () -> work.setStatus(WorkStatusDict.PROCESSING.getCode()), () -> work.setAuditStatus(WorkAuditStatusDict.PENDING.getCode()),
-                () -> work.setMediaType(MediaTypeDict.VIDEO.getCode()));
-        for (Runnable invalidator : invalidators) {
-            setUp(); invalidator.run();
-            for (boolean structured : List.of(false,true)) {
-                assertThatThrownBy(() -> normalize(structured,input())).isInstanceOf(BusinessException.class);
-                assertThatThrownBy(() -> extract(structured,input())).isInstanceOf(BusinessException.class);
-                JSONObject rendered = render(structured,input(),context);
-                assertThat(rendered).containsEntry("backgroundEnabled",true).containsEntry("backgroundInvalid",true);
-                assertThat(rendered.get("backgroundWork")).isNull();
-                assertThat(rendered.toJSONString()).doesNotContain("injected", "https://cdn.example");
-                assertThat(rendered).containsKey(structured ? "blocks" : "content");
+                () -> work.setStatus(WorkStatusDict.PROCESSING_FAILED.getCode()),
+                () -> work.setAuditStatus(WorkAuditStatusDict.REJECTED.getCode()), () -> work.setAuditStatus(null),
+                () -> when(works.selectBatchIds(anyCollection())).thenReturn(List.of()), () -> work.setMediaType(null));
+        for (MediaTypeDict media : List.of(MediaTypeDict.IMAGE,MediaTypeDict.VIDEO)) {
+            for (Runnable invalidator : invalidators) {
+                setUp(); work.setMediaType(media.getCode()); invalidator.run();
+                for (boolean structured : List.of(false,true)) {
+                    assertThatThrownBy(() -> normalize(structured,input())).isInstanceOf(BusinessException.class)
+                            .hasMessage(PortfolioTextMessage.BACKGROUND_UNAVAILABLE);
+                    assertThatThrownBy(() -> extract(structured,input())).isInstanceOf(BusinessException.class)
+                            .hasMessage(PortfolioTextMessage.BACKGROUND_UNAVAILABLE);
+                    JSONObject rendered = render(structured,input(),context);
+                    assertThat(rendered).containsEntry("backgroundEnabled",true).containsEntry("backgroundInvalid",true);
+                    assertThat(rendered.get("backgroundWork")).isNull();
+                    assertThat(rendered.toJSONString()).doesNotContain("injected", "https://cdn.example");
+                    assertThat(rendered).containsKey(structured ? "blocks" : "content");
+                }
             }
         }
+        verifyNoInteractions(cos);
+    }
+
+    /** 视频原资源缺失时不使用封面伪装为有效背景。 */
+    @Test void missingVideoSourcePreservesTextWithoutMediaOrPoster() {
+        work.setMediaType(MediaTypeDict.VIDEO.getCode()); work.setMediaObjectKey(" ");
+        for (boolean structured : List.of(false,true)) {
+            JSONObject rendered = render(structured,input(),context);
+            assertThat(rendered).containsEntry("backgroundEnabled",true).containsEntry("backgroundInvalid",true);
+            assertThat(rendered.get("backgroundWork")).isNull();
+            assertThat(rendered).containsKey(structured ? "blocks" : "content");
+        }
+        verifyNoInteractions(cos);
     }
 
     /** 声称属于别的授权成员也不能使用实际拥有者不匹配的作品。 */
@@ -142,6 +209,7 @@ class TeamTextBackgroundResourceTest {
 
     /** 同页两种组件共享一批授权结果，渲染阶段无逐组件数据库读取。 */
     @Test void batchContextReusesValidatedResources() {
+        work.setMediaType(MediaTypeDict.VIDEO.getCode());
         Map<Long,WorkEntity> loaded = support.load(List.of(input(),input()),context);
         clearInvocations(members,users,works);
         TeamPortfolioComponentContext batch = new TeamPortfolioComponentContext(1,2,3,loaded);

@@ -92,7 +92,9 @@ test('builds profile field character limit counters', () => {
     nickname: '4 / 50',
     profession: '2 / 50',
     city: '5 / 50',
-    intro: '3 / 500'
+    intro: '3 / 500',
+    contactPhone: '0 / 32',
+    contactWechat: '0 / 64'
   })
 })
 
@@ -116,4 +118,16 @@ test('validates profile tag limits before save', () => {
     validateProfileForm({ tags: [{ content: '高端婚礼', color: '#123456' }] }),
     { valid: false, message: '请选择有效的标签颜色' }
   )
+})
+
+test('联系字段保留空串与省略语义，默认值来自资料接口', () => {
+  assert.equal(normalizeProfile({ contactPhone: '13900000000' }).contactPhone, '13900000000')
+  assert.equal(normalizeProfile({ contactPhone: '' }).contactPhone, '')
+  assert.equal(buildProfilePayload({ contactPhone: ' ', contactWechat: ' wx-id ' }).contactPhone, '')
+  assert.equal(buildProfilePayload({ contactWechat: ' wx-id ' }).contactWechat, 'wx-id')
+  assert.equal('contactPhone' in buildProfilePayload({ contactPhone: null }), false)
+  assert.equal('contactWechat' in buildProfilePayload({}), false)
+  assert.equal(validateProfileForm({ contactPhone: '😀'.repeat(32) }).valid, true)
+  assert.equal(validateProfileForm({ contactPhone: '😀'.repeat(33) }).valid, false)
+  assert.equal(validateProfileForm({ contactWechat: 'a\nb' }).valid, false)
 })

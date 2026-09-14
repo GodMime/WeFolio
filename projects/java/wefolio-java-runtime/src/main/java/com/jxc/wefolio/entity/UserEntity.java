@@ -43,6 +43,9 @@ public class UserEntity extends BaseEntity {
     /** 资料联系电话密文，不作为登录凭证 */
     private String contactPhoneCiphertext;
 
+    /** 联系微信密文；NULL 为未设置，空串为明确清空。 */
+    private String contactWechatCiphertext;
+
     /** 微信手机号快速验证获得的手机号 */
     private String phoneNumber;
 

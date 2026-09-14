@@ -33,8 +33,10 @@ class TeamPortfolioDependencyBoundaryTest {
     private static final Pattern FQCN_PATTERN = Pattern.compile(
             "(?<![\\w$])com\\.jxc\\.wefolio(?:\\.(?:[A-Za-z_$][\\w$]*|\\*))+");
     private static final List<String> TOP_LEVEL_ALLOWED_DEPENDENCIES = List.of(
-            // 只开放个人、团队共用的全局音频能力，不放开个人作品集配置和组件依赖。
+            // 仅开放双端共用的纯配置规则和全局音频，不放开个人作品集服务依赖。
             "com.jxc.wefolio.common.PortfolioBackgroundAudioSupport",
+            "com.jxc.wefolio.service.PortfolioContactInfoConfigSupport",
+            "com.jxc.wefolio.service.PortfolioTextGridConfigNormalizer",
             "com.jxc.wefolio.service.PortfolioBackgroundAudioService",
             "com.jxc.wefolio.constant.TeamPortfolioConstants",
             "com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict",

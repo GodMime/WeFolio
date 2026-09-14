@@ -100,7 +100,9 @@ public class MineTeamPortfolioService {
             new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION, "通过独立文字区块组合团队介绍与背景"),
             new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询团队档期"),
             new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
-            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.QR_CONTACT, "展示团队联系二维码")
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.QR_CONTACT, "展示团队联系二维码"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.TEXT_GRID, "自定义行列、合并单元格和混合文字样式"),
+            new ComponentLibraryDefinition(TeamPortfolioComponentTypeDict.CONTACT_INFO, "展示并复制联系手机和联系微信")
     );
 
     /** 作品集积分业务类型。 */

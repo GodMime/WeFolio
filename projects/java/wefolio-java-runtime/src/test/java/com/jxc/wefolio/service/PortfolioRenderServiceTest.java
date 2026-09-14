@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
+import com.jxc.wefolio.dict.PortfolioProfileLayoutDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
@@ -53,6 +54,180 @@ class PortfolioRenderServiceTest {
     /** COS 服务模拟 */
     @Mock
     private CosService cosService;
+
+    /** 草稿预览与正式访客响应输出相同组件间距，保留零值，旧快照缺省时维持三十二。 */
+    @Test
+    void rendersComponentSpacingInPreviewAndVisitorResponses() {
+        PortfolioConfigDto input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(),
+                1000, Map.of()));
+        PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
+        style.setBackgroundColor("#102030");
+        input.setStyle(style);
+        for (boolean preview : List.of(false, true)) {
+            for (Integer spacing : new Integer[]{null, 0, 23, 32, 96}) {
+                style.setComponentSpacingRpx(spacing);
+                PortfolioConfigDto persisted = JSON.parseObject(JSON.toJSONString(input), PortfolioConfigDto.class);
+                PortfolioRenderDto render = service().render(portfolio(), persisted, preview, false, null, null);
+
+                assertThat(render.getStyle().getComponentSpacingRpx()).isEqualTo(spacing == null ? 32 : spacing);
+                assertThat(render.getStyle().getBackgroundColor()).isEqualTo("#102030");
+                assertThat(render.getStyle().getThemeMode()).isEqualTo("dark");
+                JsonNode response = new ObjectMapper().valueToTree(render);
+                assertThat(response.path("style").path("componentSpacingRpx").intValue())
+                        .isEqualTo(spacing == null ? 32 : spacing);
+            }
+        }
+        input.setStyle(null);
+        assertThat(service().render(portfolio(), input, false, false, null, null)
+                .getStyle().getComponentSpacingRpx()).isEqualTo(32);
+    }
+
+    /** 未经保存规范化的历史快照越界间距和维护页均使用默认间距。 */
+    @Test
+    void renderingShouldDefaultInvalidComponentSpacingAndMaintenanceStyle() {
+        PortfolioConfigDto input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(),
+                1000, Map.of()));
+        PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
+        input.setStyle(style);
+        for (int spacing : List.of(-1, 97, Integer.MIN_VALUE, Integer.MAX_VALUE)) {
+            style.setComponentSpacingRpx(spacing);
+            for (boolean preview : List.of(false, true)) {
+                assertThat(service().render(portfolio(), input, preview, false, null, null)
+                        .getStyle().getComponentSpacingRpx()).isEqualTo(32);
+            }
+        }
+        assertThat(service().render(portfolio(), input, false, true, null, null)
+                .getStyle().getComponentSpacingRpx()).isEqualTo(32);
+    }
+
+    /** 个人资料预览与发布输出留白，历史边框快照继续左右三十二、上下零，关边框也不丢参数。 */
+    @Test void rendersProfileMarginsAndLegacyDefaults() {
+        var input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000,
+                Map.of("profile", Map.of("displayName", "竞成"), PortfolioProfileConfigSupport.PROFILE_BORDER, true)));
+        var legacy = service().render(portfolio(), input, false, false, null, null).getComponents().getFirst().getProfile();
+        assertThat(legacy.getProfileHorizontalMarginRpx()).isEqualTo(32);
+        assertThat(legacy.getProfileVerticalMarginRpx()).isEqualTo(0);
+        var values = input.getComponents().getFirst().getConfig();
+        values.put(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX, 96);
+        values.put(PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX, 24);
+        for (boolean border : List.of(false, true)) {
+            values.put(PortfolioProfileConfigSupport.PROFILE_BORDER, border);
+            for (boolean preview : List.of(false, true)) {
+                var profile = service().render(portfolio(), input, preview, false, null, null).getComponents().getFirst().getProfile();
+                assertThat(profile.getDisplayName()).isEqualTo("竞成");
+                assertThat(profile.getProfileBorder()).isEqualTo(border);
+                assertThat(profile.getProfileHorizontalMarginRpx()).isEqualTo(96);
+                assertThat(profile.getProfileVerticalMarginRpx()).isEqualTo(24);
+            }
+        }
+    }
+
+    /** 个人资料在预览与发布中透传边框样式，开关变化不丢失样式，旧快照默认无边框。 */
+    @Test void rendersProfileBordersAndLegacyDefaults() {
+        var input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000,
+                Map.of("profile", Map.of("displayName", "竞成"), PortfolioProfileConfigSupport.PROFILE_LAYOUT,
+                        PortfolioProfileLayoutDict.HORIZONTAL.getCode())));
+        var legacy = service().render(portfolio(), input, false, false, null, null).getComponents().getFirst().getProfile();
+        assertThat(legacy.getProfileBorder()).isFalse();
+        assertThat(legacy.getProfileBorderWidthRpx()).isEqualTo(1);
+        assertThat(legacy.getProfileBorderColor()).isEqualTo("AUTO");
+        var values = input.getComponents().getFirst().getConfig();
+        values.put(PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX, 12);
+        values.put(PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR, "#aabbcc");
+        for (boolean enabled : List.of(false, true)) {
+            values.put(PortfolioProfileConfigSupport.PROFILE_BORDER, enabled);
+            for (boolean preview : List.of(false, true)) {
+                var profile = service().render(portfolio(), input, preview, false, null, null).getComponents().getFirst().getProfile();
+                assertThat(profile.getDisplayName()).isEqualTo("竞成");
+                assertThat(profile.getProfileLayout()).isEqualTo(PortfolioProfileLayoutDict.HORIZONTAL.getCode());
+                assertThat(profile.getProfileBorder()).isEqualTo(enabled);
+                assertThat(profile.getProfileBorderWidthRpx()).isEqualTo(12);
+                assertThat(profile.getProfileBorderColor()).isEqualTo("#AABBCC");
+            }
+        }
+    }
+
+    /** 资料布局在预览与发布展示中完整保留，历史配置继续使用纵向布局。 */
+    @Test void rendersProfileLayoutAndLegacyDefault() {
+        var input = config(component("profile", PortfolioComponentTypeDict.PROFILE.getCode(), 1000,
+                Map.of("profile", Map.of("displayName", "竞成"), PortfolioProfileConfigSupport.PROFILE_LAYOUT,
+                        PortfolioProfileLayoutDict.HORIZONTAL.getCode())));
+        for (boolean preview : List.of(false, true)) {
+            var profile = service().render(portfolio(), input, preview, false, null, null).getComponents().getFirst().getProfile();
+            assertThat(profile.getDisplayName()).isEqualTo("竞成");
+            assertThat(profile.getProfileLayout()).isEqualTo(PortfolioProfileLayoutDict.HORIZONTAL.getCode());
+        }
+        input.getComponents().getFirst().setConfig(Map.of("profile", Map.of("displayName", "竞成")));
+        var profile = service().render(portfolio(), input, false, false, null, null).getComponents().getFirst().getProfile();
+        assertThat(profile.getDisplayName()).isEqualTo("竞成");
+        assertThat(profile.getProfileLayout()).isEqualTo(PortfolioProfileLayoutDict.VERTICAL.getCode());
+    }
+
+    /** 个人网格外侧留白在预览与发布中完整透传，旧版默认值不改变布局。 */
+    @Test void rendersGridOuterMarginsAndLegacyDefaults() {
+        var grid = PortfolioTextGridConfigNormalizer.normalize(Map.of());
+        var input = config(component("grid", PortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, grid));
+        assertThat(service().render(portfolio(), input, false, false, null, null).getComponents().getFirst().getTextGrid())
+                .containsEntry("horizontalMarginRpx", 0).containsEntry("verticalMarginRpx", 0);
+        grid.put("horizontalMarginRpx", 96); grid.put("verticalMarginRpx", 24);
+        input.getComponents().getFirst().setConfig(grid);
+        for (boolean preview : List.of(false, true)) {
+            assertThat(service().render(portfolio(), input, preview, false, null, null).getComponents().getFirst().getTextGrid())
+                    .containsEntry("columns", 2).containsEntry("horizontalMarginRpx", 96).containsEntry("verticalMarginRpx", 24);
+        }
+    }
+
+    /** 个人预览和访客展示均保留跨八行的合并单元格及原文。 */
+    @Test void rendersEightRowGridInPreviewAndPublishedView() {
+        Map<String, Object> grid = PortfolioTextGridConfigNormalizer.normalize(Map.of("rows", 8, "columns", 1,
+                "columnWeights", List.of(1), "rowMinHeightsRpx", List.of(180, 180, 180, 180, 180, 180, 180, 180),
+                "cells", List.of(Map.of("cellKey", "merged", "row", 0, "column", 0, "rowSpan", 8, "columnSpan", 1,
+                        "blocks", List.of(Map.of("blockKey", "block", "runs", List.of(Map.of("runKey", "run", "text", "八行文字"))))))));
+        var input = config(component("grid", PortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, grid));
+        for (boolean preview : List.of(false, true)) {
+            assertThat(service().render(portfolio(), input, preview, false, null, null)
+                    .getComponents().getFirst().getTextGrid()).isEqualTo(grid);
+        }
+    }
+
+    /** 个人预览和访客展示均补旧版默认值，并透传开关、线宽、颜色与外侧留白。 */
+    @Test
+    void rendersContactBorderSettingsAndLegacyDefaults() {
+        var contact = component("contact", PortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, Map.of("contactPhone", "123"));
+        var input = config(contact);
+        for (boolean preview : List.of(false, true)) {
+            contact.setConfig(Map.of("contactPhone", "123"));
+            assertThat(service().render(portfolio(), input, preview, false, null, null).getComponents().getFirst().getContactInfo())
+                    .containsEntry("contactBorder", false).containsEntry("contactBorderWidthRpx", 1)
+                    .containsEntry("contactBorderColor", "AUTO").containsEntry("horizontalMarginRpx", 0)
+                    .containsEntry("verticalMarginRpx", 0);
+            for (boolean enabled : List.of(false, true)) {
+                contact.setConfig(Map.of("contactPhone", "123", "contactBorder", enabled, "contactBorderWidthRpx", 8,
+                        "contactBorderColor", "#aabbcc", "horizontalMarginRpx", 96, "verticalMarginRpx", 24));
+                assertThat(service().render(portfolio(), input, preview, false, null, null).getComponents().getFirst().getContactInfo())
+                        .containsEntry("contactPhone", "123").containsEntry("contactBorder", enabled)
+                        .containsEntry("contactBorderWidthRpx", 8).containsEntry("contactBorderColor", "#AABBCC")
+                        .containsEntry("horizontalMarginRpx", 96).containsEntry("verticalMarginRpx", 24);
+            }
+        }
+        verify(workEntityMapper, never()).selectBatchIds(anyCollection());
+    }
+
+    /** 新组件真实输出快照与完整网格，无需媒体查询。 */
+    @Test void rendersGridAndContactInfoDataWithoutProjection() {
+        Map<String, Object> grid = PortfolioTextGridConfigNormalizer.normalize(Map.of());
+        grid.put("cellBorder", true); grid.put("cellBorderWidthRpx", 8); grid.put("cellBorderColor", "#112233");
+        PortfolioConfigDto input = config(component("grid", PortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, grid),
+                component("contact", PortfolioComponentTypeDict.CONTACT_INFO.getCode(), 2000, Map.of("contactPhone", "123", "contactWechat", "我的微信")));
+        var rendered = service().render(portfolio(), input, true, false, null, null);
+        assertThat(rendered.getComponents().getFirst().getTextGrid()).isEqualTo(grid);
+        grid.put("cellBorder", false);
+        input.getComponents().getFirst().setConfig(grid);
+        assertThat(service().render(portfolio(), input, false, false, null, null).getComponents().getFirst().getTextGrid())
+                .containsEntry("cellBorder", false).containsEntry("cellBorderWidthRpx", 8).containsEntry("cellBorderColor", "#112233");
+        assertThat(rendered.getComponents().get(1).getContactInfo()).containsEntry("contactPhone", "123").containsEntry("contactWechat", "我的微信");
+        verify(workEntityMapper, never()).selectBatchIds(anyCollection());
+    }
 
     /**
      * 渲染时应展开作品数据，并按配置排序输出组件。
@@ -140,6 +315,7 @@ class PortfolioRenderServiceTest {
                 .getComponents().getFirst();
 
         assertThat(component.getTitle()).isEqualTo("婚礼电影");
+        assertThat(component.getShowComponentTitle()).isTrue();
         assertThat(component.getShowTitle()).isFalse();
         assertThat(component.getShowSwipeHint()).isTrue();
         assertThat(component.getWorks()).extracting(PortfolioRenderDto.WorkItem::getWorkId)
@@ -154,6 +330,28 @@ class PortfolioRenderServiceTest {
                     assertThat(work.getAspectRatio()).isEqualTo("4:3");
                 });
         verify(cosService, never()).headObject(any());
+    }
+
+    /** 渲染保留组件标题文字，显式关闭只影响组件标题，并兼容历史空值开关。 */
+    @Test
+    void renderShouldKeepVideoComponentTitleIndependentFromWorkTitles() {
+        WorkEntity video = work(11L, MediaTypeDict.VIDEO.getCode(), "video/11.mp4", "cover/11.jpg", 6100);
+        video.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(video));
+        for (Boolean showComponentTitle : new Boolean[]{null, true, false}) {
+            Map<String, Object> values = new LinkedHashMap<>(Map.of(
+                    "title", "婚礼电影", "workIds", List.of(11L, 12L, 13L), "showTitle", true));
+            values.put("showComponentTitle", showComponentTitle);
+            PortfolioConfigDto config = config(component("c_video_carousel",
+                    PortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(), 1000, values));
+
+            PortfolioRenderDto.Component rendered = service()
+                    .render(portfolio(), config, false, false, null, null).getComponents().getFirst();
+
+            assertThat(rendered.getShowComponentTitle()).isEqualTo(!Boolean.FALSE.equals(showComponentTitle));
+            assertThat(rendered.getTitle()).isEqualTo("婚礼电影");
+            assertThat(rendered.getShowTitle()).isTrue();
+        }
     }
 
     /**
@@ -502,23 +700,25 @@ class PortfolioRenderServiceTest {
      */
     @Test
     void renderShouldExposeTextSectionTypography() {
-        PortfolioConfigDto config = config(component(
-                "c_text",
-                PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
-                1000,
-                Map.of(
-                        "content", "第一行\n第二行",
-                        "alignment", "RIGHT",
-                        "fontFamily", "WECHAT_SANS_SS",
-                        "fontSizeRpx", 36
-                )
-        ));
+        for (int size : List.of(10, 11, 19, 20, 36, 48, 49, 95, 96)) {
+            PortfolioConfigDto config = config(component(
+                    "c_text",
+                    PortfolioComponentTypeDict.TEXT_SECTION.getCode(),
+                    1000,
+                    Map.of(
+                            "content", "第一行\n第二行",
+                            "alignment", "RIGHT",
+                            "fontFamily", "WECHAT_SANS_SS",
+                            "fontSizeRpx", size
+                    )
+            ));
 
-        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+            PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
 
-        PortfolioRenderDto.TextSection textSection = render.getComponents().get(0).getTextSection();
-        assertThat(textSection.getFontFamily()).isEqualTo("WECHAT_SANS_SS");
-        assertThat(textSection.getFontSizeRpx()).isEqualTo(36);
+            PortfolioRenderDto.TextSection textSection = render.getComponents().get(0).getTextSection();
+            assertThat(textSection.getFontFamily()).isEqualTo("WECHAT_SANS_SS");
+            assertThat(textSection.getFontSizeRpx()).isEqualTo(size);
+        }
     }
 
     /**
@@ -560,21 +760,23 @@ class PortfolioRenderServiceTest {
      */
     @Test
     void renderShouldExposeDividerColorAndHeight() {
-        PortfolioConfigDto config = config(component(
-                "c_divider",
-                PortfolioComponentTypeDict.DIVIDER.getCode(),
-                1000,
-                Map.of(
-                        "color", "WHITE",
-                        "heightPx", 28
-                )
-        ));
+        for (String color : List.of("WHITE", "BLACK", "GRAY", "TRANSPARENT", "#000000", "#FFFFFF", "#F5F6F8", "#12ABCD")) {
+            PortfolioConfigDto config = config(component(
+                    "c_divider",
+                    PortfolioComponentTypeDict.DIVIDER.getCode(),
+                    1000,
+                    Map.of(
+                            "color", color,
+                            "heightPx", 28
+                    )
+            ));
 
-        PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
+            PortfolioRenderDto render = service().render(portfolio(), config, false, false, null, null);
 
-        PortfolioRenderDto.Divider divider = render.getComponents().get(0).getDivider();
-        assertThat(divider.getColor()).isEqualTo("WHITE");
-        assertThat(divider.getHeightPx()).isEqualTo(28);
+            PortfolioRenderDto.Divider divider = render.getComponents().get(0).getDivider();
+            assertThat(divider.getColor()).isEqualTo(color);
+            assertThat(divider.getHeightPx()).isEqualTo(28);
+        }
     }
 
     @Test

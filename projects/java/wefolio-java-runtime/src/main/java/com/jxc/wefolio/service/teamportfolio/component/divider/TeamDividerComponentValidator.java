@@ -2,11 +2,10 @@ package com.jxc.wefolio.service.teamportfolio.component.divider;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.common.PortfolioDividerColorSupport;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
 import org.springframework.stereotype.Component;
-
-import java.util.Set;
 
 /**
  * 分割线组件配置校验器。
@@ -26,9 +25,6 @@ public class TeamDividerComponentValidator {
     /** 默认分割线高度。 */
     private static final int DEFAULT_HEIGHT_PX = 16;
 
-    /** 支持的分割线颜色。 */
-    private static final Set<String> SUPPORTED_COLORS = Set.of("BLACK", "WHITE", "GRAY", "TRANSPARENT");
-
     /** 颜色不支持提示。 */
     private static final String COLOR_UNSUPPORTED_MESSAGE = "分割线颜色不支持";
 
@@ -45,14 +41,14 @@ public class TeamDividerComponentValidator {
     public JSONObject normalizeAndValidate(JSONObject config, TeamPortfolioComponentContext context) {
         TeamDividerComponentConfig componentConfig = toComponentConfig(config);
         String color = componentConfig.getColor() == null ? DEFAULT_COLOR : componentConfig.getColor();
-        if (!SUPPORTED_COLORS.contains(color)) {
+        if (!PortfolioDividerColorSupport.isSupported(color)) {
             throw new BusinessException(COLOR_UNSUPPORTED_MESSAGE);
         }
         Integer heightPx = componentConfig.getHeightPx() == null ? DEFAULT_HEIGHT_PX : componentConfig.getHeightPx();
         if (heightPx == null || heightPx <= 0) {
             throw new BusinessException(HEIGHT_INVALID_MESSAGE);
         }
-        componentConfig.setColor(color);
+        componentConfig.setColor(PortfolioDividerColorSupport.normalize(color));
         componentConfig.setHeightPx(heightPx);
         return JSON.parseObject(JSON.toJSONString(componentConfig));
     }
