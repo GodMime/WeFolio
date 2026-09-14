@@ -4,6 +4,7 @@
 > 更新日期：2026-07-09
 > 数据库：MySQL 8.0
 > 当前依据：`projects/java/wefolio-java-runtime/src/main/resources/db/migration/V1` 至 `V30`、后端实体类、当前开发库 DDL 导出
+> 2026-09-11 增量：本次补充 V56 联系微信、V57 活动会话及前台毫秒字段；迁移与正式发布状态见本次验收记录，历史章节未在本次整体重审。
 
 ## 1. 文档定位
 
@@ -157,6 +158,7 @@ erDiagram
 - `unique_code`：个人唯一码。
 - `nickname`、`avatar_url`、`profession`、`city`、`intro`、`profile_tags`：资料展示字段。
 - `wechat_qr_url`、`contact_phone_ciphertext`：维护者联系方式。
+- V56 新增 `contact_wechat_ciphertext VARCHAR(512) NULL`。联系手机、微信密文均采用 NULL（未设置）／空串（明确清空）／非空密文三态；手机 NULL 读取明文登录 `phone_number` 作为默认值，不回填落库。两字段使用专用用途隔离加密，手机号与微信密文不能互换，密文最大 512 字符；依赖 `AUTH_TOKEN_SECRET`，不可直接轮换，须先安排重加密迁移。
 - `phone_number`、`phone_country_code`、`phone_last4`：微信手机号快速验证结果。
 - `wechat_openpid`：微信插件用户唯一标识。
 - `status`、`phone_bound_at`、`registered_at`、`last_login_at`：账号状态和时间。
@@ -412,6 +414,7 @@ erDiagram
 - `owner_type`、`owner_id`。
 - `source_type`、`source_portfolio_id`、`source_portfolio_title_snapshot`、`source_portfolio_type`。
 - `visit_count`、`view_work_count`、`play_video_count`、`schedule_query_count`、`qr_action_count`、`contact_submit_count`、`total_duration_seconds`。
+- V57 新增 `foreground_duration_ms BIGINT NULL DEFAULT NULL`：独立前台毫秒汇总，历史保持 NULL；首个有效 activity（包括 0）初始化。既有 `total_duration_seconds` 和事件 `duration_seconds` 不回填至新列、不承载新增 activity。累计使用独立原子 SQL，并同步推进 `version` 与 `updated_at`，防止跟进状态旧实体覆盖时长。
 - `queried_schedule_dates`、`follow_status`、`follow_note`、`first_visited_at`、`last_visited_at`。
 
 索引与约束：`uk_visit_key_portfolio_deleted(visitor_key, portfolio_id, deleted)`、`idx_visit_visitor(visitor_id, last_visited_at)`、`idx_visit_visitor_portfolio(visitor_id, portfolio_id, deleted)`、`idx_visit_owner_time(owner_type, owner_id, last_visited_at)`、`idx_visit_owner_follow(owner_type, owner_id, follow_status, last_visited_at)`、`idx_visit_portfolio_time(portfolio_id, last_visited_at)`。
@@ -500,6 +503,18 @@ erDiagram
 
 索引与约束：`uk_recharge_merchant_order(merchant_order_no)`、`uk_recharge_payment_transaction(payment_transaction_id)`、`idx_recharge_user_time(user_id, created_at)`、`idx_recharge_package(package_id, created_at)`、`idx_recharge_status_expire(status, expire_at)`。
 
+### 7.31 `wf_visit_activity_session`（V57）
+
+用途：个人和团队正式访客的活动会话、高水位累计及设备快照。
+
+- 公共字段：`id / created_at / updated_at / deleted / version`，采用现有毫秒时间与 BIGINT 逻辑删除约定。
+- 归属：`visitor_id / portfolio_id / portfolio_type / visit_record_id`，均绑定服务端认证与访问校验后的上下文；`portfolio_type` 为 ASCII 枚举 PERSONAL／TEAM。
+- 双键：`client_session_key VARCHAR(64)`、`open_idempotency_key VARCHAR(64)`。唯一约束分别为 `(visitor_id,portfolio_type,portfolio_id,client_session_key,deleted)` 和 `(visitor_id,portfolio_type,portfolio_id,open_idempotency_key,deleted)`，防止同一打开键绑定不同活动会话。
+- 计时：`active_duration_ms BIGINT NOT NULL DEFAULT 0`，非负检查；`last_reported_at DATETIME(3) NULL`，未成功上报时为空。会话行锁保护高水位差量，与访问汇总原子增加处于同一事务。
+- 设备：`brand VARCHAR(64)`、`model VARCHAR(128)`、`system VARCHAR(128)`、`platform VARCHAR(32)`，均可空，过滤控制字符。只在会话创建时存储，不随补报覆盖。
+- 设备索引：`(visit_record_id,deleted,created_at,id)`。授权后按创建时间及 ID 倒序查询至少一项设备非 NULL 的最新会话，不增加汇总指针或会话数冗余列。
+- 持久化双键恢复不依赖短期幂等缓存，返回当前会话累计供客户端续算；恢复不重复打开或计费。个人本人自访不建会话，团队拥有者正式自访正常建会话。
+
 ## 8. 关键业务规则
 
 ### 8.1 注册与账号
@@ -549,7 +564,7 @@ erDiagram
 3. 访问记录和线索保存作品集标题、分享码快照，支持作品集删除后继续展示历史来源。
 4. 行为事件通过 `idempotency_key` 去重。
 5. 联系线索通过 `owner_type + owner_id` 归属个人用户或团队，手机号和微信至少填一项。
-6. 维护者本人访问识别后不计入普通访客统计。
+6. 个人维护者本人访问识别后不计入普通访客统计；团队拥有者从正式团队访客入口自访仍计入。两端维护预览均不计入。
 
 ### 8.7 积分与充值
 
