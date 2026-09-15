@@ -197,6 +197,7 @@ ORDER BY updated_at ASC;
 | `OBJECT_STORAGE_ACCESS_KEY_ID` | 待补充 | 对象存储 AccessKey ID | 待补充 | 待补充 | 是 | 建议最小权限 |
 | `OBJECT_STORAGE_ACCESS_KEY_SECRET` | 待补充 | 对象存储 AccessKey Secret | 待补充 | 待补充 | 是 | 只记录存放位置 |
 | `LLM_API_KEY` | 待补充 | 大模型服务调用密钥 | 待补充 | 待补充 | 是 | 只记录存放位置 |
+| `WEFOLIO_LOGIN_DEFAULT_TAB` | Runtime 双节点 | 小程序登录页普通入口默认标签 | `experience` / `maintainer` | `application.yml` 默认值或 `wefolio.service` 环境配置 | 否 | 默认 `experience`（体验）；`maintainer` 表示登录 / 注册；双节点应一致，修改后重启 Runtime 生效 |
 | `FEISHU_FEEDBACK_WEBHOOK_URL` | 生产 Runtime 双节点 | 问题反馈飞书机器人 Webhook | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | URL 含访问令牌，禁止进入日志、数据库和命令历史 |
 | `FEISHU_FEEDBACK_WEBHOOK_SECRET` | 生产 Runtime 双节点 | 飞书机器人签名密钥 | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | 两台 Runtime 必须使用同一有效配置 |
 | `ADMIN_POINT_SECRET` | Runtime 双节点及内部调用方 | 积分、反馈状态和作品人工审核回传的共享内部密钥 | 不记录值 | root-only 服务环境配置 | 是 | 两台 Runtime 与所有调用方必须一致；反馈和审核飞书卡片会包含完整值 |
@@ -209,6 +210,10 @@ ORDER BY updated_at ASC;
 | `FEEDBACK_UPLOAD_CLEANUP_ZONE` | 生产 Job | 反馈清理 cron 调度时区 | `Asia/Shanghai` | `wefolio-job.service` 环境配置 | 否 | 只影响调度触发；数据库过期比较固定使用 `Asia/Shanghai` |
 | `FEEDBACK_UPLOAD_CLEANUP_BATCH_SIZE` | 生产 Job | 单批反馈上传任务数量 | `200` | `wefolio-job.service` 环境配置 | 否 | 有效范围 1 至 1000 |
 | `FEEDBACK_UPLOAD_CLEANUP_MAX_BATCHES` | 生产 Job | 单轮最多处理批次数 | `10` | `wefolio-job.service` 环境配置 | 否 | 有效范围 1 至 100 |
+
+登录页通过免登录接口 `GET /api/auth/login-page-config` 查询配置，不需要 `Authorization` 请求头。接口沿用 `Response` 包装，例如 `{"success":true,"message":"ok","data":{"defaultTab":"experience"}}`，并返回 `Cache-Control: no-store`。仅新增接口，不修改既有登录、注册或预检接口，旧版小程序可继续正常使用。
+
+`WEFOLIO_LOGIN_DEFAULT_TAB=maintainer` 将普通入口默认标签切换为“登录 / 注册”；未设置、空值或未知值均回退“体验”，取值严格区分大小写。更新 Runtime 环境配置并重启后，用户重新进入登录页时读取新配置。新版小程序遇到旧后端的 404、请求失败或无效配置时保留“体验”；有效推荐码入口仍优先展示“登录 / 注册”，迟到的配置响应不会覆盖用户已手动选择的标签。
 
 ## 11. 备份与恢复
 

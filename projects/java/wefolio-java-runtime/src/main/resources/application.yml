@@ -25,6 +25,9 @@ mybatis-plus:
   type-aliases-package: com.jxc.wefolio.entity
 
 wefolio:
+  login:
+    # 默认展示体验；配置为 maintainer 时默认展示登录 / 注册。
+    default-tab: ${WEFOLIO_LOGIN_DEFAULT_TAB:experience}
   mybatis:
     sql-log-enabled: ${WEFOLIO_MYBATIS_SQL_LOG_ENABLED:false}
   content-limit:
