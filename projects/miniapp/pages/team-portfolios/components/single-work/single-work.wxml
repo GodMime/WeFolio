@@ -52,11 +52,20 @@
       </view>
       <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品标题</view><view class="editor-switch-note">关闭后隐藏标题</view></view><switch checked="{{draft.showTitle}}" color="#212529" bindchange="handleShowTitleChange" /></view>
       <view class="editor-switch-row"><view><view class="editor-switch-label">展示作品说明</view><view class="editor-switch-note">关闭后隐藏说明</view></view><switch checked="{{draft.showDescription}}" color="#212529" bindchange="handleShowDescriptionChange" /></view>
+    <view class="editor-switch-row">
+      <view class="editor-switch-copy"><view class="editor-switch-label">独立详情页</view><view class="editor-switch-note">点击封面后进入作品详情</view></view>
+      <switch checked="{{draft.openMode === 'DETAIL_PAGE'}}" color="#212529" bindchange="handleOpenModeChange" />
+    </view>
+    <block wx:if="{{draft.openMode === 'DETAIL_PAGE'}}">
+      <view class="editor-switch-row"><view class="editor-switch-label">详情展示标题</view><switch checked="{{draft.detailOptions.showTitle}}" data-field="showTitle" color="#212529" bindchange="handleDetailOptionChange" /></view>
+      <view class="editor-switch-row"><view class="editor-switch-label">详情展示描述</view><switch checked="{{draft.detailOptions.showDescription}}" data-field="showDescription" color="#212529" bindchange="handleDetailOptionChange" /></view>
+    </block>
+
       <view wx:if="{{errorMessage}}" class="editor-error">{{errorMessage}}</view>
     </view>
   </block>
   <block wx:else>
-    <video wx:if="{{work.mediaType === 'VIDEO' && activeVideoKey === componentKey}}" id="teamSingleWorkVideo-{{componentKey}}" class="single-work-video" src="{{work.mediaUrl}}" poster="{{work.coverUrl}}" controls="{{true}}" autoplay="{{true}}" object-fit="contain" binderror="handleVideoError"></video>
+    <video wx:if="{{work.mediaType === 'VIDEO' && activeVideoKey === componentKey}}" id="teamSingleWorkVideo-{{componentKey}}" class="single-work-video" src="{{work.mediaUrl}}" poster="{{work.coverUrl}}" controls="{{true}}" autoplay="{{true}}" object-fit="contain" bindplay="handleVideoPlay" binderror="handleVideoError"></video>
     <view wx:elif="{{work.mediaType === 'VIDEO'}}" class="single-work-video-poster" bindtap="handleMediaTap" aria-role="button" aria-label="播放视频{{work.title}}">
       <image class="single-work-video-cover" src="{{work.coverUrl}}" mode="aspectFit"></image>
       <view class="single-work-play">▶</view>

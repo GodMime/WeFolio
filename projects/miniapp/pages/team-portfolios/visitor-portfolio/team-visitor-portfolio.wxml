@@ -8,12 +8,15 @@
     <view wx:else class="content">
       <team-profile theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.teamProfile}}" wx:key="componentKey" style="order:{{item.sortOrder}}" team="{{item.data.team}}" />
       <team-carousel theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.carousel}}" wx:key="componentKey" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" items="{{item.data.items}}" bindpreview="handleImagePreview" />
-      <team-video-carousel theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.videoCarousel}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" title="{{item.data.title}}" works="{{item.data.works}}" show-title="{{item.data.showTitle}}" show-swipe-hint="{{item.data.showSwipeHint}}" bindplay="handleVideoCarouselPlay" />
-      <team-single-work theme-mode="{{themeMode}}" class="folio-component team-single-work-instance" wx:for="{{componentBuckets.singleWork}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" work="{{item.data.work}}" show-title="{{item.data.showTitle}}" show-description="{{item.data.showDescription}}" active-video-key="{{activeSingleWorkVideoKey}}" bindpreview="handleSingleWorkPreview" bindactivate="handleSingleWorkActivate" bindvideoerror="handleSingleWorkVideoError" />
+      <team-video-carousel theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.videoCarousel}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" title="{{item.data.title}}" show-component-title="{{item.data.showComponentTitle}}" works="{{item.data.works}}" show-title="{{item.data.showTitle}}" show-swipe-hint="{{item.data.showSwipeHint}}" bindplay="handleVideoCarouselPlay"  display-style="{{item.data.displayStyle}}" show-description="{{item.data.showDescription}}" />
+      <team-single-work theme-mode="{{themeMode}}" class="folio-component team-single-work-instance" wx:for="{{componentBuckets.singleWork}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" work="{{item.data.work}}" show-title="{{item.data.showTitle}}" show-description="{{item.data.showDescription}}" active-video-key="{{activeSingleWorkVideoKey}}" bindpreview="handleSingleWorkPreview" bindactivate="handleSingleWorkActivate" bindvideoplay="pauseBackgroundAudio" bindvideoerror="handleSingleWorkVideoError"  open-mode="{{item.data.openMode}}" binddetail="handleWorkDetail" />
       <team-divider theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.divider}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
       <team-member-portfolio-grid theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.grid}}" wx:key="componentKey" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" items="{{item.data.items}}" show-member-name="{{item.data.showMemberName}}" bindpreview="handleMemberPortfolio" />
       <team-member-portfolio-list theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.list}}" wx:key="componentKey" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" items="{{item.data.items}}" show-member-name="{{item.data.showMemberName}}" bindpreview="handleMemberPortfolio" />
-      <team-text-section theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.text}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
+      <team-text-section background-video-paused="{{videoPreviewVisible}}" theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.text}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
+      <portfolio-text-grid theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.textGrid}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
+      <portfolio-contact-info theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.contactInfo}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
+      <team-structured-text-section background-video-paused="{{videoPreviewVisible}}" theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.structuredText}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
       <team-schedule-query theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.schedule}}" wx:key="componentKey" id="schedule-{{item.componentKey}}" style="order:{{item.sortOrder}}" share-code="{{shareCode}}" component-key="{{item.componentKey}}" config="{{item.data}}" result="{{scheduleResults[item.componentKey]}}" bindschedulequery="handleScheduleQuery" />
       <team-contact-form theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.contact}}" wx:key="componentKey" id="contact-form-{{item.componentKey}}" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" config="{{item.data}}" form="{{contactForms[item.componentKey]}}" modal-visible="{{contactModalVisible[item.componentKey]}}" submitting="{{contactSubmitting[item.componentKey]}}" bindcontactinput="handleContactInput" bindopenmodal="handleContactOpen" bindclosemodal="handleContactClose" bindsubmit="handleContactSubmit" />
       <team-qr-contact theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.qr}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" config="{{item.data}}" visitor-mode="{{true}}" bindinteract="handleQrInteract" />
@@ -32,14 +35,7 @@
   theme-mode="{{themeMode}}"
   bindchange="handleMenuTap"
 ></portfolio-bottom-nav>
-<root-portal wx:if="{{videoPreviewVisible}}">
-  <view class="work-video-mask visible" catchtap="handleCloseVideoPreview">
-    <view class="work-video-panel" catchtap="handleVideoPreviewPanelTap">
-      <view class="work-video-heading"><view class="work-video-title">{{videoPreview.title}}</view><view class="work-video-close" catchtap="handleCloseVideoPreview">×</view></view>
-      <video id="teamPortfolioWorkVideo" class="work-video-player" src="{{videoPreviewUrl}}" poster="{{videoPreview.poster}}" controls="{{true}}" autoplay="{{true}}" show-fullscreen-btn="{{true}}" show-center-play-btn="{{true}}" enable-progress-gesture="{{true}}" object-fit="contain" binderror="handleVideoPreviewError"></video>
-    </view>
-  </view>
-</root-portal>
+
 <view wx:if="{{visitorProfileAuthVisible}}" class="profile-mask">
   <view class="profile-panel">
     <input data-field="nickname" value="{{visitorProfileForm.nickname}}" bindinput="handleProfileInput" placeholder="昵称" />
@@ -47,6 +43,9 @@
     <text wx:if="{{visitorProfileForm.avatarPath}}">已选择头像</text>
     <button class="primary" loading="{{visitorProfileSaving}}" bindtap="handleProfileSave">保存资料</button>
     <button bindtap="handleProfileSkip">暂不填写</button>
+  </view>
+  <view wx:if="{{backgroundAudioResource.enabled && backgroundAudioResource.mediaUrl && !loading && !errorMessage}}" class="portfolio-background-audio" style="position: fixed; top: {{backgroundAudioTop}}px; right: 12px; z-index: 20;">
+    <background-audio-control draggable="{{true}}" anchor-top="{{backgroundAudioTop}}" display-style="{{backgroundAudioResource.displayStyle}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" bindtoggle="handleToggleBackgroundAudio" />
   </view>
 </view>
 <timeline-share-guide visible="{{timelineGuideVisible}}" back="{{showNavigationBack}}" bindback="handleTimelineGuideBack" bindclose="handleCloseTimelineGuide"></timeline-share-guide>

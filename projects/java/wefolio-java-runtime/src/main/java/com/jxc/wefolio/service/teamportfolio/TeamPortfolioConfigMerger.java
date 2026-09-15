@@ -1,8 +1,15 @@
 package com.jxc.wefolio.service.teamportfolio;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.common.PortfolioDividerColorSupport;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
+import com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport;
+import com.jxc.wefolio.service.PortfolioContactInfoConfigSupport;
+import com.jxc.wefolio.service.PortfolioTextGridConfigNormalizer;
+import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -13,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * 新旧团队编辑器配置兼容合并器。
@@ -30,6 +38,16 @@ public final class TeamPortfolioConfigMerger {
 
     /** 规范化后的排序间隔。 */
     private static final int SORT_ORDER_STEP = 1000;
+
+    /** 顶层字段版本步骤表，后续字段按引入版本登记。 */
+    private static final List<ConfigFieldMergeStep> CONFIG_FIELD_MERGE_STEPS = List.of(
+            new ConfigFieldMergeStep(STYLE_AND_NAV_REVISION, (target, source) -> {
+                target.setStyle(source == null ? null : deepCopy(source.getStyle(), TeamPortfolioConfigDto.Style.class));
+                target.setBottomNav(source == null ? null : deepCopy(source.getBottomNav(), TeamPortfolioConfigDto.BottomNav.class));
+            }));
+    /** 顶层字段引入版本和独立复制策略。 */
+    private record ConfigFieldMergeStep(int introducedAtRevision,
+            BiConsumer<TeamPortfolioConfigDto, TeamPortfolioConfigDto> mergeFields) { }
 
     /** 工具类不允许实例化。 */
     private TeamPortfolioConfigMerger() {
@@ -50,28 +68,25 @@ public final class TeamPortfolioConfigMerger {
         if (existingDraftConfig == null) {
             return merged;
         }
-
         Integer incomingRevision = incomingConfig.getEditorSchemaRevision();
         Integer existingRevision = existingDraftConfig.getEditorSchemaRevision();
         merged.setEditorSchemaRevision(existingRevision != null
                 && (incomingRevision == null || incomingRevision < existingRevision)
                 ? existingRevision : incomingRevision);
 
-        boolean incomingHasStyleAndNav = incomingRevision != null
-                && incomingRevision >= STYLE_AND_NAV_REVISION;
-        boolean existingHasStyleAndNav = existingRevision != null
-                && existingRevision >= STYLE_AND_NAV_REVISION;
-        if (!incomingHasStyleAndNav && existingHasStyleAndNav) {
-            merged.setStyle(deepCopy(existingDraftConfig.getStyle(), TeamPortfolioConfigDto.Style.class));
-            merged.setBottomNav(deepCopy(
-                    existingDraftConfig.getBottomNav(), TeamPortfolioConfigDto.BottomNav.class));
-        } else if (!incomingHasStyleAndNav) {
-            merged.setStyle(null);
-            merged.setBottomNav(null);
+        for (ConfigFieldMergeStep step : CONFIG_FIELD_MERGE_STEPS) {
+            boolean incomingKnows = incomingRevision != null && incomingRevision >= step.introducedAtRevision();
+            boolean existingKnows = existingRevision != null && existingRevision >= step.introducedAtRevision();
+            step.mergeFields().accept(merged, incomingKnows ? incomingConfig : existingKnows ? existingDraftConfig : null);
+        }
+        // 音频在顶层版本字段之后按缺省保留特例处理，不受新能力版本限制。
+        if (incomingConfig.getBackgroundAudio() == null) {
+            merged.setBackgroundAudio(deepCopy(existingDraftConfig.getBackgroundAudio(), BackgroundAudioConfigDto.class));
         }
 
         int effectiveRevision = incomingRevision == null
                 ? LEGACY_COMPONENT_REVISION : Math.max(LEGACY_COMPONENT_REVISION, incomingRevision);
+        protectComponentFields(merged, existingDraftConfig, effectiveRevision);
         Set<String> protectedKeys = collectProtectedKeys(existingDraftConfig, effectiveRevision);
         if (protectedKeys.isEmpty()) {
             return merged;
@@ -81,6 +96,30 @@ public final class TeamPortfolioConfigMerger {
                 merged.getComponents(), existingDraftConfig.getComponents(), effectiveRevision));
         mergeNavigationLists(merged, existingDraftConfig, effectiveRevision);
         return merged;
+    }
+
+    /** 在类型合并之前按全配置的键与类型匹配字段，支持跨菜单移动。 */
+    private static void protectComponentFields(TeamPortfolioConfigDto merged, TeamPortfolioConfigDto existing, int revision) {
+        Map<String, TeamPortfolioConfigDto.ComponentEnvelope> byKey = new HashMap<>();
+        for (var location : TeamPortfolioComponentTraversal.listComponentLocations(existing)) {
+            var component = location.component();
+            if (component != null) { byKey.put(component.getComponentKey(), component); }
+        }
+        for (var location : TeamPortfolioComponentTraversal.listComponentLocations(merged)) {
+            var component = location.component();
+            if (component == null) { continue; }
+            var saved = byKey.get(component.getComponentKey());
+            if (saved != null && Objects.equals(component.getComponentType(), saved.getComponentType())) {
+                component.setConfig(component.getConfig() == null ? new JSONObject() : new JSONObject(component.getConfig()));
+                PortfolioTextLineHeightSupport.protectMissing(component.getConfig(), saved.getConfig(), component.getComponentType());
+                PortfolioComponentDisplayOptionsSupport.protect(component.getConfig(), saved.getConfig(),
+                        component.getComponentType(), PortfolioComponentDisplayOptionsSupport.EditorType.TEAM, revision);
+                if (TeamPortfolioComponentTypeDict.DIVIDER.getCode().equals(component.getComponentType())) {
+                    PortfolioDividerColorSupport.protectHexColor(component.getConfig(), saved.getConfig(), revision,
+                            PortfolioDividerColorSupport.TEAM_HEX_COLOR_REVISION);
+                }
+            }
+        }
     }
 
     /** 合并各底部导航菜单中的受保护组件。 */
@@ -371,6 +410,52 @@ public final class TeamPortfolioConfigMerger {
 
     /** JSON 往返深拷贝 DTO。 */
     private static <T> T deepCopy(T source, Class<T> type) {
-        return source == null ? null : JSON.parseObject(JSON.toJSONString(source), type);
+        if (source == null) { return null; }
+        T copy = JSON.parseObject(JSON.toJSONString(source), type);
+        // 仅恢复本次新增字段的显式空值，使校验器能够拒绝；其余字段保留既有序列化语义。
+        var sourceContainer = componentContainer(source);
+        var copyContainer = componentContainer(copy);
+        if (sourceContainer != null && copyContainer != null) {
+            var sources = TeamPortfolioComponentTraversal.listComponentLocations(sourceContainer);
+            var copies = TeamPortfolioComponentTraversal.listComponentLocations(copyContainer);
+            for (int index = 0; index < sources.size(); index++) {
+                var original = sources.get(index).component();
+                var copied = copies.get(index).component();
+                if (original == null || copied == null || original.getConfig() == null) { continue; }
+                PortfolioTextLineHeightSupport.restoreExplicitNulls(copied.getConfig(), original.getConfig(), original.getComponentType());
+                if (TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode().equals(original.getComponentType())) {
+                    for (String field : PortfolioContactInfoConfigSupport.APPEARANCE_FIELDS) {
+                        if (original.getConfig().containsKey(field) && original.getConfig().get(field) == null) {
+                            if (copied.getConfig() == null) { copied.setConfig(new JSONObject()); }
+                            copied.getConfig().put(field, null);
+                        }
+                    }
+                }
+                if (!TeamPortfolioComponentTypeDict.TEXT_GRID.getCode().equals(original.getComponentType())) { continue; }
+                for (String field : List.of(PortfolioTextGridConfigNormalizer.CELL_BORDER_WIDTH_RPX,
+                        PortfolioTextGridConfigNormalizer.CELL_BORDER_COLOR,
+                        PortfolioTextGridConfigNormalizer.HORIZONTAL_MARGIN_RPX,
+                        PortfolioTextGridConfigNormalizer.VERTICAL_MARGIN_RPX)) {
+                    if (original.getConfig().containsKey(field) && original.getConfig().get(field) == null) {
+                        if (copied.getConfig() == null) { copied.setConfig(new JSONObject()); }
+                        copied.getConfig().put(field, null);
+                    }
+                }
+            }
+        }
+        return copy;
+    }
+
+    /** 将本合并器可能单独复制的菜单和组件包入遍历视图，不修改源对象。 */
+    private static TeamPortfolioConfigDto componentContainer(Object value) {
+        if (value instanceof TeamPortfolioConfigDto config) { return config; }
+        TeamPortfolioConfigDto container = new TeamPortfolioConfigDto();
+        if (value instanceof TeamPortfolioConfigDto.BottomNav navigation) { container.setBottomNav(navigation); }
+        else if (value instanceof TeamPortfolioConfigDto.BottomNavItem item) {
+            container.setComponents(item.getComponents());
+        } else if (value instanceof TeamPortfolioConfigDto.ComponentEnvelope component) {
+            container.setComponents(List.of(component));
+        } else { return null; }
+        return container;
     }
 }

@@ -1,10 +1,14 @@
 const TAG_MAX_COUNT = 10
 const TAG_MAX_LENGTH = 10
+const CONTACT_FIELD_LIMITS = { contactPhone: 32, contactWechat: 64 }
+const CONTACT_FIELD_LABELS = { contactPhone: '联系手机', contactWechat: '联系微信' }
+const CONTACT_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u
 const PROFILE_FIELD_LIMITS = {
   nickname: 50,
   profession: 50,
   city: 50,
-  intro: 500
+  intro: 500,
+  ...CONTACT_FIELD_LIMITS
 }
 const DEFAULT_TAG_COLOR = '#0f766e'
 const TAG_COLOR_OPTIONS = [
@@ -174,6 +178,8 @@ function normalizeProfile(raw = {}) {
     nickname: raw.nickname || '',
     avatarUrl: raw.avatarUrl || '',
     wechatQrUrl: raw.wechatQrUrl || '',
+    contactPhone: raw.contactPhone || '',
+    contactWechat: raw.contactWechat || '',
     profession: raw.profession || '',
     city: raw.city || '',
     intro: raw.intro || '',
@@ -194,7 +200,7 @@ function trimTags(tags) {
 }
 
 function buildProfilePayload(form = {}) {
-  return {
+  const payload = {
     nickname: trimText(form.nickname),
     avatarUrl: trimText(form.avatarUrl),
     wechatQrUrl: trimText(form.wechatQrUrl),
@@ -208,6 +214,11 @@ function buildProfilePayload(form = {}) {
         color: getTagColorOption(tag.color).color
       }))
   }
+  Object.keys(CONTACT_FIELD_LIMITS).forEach((field) => {
+    // 未提供的字段不改，明确的空串由服务端保存为清空状态。
+    if (form[field] !== undefined && form[field] !== null) payload[field] = trimText(form[field])
+  })
+  return payload
 }
 
 function validateLength(value, maxLength, fieldName) {
@@ -218,6 +229,12 @@ function validateLength(value, maxLength, fieldName) {
 }
 
 function validateProfileForm(form = {}) {
+  for (const field of Object.keys(CONTACT_FIELD_LIMITS)) {
+    const value = String(form[field] || '').trim()
+    const label = CONTACT_FIELD_LABELS[field]
+    if (CONTACT_CONTROL_CHARACTERS.test(value)) return { valid: false, message: `${label}不能包含换行或控制字符` }
+    if (countText(value) > CONTACT_FIELD_LIMITS[field]) return { valid: false, message: `${label}不能超过 ${CONTACT_FIELD_LIMITS[field]} 个字` }
+  }
   const fieldError = validateLength(form.nickname, 50, '姓名 / 艺名') ||
     validateLength(form.avatarUrl, 512, '头像地址') ||
     validateLength(form.wechatQrUrl, 512, '微信二维码地址') ||
@@ -276,6 +293,7 @@ function validateProfileForm(form = {}) {
 }
 
 module.exports = {
+  CONTACT_FIELD_LIMITS,
   DEFAULT_TAG_COLOR,
   PROFILE_FIELD_LIMITS,
   TAG_MAX_COUNT,

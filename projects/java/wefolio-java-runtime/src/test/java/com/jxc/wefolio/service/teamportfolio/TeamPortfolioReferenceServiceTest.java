@@ -10,6 +10,7 @@ import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
 import com.jxc.wefolio.entity.BaseEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -24,6 +25,8 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentReferenceExtractor;
+import com.jxc.wefolio.service.teamportfolio.component.structuredtextsection.TeamStructuredTextSectionComponentReferenceExtractor;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
 import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentReferenceExtractor;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
@@ -57,6 +60,35 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class TeamPortfolioReferenceServiceTest {
+
+    /** 关闭仍在两个作用域保留音频引用；显式移除才不再插入该引用。 */
+    @Test
+    void disabledBackgroundAudioShouldRetainDraftAndPublishedWorkReferences() {
+        TeamPortfolioConfigDto config = new TeamPortfolioConfigDto();
+        config.setSchemaVersion(TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1);
+        config.setComponents(List.of());
+        BackgroundAudioConfigDto audio = new BackgroundAudioConfigDto();
+        audio.setEnabled(false);
+        audio.setWorkId(19L);
+        config.setBackgroundAudio(audio);
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 3);
+        service().rebuild(22L, "DRAFT", config, context);
+        service().rebuild(22L, "PUBLISHED", config, context);
+        audio.setWorkId(null);
+        service().rebuild(22L, "DRAFT", config, context);
+        ArgumentCaptor<PortfolioReferenceEntity> refs = ArgumentCaptor.forClass(PortfolioReferenceEntity.class);
+        verify(referenceMapper, times(2)).insert(refs.capture());
+        assertThat(refs.getAllValues()).extracting(PortfolioReferenceEntity::getConfigScope)
+                .containsExactly("DRAFT", "PUBLISHED");
+        assertThat(refs.getAllValues()).allSatisfy(ref -> {
+            assertThat(ref.getPortfolioId()).isEqualTo(22L);
+            assertThat(ref.getReferenceId()).isEqualTo(19L);
+            assertThat(ref.getReferenceType()).isEqualTo("WORK");
+            assertThat(ref.getComponentPath()).isEqualTo("backgroundAudio.workId");
+        });
+    }
+    /** 结构化文字组件策略模拟。 */
+    @Mock private TeamStructuredTextSectionComponentReferenceExtractor structuredTextExtractor;
 
     @Mock private PortfolioReferenceEntityMapper referenceMapper;
     @Mock private TeamProfileComponentReferenceExtractor teamProfileExtractor;
@@ -95,7 +127,7 @@ class TeamPortfolioReferenceServiceTest {
         verify(referenceMapper).delete(deleteCaptor.capture());
         assertDeleteScope(deleteCaptor.getValue(), context.portfolioId(), PortfolioConfigScopeDict.DRAFT.getCode());
         ArgumentCaptor<PortfolioReferenceEntity> insertCaptor = ArgumentCaptor.forClass(PortfolioReferenceEntity.class);
-        verify(referenceMapper, times(11)).insert(insertCaptor.capture());
+        verify(referenceMapper, times(12)).insert(insertCaptor.capture());
         assertThat(insertCaptor.getAllValues()).allSatisfy(reference -> {
             assertThat(reference.getPortfolioId()).isEqualTo(context.portfolioId());
             assertThat(reference.getConfigScope()).isEqualTo(PortfolioConfigScopeDict.DRAFT.getCode());
@@ -296,6 +328,7 @@ class TeamPortfolioReferenceServiceTest {
                 case MEMBER_PORTFOLIO_GRID -> when(gridExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case MEMBER_PORTFOLIO_LIST -> when(listExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case TEXT_SECTION -> when(textExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
+                case STRUCTURED_TEXT_SECTION -> when(structuredTextExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case SCHEDULE_QUERY -> when(scheduleExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case CONTACT_FORM -> when(contactExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
                 case QR_CONTACT -> when(qrExtractor.extract(anyString(), anyString(), any(JSONObject.class), eq(context))).thenReturn(references);
@@ -321,13 +354,13 @@ class TeamPortfolioReferenceServiceTest {
 
     private void verifyNoReferenceCollaboratorInteractions() {
         verifyNoInteractions(referenceMapper, teamProfileExtractor, carouselExtractor, singleWorkExtractor, dividerExtractor, gridExtractor,
-                listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor, videoCarouselExtractor);
+                listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor, videoCarouselExtractor, structuredTextExtractor);
     }
 
     private TeamPortfolioReferenceService service() {
         return new TeamPortfolioReferenceService(referenceMapper, teamProfileExtractor, carouselExtractor, singleWorkExtractor, dividerExtractor,
                 gridExtractor, listExtractor, textExtractor, scheduleExtractor, contactExtractor, qrExtractor,
-                videoCarouselExtractor);
+                videoCarouselExtractor, structuredTextExtractor);
     }
 
     private TeamPortfolioConfigDto configForEveryType(boolean enabled) {

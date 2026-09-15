@@ -1,0 +1,18 @@
+<view class="structured-text-section {{background.enabled ? 'text-background-enabled' : ''}}" style="{{frameStyle}}">
+  <video wx:if="{{background.videoUrl && !backgroundVideoFailed}}" id="textBackgroundVideo" class="text-background-video"
+    src="{{background.videoUrl}}" data-src="{{background.videoUrl}}" poster="{{background.posterUrl}}"
+    autoplay="{{backgroundVideoVisible}}" loop="{{true}}" muted="{{true}}" controls="{{false}}"
+    show-center-play-btn="{{false}}" show-play-btn="{{false}}" show-fullscreen-btn="{{false}}"
+    enable-progress-gesture="{{false}}" enable-play-gesture="{{false}}" object-fit="cover"
+    bindloadedmetadata="handleBackgroundLoad" bindplay="handleBackgroundVideoPlay" bindtimeupdate="handleBackgroundVideoTimeUpdate" binderror="handleBackgroundVideoError" aria-hidden="true" />
+  <image wx:if="{{background.videoUrl && background.posterUrl && (!backgroundVideoStarted || backgroundVideoFailed)}}" class="text-background-poster" src="{{background.posterUrl}}" mode="aspectFill" aria-hidden="true" />
+  <image wx:if="{{background.imageUrl && !backgroundFailed}}" class="text-background-image" src="{{background.imageUrl}}" data-src="{{background.imageUrl}}" mode="aspectFill" webp="{{true}}" binderror="handleBackgroundError" bindload="handleBackgroundLoad" />
+  <view wx:if="{{background.enabled}}" class="text-background-mask {{background.treatmentClass}}"></view>
+  <view class="structured-text-content">
+    <view wx:if="{{repairMode && background.enabled && (background.invalid || backgroundFailed || backgroundVideoFailed)}}" class="text-background-warning">{{backgroundFailed || backgroundVideoFailed ? '背景加载失败，请重新选择或关闭背景' : '背景作品已失效，请重新选择或关闭背景'}}</view>
+    <view wx:for="{{presentation.blocks}}" wx:key="blockKey" class="structured-block {{item.fontClass}} {{item.type === 'SPACER' ? 'structured-spacer' : ''}}" style="{{item.style}}">
+      <block wx:if="{{item.type === 'LIST'}}"><text wx:for="{{item.listItems}}" wx:for-item="line" wx:key="key" class="structured-list-item" style="color:{{item.displayColor}};{{item.lineHeightStyle}}" space="nbsp">• {{line.content}}</text></block>
+      <text wx:elif="{{item.type !== 'SPACER'}}" class="structured-copy" style="color:{{item.displayColor}};{{item.lineHeightStyle}}" space="nbsp">{{item.content}}</text>
+    </view>
+  </view>
+</view>

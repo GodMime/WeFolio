@@ -97,6 +97,7 @@ public class MinePortfolioService {
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.VIDEO_CAROUSEL,
                     "叠放循环展示视频作品，访客左右滑动浏览、点击播放"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.TEXT_SECTION, "展示服务说明和补充文字"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION, "通过独立文字区块组合介绍与背景"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.DIVIDER, "在内容之间加入可调高度的分割线"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.WORK_GRID, "双列展示图片和视频作品"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.WORK_LIST, "单列展示重点图片和视频作品"),
@@ -104,7 +105,9 @@ public class MinePortfolioService {
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.HYPERLINK, "通过展示作品跳转作品集或复制分享内容"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.SCHEDULE_QUERY, "允许访客查询公开档期"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
-            new ComponentLibraryDefinition(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式")
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.TEXT_GRID, "自定义行列、合并单元格和混合文字样式"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.CONTACT_INFO, "展示并复制联系手机和联系微信")
     );
 
     /** 作品集积分业务类型 */

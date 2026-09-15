@@ -1715,54 +1715,43 @@
 }
 
 .edit-tag-option {
+  width: auto;
   min-width: 0;
   max-width: 100%;
-  min-height: 58rpx;
+  height: 50rpx;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   flex: 0 1 auto;
-  padding: 0 18rpx;
-  color: #40546a;
+  gap: 8rpx;
+  padding: 0 20rpx;
+  overflow: hidden;
+  color: #17202a;
   font-size: 24rpx;
   font-weight: 800;
-  line-height: 1.2;
-  border: 1rpx solid #cbd8e5;
-  border-radius: 8rpx;
+  line-height: 1;
+  border: 1rpx solid #d4dee8;
+  border-radius: 999rpx;
   background: #ffffff;
   box-sizing: border-box;
-}
-
-.edit-tag-option.is-selected {
-  color: #2d5f9a;
-  border-color: #2d5f9a;
-  background: #e5effb;
 }
 
 .edit-tag-option.is-locked {
   opacity: 0.78;
 }
 
-.edit-tag-checkbox {
-  width: 28rpx;
-  height: 28rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.edit-tag-dot {
+  width: 12rpx;
+  height: 12rpx;
   flex: none;
-  margin-right: 10rpx;
-  border: 2rpx solid rgba(64, 84, 106, 0.42);
-  border-radius: 6rpx;
-  box-sizing: border-box;
-}
-
-.edit-tag-checkbox.is-checked {
-  border-color: #2d5f9a;
-  background: #2d5f9a;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .edit-tag-checkmark {
-  color: #ffffff;
-  font-size: 20rpx;
+  flex: none;
+  color: inherit;
+  font-size: 24rpx;
   font-weight: 900;
   line-height: 1;
 }
@@ -1771,6 +1760,7 @@
   max-width: 360rpx;
   min-width: 0;
   overflow: hidden;
+  color: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1862,7 +1852,7 @@
   font-size: 24rpx;
   font-weight: 900;
   line-height: 1;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
   background: #17202a;
   box-sizing: border-box;
 }
@@ -1882,7 +1872,7 @@
   font-size: 25rpx;
   font-weight: 800;
   border: 1rpx solid #cbd8e5;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
   background: #eef3f7;
   box-sizing: border-box;
 }
@@ -2075,7 +2065,7 @@
   padding: 0 28rpx;
   font-size: 26rpx;
   font-weight: 900;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
   box-sizing: border-box;
 }
 
@@ -2245,4 +2235,149 @@
   to {
     transform: rotate(360deg);
   }
+}
+.audio-badge {
+  position: absolute;
+  bottom: 8rpx;
+  right: 8rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 12rpx;
+  color: #fff;
+  background: rgba(23, 32, 42, 0.72);
+  font-size: 20rpx;
+}
+
+.audio-preview-row,
+.audio-cover-actions,
+.audio-cover-option {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.audio-cover {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 16rpx;
+  flex-shrink: 0;
+}
+
+.audio-preview-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.audio-preview-meta {
+  max-width: 100%;
+  color: #66727f;
+  font-size: 24rpx;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+/* 提高优先级，覆盖 WebView 原生按钮的默认宽度和自动外边距。 */
+.audio-preview-copy .audio-play-button {
+  width: auto;
+  min-width: 200rpx;
+  max-width: 100%;
+  height: 72rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: flex-start;
+  flex: none;
+  gap: 12rpx;
+  margin: 0;
+  padding: 0 22rpx 0 12rpx;
+  color: #17202a;
+  border: 0;
+  border-radius: 999rpx;
+  background: #f1f3f5;
+  box-sizing: border-box;
+}
+
+.audio-preview-copy .audio-play-button-hover {
+  background: #e9ecef;
+}
+
+.audio-play-icon {
+  width: 44rpx;
+  height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  background: #17202a;
+}
+
+.audio-play-mark {
+  width: 0;
+  height: 0;
+  margin-left: 4rpx;
+  border-top: 9rpx solid transparent;
+  border-bottom: 9rpx solid transparent;
+  border-left: 14rpx solid #ffffff;
+}
+
+.audio-pause-mark {
+  width: 16rpx;
+  height: 18rpx;
+  border-left: 5rpx solid #ffffff;
+  border-right: 5rpx solid #ffffff;
+  box-sizing: border-box;
+}
+
+.audio-play-label {
+  color: inherit;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.audio-preview-copy .audio-play-button[disabled] {
+  color: #8b96a3;
+  background: #f4f6f8;
+}
+
+.audio-play-button[disabled] .audio-play-icon {
+  background: #c5cdd5;
+}
+
+.audio-cover-actions {
+  margin-top: 20rpx;
+  flex-wrap: wrap;
+}
+
+.audio-cover-picker {
+  margin-top: 24rpx;
+}
+
+.audio-cover-options {
+  height: 360rpx;
+}
+
+.audio-cover-option {
+  min-height: 88rpx;
+  padding: 12rpx 0;
+}
+
+.audio-cover-option image {
+  width: 80rpx;
+  height: 80rpx;
+  flex-shrink: 0;
+  border-radius: 8rpx;
+}
+
+.audio-cover-option text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

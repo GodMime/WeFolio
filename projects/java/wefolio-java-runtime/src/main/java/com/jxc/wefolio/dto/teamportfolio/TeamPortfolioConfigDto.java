@@ -1,6 +1,7 @@
 package com.jxc.wefolio.dto.teamportfolio;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
 import lombok.Data;
 
 import java.util.List;
@@ -12,7 +13,7 @@ import java.util.List;
 public class TeamPortfolioConfigDto {
 
     /** 当前团队编辑器配置能力版本 */
-    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 3;
+    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 10;
 
     /** 默认页面背景色 */
     public static final String DEFAULT_BACKGROUND_COLOR = "#FFFFFF";
@@ -28,6 +29,9 @@ public class TeamPortfolioConfigDto {
 
     /** 页面样式 */
     private Style style;
+
+    /** 全局背景音频；请求缺省保持 null，供旧客户端兼容合并判断。 */
+    private BackgroundAudioConfigDto backgroundAudio;
 
     /** 组件配置列表 */
     private List<ComponentEnvelope> components;

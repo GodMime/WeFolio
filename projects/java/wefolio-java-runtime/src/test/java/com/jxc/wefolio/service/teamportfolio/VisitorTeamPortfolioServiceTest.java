@@ -43,6 +43,16 @@ import com.jxc.wefolio.service.PortfolioPublishTransactionService;
 import com.jxc.wefolio.service.PointBalanceGateService;
 import com.jxc.wefolio.service.VisitorAuthTokenService;
 import com.jxc.wefolio.service.VisitorService;
+import com.jxc.wefolio.service.VisitActivitySessionApplicationService;
+import com.jxc.wefolio.service.VisitActivitySessionTransactionService;
+import com.jxc.wefolio.dto.VisitActivityTrackingDto;
+import com.jxc.wefolio.dto.VisitActivityUpdateRequest;
+import com.jxc.wefolio.dict.PortfolioTypeDict;
+import com.jxc.wefolio.common.auth.AuthContext;
+import com.jxc.wefolio.common.auth.AuthContextHolder;
+import java.math.BigDecimal;
+import com.jxc.wefolio.entity.VisitActivitySessionEntity;
+import org.springframework.test.util.ReflectionTestUtils;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentService;
 import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamScheduleQueryComponentService;
 import org.junit.jupiter.api.AfterEach;
@@ -228,6 +238,56 @@ class VisitorTeamPortfolioServiceTest {
 
         verifyNoInteractions(context.visitorService, context.visitService,
                 context.tokenService, context.renderService);
+    }
+
+    /** 新团队协议返回固定活动会话及累计，沿用团队访问且不引入个人本人排除。 */
+    @Test
+    void trackedTeamOpenReturnsSessionBaseline() {
+        VisitorServiceContext context = publishedContext();
+        VisitActivitySessionApplicationService activity = mock(VisitActivitySessionApplicationService.class);
+        ReflectionTestUtils.setField(context.service, "visitActivitySessionApplicationService", activity);
+        VisitorTeamPortfolioOpenRequest request = new VisitorTeamPortfolioOpenRequest();request.setLoginCode("wx-code");
+        request.setIdempotencyKey("open-tracked");request.setTracking(new VisitActivityTrackingDto());
+        VisitorEntity visitor = visitor();
+        when(context.visitorService.resolveForOpen(eq("wx-code"),isNull(),eq("TEAM:41"),any()))
+                .thenReturn(new VisitorService.VisitorSession(visitor,false));
+        when(context.tokenService.issueToken(VISITOR_ID,VISITOR_KEY))
+                .thenReturn(new VisitorAuthTokenService.VisitorLoginToken("Bearer","token",7200L));
+        when(context.renderService.render(any(),any())).thenReturn(new TeamPortfolioRenderDto());
+        VisitActivitySessionEntity session = new VisitActivitySessionEntity();session.setId(77L);session.setActiveDurationMs(45000L);
+        when(activity.open(any(),eq("TEAM"),eq(VISITOR_ID),eq(VISITOR_KEY),isNull(),eq("open-tracked"),any()))
+                .thenReturn(new VisitActivitySessionTransactionService.OpenResult(ownedRecord(),session));
+        var response = context.service.openPortfolio("TPF-TASK8",request);
+        assertThat(response.getTrackingSessionId()).isEqualTo(77L);
+        assertThat(response.getTrackingActiveDurationMs()).isEqualTo(45000L);
+        verifyNoInteractions(context.visitService);
+    }
+
+    /** 团队拥有者以正式访客身份打开并上报仍计入，不能套用个人本人自访豁免。 */
+    @Test
+    void teamOwnerFormalVisitAndActivityAreRecorded() {
+        VisitorServiceContext context = publishedContext();
+        VisitActivitySessionApplicationService activity = mock(VisitActivitySessionApplicationService.class);
+        ReflectionTestUtils.setField(context.service,"visitActivitySessionApplicationService",activity);
+        VisitorEntity ownerVisitor = visitor();ownerVisitor.setOpenid("team-owner-wechat-openid");
+        AuthContextHolder.set(new AuthContext(USER_ID,"team-owner-maintainer-context"));
+        try {
+            VisitorTeamPortfolioOpenRequest request = new VisitorTeamPortfolioOpenRequest();request.setLoginCode("owner-login");
+            request.setIdempotencyKey("owner-open");request.setTracking(new VisitActivityTrackingDto());
+            when(context.visitorService.resolveForOpen(eq("owner-login"),isNull(),eq("TEAM:41"),any()))
+                    .thenReturn(new VisitorService.VisitorSession(ownerVisitor,false));
+            when(context.renderService.render(any(),any())).thenReturn(new TeamPortfolioRenderDto());
+            when(context.tokenService.issueToken(VISITOR_ID,VISITOR_KEY))
+                    .thenReturn(new VisitorAuthTokenService.VisitorLoginToken("Bearer","owner-visitor-token",7200L));
+            VisitActivitySessionEntity session = new VisitActivitySessionEntity();session.setId(99L);session.setActiveDurationMs(0L);
+            when(activity.open(any(),eq(PortfolioTypeDict.TEAM.getCode()),eq(VISITOR_ID),eq(VISITOR_KEY),isNull(),eq("owner-open"),any()))
+                    .thenReturn(new VisitActivitySessionTransactionService.OpenResult(ownedRecord(),session));
+            assertThat(context.service.openPortfolio("TPF-TASK8",request).getTrackingSessionId()).isEqualTo(99L);
+            VisitActivityUpdateRequest update = new VisitActivityUpdateRequest();update.setActiveDurationMs(BigDecimal.valueOf(15000));
+            when(activity.accept(any(),eq(PortfolioTypeDict.TEAM.getCode()),eq(99L),eq(update))).thenReturn(15000L);
+            assertThat(context.service.recordActivity("TPF-TASK8",99L,update)).isEqualTo(15000L);
+            verify(activity).accept(any(),eq(PortfolioTypeDict.TEAM.getCode()),eq(99L),eq(update));
+        } finally { AuthContextHolder.clear(); }
     }
 
     /**
@@ -607,7 +667,8 @@ class VisitorTeamPortfolioServiceTest {
                 properties, portfolioMapper, teamMapper, renderService, scheduleService,
                 contactService, visitService, visitorService, tokenService,
                 pointBalanceGateService,
-                performanceLogger());
+                performanceLogger(),
+                mock(VisitActivitySessionApplicationService.class));
         return new VisitorServiceContext(service, portfolioMapper, teamMapper, renderService,
                 scheduleService, contactService, visitService, visitorService, tokenService,
                 pointBalanceGateService);

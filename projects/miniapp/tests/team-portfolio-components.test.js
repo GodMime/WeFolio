@@ -242,13 +242,15 @@ test('single work selects member before work and keeps one 16rpx copy gap', () =
 
   harness.instance.selectMember({ currentTarget: { dataset: { id: 2 } } })
   assert.deepEqual(harness.instance.data.draft, {
-    memberUserId: 2, workId: null, showTitle: true, showDescription: false
+    memberUserId: 2, workId: null, showTitle: true, showDescription: false,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true }
   })
   harness.instance.selectWork({ currentTarget: { dataset: { item: { workId: 20, mediaType: 'VIDEO' } } } })
   harness.instance.handleShowDescriptionChange({ detail: { value: true } })
   harness.instance.saveEdit()
   assert.deepEqual(harness.eventsByName('save')[0].detail.config, {
-    memberUserId: 2, workId: 20, showTitle: true, showDescription: true
+    memberUserId: 2, workId: 20, showTitle: true, showDescription: true,
+    openMode: 'INLINE', detailOptions: { showTitle: true, showDescription: true }
   })
   assert.equal(exports.validateSingleWorkConfig(harness.eventsByName('save')[0].detail.config).valid, true)
 
@@ -746,6 +748,36 @@ test('divider owns color and positive height validation', () => {
   assert.match(wxss, /\.divider-component\.editor-mode\s*\{[^}]*width:\s*100%;[^}]*margin-left:\s*0;[^}]*padding:\s*0;/)
 })
 
+test('team divider keeps legacy rendering and saves custom colors through the unified picker', () => {
+  const { definition, exports } = loadComponent('divider')
+  const colors = {
+    BLACK: '#212529', WHITE: '#ffffff', GRAY: '#d7dfe1', TRANSPARENT: 'transparent',
+    '#000000': '#000000', '#FFFFFF': '#FFFFFF', '#F5F6F8': '#F5F6F8', '#12abef': '#12ABEF'
+  }
+  const harness = createComponentHarness(definition)
+  for (const [color, colorValue] of Object.entries(colors)) {
+    harness.setProperties({ editMode: false, config: { color, heightPx: 24 } })
+    assert.equal(harness.instance.data.colorValue, colorValue)
+    assert.equal(exports.validateDividerConfig({ color, heightPx: 24 }).valid, true)
+    harness.setProperties({ editMode: true })
+    harness.instance.saveEdit()
+    assert.equal(harness.eventsByName('save').at(-1).detail.config.color, color.startsWith('#') ? color.toUpperCase() : color)
+  }
+  harness.instance.selectColor({ detail: { color: '#a1b2c3' } })
+  harness.instance.saveEdit()
+  assert.equal(harness.eventsByName('save').at(-1).detail.config.color, '#A1B2C3')
+  assert.equal(harness.instance.data.colorValue, '#A1B2C3')
+  for (const color of ['#fff', '#12345678', '#123456;display:none', 'RED']) {
+    assert.equal(exports.validateDividerConfig({ color, heightPx: 16 }).valid, false)
+    assert.equal(exports.resolveDividerColorValue(color), '#d7dfe1')
+  }
+  const wxml = fs.readFileSync(path.join(ROOT, 'divider/divider.wxml'), 'utf8')
+  const json = JSON.parse(fs.readFileSync(path.join(ROOT, 'divider/divider.json'), 'utf8'))
+  assert.match(wxml, /<text-color-editor[^>]*bindchange="selectColor"/)
+  assert.match(wxml, /background: \{\{colorValue\}\}/)
+  assert.equal(json.usingComponents['text-color-editor'], '../text-color-editor/text-color-editor')
+})
+
 test('grid independently loads a member before that member published portfolios', async () => {
   const { definition, exports } = loadComponent('member-portfolio-grid')
   assert.equal(propertyDefault(definition, 'showMemberName'), true)
@@ -816,6 +848,7 @@ test('text section trims required body, limits 200 chars and owns safe typograph
   const { definition, exports } = loadComponent('text-section')
   assert.deepEqual(exports.createDefaultTextSectionConfig(), {
     content: '',
+    color: 'AUTO',
     alignment: 'LEFT',
     fontFamily: 'SYSTEM',
     fontSizeRpx: 32,
@@ -829,9 +862,9 @@ test('text section trims required body, limits 200 chars and owns safe typograph
   assert.equal(exports.countTextCodePoints('😀a'), 2)
   assert.equal(exports.validateTextSectionConfig({ content: '正文', alignment: 'JUSTIFY' }).valid, false)
 
-  assert.deepEqual(definition.data, {
-    normalizedConfig: exports.createDefaultTextSectionConfig()
-  })
+  assert.deepEqual(definition.data.normalizedConfig, exports.createDefaultTextSectionConfig())
+  assert.equal(definition.data.background.enabled, false)
+  assert.equal(definition.data.frameStyle, '')
 
   const harness = createComponentHarness(definition)
   harness.setProperties({
@@ -859,6 +892,15 @@ test('text section trims required body, limits 200 chars and owns safe typograph
   assert.equal(harness.instance.data.normalizedConfig.fontClass, 'font-system')
   assert.equal(harness.instance.data.normalizedConfig.fontSizeStyle, 'font-size: 20rpx;')
 
+  for (const size of [10, 11, 19, 49, 95, 96]) {
+    harness.setProperties({ config: { content: '字号边界', fontSizeRpx: size } })
+    assert.equal(harness.instance.data.normalizedConfig.fontSizeStyle, `font-size: ${size}rpx;`)
+  }
+  for (const size of [9, 97, 10.5, '10']) {
+    harness.setProperties({ config: { content: '非法字号', fontSizeRpx: size } })
+    assert.equal(harness.instance.data.normalizedConfig.fontSizeStyle, 'font-size: 32rpx;')
+  }
+
   const wxml = fs.readFileSync(
     path.join(ROOT, 'text-section/text-section.wxml'),
     'utf8'
@@ -869,7 +911,7 @@ test('text section trims required body, limits 200 chars and owns safe typograph
   )
   assert.match(
     wxml,
-    /class="content \{\{normalizedConfig\.fontClass\}\}"[^>]*style="\{\{normalizedConfig\.fontSizeStyle\}\}"/
+    /class="content \{\{normalizedConfig\.fontClass\}\}"[^>]*style="\{\{normalizedConfig\.fontSizeStyle\}\}\{\{textColorStyle\}\}\{\{lineHeightStyle\}\}"/
   )
   assert.match(
     wxss,
@@ -908,7 +950,9 @@ test('schedule calendar builds six stable weeks and applies query range bounds',
   )
 })
 
-test('schedule calendar changes months and selects only enabled dates', () => {
+test('schedule calendar changes months and selects only enabled dates', (t) => {
+  // 固定在用例的八月查询区间内，避免真实月份变化影响初始化；结束后由测试上下文恢复时钟。
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 7, 3, 12).getTime() })
   const { definition } = loadComponent('schedule-query')
   const harness = createComponentHarness(definition, {
     config: {
@@ -1131,7 +1175,11 @@ test('QR is CUSTOM-only and distinguishes maintainer preview from visitor intera
 test('component styles constrain cards and long text without unrelated decorative gradients', () => {
   for (const name of COMPONENTS) {
     const source = fs.readFileSync(path.join(ROOT, name, `${name}.wxss`), 'utf8')
-    if (name !== 'video-carousel') assert.doesNotMatch(source, /linear-gradient|radial-gradient/)
+    if (!['video-carousel', 'text-section'].includes(name)) assert.doesNotMatch(source, /linear-gradient|radial-gradient/)
+    if (name === 'text-section') {
+      assert.doesNotMatch(source, /radial-gradient/)
+      assert.match(source, /\.text-background--gradient \.text-background-mask\s*\{\s*background:\s*linear-gradient/)
+    }
     assert.doesNotMatch(source, /border-radius:\s*(?:[9-9]|[1-9]\d+)px/)
     assert.match(source, /overflow-wrap|word-break|text-overflow/)
   }

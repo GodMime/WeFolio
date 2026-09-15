@@ -569,7 +569,7 @@ class CosServiceTest {
         verify(cosClient, atLeastOnce()).putObject(captor.capture());
         assertThat(captor.getAllValues())
                 .extracting(PutObjectRequest::getKey)
-                .contains("WFA3B1E7A2/work/animation/");
+                .contains("WFA3B1E7A2/work/animation/", "WFA3B1E7A2/work/audio/");
         assertThat(captor.getAllValues()).allSatisfy(request -> {
             assertThat(request.getMetadata().getContentLength()).isZero();
             assertThat(request.getMetadata().getContentType())

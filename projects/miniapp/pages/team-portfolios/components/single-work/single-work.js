@@ -8,7 +8,10 @@ function normalizeSingleWorkConfig(config = {}) {
     memberUserId: positiveId(config.memberUserId),
     workId: positiveId(config.workId),
     showTitle: typeof config.showTitle === 'boolean' ? config.showTitle : true,
-    showDescription: typeof config.showDescription === 'boolean' ? config.showDescription : false
+    showDescription: typeof config.showDescription === 'boolean' ? config.showDescription : false,
+    openMode: config.openMode === 'DETAIL_PAGE' ? 'DETAIL_PAGE' : 'INLINE',
+    detailOptions: { showTitle: !config.detailOptions || config.detailOptions.showTitle !== false,
+      showDescription: !config.detailOptions || config.detailOptions.showDescription !== false }
   }
 }
 
@@ -46,6 +49,7 @@ function syncDraft(component, requestSources) {
 
 Component({
   properties: {
+    openMode: { type: String, value: 'INLINE' },
     themeMode: { type: String, value: 'light' },
     portfolioId: { type: Number, value: 0 },
     componentKey: { type: String, value: '' },
@@ -165,6 +169,12 @@ Component({
     retryLoadMore() {
       this.triggerEvent('retryloadmore', { memberUserId: this.data.draft.memberUserId })
     },
+    handleOpenModeChange(event) {
+      this.setData({ 'draft.openMode': event.detail.value ? 'DETAIL_PAGE' : 'INLINE' })
+    },
+    handleDetailOptionChange(event) {
+      this.setData({ [`draft.detailOptions.${event.currentTarget.dataset.field}`]: Boolean(event.detail.value) })
+    },
     handleShowTitleChange(event) {
       this.setData({
         draft: Object.assign({}, this.data.draft, {
@@ -195,6 +205,10 @@ Component({
     handleMediaTap() {
       const work = this.properties.work
       if (!work) return
+      if (this.properties.openMode === 'DETAIL_PAGE') {
+        this.triggerEvent('detail', { componentKey: this.properties.componentKey })
+        return
+      }
       if (work.mediaType === 'VIDEO') {
         this.triggerEvent('activate', {
           componentKey: this.properties.componentKey,
@@ -218,6 +232,10 @@ Component({
         componentKey: this.properties.componentKey,
         error: event.detail
       })
+    },
+
+    handleVideoPlay() {
+      this.triggerEvent('videoplay', { componentKey: this.data.componentKey })
     },
     pauseVideo() {
       if (this.properties.activeVideoKey !== this.properties.componentKey) return

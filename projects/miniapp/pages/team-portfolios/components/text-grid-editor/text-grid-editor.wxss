@@ -1,0 +1,46 @@
+.grid-mask { position:fixed; top:0;right:0;bottom:0;left:0; z-index:80; background:rgba(0,0,0,.42); opacity:0; pointer-events:none; transition:opacity .2s; display:flex; align-items:flex-end; }
+.grid-mask.is-visible { opacity:1; pointer-events:auto; }
+.grid-panel { width:100%; height:90vh; background:#fff; border-radius:32rpx 32rpx 0 0; display:flex; flex-direction:column; padding:28rpx 24rpx calc(24rpx + env(safe-area-inset-bottom)); box-sizing:border-box; color:#212529; }
+.grid-header,.grid-field { display:flex; justify-content:space-between; align-items:center; gap:16rpx; }
+.grid-header { flex-shrink:0; font-size:32rpx; line-height:1.4; font-weight:700; padding-bottom:24rpx; }
+.grid-header .grid-meta { flex-shrink:0; font-weight:400; }
+.grid-tabs { display:flex; flex-shrink:0; min-height:72rpx; margin-bottom:12rpx; border-bottom:1rpx solid #E9ECEF; }
+.grid-tab { position:relative; display:flex; align-items:center; justify-content:center; flex:1; min-width:0; height:72rpx; font-size:26rpx; line-height:1; font-weight:500; color:#868E96; }
+.grid-tab.active { color:#212529; font-weight:600; }
+.grid-tab-indicator { position:absolute; bottom:-1rpx; left:50%; width:48rpx; height:5rpx; margin-left:-24rpx; border-radius:999rpx; background:#212529; }
+.grid-scroll { flex:1; min-height:0; height:0; }
+.grid-body { padding:16rpx 0 32rpx; }
+.grid-label { margin:24rpx 0 12rpx; font-size:26rpx; font-weight:600; }
+.grid-meta { font-size:24rpx; color:#868E96; line-height:1.6; }
+.grid-options,.grid-actions { display:flex; flex-wrap:wrap; gap:12rpx; margin:12rpx 0; }
+.grid-option { border:2rpx solid #E9ECEF; padding:16rpx 22rpx; border-radius:var(--pe-radius-pill, 999rpx); font-size:24rpx; line-height:1.5; background:#F5F6F7; }
+.grid-option.selected { background:#212529; color:#FFFFFF; border-color:#212529; }
+/* 全局按钮样式已清除原生尺寸，弹层内显式保证点击高度和圆角。 */
+.grid-button { display:flex; align-items:center; justify-content:center; width:auto; min-width:0; min-height:80rpx; box-sizing:border-box; margin:0; padding:20rpx; border:2rpx solid #E9ECEF; border-radius:var(--pe-radius-pill, 999rpx); font-size:26rpx; line-height:1.5; font-weight:400; color:#212529; background:#F5F6F7; }
+.grid-button::after { border:0; }
+.grid-button[disabled] { color:#868E96; opacity:.55; }
+.grid-options .grid-button { font-size:24rpx; }
+.grid-layout-actions { flex-wrap:nowrap; }
+.grid-layout-actions .grid-button { flex:1; width:0; min-width:0; padding:20rpx 8rpx; white-space:nowrap; }
+.grid-content-actions { display:flex; flex-direction:row; flex-wrap:nowrap; flex:1; min-width:400rpx; gap:12rpx; }
+.grid-content-actions .grid-button { flex:1; width:0; min-width:0; padding:20rpx 8rpx; white-space:nowrap; }
+.grid-field { margin:16rpx 0; font-size:26rpx; min-height:68rpx; }
+.grid-input { width:110rpx; background:#F5F6F7; padding:12rpx; border-radius:10rpx; text-align:center; }
+.grid-stepper { display:flex; align-items:center; flex-shrink:0; background:#F5F6F7; border-radius:10rpx; overflow:hidden; }
+.grid-stepper .grid-step-button { flex-shrink:0; width:80rpx; height:80rpx; padding:0; border:0; border-radius:0; font-size:32rpx; background:transparent; }
+.grid-stepper .grid-input { width:80rpx; height:80rpx; min-width:0; padding:0; border-radius:0; font-size:26rpx; background:transparent; }
+.grid-stepper .grid-line-height-input { width:200rpx; font-size:24rpx; }
+/* 关闭边框时收起设置，保留配置值；自定义颜色在同一滚动区内展开。 */
+.grid-border-settings { max-height:0; overflow:hidden; opacity:0; pointer-events:none; transition:max-height .2s ease, opacity .2s ease; }
+.grid-border-settings.is-visible { max-height:1800rpx; opacity:1; }
+/* 展开状态会随草稿保留，只有父弹层可见时才能接收点击，避免透明区域遮挡页面。 */
+.grid-mask.is-visible .grid-border-settings.is-visible { pointer-events:auto; }
+.grid-border-width-slider { margin:12rpx 12rpx 20rpx; }
+.grid-selector { width:100%; position:relative; margin:20rpx 0; }
+.grid-selector-cell { position:absolute; box-sizing:border-box; border:4rpx solid #fff; background:#F1F3F5; border-radius:12rpx; display:flex; justify-content:center; align-items:center; font-size:22rpx; }
+.grid-selector-cell.selected { background:#212529; color:#FFFFFF; }
+.grid-textarea { box-sizing:border-box; width:100%; height:150rpx; background:#f5f6f8; border-radius:14rpx; padding:20rpx; font-size:28rpx; margin:16rpx 0; }
+.grid-actions { flex-shrink:0; flex-wrap:nowrap; gap:16rpx; padding-top:24rpx; margin:0; background:#FFFFFF; }
+.grid-action-button { flex:1; }
+.grid-actions .primary { background:#212529; color:#fff; border-color:#212529; }
+.grid-error { padding:12rpx 0; color:#b54708; font-size:24rpx; }

@@ -166,6 +166,17 @@
           <view class="visit-event-meta">{{selectedVisitRecord.lastVisitedText || selectedVisitRecord.eventCountText}}</view>
         </view>
 
+        <view class="visit-activity-summary" wx:if="{{!eventSheetLoading && !eventSheetErrorMessage}}">
+          <view class="visit-activity-row"><text class="visit-activity-label">累计前台停留</text><text>{{selectedVisitRecord.foregroundDurationText}}</text></view>
+          <view class="visit-activity-row" bindtap="handleToggleEventDevice" aria-role="button" aria-label="查看设备信息">
+            <text class="visit-activity-label">最近采集设备</text>
+            <view class="visit-activity-device"><text>{{selectedVisitRecord.deviceText}}</text><text wx:if="{{selectedVisitRecord.hasDeviceInfo}}" class="visit-device-toggle">{{eventDeviceExpanded ? '收起' : '展开'}}</text></view>
+          </view>
+          <view wx:if="{{eventDeviceExpanded && selectedVisitRecord.hasDeviceInfo}}" class="visit-device-details">
+            <view class="visit-activity-row" wx:for="{{selectedVisitRecord.deviceRows}}" wx:key="key"><text class="visit-activity-label">{{item.label}}</text><text>{{item.value}}</text></view>
+            <view wx:if="{{selectedVisitRecord.deviceRecordedAtText}}" class="visit-activity-row"><text class="visit-activity-label">采集时间</text><text>{{selectedVisitRecord.deviceRecordedAtText}}</text></view>
+          </view>
+        </view>
         <view wx:if="{{eventSheetLoading}}" class="visit-event-loading">事件加载中...</view>
         <view wx:elif="{{eventSheetErrorMessage}}" class="visit-event-empty">
           <view class="empty-title small">加载失败</view>

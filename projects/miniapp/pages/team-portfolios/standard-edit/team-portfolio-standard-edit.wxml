@@ -72,6 +72,36 @@
 
         <view class="form-row">
           <view class="field-heading">
+            <view class="field-label">背景音频</view>
+            <switch checked="{{config.backgroundAudio.enabled}}" bindchange="handleBackgroundAudioSwitch" aria-label="开启背景音频" color="#212529" disabled="{{!canMaintain}}" />
+          </view>
+          <block wx:if="{{config.backgroundAudio.enabled}}">
+            <view class="section-desc pe-page-card-description">全局配置；关闭后保留选择，移除后取消引用</view>
+            <view wx:if="{{config.backgroundAudio.workId}}" class="section-desc pe-page-card-description">{{backgroundAudioSelected.title || '已选择音频'}}</view>
+            <button wx:if="{{config.backgroundAudio.workId}}" class="background-audio-action pe-page-action-secondary" disabled="{{!backgroundAudioResource.mediaUrl}}" bindtap="handleToggleBackgroundAudio">{{backgroundAudioPlaying ? '暂停试听' : '试听音频'}}</button>
+            <view class="background-audio-styles">
+              <view wx:for="{{backgroundAudioStyles}}" wx:key="value" class="background-audio-style {{config.backgroundAudio.displayStyle === item.value ? 'audio-style-selected' : ''}}" data-style="{{item.value}}" bindtap="handleBackgroundAudioStyle" aria-role="radio" aria-checked="{{config.backgroundAudio.displayStyle === item.value}}" aria-label="{{item.label}}">
+                <view class="background-audio-sample"><background-audio-control display-style="{{item.value}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" sample="{{true}}" /></view>
+                <view class="background-audio-style-label">{{item.label}}{{config.backgroundAudio.displayStyle === item.value ? ' · 已选' : ''}}</view>
+              </view>
+            </view>
+            <button class="background-audio-action pe-page-action-secondary" bindtap="handleChooseBackgroundAudio">从音频作品中选择</button>
+            <button wx:if="{{config.backgroundAudio.workId}}" class="background-audio-action pe-page-action-secondary" bindtap="handleRemoveBackgroundAudio">移除音频</button>
+            <view wx:if="{{backgroundAudioPickerVisible}}" class="background-audio-options">
+              <picker range="{{backgroundAudioMembers}}" range-key="nickname" value="{{backgroundAudioMemberIndex}}" bindchange="handleBackgroundAudioMemberChange"><view class="background-audio-action pe-page-action-secondary">{{backgroundAudioMembers[backgroundAudioMemberIndex].nickname || '暂无可授权作品的成员'}} · 切换成员</view></picker>
+              <button wx:for="{{backgroundAudioOptions}}" wx:key="workId" class="background-audio-option" data-index="{{index}}" bindtap="handleSelectBackgroundAudio">
+                <text>{{item.title || '未命名音频'}}</text>
+              </button>
+              <view wx:if="{{backgroundAudioLoading}}" class="section-desc pe-page-card-description">加载中…</view>
+              <view wx:if="{{!backgroundAudioLoading && backgroundAudioOptions.length === 0}}" class="section-desc pe-page-card-description">暂无可用音频，请先上传并等待审核通过</view>
+              <button wx:if="{{backgroundAudioHasMore}}" class="background-audio-action pe-page-action-secondary {{backgroundAudioLoading ? 'pe-action-loading' : ''}}" bindtap="loadBackgroundAudioOptions" loading="{{backgroundAudioLoading}}" disabled="{{backgroundAudioLoading}}">加载更多</button>
+              <button class="background-audio-action pe-page-action-secondary" bindtap="handleCloseBackgroundAudioPicker">收起选择</button>
+            </view>
+          </block>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
             <view class="field-label">底部导航</view>
             <view class="field-limit">2~4 个菜单</view>
           </view>
@@ -205,14 +235,20 @@
         ></slider>
         <view class="background-hue-thumb" style="left: {{backgroundColorHsv.hue / 3.59}}%; background-color: {{backgroundHueColor}};"></view>
       </view>
-      <input
-        class="background-hex-input pe-sheet-field"
-        value="{{backgroundColorDraft}}"
-        bindinput="handleBackgroundHexInput"
-        bindblur="handleBackgroundHexBlur"
-        maxlength="7"
-        placeholder="#FFFFFF"
-      />
+      <view class="background-hex-row">
+        <input
+          class="background-hex-input pe-sheet-field"
+          type="text"
+          value="{{backgroundColorDraft}}"
+          bindinput="handleBackgroundHexInput"
+          bindblur="handleBackgroundHexBlur"
+          maxlength="7"
+          placeholder="#FFFFFF"
+          disabled="{{!backgroundColorSheetVisible || !canMaintain}}"
+          aria-label="十六进制背景色，可直接输入"
+        />
+        <button class="background-hex-copy" catchtap="handleCopyBackgroundColor" disabled="{{!backgroundColorSheetVisible || !canMaintain}}" aria-label="复制背景色值">复制</button>
+      </view>
       <view class="background-color-preview-bar">
         <view class="background-color-preview-chip" style="background-color: {{backgroundColorDraft}};"></view>
         <view class="background-color-preview-text">预览 {{backgroundColorDraft}}</view>
@@ -291,7 +327,7 @@
         <view class="pe-sheet-title">编辑文字说明</view>
       </view>
 
-      <scroll-view class="text-section-form pe-sheet-scroll" scroll-y type="list">
+      <scroll-view class="text-section-form pe-sheet-scroll" scroll-y type="list" lower-threshold="80" bindscrolltolower="handleTextBackgroundScrollToLower">
         <view class="text-section-form-content">
           <view class="form-row">
             <view class="field-heading">
@@ -300,7 +336,7 @@
             </view>
             <textarea
               class="text-section-sheet-textarea pe-sheet-field pe-sheet-field-textarea {{textSectionTypography.fontClass}}"
-              style="{{textSectionTypography.fontSizeStyle}}"
+              style="{{textSectionTypography.fontSizeStyle}}{{textSectionTypography.lineHeightStyle}}"
               value="{{textSectionForm.content}}"
               placeholder="请输入给访客看的说明文字"
               maxlength="{{textSectionMaxLength}}"
@@ -352,7 +388,18 @@
           </view>
 
           <view class="form-row">
-            <view class="field-heading"><view class="field-label">对齐方式</view></view>
+            <view class="field-heading"><view class="field-label">行间距（0.5–3.0 倍）</view></view>
+            <view class="text-section-line-height-stepper">
+              <button data-delta="{{-textSectionLineHeightEditor.step}}" bindtap="handleTextSectionLineHeightStep" disabled="{{textSectionLineHeightEditor.decreaseDisabled}}" aria-label="减小行间距">−</button>
+              <input type="digit" value="{{textSectionLineHeightEditor.value}}" placeholder="{{textSectionLineHeightEditor.placeholder}}" bindinput="handleTextSectionLineHeightInput" aria-label="行间距，0.5至3.0倍" />
+              <text>倍</text>
+              <button data-delta="{{textSectionLineHeightEditor.step}}" bindtap="handleTextSectionLineHeightStep" disabled="{{textSectionLineHeightEditor.increaseDisabled}}" aria-label="增大行间距">＋</button>
+            </view>
+            <view wx:if="{{textSectionLineHeightEditor.error}}" class="text-section-line-height-error">{{textSectionLineHeightEditor.error}}</view>
+          </view>
+
+          <view class="form-row">
+            <view class="field-heading"><view class="field-label">左右对齐方式</view></view>
             <view class="text-section-alignment-list">
               <view wx:for="{{textSectionAlignmentOptions}}" wx:key="value" class="text-section-alignment-option pe-sheet-choice {{textSectionForm.alignment === item.value ? 'pe-sheet-choice-selected' : ''}}" data-value="{{item.value}}" catchtap="handleTextSectionAlignmentTap" aria-role="radio" aria-checked="{{textSectionForm.alignment === item.value}}">
                 <view class="text-section-alignment-radio"></view>
@@ -360,6 +407,11 @@
               </view>
             </view>
           </view>
+          <view class="form-row">
+            <view class="field-heading"><view class="field-label">颜色</view></view>
+            <text-color-editor color="{{textSectionForm.color}}" active="{{textSectionSheetVisible && canMaintain}}" bindchange="handleTextSectionColorChange" />
+          </view>
+          <team-text-background-editor id="text-background-picker" wx:if="{{textSectionSheetVisible}}" config="{{textSectionForm}}" options="{{textBackgroundOptions}}" loading="{{textBackgroundLoading}}" error="{{textBackgroundError}}" has-more="{{textBackgroundHasMore}}" members="{{textBackgroundMembers}}" member-user-id="{{textBackgroundMemberUserId}}" members-loading="{{textBackgroundMembersLoading}}" bindchange="handleTextBackgroundChange" bindrequest="handleTextBackgroundRequest" />
         </view>
       </scroll-view>
 
@@ -369,6 +421,10 @@
       </view>
     </view>
   </view>
+
+  <text-grid-editor background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'TEXT_GRID'}}" config="{{newComponentConfig}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
+  <contact-info-editor background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'CONTACT_INFO'}}" config="{{newComponentConfig}}" is-new="{{!newComponentKey}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
+  <team-structured-text-editor visible="{{structuredTextSheetVisible}}" config="{{structuredTextConfig}}" is-new="{{structuredTextIsNew}}" font-options="{{textSectionFontOptions}}" background-options="{{textBackgroundOptions}}" background-loading="{{textBackgroundLoading}}" background-error="{{textBackgroundError}}" background-has-more="{{textBackgroundHasMore}}" background-members="{{textBackgroundMembers}}" background-member-user-id="{{textBackgroundMemberUserId}}" background-members-loading="{{textBackgroundMembersLoading}}" background-resource="{{textBackgroundResource}}" bindconfirm="handleConfirmStructuredText" bindcancel="handleCancelStructuredText" bindbackgroundrequest="handleTextBackgroundRequest" bindbackgroundchange="handleStructuredTextBackgroundChange" />
 
   <view class="contact-form-sheet-mask pe-sheet-mask {{contactFormSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseContactFormSheet">
     <view class="contact-form-sheet-panel pe-sheet-panel pe-sheet-size-standard {{contactFormSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
@@ -408,16 +464,20 @@
     <view class="divider-sheet-panel pe-sheet-panel pe-sheet-size-compact {{dividerSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
       <view class="pe-sheet-grabber"></view>
       <view class="pe-sheet-heading"><view class="pe-sheet-title">编辑分割线</view><view class="pe-sheet-meta">{{dividerForm.heightPx}}px</view></view>
-      <view class="divider-sheet-form"><view class="form-row"><view class="field-heading"><view class="field-label">颜色</view></view><view class="divider-color-list"><view wx:for="{{dividerColorOptions}}" wx:key="value" class="divider-color-option pe-sheet-choice {{dividerForm.color === item.value ? 'pe-sheet-choice-selected' : ''}}" data-value="{{item.value}}" catchtap="handleDividerColorTap" aria-role="radio" aria-checked="{{dividerForm.color === item.value}}"><view class="divider-color-swatch" style="background-color: {{item.colorValue}};"></view><view class="divider-color-label">{{item.label}}</view></view></view></view><view class="form-row"><view class="field-heading"><view class="field-label">高度(px)</view></view><input class="divider-height-input pe-sheet-field" type="number" value="{{dividerForm.heightPx}}" placeholder="16" bindinput="handleDividerHeightInput" /></view></view>
+      <view class="divider-sheet-form"><view class="form-row"><view class="field-heading"><view class="field-label">颜色</view></view><text-color-editor label="分割线颜色" color="{{dividerPickerColor}}" active="{{dividerSheetVisible && canMaintain}}" bindchange="handleDividerColorChange" /></view><view class="form-row"><view class="field-heading"><view class="field-label">高度(px)</view></view><input class="divider-height-input pe-sheet-field" type="number" value="{{dividerForm.heightPx}}" placeholder="16" bindinput="handleDividerHeightInput" /></view></view>
       <view class="divider-sheet-actions pe-sheet-actions"><button class="pe-sheet-action-cancel" catchtap="handleCloseDividerSheet">取消</button><button class="pe-sheet-action-confirm" catchtap="handleConfirmDividerConfig">完成</button></view>
     </view>
   </view>
 
   <view class="component-editor-mask pe-sheet-mask {{componentEditorVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseComponentEditor">
-    <view class="component-editor-panel pe-sheet-panel pe-sheet-size-long {{componentEditorLayoutType === 'MEMBER_PORTFOLIO_GRID' || componentEditorLayoutType === 'MEMBER_PORTFOLIO_LIST' ? 'member-portfolio-editor-compact' : ''}} {{componentEditorLayoutType === 'CAROUSEL' ? 'carousel-editor-content-sized' : ''}} {{componentEditorVisible ? 'pe-sheet-panel-visible' : ''}}" style="{{componentEditorLayoutType === 'CAROUSEL' ? carouselEditorPanelStyle : ''}}" catchtap="noop">
-      <view class="pe-sheet-grabber"></view>
-      <view class="pe-sheet-heading">
-        <view class="pe-sheet-title">编辑{{activeComponentName}}</view>
+    <view class="component-editor-panel pe-sheet-panel pe-sheet-size-long {{componentEditorLayoutType === 'MEMBER_PORTFOLIO_GRID' || componentEditorLayoutType === 'MEMBER_PORTFOLIO_LIST' ? 'member-portfolio-editor-compact' : ''}} {{componentEditorLayoutType === 'CAROUSEL' ? 'carousel-editor-content-sized' : ''}} {{componentEditorLayoutType === 'VIDEO_CAROUSEL' ? 'team-video-editor-compact' : ''}} {{componentEditorVisible ? 'pe-sheet-panel-visible' : ''}}" style="{{componentEditorLayoutType === 'CAROUSEL' ? carouselEditorPanelStyle : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber team-video-editor-grabber"></view>
+      <view class="pe-sheet-heading team-video-editor-heading">
+        <view class="pe-sheet-title team-video-editor-title">编辑{{activeComponentName}}</view>
+        <view wx:if="{{activeComponentType === 'VIDEO_CAROUSEL'}}" class="team-video-heading-tools">
+          <view class="team-video-selected-count">{{teamVideoSelectedItems.length}} / 8 已选</view>
+          <view class="team-video-settings-toggle" catchtap="handleTeamVideoToggleSettings" aria-role="button" aria-expanded="{{!teamVideoSettingsCollapsed}}" aria-label="{{teamVideoSettingsCollapsed ? '展开展示设置' : '收起展示设置'}}"><text>{{teamVideoSettingsCollapsed ? '设置' : '收起'}}</text><view class="team-video-settings-chevron {{teamVideoSettingsCollapsed ? 'collapsed' : ''}}"></view></view>
+        </view>
       </view>
       <view wx:if="{{!portfolioId && activeComponentNeedsPortfolio}}" class="editor-notice">请先保存草稿，再选择团队成员内容</view>
       <view wx:if="{{activeComponentSource.loadingFingerprint && activeComponentType !== 'CAROUSEL'}}" class="source-state">正在加载团队内容...</view>
@@ -428,24 +488,35 @@
         <button wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_GRID'}}" data-key="{{activeComponentKey}}" bindtap="handleGridRetrySource">重试</button>
         <button wx:if="{{activeComponentType === 'MEMBER_PORTFOLIO_LIST'}}" data-key="{{activeComponentKey}}" bindtap="handleListRetrySource">重试</button>
       </view>
-      <scroll-view class="component-editor-scroll pe-sheet-scroll" style="{{componentEditorLayoutType === 'CAROUSEL' ? carouselEditorScrollStyle : ''}}" scroll-y type="list">
+      <scroll-view class="component-editor-scroll pe-sheet-scroll" style="{{componentEditorLayoutType === 'CAROUSEL' ? carouselEditorScrollStyle : ''}}" scroll-y type="list" bindscrolltolower="handleTeamVideoEditorScrollToLower">
         <view class="component-editor-content">
           <block wx:if="{{activeComponentType === 'VIDEO_CAROUSEL'}}">
-            <view class="team-video-editor-settings">
+            <view wx:if="{{teamVideoSettingsCollapsed}}" class="team-video-settings-summary">{{teamVideoDisplayStyle === 'PORTRAIT_CARDS' ? '竖向横滑' : '堆叠轮播'}} · {{teamVideoShowComponentTitle ? (teamVideoTitle || '视频作品') : '无组件标题'}} · {{(teamVideoShowTitle ? 1 : 0) + (teamVideoShowDescription ? 1 : 0) + (teamVideoShowSwipeHint ? 1 : 0)}} 项展示已开启</view>
+            <view wx:else class="team-video-editor-settings">
+              <view class="display-style-options" aria-role="radiogroup" aria-label="轮播样式">
+                <view class="display-style-choice {{teamVideoDisplayStyle !== 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="STACKED" bindtap="handleTeamVideoStyleChange" aria-role="radio" aria-checked="{{teamVideoDisplayStyle !== 'PORTRAIT_CARDS'}}"><view class="style-thumbnail stacked" aria-hidden="true"><view></view><view></view><view></view></view><text>堆叠轮播</text></view>
+                <view class="display-style-choice {{teamVideoDisplayStyle === 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="PORTRAIT_CARDS" bindtap="handleTeamVideoStyleChange" aria-role="radio" aria-checked="{{teamVideoDisplayStyle === 'PORTRAIT_CARDS'}}"><view class="style-thumbnail portrait" aria-hidden="true"><view></view><view></view></view><text>竖向横滑</text></view>
+              </view>
               <view class="team-video-title-setting">
-                <view class="team-video-setting-heading">
-                  <view class="field-label">组件标题</view>
-                  <view class="team-video-title-count">{{teamVideoTitleCount}} / 10</view>
+                <view class="team-video-switch-title">组件标题</view>
+                <view wx:if="{{teamVideoShowComponentTitle}}" class="team-video-title-field">
+                  <input class="team-video-title-input" value="{{teamVideoTitle}}" maxlength="-1" placeholder="视频作品" bindinput="handleTeamVideoTitleInput" aria-label="组件标题内容" />
+                  <view class="team-video-title-count">{{teamVideoTitleCount}}/10</view>
                 </view>
-                <input class="team-video-title-input pe-sheet-field" value="{{teamVideoTitle}}" maxlength="-1" placeholder="视频作品" bindinput="handleTeamVideoTitleInput" />
+                <view wx:else class="team-video-title-hidden">不展示</view>
+                <switch class="team-video-switch" checked="{{teamVideoShowComponentTitle}}" color="#212529" bindchange="handleTeamVideoShowComponentTitleChange" aria-label="展示组件标题" />
               </view>
               <view class="team-video-switch-setting">
-                <view class="team-video-switch-copy"><view class="team-video-switch-title">显示作品标题</view><view class="team-video-switch-note">在卡片下方展示每个视频的标题</view></view>
-                <switch checked="{{teamVideoShowTitle}}" color="#212529" bindchange="handleTeamVideoShowTitleChange" />
+                <view class="team-video-switch-copy"><view class="team-video-switch-title">作品标题</view><view class="team-video-setting-help" data-setting="title" catchtap="handleTeamVideoSettingHelp" aria-role="button" aria-label="作品标题说明"><text>?</text></view></view>
+                <switch class="team-video-switch" checked="{{teamVideoShowTitle}}" color="#212529" bindchange="handleTeamVideoShowTitleChange" aria-label="展示作品标题" />
               </view>
               <view class="team-video-switch-setting">
-                <view class="team-video-switch-copy"><view class="team-video-switch-title">显示滑动提示</view><view class="team-video-switch-note">提示访客可左右拖动浏览视频</view></view>
-                <switch checked="{{teamVideoShowSwipeHint}}" color="#212529" bindchange="handleTeamVideoShowSwipeHintChange" />
+                <view class="team-video-switch-copy"><view class="team-video-switch-title">作品描述</view><view class="team-video-setting-help" data-setting="description" catchtap="handleTeamVideoSettingHelp" aria-role="button" aria-label="作品描述说明"><text>?</text></view></view>
+                <switch class="team-video-switch" checked="{{teamVideoShowDescription}}" color="#212529" bindchange="handleTeamVideoDescriptionChange" aria-label="展示作品描述" />
+              </view>
+              <view class="team-video-switch-setting">
+                <view class="team-video-switch-copy"><view class="team-video-switch-title">滑动提示</view><view class="team-video-setting-help" data-setting="swipeHint" catchtap="handleTeamVideoSettingHelp" aria-role="button" aria-label="滑动提示说明"><text>?</text></view></view>
+                <switch class="team-video-switch" checked="{{teamVideoShowSwipeHint}}" color="#212529" bindchange="handleTeamVideoShowSwipeHintChange" aria-label="展示滑动提示" />
               </view>
             </view>
 
@@ -465,16 +536,16 @@
 
             <view wx:if="{{teamVideoMembers.length}}" class="team-video-search">
               <view class="team-video-search-icon"></view>
-              <input class="team-video-search-input pe-sheet-field" value="{{teamVideoKeyword}}" confirm-type="search" placeholder="搜索视频作品" bindinput="handleTeamVideoKeywordInput" bindconfirm="handleTeamVideoSearchConfirm" />
-              <view wx:if="{{teamVideoKeyword}}" class="team-video-search-clear" catchtap="handleTeamVideoClearSearch">×</view>
+              <input class="team-video-search-input" value="{{teamVideoKeyword}}" confirm-type="search" placeholder="搜索视频作品" bindinput="handleTeamVideoKeywordInput" bindconfirm="handleTeamVideoSearchConfirm" aria-label="搜索视频作品" />
+              <view wx:if="{{teamVideoKeyword}}" class="team-video-search-clear" catchtap="handleTeamVideoClearSearch" aria-role="button" aria-label="清空搜索">×</view>
             </view>
 
             <view wx:if="{{teamVideoErrorText}}" class="team-video-source-state source-error"><view>{{teamVideoErrorText}}</view><button catchtap="handleTeamVideoRetry">重试</button></view>
             <view wx:elif="{{teamVideoWorksLoading}}" class="team-video-source-state">正在加载视频作品...</view>
             <view wx:elif="{{teamVideoMembers.length && !teamVideoWorkOptions.length}}" class="team-video-source-state">当前成员暂无视频作品</view>
-            <scroll-view wx:else class="team-video-work-scroll" scroll-y type="list" bindscrolltolower="handleTeamVideoLoadMore">
+            <view wx:else class="team-video-work-scroll">
               <view class="team-video-work-list">
-                <view wx:for="{{teamVideoWorkOptions}}" wx:key="workId" class="team-video-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}" data-work-id="{{item.workId}}" catchtap="handleTeamVideoWorkTap" aria-role="checkbox" aria-checked="{{item.selected}}">
+                <view wx:for="{{teamVideoWorkOptions}}" wx:key="workId" class="team-video-work-option {{item.selected ? 'team-video-work-selected' : ''}}" data-work-id="{{item.workId}}" catchtap="handleTeamVideoWorkTap" aria-role="checkbox" aria-checked="{{item.selected}}" aria-label="{{item.title + (item.selected ? '，已选第' + item.selectionOrder + '个' : '，未选择')}}">
                   <view class="team-video-work-thumb"><image wx:if="{{item.thumbUrl}}" src="{{item.thumbUrl}}" mode="aspectFill"></image><view wx:else class="team-video-work-placeholder">视频</view></view>
                   <view class="team-video-work-copy"><view class="team-video-work-title">{{item.title}}</view><view class="team-video-work-meta">{{item.memberDisplayName}} · {{item.metaText}} · {{item.aspectRatioText}} · {{item.durationText}}</view></view>
                   <view class="team-video-work-order">{{item.selectionOrder || ''}}</view>
@@ -482,7 +553,7 @@
                 <view wx:if="{{teamVideoLoadingMore}}" class="team-video-work-footer">加载更多视频</view>
                 <view wx:if="{{!teamVideoHasMore && teamVideoWorkOptions.length}}" class="team-video-work-footer">已显示全部视频</view>
               </view>
-            </scroll-view>
+            </view>
           </block>
           <team-profile wx:if="{{activeComponentType === 'TEAM_PROFILE'}}" id="active-component-editor" data-key="{{activeComponentKey}}" team="{{activeComponent.config.team}}" visible-fields="{{activeComponent.config.visibleFields}}" edit-mode="{{true}}" refreshing="{{teamProfileRefreshing}}" bindchooseavatar="handleTeamProfileChooseAvatar" bindrefresh="handleTeamProfileRefresh" bindsave="handleComponentSave" />
           <team-carousel wx:if="{{activeComponentType === 'CAROUSEL'}}" id="active-component-editor" data-key="{{activeComponentKey}}" portfolio-id="{{portfolioId}}" items="{{activeComponent.config.items}}" members="{{activeComponentSource.members}}" works="{{activeComponentSource.works}}" loading="{{activeComponentSource.loadingFingerprint ? true : false}}" edit-mode="{{true}}" bindloadmembers="handleCarouselLoadMembers" bindmemberchange="handleCarouselMemberChange" bindlayoutchange="handleCarouselLayoutChange" bindsave="handleComponentSave" />

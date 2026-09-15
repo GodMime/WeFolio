@@ -1,9 +1,13 @@
 package com.jxc.wefolio.dto;
 
+import com.jxc.wefolio.dict.PortfolioProfileLayoutDict;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.util.ArrayList;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +44,9 @@ public class PortfolioRenderDto {
     /** 页面渲染样式 */
     private Style style;
 
+    /** 全局背景音频展示数据。 */
+    private BackgroundAudioRenderDto backgroundAudio;
+
     /** 渲染组件 */
     private List<Component> components = new ArrayList<>();
 
@@ -54,6 +61,9 @@ public class PortfolioRenderDto {
 
         /** 页面背景色 */
         private String backgroundColor;
+
+        /** 组件间距，单位 rpx，范围 0–96，默认 32。 */
+        private Integer componentSpacingRpx;
 
         /** 页面明暗模式：light / dark */
         private String themeMode;
@@ -110,6 +120,9 @@ public class PortfolioRenderDto {
         /** 组件标题 */
         private String title;
 
+        /** 是否展示视频轮播组件标题，独立于作品标题；旧配置默认开启。 */
+        private Boolean showComponentTitle;
+
         /** 轮播或扁平作品列表 */
         private List<WorkItem> works = new ArrayList<>();
 
@@ -142,6 +155,20 @@ public class PortfolioRenderDto {
 
         /** 文字说明渲染数据 */
         private TextSection textSection;
+
+        /** 完整文字网格配置，保留所有片段样式。 */
+        private Map<String, Object> textGrid;
+        /** 独立联系资料快照。 */
+        private Map<String, Object> contactInfo;
+        /** 视频轮播展示样式。 */
+        private String displayStyle;
+        /** 单作打开方式。 */
+        private String openMode;
+        /** 详情文字开关，独立于卡面开关。 */
+        private Map<String, Object> detailOptions;
+
+        /** 结构化文字独立展示配置。 */
+        private StructuredTextSection structuredTextSection;
 
         /** 分割线渲染数据 */
         private Divider divider;
@@ -245,6 +272,24 @@ public class PortfolioRenderDto {
     @Data
     public static class Profile {
 
+        /** 资料卡布局，取值见 {@link PortfolioProfileLayoutDict}。 */
+        private String profileLayout;
+
+        /** 是否显示资料卡边框。 */
+        private Boolean profileBorder;
+
+        /** 资料卡边框宽度，单位 rpx。 */
+        private Integer profileBorderWidthRpx;
+
+        /** 资料卡边框颜色，AUTO 为主题色，或六位十六进制颜色。 */
+        private String profileBorderColor;
+
+        /** 资料卡左右外侧留白，单位 rpx，仅在边框开启时应用。 */
+        private Integer profileHorizontalMarginRpx;
+
+        /** 资料卡上下外侧留白，单位 rpx，仅在边框开启时应用。 */
+        private Integer profileVerticalMarginRpx;
+
         /** 头像地址 */
         private String avatarUrl;
 
@@ -344,7 +389,14 @@ public class PortfolioRenderDto {
      * 文字说明渲染数据。
      */
     @Data
-    public static class TextSection {
+    @EqualsAndHashCode(callSuper = true)
+    public static class TextSection extends TextBackground {
+
+        /** 普通文字颜色：AUTO 或六位十六进制；自动颜色由展示端解析。 */
+        private String color;
+
+        /** 普通文字整体垂直对齐。 */
+        private String verticalAlignment;
 
         /** 标题，可为空 */
         private String title;
@@ -358,8 +410,53 @@ public class PortfolioRenderDto {
         /** 字体：SYSTEM / WECHAT_SANS_SS */
         private String fontFamily;
 
-        /** 正文字号，单位 rpx */
+        /** 正文字号，单位 rpx，取值为 10 至 96 的整数 */
         private Integer fontSizeRpx;
+
+        /** 可选行高字号倍数，范围 0.5 至 3.0、步长 0.1；省略时保持旧样式。 */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private BigDecimal lineHeight;
+    }
+
+    /** 两类文字共用的背景展示信息；资源失效不改变配置开关。 */
+    @Data
+    public static class TextBackground {
+        /** 是否启用背景。 */
+        private Boolean backgroundEnabled;
+        /** 配置的背景作品。 */
+        private Long backgroundWorkId;
+        /** 背景处理偏好。 */
+        private String backgroundTreatment;
+        /** 已启用但背景资源不可用。 */
+        private Boolean backgroundInvalid;
+        /** 经授权检查后的背景资源。 */
+        private BackgroundWork backgroundWork;
+    }
+
+    /** 结构化文字有序区块。 */
+    @Data
+    @EqualsAndHashCode(callSuper = true)
+    public static class StructuredTextSection extends TextBackground {
+        /** 有序独立样式区块，保留 AUTO 颜色语义。 */
+        private List<Map<String,Object>> blocks;
+    }
+
+    /** 背景资源最小展示契约，URL 使用原始图片、动图或可播放视频资源。 */
+    @Data
+    public static class BackgroundWork {
+        /** 作品标识。 */
+        private Long workId;
+        /** 媒体类型。 */
+        private String mediaType;
+        /** 原资源 URL。 */
+        private String url;
+        /** 可选视频封面 URL；图片和动图继续直接展示原资源。 */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String posterUrl;
+        /** 原资源宽度。 */
+        private Integer width;
+        /** 原资源高度。 */
+        private Integer height;
     }
 
     /**
@@ -368,7 +465,7 @@ public class PortfolioRenderDto {
     @Data
     public static class Divider {
 
-        /** 颜色：BLACK / WHITE / GRAY / TRANSPARENT */
+        /** 颜色：六位十六进制颜色，兼容 BLACK / WHITE / GRAY / TRANSPARENT。 */
         private String color;
 
         /** 高度，单位 px */

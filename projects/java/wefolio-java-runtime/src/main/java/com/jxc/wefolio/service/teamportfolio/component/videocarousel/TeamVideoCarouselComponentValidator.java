@@ -2,6 +2,7 @@ package com.jxc.wefolio.service.teamportfolio.component.videocarousel;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
@@ -127,7 +128,10 @@ public class TeamVideoCarouselComponentValidator {
 
         TeamVideoCarouselComponentConfig config = new TeamVideoCarouselComponentConfig();
         config.setTitle(title);
+        config.setShowComponentTitle(PortfolioComponentDisplayOptionsSupport.showComponentTitle(rawConfig));
         config.setItems(items);
+        config.setDisplayStyle(PortfolioComponentDisplayOptionsSupport.displayStyle(rawConfig));
+        config.setShowDescription(PortfolioComponentDisplayOptionsSupport.showDescription(rawConfig));
         config.setShowTitle(booleanValue(rawConfig.get(CONFIG_KEY_SHOW_TITLE), true));
         config.setShowSwipeHint(booleanValue(rawConfig.get(CONFIG_KEY_SHOW_SWIPE_HINT), true));
         return config;

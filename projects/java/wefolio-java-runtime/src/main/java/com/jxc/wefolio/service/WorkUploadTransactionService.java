@@ -38,6 +38,12 @@ import java.util.Set;
 @Slf4j
 public class WorkUploadTransactionService {
 
+    /** 已确认的系统默认音频封面，新增及恢复默认时复用。 */
+    public static final String DEFAULT_AUDIO_COVER_KEY = "system/default-audio-cover-v1-200kb.png";
+
+    /** 默认音频封面的摘要。 */
+    public static final String DEFAULT_AUDIO_COVER_SHA256 = "f998fbcd98052b9b6bf3eba13d89f7c3dc506ebac3566261bd6085e9a8438f34";
+
     /** 作品标题最大长度 */
     private static final int TITLE_MAX_LENGTH = 30;
 
@@ -134,8 +140,9 @@ public class WorkUploadTransactionService {
         WorkUploadTaskEntity coverTask = resolveCoverTask(userId, task, item);
         String coverObjectKey = resolveCoverObjectKey(task, coverTask);
         String coverSha256 = resolveCoverSha256(task, coverTask);
-        String sceneCode = resolvePointScene(task.getMediaType());
-        String remark = buildPointRemark(task.getMediaType());
+        boolean audio = MediaTypeDict.AUDIO.getCode().equals(task.getMediaType());
+        String sceneCode = audio ? null : resolvePointScene(task.getMediaType());
+        String remark = audio ? null : buildPointRemark(task.getMediaType());
         String idempotencyKey = normalizeText(item == null ? null : item.getIdempotencyKey());
         if (idempotencyKey.isBlank()) {
             idempotencyKey = CONFIRM_IDEMPOTENCY_PREFIX + task.getId();
@@ -143,14 +150,17 @@ public class WorkUploadTransactionService {
         ensureNoDuplicateWork(userId, task.getFileSha256());
         contentLimitService.ensureWorkCapacity(userId, task.getMediaType(), 1L);
 
-        pointService.consume(
-                userId,
-                sceneCode,
-                BUSINESS_TYPE_WORK_UPLOAD,
-                String.valueOf(task.getId()),
-                1,
-                idempotencyKey,
-                remark);
+        // 音频只参与既有存储计费，不产生固定按次上传扣费。
+        if (!audio) {
+            pointService.consume(
+                    userId,
+                    sceneCode,
+                    BUSINESS_TYPE_WORK_UPLOAD,
+                    String.valueOf(task.getId()),
+                    1,
+                    idempotencyKey,
+                    remark);
+        }
 
         WorkEntity work = buildWork(task, title, description, aspectRatio, coverObjectKey, coverSha256);
         try {
@@ -253,6 +263,9 @@ public class WorkUploadTransactionService {
      * @return 封面对象键
      */
     private String resolveCoverObjectKey(WorkUploadTaskEntity task, WorkUploadTaskEntity coverTask) {
+        if (MediaTypeDict.AUDIO.getCode().equals(task.getMediaType())) {
+            return DEFAULT_AUDIO_COVER_KEY;
+        }
         if (coverTask != null && hasText(coverTask.getObjectKey())) {
             return coverTask.getObjectKey();
         }
@@ -276,6 +289,9 @@ public class WorkUploadTransactionService {
      * @return 缩略图或封面图 SHA-256
      */
     private String resolveCoverSha256(WorkUploadTaskEntity task, WorkUploadTaskEntity coverTask) {
+        if (MediaTypeDict.AUDIO.getCode().equals(task.getMediaType())) {
+            return DEFAULT_AUDIO_COVER_SHA256;
+        }
         if (coverTask != null && hasText(coverTask.getFileSha256())) {
             return coverTask.getFileSha256();
         }

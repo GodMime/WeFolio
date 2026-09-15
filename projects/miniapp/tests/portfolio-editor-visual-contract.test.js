@@ -431,7 +431,7 @@ test('personal portfolio editor consumes the shared page and thirteen-sheet cont
   assert.match(wxml, /class="component-work-filter-pill pe-sheet-choice \{\{[^\n]+pe-sheet-choice-selected/)
   assert.doesNotMatch(wxml, /component-work-filter-pill[^>]+style="\{\{[^\n]+activeStyle/)
 
-  assertNativeLoadingContract(wxml, '个人作品集编辑器', 2)
+  assertNativeLoadingContract(wxml, '个人作品集编辑器', 3)
   assert.doesNotMatch(wxss, /(?:^|\n)\s*\.pe-[^{]+\{/)
 })
 
@@ -570,7 +570,7 @@ test('team portfolio editor consumes the shared page and ten-sheet contract', ()
   assert.ok(classTokenCount(wxml, 'pe-sheet-field') >= 2)
   assert.ok(classTokenCount(wxml, 'pe-sheet-choice') >= 6)
 
-  assertNativeLoadingContract(wxml, '团队作品集编辑器', 4)
+  assertNativeLoadingContract(wxml, '团队作品集编辑器', 5)
   assert.doesNotMatch(wxss, /(?:^|\n)\s*\.pe-[^{]+\{/)
 })
 

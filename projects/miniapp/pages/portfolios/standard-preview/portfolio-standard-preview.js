@@ -1,3 +1,7 @@
+const { openWorkDetail } = require('../utils/portfolio-work-detail')
+const { openVideoPlayer } = require('../utils/portfolio-video-player')
+const VIDEO_PLAYER_ROUTE = '/pages/portfolios/video-player/video-player'
+const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request')
 const { createContactLeadForm } = require('../utils/contact-lead')
 const {
@@ -28,10 +32,11 @@ const DRAFT_PREVIEW_SCOPE = 'draft'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
 const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
-const DEFAULT_VIDEO_TITLE = '视频作品'
 
 Page({
+  ...portfolioAudioPageMethods,
   data: {
+    backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
     portfolioId: null,
     previewScope: '',
     teamPortfolioId: 0,
@@ -43,8 +48,6 @@ Page({
     contactFormModalVisible: false,
     activeContactFormComponent: createActiveContactFormComponent(),
     videoPreviewVisible: false,
-    videoPreviewUrl: '',
-    videoPreview: null,
     activeSingleWorkVideoKey: '',
     displaySwitchingComponentKey: '',
     portfolioMenuSwitching: false,
@@ -55,6 +58,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.positionBackgroundAudio()
     const teamPortfolioId = Number(options.teamPortfolioId) || 0
     const teamPreviewScope = teamPortfolioId && options.teamScope === PUBLISHED_PREVIEW_SCOPE
       ? PUBLISHED_PREVIEW_SCOPE
@@ -79,6 +83,7 @@ Page({
         url: `${TEAM_PORTFOLIO_API_PREFIX}/${this.data.teamPortfolioId}/member-portfolios/${this.data.portfolioId}/published-preview`,
         data: { scope: this.data.teamPreviewScope }
       }).then((response) => {
+        this.syncBackgroundAudio(normalizeVisitorPortfolio(response).backgroundAudio, true)
         this.setData({
           portfolio: normalizeVisitorPortfolio(response),
           loading: false,
@@ -94,6 +99,7 @@ Page({
     const previewPath = this.data.previewScope === PUBLISHED_PREVIEW_SCOPE ? 'published-preview' : 'preview'
     return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}/${previewPath}` })
       .then((response) => {
+        this.syncBackgroundAudio(normalizeVisitorPortfolio(response).backgroundAudio, true)
         this.setData({
           portfolio: normalizeVisitorPortfolio(response),
           loading: false,
@@ -187,13 +193,11 @@ Page({
       onBeforeExit: () => {
         clearDisplaySwitchingTimer(this)
         this.stopActiveSingleWorkVideo()
+        this.clearVideoPreview()
       },
       exitPatch: {
         contactFormModalVisible: false,
         activeContactFormComponent: createActiveContactFormComponent(),
-        videoPreviewVisible: false,
-        videoPreviewUrl: '',
-        videoPreview: null,
         displaySwitchingComponentKey: ''
       },
       switchPortfolio: switchPortfolioMenu
@@ -201,10 +205,11 @@ Page({
   },
 
   onUnload() {
+    this.videoPlayerDisposed = true
+    this.destroyBackgroundAudio()
     clearPortfolioMenuTransitionTimers(this)
     clearDisplaySwitchingTimer(this)
     this.stopActiveSingleWorkVideo()
-    this.clearVideoPreview()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.dispose()
       this.clipboardPromptController = null
@@ -212,14 +217,16 @@ Page({
   },
 
   onHide() {
+    this.hideBackgroundAudio()
     this.stopActiveSingleWorkVideo()
-    this.clearVideoPreview()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.pause()
     }
   },
 
   onShow() {
+    this.clearVideoPreview()
+    this.showBackgroundAudio()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.resume()
     }
@@ -266,6 +273,15 @@ Page({
     return this.openWorkMedia(work)
   },
 
+  handleWorkDetail(event) {
+    return openWorkDetail(this, {
+      componentKey: event.detail && event.detail.componentKey,
+      components: this.data.portfolio.activeComponents || [],
+      theme: { backgroundColor: this.data.portfolio.style && this.data.portfolio.style.backgroundColor, themeMode: this.data.portfolio.themeMode },
+      preview: true,
+      route: '/pages/portfolios/work-detail/portfolio-work-detail'
+    })
+  },
   handleSingleWorkTap(event) {
     const data = readPortfolioRenderEventData(event)
     const work = normalizeSingleWorkTapDataset(data)
@@ -277,6 +293,7 @@ Page({
       wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
       return false
     }
+    this.pauseBackgroundAudio()
     this.stopActiveSingleWorkVideo()
     this.setData({ activeSingleWorkVideoKey: componentKey })
     return true
@@ -325,40 +342,28 @@ Page({
     return Promise.resolve(true)
   },
 
-  handleCloseVideoPreview() {
-    this.clearVideoPreview()
-  },
-
   clearVideoPreview() {
-    if (typeof wx !== 'undefined' && wx.createVideoContext && this.data.videoPreviewUrl) {
-      const context = wx.createVideoContext('portfolioWorkVideo', this)
-      if (context && typeof context.stop === 'function') context.stop()
-    }
-    this.setData({
-      videoPreviewVisible: false,
-      videoPreviewUrl: '',
-      videoPreview: null
-    })
+    // 返回作品集或打开失败时，解除文字组件的背景视频暂停。
+    if (this.data.videoPreviewVisible) this.setData({ videoPreviewVisible: false })
   },
 
   openVideoPreview(work = {}) {
-    const previewUrl = work.mediaUrl || work.previewUrl || ''
-    if (!previewUrl) {
+    if (this.videoPlayerDisposed || this.data.videoPreviewVisible) return false
+    this.pauseBackgroundAudio()
+    const mediaUrl = work.mediaUrl || work.previewUrl || ''
+    if (!mediaUrl) {
       wx.showToast({ title: VIDEO_MISSING_MESSAGE, icon: 'none' })
       return false
     }
     this.stopActiveSingleWorkVideo()
-    if (this.data.videoPreviewVisible || this.data.videoPreviewUrl) this.clearVideoPreview()
-    this.setData({
-      videoPreviewVisible: true,
-      videoPreviewUrl: previewUrl,
-      videoPreview: {
-        src: previewUrl,
-        poster: work.coverUrl || '',
-        title: work.title || DEFAULT_VIDEO_TITLE
-      }
-    })
-    return true
+    this.setData({ videoPreviewVisible: true })
+    return openVideoPlayer({ url: mediaUrl, poster: work.coverUrl || '', title: work.title || '',
+      route: VIDEO_PLAYER_ROUTE, browserContext: this.browserContext || null }, wx)
+      .then((opened) => {
+        // 导航成功后来源页保持暂停，失败或返回作品集时才恢复背景视频。
+        if (!opened && !this.videoPlayerDisposed) this.clearVideoPreview()
+        return opened
+      })
   },
 
   handleVideoCarouselPlay(event) {
@@ -371,11 +376,4 @@ Page({
     return Promise.resolve(this.openVideoPreview(work))
   },
 
-  handleVideoPreviewError() {
-    this.clearVideoPreview()
-    wx.showToast({ title: '视频播放失败，请重试', icon: 'none' })
-  },
-
-  handleVideoPreviewPanelTap() {
-  }
 })

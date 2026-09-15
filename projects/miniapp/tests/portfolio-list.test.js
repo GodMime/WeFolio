@@ -8,6 +8,16 @@ function flushPromises() {
   })
 }
 
+function createDeferred() {
+  let resolve
+  let reject
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
@@ -18,7 +28,7 @@ function applyData(target, patch) {
   })
 }
 
-function loadPortfolioListPage(fakeRequest, wxOverrides = {}) {
+function loadPortfolioListPage(fakeRequest, wxOverrides = {}, sessionOverrides = {}) {
   const pagePath = path.join(__dirname, '../pages/portfolios/portfolios.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
   const sessionPath = path.join(__dirname, '../utils/session.js')
@@ -47,12 +57,12 @@ function loadPortfolioListPage(fakeRequest, wxOverrides = {}) {
     id: sessionPath,
     filename: sessionPath,
     loaded: true,
-    exports: {
+    exports: Object.assign({
       handleMaintainerAuthRequired() {},
       hasLocalToken() {
         return true
       }
-    }
+    }, sessionOverrides)
   }
   global.Page = (definition) => {
     pageDefinition = definition
@@ -97,6 +107,191 @@ function loadPortfolioListPage(fakeRequest, wxOverrides = {}) {
         this.onUnload()
       }
       global.wx = originalWx
+    }
+  })
+}
+
+const loadingScenarios = [
+  {
+    name: 'personal',
+    endpoint: '/api/mine/portfolios',
+    bootstrap: 'bootstrap',
+    refresh: 'handlePullDownRefresh',
+    loading: 'loading',
+    loaded: 'loaded',
+    refreshing: 'pullDownRefreshing',
+    error: 'errorMessage',
+    portfolios: 'portfolios',
+    displayPortfolios: 'displayPortfolios',
+    summary: 'summary',
+    failureMessage: '网络暂时不可用',
+    response: (portfolios) => ({ portfolios })
+  },
+  {
+    name: 'team',
+    endpoint: '/api/mine/team-portfolios',
+    bootstrap: 'bootstrapTeam',
+    refresh: 'handleTeamPullDownRefresh',
+    loading: 'teamLoading',
+    loaded: 'teamLoaded',
+    refreshing: 'teamPullDownRefreshing',
+    error: 'teamErrorMessage',
+    portfolios: 'teamPortfolios',
+    displayPortfolios: 'teamDisplayPortfolios',
+    summary: 'teamSummary',
+    failureMessage: '团队作品集加载失败，请重试',
+    response: (portfolios) => portfolios
+  }
+]
+
+for (const scenario of loadingScenarios) {
+  const portfolios = [{ portfolioId: 88, teamId: 7, title: '婚礼作品集', publicationStatus: 'PUBLISHED' }]
+
+  test(`${scenario.name} first load stays pending until portfolio data arrives`, async () => {
+    const response = createDeferred()
+    const page = loadPortfolioListPage((options) => options.url === scenario.endpoint
+      ? response.promise
+      : Promise.resolve([]))
+
+    try {
+      assert.equal(page.data[scenario.loaded], false)
+      if (scenario.name === 'personal') {
+        assert.equal(page.data.loading, true)
+      }
+      const loading = page[scenario.bootstrap]()
+      await flushPromises()
+
+      assert.equal(page.data[scenario.loading], true)
+      assert.equal(page.data[scenario.loaded], false)
+      assert.deepEqual(page.data[scenario.displayPortfolios], [])
+
+      response.resolve(scenario.response(portfolios))
+      await loading
+
+      assert.equal(page.data[scenario.loading], false)
+      assert.equal(page.data[scenario.loaded], true)
+      assert.equal(page.data[scenario.error], '')
+      assert.equal(page.data[scenario.displayPortfolios][0].title, '婚礼作品集')
+      assert.deepEqual(page.data[scenario.summary], { publishedText: '1 已发布', draftText: '0 草稿' })
+    } finally {
+      page.cleanup()
+    }
+  })
+
+  test(`${scenario.name} failed first load can retry and successfully load an empty list`, async () => {
+    let response = createDeferred()
+    const page = loadPortfolioListPage((options) => options.url === scenario.endpoint
+      ? response.promise
+      : Promise.resolve([]))
+
+    try {
+      const initialLoad = page[scenario.bootstrap]()
+      await flushPromises()
+      response.reject(new Error('网络暂时不可用'))
+      await initialLoad
+
+      assert.equal(page.data[scenario.loading], false)
+      assert.equal(page.data[scenario.loaded], false)
+      assert.equal(page.data[scenario.error], scenario.failureMessage)
+
+      response = createDeferred()
+      const retry = page[scenario.bootstrap]()
+      await flushPromises()
+
+      assert.equal(page.data[scenario.loading], true)
+      assert.equal(page.data[scenario.loaded], false)
+      assert.equal(page.data[scenario.error], '')
+
+      response.resolve(scenario.response([]))
+      await retry
+
+      assert.equal(page.data[scenario.loading], false)
+      assert.equal(page.data[scenario.loaded], true)
+      assert.deepEqual(page.data[scenario.displayPortfolios], [])
+      assert.deepEqual(page.data[scenario.summary], { publishedText: '0 已发布', draftText: '0 草稿' })
+    } finally {
+      page.cleanup()
+    }
+  })
+
+  for (const initialPortfolios of [portfolios, []]) {
+    const contentType = initialPortfolios.length ? 'cards' : 'empty list'
+    test(`${scenario.name} preserves loaded ${contentType} while refreshing and after refresh failure`, async () => {
+      const refreshResponse = createDeferred()
+      let listRequests = 0
+      const page = loadPortfolioListPage((options) => {
+        if (options.url !== scenario.endpoint) {
+          return Promise.resolve([])
+        }
+        listRequests += 1
+        return listRequests === 1 ? Promise.resolve(scenario.response(initialPortfolios)) : refreshResponse.promise
+      })
+
+      try {
+        await page[scenario.bootstrap]()
+        const savedPortfolios = clone(page.data[scenario.portfolios])
+        const savedDisplayPortfolios = clone(page.data[scenario.displayPortfolios])
+        const savedSummary = clone(page.data[scenario.summary])
+        const refresh = page[scenario.refresh]()
+        await flushPromises()
+
+        assert.equal(listRequests, 2)
+        assert.equal(page.data[scenario.loading], true)
+        assert.equal(page.data[scenario.refreshing], true)
+        assert.equal(page.data[scenario.loaded], true)
+        assert.deepEqual(page.data[scenario.portfolios], savedPortfolios)
+        assert.deepEqual(page.data[scenario.displayPortfolios], savedDisplayPortfolios)
+        assert.deepEqual(page.data[scenario.summary], savedSummary)
+
+        refreshResponse.reject(new Error('网络暂时不可用'))
+        await refresh
+
+        assert.equal(page.data[scenario.loading], false)
+        assert.equal(page.data[scenario.refreshing], false)
+        assert.equal(page.data[scenario.loaded], true)
+        assert.equal(page.data[scenario.error], scenario.failureMessage)
+        assert.deepEqual(page.data[scenario.portfolios], savedPortfolios)
+        assert.deepEqual(page.data[scenario.displayPortfolios], savedDisplayPortfolios)
+        assert.deepEqual(page.data[scenario.summary], savedSummary)
+      } finally {
+        page.cleanup()
+      }
+    })
+  }
+
+  test(`${scenario.name} 401 ends loading and pull-down refresh after handing off authentication`, async () => {
+    const response = createDeferred()
+    const authMessages = []
+    let stoppedRefreshes = 0
+    const page = loadPortfolioListPage((options) => options.url === scenario.endpoint
+      ? response.promise
+      : Promise.resolve([]), {
+      stopPullDownRefresh() {
+        stoppedRefreshes += 1
+      }
+    }, {
+      handleMaintainerAuthRequired(message) {
+        authMessages.push(message)
+      }
+    })
+
+    try {
+      const refresh = page[scenario.refresh]()
+      await flushPromises()
+      assert.equal(page.data[scenario.loading], true)
+      assert.equal(page.data[scenario.refreshing], true)
+
+      response.reject(Object.assign(new Error('登录已过期'), { authRequired: true }))
+      await refresh
+
+      assert.deepEqual(authMessages, ['登录已过期'])
+      assert.equal(stoppedRefreshes, 1)
+      assert.equal(page.data[scenario.loading], false)
+      assert.equal(page.data[scenario.refreshing], false)
+      assert.equal(page.data[scenario.loaded], false)
+      assert.equal(page.data[scenario.error], '')
+    } finally {
+      page.cleanup()
     }
   })
 }
@@ -171,10 +366,14 @@ test('TEAM entry switches in place, loads once, and keeps cached team state', as
   }
 })
 
-test('TEAM route opens the team panel directly and onShow only refreshes team data', async () => {
+test('TEAM route loads team data first and switching back loads personal data only once', async () => {
   const requests = []
+  const personalResponse = createDeferred()
   const page = loadPortfolioListPage(async (options) => {
     requests.push(options)
+    if (options.url === '/api/mine/portfolios') {
+      return personalResponse.promise
+    }
     if (options.url.endsWith('/maintainable-teams')) {
       return []
     }
@@ -184,6 +383,10 @@ test('TEAM route opens the team panel directly and onShow only refreshes team da
   try {
     assert.equal(typeof page.onLoad, 'function')
     page.onLoad({ ownerType: 'TEAM' })
+    assert.equal(page.data.loading, false)
+    assert.equal(page.data.loaded, false)
+    assert.equal(page.data.teamLoading, true)
+    assert.equal(page.data.teamLoaded, false)
     await page.onShow()
     assert.equal(page.data.ownerType, 'TEAM')
     assert.equal(page.data.switching, false)
@@ -191,6 +394,34 @@ test('TEAM route opens the team panel directly and onShow only refreshes team da
       '/api/mine/team-portfolios',
       '/api/mine/team-portfolios/maintainable-teams'
     ])
+
+    page.handleOwnerTypeTap({ currentTarget: { dataset: { type: 'USER' } } })
+    await flushPromises()
+    assert.equal(page.data.loading, true)
+    assert.equal(page.data.loaded, false)
+    assert.deepEqual(requests[2], {
+      url: '/api/mine/portfolios',
+      data: { ownerType: 'USER' }
+    })
+
+    page.setData({ switching: false })
+    page.handleOwnerTypeTap({ currentTarget: { dataset: { type: 'TEAM' } } })
+    page.setData({ switching: false })
+    page.handleOwnerTypeTap({ currentTarget: { dataset: { type: 'USER' } } })
+    await flushPromises()
+    assert.equal(requests.length, 3)
+
+    personalResponse.resolve({ portfolios: [] })
+    await flushPromises()
+    assert.equal(page.data.loading, false)
+    assert.equal(page.data.loaded, true)
+
+    page.setData({ switching: false })
+    page.handleOwnerTypeTap({ currentTarget: { dataset: { type: 'TEAM' } } })
+    page.setData({ switching: false })
+    page.handleOwnerTypeTap({ currentTarget: { dataset: { type: 'USER' } } })
+    await flushPromises()
+    assert.equal(requests.length, 3)
   } finally {
     page.cleanup()
   }

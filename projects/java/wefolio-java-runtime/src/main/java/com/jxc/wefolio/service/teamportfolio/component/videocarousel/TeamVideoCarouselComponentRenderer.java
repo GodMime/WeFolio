@@ -2,6 +2,7 @@ package com.jxc.wefolio.service.teamportfolio.component.videocarousel;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
@@ -115,8 +116,11 @@ public class TeamVideoCarouselComponentRenderer {
         }
         JSONObject rendered = new JSONObject();
         rendered.put(CONFIG_KEY_TITLE, config.getTitle());
+        rendered.put(PortfolioComponentDisplayOptionsSupport.SHOW_COMPONENT_TITLE, config.isShowComponentTitle());
         rendered.put(CONFIG_KEY_ITEMS, renderedItems);
         rendered.put(RENDER_KEY_WORKS, renderedItems);
+        rendered.put(PortfolioComponentDisplayOptionsSupport.DISPLAY_STYLE, config.getDisplayStyle());
+        rendered.put(PortfolioComponentDisplayOptionsSupport.SHOW_DESCRIPTION, config.isShowDescription());
         rendered.put(CONFIG_KEY_SHOW_TITLE, config.isShowTitle());
         rendered.put(CONFIG_KEY_SHOW_SWIPE_HINT, config.isShowSwipeHint());
         return rendered;
@@ -148,7 +152,10 @@ public class TeamVideoCarouselComponentRenderer {
         title = title == null ? "" : title.strip();
         TeamVideoCarouselComponentConfig config = new TeamVideoCarouselComponentConfig();
         config.setTitle(title.isEmpty() ? DEFAULT_TITLE : title);
+        config.setShowComponentTitle(PortfolioComponentDisplayOptionsSupport.showComponentTitle(rawConfig));
         config.setItems(items);
+        config.setDisplayStyle(PortfolioComponentDisplayOptionsSupport.displayStyle(rawConfig));
+        config.setShowDescription(PortfolioComponentDisplayOptionsSupport.showDescription(rawConfig));
         config.setShowTitle(booleanValue(rawConfig.get(CONFIG_KEY_SHOW_TITLE), true));
         config.setShowSwipeHint(booleanValue(rawConfig.get(CONFIG_KEY_SHOW_SWIPE_HINT), true));
         return config;

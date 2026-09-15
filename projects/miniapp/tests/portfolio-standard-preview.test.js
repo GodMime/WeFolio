@@ -31,7 +31,7 @@ function clone(value) {
 
 function readRule(content, selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = content.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`))
+  const match = content.match(new RegExp(`^\\s*${escapedSelector}\\s*\\{([^}]*)\\}`, 'm'))
   return match ? match[1] : ''
 }
 
@@ -85,58 +85,36 @@ function loadPreviewPage(fakeRequest, wxOverrides = {}) {
   })
 }
 
-test('preview video carousel opens and fully clears the root portal player', async () => {
-  const toasts = []
-  const requests = []
-  const page = loadPreviewPage((options) => {
-    requests.push(options)
-    return Promise.resolve({})
-  }, {
-    showToast(options) { toasts.push(options) },
-    createVideoContext() { return { stop() {} } }
-  })
+test('preview video carousel opens a dedicated video page without events and handles missing or failed video', async () => {
+  const toasts = [], requests = [], previews = []
+  const page = loadPreviewPage((options) => { requests.push(options); return Promise.resolve({}) })
   const previousWx = global.wx
   global.wx = {
     showToast(options) { toasts.push(options) },
-    createVideoContext() { return { stop() {} } }
+    navigateTo(options) {
+      const navigation = { route: options.url }; previews.push(navigation)
+      options.success({ eventChannel: { emit(event, payload) { Object.assign(navigation, { event, payload }) } } })
+    },
+    createVideoContext() { assert.fail('来源页不得创建页内播放器') }
   }
   try {
-    const opened = await page.handleVideoCarouselPlay({
-      detail: {
-        componentKey: 'vc-1',
-        work: { workId: 11, mediaType: 'VIDEO', mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' }
-      }
-    })
-    assert.equal(opened, true)
+    const work = { workId: 11, mediaType: 'VIDEO', mediaUrl: 'video-11', coverUrl: 'cover-11', title: '视频十一' }
+    assert.equal(await page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work } }), true)
     assert.equal(page.data.videoPreviewVisible, true)
-    assert.equal(page.data.videoPreviewUrl, 'video-11')
+    assert.deepEqual(previews, [{ route: '/pages/portfolios/video-player/video-player', event: 'portfolioVideoPlayer', payload: { url: 'video-11', poster: 'cover-11', title: '视频十一', browserContext: null, contextId: '' } }])
     assert.deepEqual(requests, [])
-
-    page.handleCloseVideoPreview()
+    page.onShow()
     assert.equal(page.data.videoPreviewVisible, false)
-    assert.equal(page.data.videoPreviewUrl, '')
-    assert.equal(page.data.videoPreview, null)
-
-    await page.handleVideoCarouselPlay({
-      detail: {
-        componentKey: 'vc-1',
-        work: {
-          workId: 12,
-          mediaType: 'VIDEO',
-          mediaUrl: '',
-          previewUrl: 'cover-12',
-          coverUrl: 'cover-12'
-        }
-      }
-    })
+    assert.equal(await page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work: {
+      workId: 12, mediaType: 'VIDEO', mediaUrl: '', previewUrl: 'cover-12', coverUrl: 'cover-12'
+    } } }), false)
     assert.equal(toasts.at(-1).title, '视频地址缺失')
+    assert.equal(previews.length, 1)
+    global.wx.navigateTo = (options) => options.fail({ errMsg: 'navigateTo:fail' })
+    assert.equal(await page.handleVideoCarouselPlay({ detail: { componentKey: 'vc-1', work } }), false)
+    assert.equal(toasts.at(-1).title, '视频打开失败，请重试')
     assert.equal(page.data.videoPreviewVisible, false)
-    page.handleVideoPreviewError()
-    assert.equal(toasts.at(-1).title, '视频播放失败，请重试')
-    assert.equal(page.data.videoPreviewUrl, '')
-  } finally {
-    global.wx = previousWx
-  }
+  } finally { global.wx = previousWx }
 })
 
 test('preview hyperlink always opens the target published preview and keeps native back navigation', async () => {
@@ -319,7 +297,7 @@ test('dark preview and visitor footers use the transparent white logo without fi
   assert.ok(darkLogo.byteLength < 50 * 1024)
 })
 
-test('preview page keeps recoverable loading and error states when request fails', async () => {
+test('preview page keeps recoverable loading and error states when request fails', async (t) => {
   const requests = []
   const fakeRequest = (options) => {
     const pending = deferred()
@@ -327,6 +305,8 @@ test('preview page keeps recoverable loading and error states when request fails
     return pending.promise
   }
   const page = loadPreviewPage(fakeRequest)
+  global.wx = {}
+  t.after(() => { delete global.wx })
 
   page.onLoad({ portfolioId: '88' })
 
@@ -359,7 +339,7 @@ test('preview page keeps recoverable loading and error states when request fails
   assert.equal(page.data.portfolio.title, '预览成功')
 })
 
-test('preview page requests published preview endpoint for published scope', async () => {
+test('preview page requests published preview endpoint for published scope', async (t) => {
   const requests = []
   const page = loadPreviewPage((options) => {
     requests.push(options)
@@ -374,6 +354,8 @@ test('preview page requests published preview endpoint for published scope', asy
     })
   })
 
+  global.wx = {}
+  t.after(() => { delete global.wx })
   page.onLoad({ portfolioId: '88', scope: 'published' })
   await flushPromises()
 
@@ -382,7 +364,7 @@ test('preview page requests published preview endpoint for published scope', asy
   assert.equal(page.data.portfolio.preview, true)
 })
 
-test('preview page loads a team-referenced member portfolio through the nested published endpoint', async () => {
+test('preview page loads a team-referenced member portfolio through the nested published endpoint', async (t) => {
   const requests = []
   const page = loadPreviewPage((options) => {
     requests.push(options)
@@ -397,6 +379,8 @@ test('preview page loads a team-referenced member portfolio through the nested p
     })
   })
 
+  global.wx = {}
+  t.after(() => { delete global.wx })
   page.onLoad({
     portfolioId: '88',
     teamPortfolioId: '13',
@@ -511,10 +495,14 @@ test('preview display group switch marks work content as switching briefly', () 
   }
 })
 
-test('preview page opens image and video work media without visitor event request', () => {
+test('preview page opens image and video work media without visitor event request', async () => {
   const requests = []
-  const previews = []
+  const previews = [], videos = []
   const wxMock = {
+    navigateTo(options) {
+      const navigation = { route: options.url }; videos.push(navigation)
+      options.success({ eventChannel: { emit(event, payload) { Object.assign(navigation, { event, payload }) } } })
+    },
     previewImage(options) {
       previews.push(options)
     }
@@ -528,7 +516,7 @@ test('preview page opens image and video work media without visitor event reques
   }, wxMock)
 
   try {
-    page.handleWorkTap({
+    await page.handleWorkTap({
       currentTarget: {
         dataset: {
           workId: '11',
@@ -545,7 +533,7 @@ test('preview page opens image and video work media without visitor event reques
       urls: ['https://cdn.example.com/original.jpg']
     })
 
-    page.handleWorkTap({
+    await page.handleWorkTap({
       currentTarget: {
         dataset: {
           workId: '12',
@@ -562,11 +550,7 @@ test('preview page opens image and video work media without visitor event reques
 
   assert.equal(requests.length, 0)
   assert.equal(page.data.videoPreviewVisible, true)
-  assert.deepEqual(page.data.videoPreview, {
-    src: 'https://cdn.example.com/movie.mp4',
-    poster: 'https://cdn.example.com/movie.jpg',
-    title: '婚礼快剪'
-  })
+  assert.deepEqual(videos, [{ route: '/pages/portfolios/video-player/video-player', event: 'portfolioVideoPlayer', payload: { url: 'https://cdn.example.com/movie.mp4', poster: 'https://cdn.example.com/movie.jpg', title: '婚礼快剪', browserContext: null, contextId: '' } }])
 })
 
 test('preview single work images open originals and videos play inline one at a time', () => {
@@ -713,7 +697,7 @@ test('preview single work does not use cover as missing original or video media'
   assert.equal(page.data.activeSingleWorkVideoKey, '')
 })
 
-test('single work markup uses width-fix images and inline autoplay video without changing list overlay', () => {
+test('single work markup keeps width-fix images and inline autoplay alongside dedicated list video playback', () => {
   const pageWxml = readExisting('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
   const componentWxml = readExisting('pages/portfolios/components/single-work/single-work.wxml')
 
@@ -723,7 +707,7 @@ test('single work markup uses width-fix images and inline autoplay video without
   assert.match(componentWxml, /<video[\s\S]*activeVideoKey === componentKey[\s\S]*autoplay="\{\{true\}\}"/)
   assert.match(componentWxml, /class="single-work-play-badge"/)
   assert.match(componentWxml, /wx:if="\{\{showTitle && work\.title\}\}" class="single-work-title"/)
-  assert.match(pageWxml, /<root-portal wx:if="\{\{videoPreviewVisible\}\}">/)
+  assert.doesNotMatch(pageWxml, /work-video-mask|work-video-player/)
 })
 
 test('preview markup exposes loading skeleton and retryable error state', () => {
@@ -753,7 +737,7 @@ test('preview page passes schedule query context to shared component', () => {
   assert.doesNotMatch(wxml, /<button class="secondary-action">档期查询<\/button>/)
 })
 
-test('portfolio work sections render fixed title, all tags, play badge, and video overlay', () => {
+test('portfolio work sections render fixed title, all tags, play badge, and dedicated video playback', () => {
   const previewWxml = fs.readFileSync(
     path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
@@ -771,8 +755,7 @@ test('portfolio work sections render fixed title, all tags, play badge, and vide
   ;[previewWxml, visitorWxml].forEach((wxml) => {
     assert.match(wxml, /<portfolio-work-grid[\s\S]*switching="\{\{displaySwitchingComponentKey === item\.componentKey\}\}"/)
     assert.match(wxml, /<portfolio-work-list[\s\S]*switching="\{\{displaySwitchingComponentKey === item\.componentKey\}\}"/)
-    assert.match(wxml, /class="work-video-mask \{\{videoPreviewVisible \? 'visible' : ''\}\}"/)
-    assert.match(wxml, /id="portfolioWorkVideo"[\s\S]*src="\{\{videoPreview\.src\}\}"[\s\S]*poster="\{\{videoPreview\.poster\}\}"[\s\S]*controls="\{\{true\}\}"[\s\S]*show-fullscreen-btn="\{\{true\}\}"/)
+    assert.doesNotMatch(wxml, /work-video-mask|work-video-player|portfolioWorkVideo/)
   })
   ;[gridWxml, listWxml].forEach((wxml) => {
     assert.match(wxml, /class="work-section-title">作品列表<\/view>/)
@@ -804,7 +787,7 @@ test('single work inline videos fill their frame across production and mock prev
   assert.match(mockRendererWxml, inlineVideoPattern)
 })
 
-test('preview video overlay renders in root portal like visitor page', () => {
+test('preview and visitor delegate video controls to the dedicated video page without page overlays', () => {
   const previewWxml = fs.readFileSync(
     path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
     'utf8'
@@ -813,22 +796,19 @@ test('preview video overlay renders in root portal like visitor page', () => {
     path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.wxml'),
     'utf8'
   )
-  const portalOverlayPattern = /<root-portal\s+wx:if="\{\{videoPreviewVisible\}\}">[\s\S]*class="work-video-mask \{\{videoPreviewVisible \? 'visible' : ''\}\}"[\s\S]*<\/root-portal>/
 
-  assert.match(visitorWxml, portalOverlayPattern)
-  assert.match(previewWxml, portalOverlayPattern)
+  for (const wxml of [visitorWxml, previewWxml]) {
+    assert.doesNotMatch(wxml, /work-video-mask|work-video-player|video-page-hidden/)
+    assert.doesNotMatch(wxml, /<root-portal\b[^>]*videoPreview/)
+  }
 })
 
-test('preview video overlay uses wxss-compatible fixed viewport offsets', () => {
+test('preview stylesheet no longer hides content for page video fullscreen', () => {
   const previewWxss = fs.readFileSync(
     path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxss'),
     'utf8'
   )
-  const maskRule = readRule(previewWxss, '.work-video-mask')
-
-  assert.match(maskRule, /position:\s*fixed;/)
-  assert.match(maskRule, /left:\s*0;[\s\S]*right:\s*0;[\s\S]*top:\s*0;[\s\S]*bottom:\s*0;/)
-  assert.doesNotMatch(maskRule, /inset:\s*0;/)
+  assert.doesNotMatch(previewWxss, /\.work-video-|\.video-page-hidden/)
 })
 
 test('profile component can render selected wechat qr in actual pages', () => {
@@ -966,6 +946,38 @@ test('portfolio user-authored text preserves line breaks in actual pages', () =>
     assert.match(rule, /word-break:\s*break-word;/)
   })
   assert.match(appWxss, /\.user-authored-text,[\s\S]*\.message-content,[\s\S]*\.team-summary,[\s\S]*\.member-summary,[\s\S]*\.candidate-summary,[\s\S]*\.visit-summary\s*\{[^}]*white-space:\s*pre-wrap;/)
+})
+
+test('personal profile borders use scoped card spacing and the existing color picker', () => {
+  const profileWxml = readExisting('pages/portfolios/components/profile/profile.wxml')
+  const profileWxss = readExisting('pages/portfolios/components/profile/profile.wxss')
+  const editorWxml = readExisting('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  assert.match(profileWxml, /profileBorderVisible \? 'profile-bordered' : ''/)
+  assert.match(profileWxml, /style="\{\{profileBorderStyle\}\}"/)
+  const cardRule = readRule(profileWxss, '.profile-bordered')
+  assert.doesNotMatch(cardRule, /margin:/)
+  assert.match(profileWxml, /^<view class="profile-spacing" style="\{\{profileSpacingStyle\}\}">/)
+  assert.match(readRule(profileWxss, '.profile-spacing'), /box-sizing:\s*border-box;/)
+  assert.match(cardRule, /padding:\s*32rpx;/)
+  assert.match(cardRule, /border-radius:\s*24rpx;/)
+  assert.match(cardRule, /border-style:\s*solid;/)
+  assert.match(readRule(profileWxss, '.profile-bordered .profile-identity'), /word-break:\s*break-word;/)
+  assert.match(editorWxml, /<text-color-editor label="边框颜色" inline="\{\{true\}\}"[^>]*active="\{\{profileSheetVisible && profileBorderConfig\.profileBorder\}\}"[^>]*bindchange="handleProfileBorderColorChange"/)
+  assert.match(editorWxml, /catchtap="handleProfileBorderAutoColor"/)
+  assert.match(editorWxml, /profile-border-settings[\s\S]*外侧留白[\s\S]*data-field="\{\{item.field\}\}"[^>]*disabled="\{\{!profileSheetVisible \|\| !profileBorderConfig.profileBorder\}\}"[^>]*bindchange="handleProfileMarginChange"/)
+})
+
+test('personal profile horizontal layout keeps the header flexible and details below it', () => {
+  const profileWxml = readExisting('pages/portfolios/components/profile/profile.wxml')
+  const profileWxss = readExisting('pages/portfolios/components/profile/profile.wxss')
+  const editorWxml = readExisting('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  assert.match(profileWxml, /profile\.profileLayout === 'HORIZONTAL' \? 'profile-horizontal'/)
+  assert.match(profileWxml, /class="profile-heading"[\s\S]*class="profile-avatar"[\s\S]*class="profile-identity"[\s\S]*<\/view>\s*<\/view>\s*<text wx:if="\{\{profile\.bio\}\}"/)
+  assert.match(readRule(profileWxss, '.profile-horizontal .profile-heading'), /display:\s*flex;/)
+  assert.match(readRule(profileWxss, '.profile-horizontal .profile-identity'), /min-width:\s*0;/)
+  assert.match(readRule(profileWxss, '.profile-horizontal .profile-identity'), /word-break:\s*break-word;/)
+  assert.match(readRule(profileWxss, '.profile-horizontal .profile-tags'), /justify-content:\s*flex-start;/)
+  assert.match(editorWxml, /wx:for="\{\{profileLayoutOptions\}\}"[^>]*catchtap="handleProfileLayoutChange"/)
 })
 
 test('portfolio profile avatar is centered in actual pages', () => {

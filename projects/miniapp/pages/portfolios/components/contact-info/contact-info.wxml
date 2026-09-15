@@ -1,0 +1,28 @@
+<view class="contact-spacing" style="{{spacingStyle}}">
+  <view class="contact-info theme-{{themeMode}}" style="{{borderStyle}}">
+    <view wx:if="{{config.contactPhone}}" class="contact-row">
+      <view class="contact-copy">
+        <text class="contact-label">联系手机</text>
+        <text class="contact-value" selectable>{{config.contactPhone}}</text>
+      </view>
+      <button class="copy-button {{copiedFields.contactPhone ? 'is-copied' : ''}}" data-field="contactPhone" bindtap="handleCopy" hover-class="copy-button-pressed" aria-label="{{copiedFields.contactPhone ? '联系手机已复制' : '复制联系手机'}}">
+        <view class="copy-button-face">
+          <view class="copy-icon" aria-hidden="true"></view>
+          <text class="copy-button-text">{{copiedFields.contactPhone ? '已复制' : '复制'}}</text>
+        </view>
+      </button>
+    </view>
+    <view wx:if="{{config.contactWechat}}" class="contact-row">
+      <view class="contact-copy">
+        <text class="contact-label">联系微信</text>
+        <text class="contact-value" selectable>{{config.contactWechat}}</text>
+      </view>
+      <button class="copy-button {{copiedFields.contactWechat ? 'is-copied' : ''}}" data-field="contactWechat" bindtap="handleCopy" hover-class="copy-button-pressed" aria-label="{{copiedFields.contactWechat ? '联系微信已复制' : '复制联系微信'}}">
+        <view class="copy-button-face">
+          <view class="copy-icon" aria-hidden="true"></view>
+          <text class="copy-button-text">{{copiedFields.contactWechat ? '已复制' : '复制'}}</text>
+        </view>
+      </button>
+    </view>
+  </view>
+</view>

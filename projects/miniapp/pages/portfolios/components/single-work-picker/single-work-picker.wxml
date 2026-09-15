@@ -86,6 +86,15 @@
 
   <view class="single-work-picker-switches">
     <view class="single-work-picker-switch-row">
+      <view class="single-work-picker-switch-copy"><view class="single-work-picker-switch-label">独立详情页</view><view class="single-work-picker-switch-note">点击封面后进入作品详情</view></view>
+      <switch checked="{{openMode === 'DETAIL_PAGE'}}" color="#212529" bindchange="handleOpenModeChange" />
+    </view>
+    <block wx:if="{{openMode === 'DETAIL_PAGE'}}">
+      <view class="single-work-picker-switch-row"><view class="single-work-picker-switch-label">详情展示标题</view><switch checked="{{detailOptions.showTitle}}" data-field="showTitle" color="#212529" bindchange="handleDetailOptionChange" /></view>
+      <view class="single-work-picker-switch-row"><view class="single-work-picker-switch-label">详情展示描述</view><switch checked="{{detailOptions.showDescription}}" data-field="showDescription" color="#212529" bindchange="handleDetailOptionChange" /></view>
+    </block>
+
+    <view class="single-work-picker-switch-row">
       <view class="single-work-picker-switch-copy">
         <view class="single-work-picker-switch-label">展示作品名</view>
         <view class="single-work-picker-switch-note">关闭后隐藏作品标题</view>

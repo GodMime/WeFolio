@@ -5,6 +5,12 @@ package com.jxc.wefolio.job.service;
  */
 public interface TencentCiAuditClient {
 
+    /** 提交 COS 音频对象审核，不传输文件内容。 */
+    TencentCiAuditResult submitAudio(String objectKey);
+
+    /** 查询音频异步审核结果。 */
+    TencentCiAuditResult queryAudio(String ciJobId);
+
     /**
      * 同步审核图片。
      *

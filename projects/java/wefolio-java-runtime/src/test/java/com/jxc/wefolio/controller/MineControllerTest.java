@@ -114,11 +114,20 @@ class MineControllerTest {
         RequestParam pageSizeParam = findRequestParam(parameterAnnotations[2]);
         MineVisitRecordsResponse.EventTimeline serviceResponse = new MineVisitRecordsResponse.EventTimeline();
         serviceResponse.setRecordId(101L);
+        serviceResponse.setForegroundDurationSeconds(3900L);
+        serviceResponse.setForegroundDurationText("1 小时 5 分");
+        serviceResponse.setDeviceText("iPhone");
+        serviceResponse.setDeviceRecordedAtEpochMs(1789099200000L);
+        serviceResponse.setDeviceRecordedAtText("09-11 12:00");
         when(mineVisitService.getVisitEvents(101L, 2, 10)).thenReturn(serviceResponse);
         MineController controller = new MineController(
                 mineDashboardService, mineProfileService, mineVisitService);
 
         Response<MineVisitRecordsResponse.EventTimeline> response = controller.visitEvents(101L, 2, 10);
+        assertThat(response.getData().getForegroundDurationSeconds()).isEqualTo(3900L);
+        assertThat(response.getData().getForegroundDurationText()).isEqualTo("1 小时 5 分");
+        assertThat(response.getData().getDeviceRecordedAtEpochMs()).isEqualTo(1789099200000L);
+        assertThat(response.getData().getDeviceRecordedAtText()).isEqualTo("09-11 12:00");
 
         assertThat(getMapping).isNotNull();
         assertThat(getMapping.value()).containsExactly("/api/mine/visits/{recordId}/events");

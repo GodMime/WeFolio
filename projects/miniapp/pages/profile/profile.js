@@ -42,6 +42,8 @@ function emptyForm() {
     city: '',
     intro: '',
     wechatQrUrl: '',
+    contactPhone: '',
+    contactWechat: '',
     tags: []
   }
 }
@@ -54,6 +56,8 @@ function formFromProfile(profile) {
     city: profile.city,
     intro: profile.intro,
     wechatQrUrl: profile.wechatQrUrl,
+    contactPhone: profile.contactPhone,
+    contactWechat: profile.contactWechat,
     tags: profile.tags.slice()
   }
 }

@@ -33,7 +33,7 @@
   gap: 14rpx;
   margin: 0;
   padding: 32rpx;
-  border: 2rpx dashed #ced4da;
+  border: 0;
   border-radius: 48rpx;
   background: #ffffff;
   box-shadow: 0 12rpx 36rpx rgba(33, 37, 41, 0.05);
@@ -43,6 +43,7 @@
 .upload-plus {
   width: 84rpx;
   height: 84rpx;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -61,6 +62,15 @@
   font-size: 31rpx;
   line-height: 1.24;
   font-weight: 800;
+}
+
+.upload-title,
+.upload-desc {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
+  text-align: center;
 }
 
 .upload-desc,
@@ -686,7 +696,7 @@
   padding: 0 28rpx;
   font-size: 26rpx;
   font-weight: 800;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
   box-sizing: border-box;
 }
 
@@ -913,7 +923,7 @@
   font-size: 24rpx;
   font-weight: 900;
   line-height: 1;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
   background: #17202a;
   box-sizing: border-box;
 }
@@ -931,7 +941,7 @@
   font-size: 25rpx;
   font-weight: 800;
   border: 1rpx solid #cbd6df;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
   background: #eef3f7;
   box-sizing: border-box;
 }
@@ -953,7 +963,7 @@
   padding: 0 28rpx;
   font-size: 26rpx;
   font-weight: 800;
-  border-radius: 14rpx;
+  border-radius: 999rpx;
   box-sizing: border-box;
 }
 

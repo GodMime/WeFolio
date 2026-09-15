@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.common.PortfolioBackgroundAudioSupport;
+
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
@@ -19,6 +21,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentReferenceExtractor;
+import com.jxc.wefolio.service.teamportfolio.component.structuredtextsection.TeamStructuredTextSectionComponentReferenceExtractor;
 import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentReferenceExtractor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,6 +59,8 @@ public class TeamPortfolioReferenceService {
     private final TeamMemberPortfolioGridComponentReferenceExtractor gridExtractor;
     private final TeamMemberPortfolioListComponentReferenceExtractor listExtractor;
     private final TeamTextSectionComponentReferenceExtractor textExtractor;
+    /** 结构化文字组件策略。 */
+    private final TeamStructuredTextSectionComponentReferenceExtractor structuredTextExtractor;
     private final TeamScheduleQueryComponentReferenceExtractor scheduleExtractor;
     private final TeamContactFormComponentReferenceExtractor contactExtractor;
     private final TeamQrContactComponentReferenceExtractor qrExtractor;
@@ -76,7 +81,8 @@ public class TeamPortfolioReferenceService {
             TeamScheduleQueryComponentReferenceExtractor scheduleExtractor,
             TeamContactFormComponentReferenceExtractor contactExtractor,
             TeamQrContactComponentReferenceExtractor qrExtractor,
-            TeamVideoCarouselComponentReferenceExtractor videoCarouselExtractor
+            TeamVideoCarouselComponentReferenceExtractor videoCarouselExtractor,
+            TeamStructuredTextSectionComponentReferenceExtractor structuredTextExtractor
     ) {
         this.referenceMapper = referenceMapper;
         this.teamProfileExtractor = teamProfileExtractor;
@@ -90,6 +96,7 @@ public class TeamPortfolioReferenceService {
         this.contactExtractor = contactExtractor;
         this.qrExtractor = qrExtractor;
         this.videoCarouselExtractor = videoCarouselExtractor;
+        this.structuredTextExtractor = structuredTextExtractor;
     }
 
     /**
@@ -148,6 +155,9 @@ public class TeamPortfolioReferenceService {
         List<TeamPortfolioComponentTraversal.ComponentLocation> locations =
                 sortedEnabledComponentLocations(config);
         List<PortfolioReferenceEntity> references = new ArrayList<>();
+        if (config.getBackgroundAudio() != null && config.getBackgroundAudio().getWorkId() != null) {
+            references.add(PortfolioBackgroundAudioSupport.reference(config.getBackgroundAudio()));
+        }
         for (TeamPortfolioComponentTraversal.ComponentLocation location : locations) {
             TeamPortfolioConfigDto.ComponentEnvelope component = location.component();
             TeamPortfolioComponentTypeDict componentType = componentType(component.getComponentType());
@@ -168,6 +178,7 @@ public class TeamPortfolioReferenceService {
             TeamPortfolioComponentContext context
     ) {
         return switch (componentType) {
+            case TEXT_GRID, CONTACT_INFO -> List.of();
             case TEAM_PROFILE -> teamProfileExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case CAROUSEL -> carouselExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case SINGLE_WORK -> singleWorkExtractor.extract(componentKey, componentPath, normalizedConfig, context);
@@ -175,6 +186,7 @@ public class TeamPortfolioReferenceService {
             case MEMBER_PORTFOLIO_GRID -> gridExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case MEMBER_PORTFOLIO_LIST -> listExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case TEXT_SECTION -> textExtractor.extract(componentKey, componentPath, normalizedConfig, context);
+            case STRUCTURED_TEXT_SECTION -> structuredTextExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case SCHEDULE_QUERY -> scheduleExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case CONTACT_FORM -> contactExtractor.extract(componentKey, componentPath, normalizedConfig, context);
             case QR_CONTACT -> qrExtractor.extract(componentKey, componentPath, normalizedConfig, context);

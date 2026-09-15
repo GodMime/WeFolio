@@ -40,6 +40,52 @@ import static org.mockito.Mockito.when;
  */
 class WorkAuditServiceTest {
 
+    /** 音频走既有异步审核编排，但不能误用视频云接口。 */
+    @Test
+    void audioShouldUseAudioProviderInExistingSubmissionFlow() {
+        WorkAuditWorkEntity work = work(17L, MediaTypeDict.AUDIO, "audio.mp3", 23000);
+        WorkAuditWorkRepository works = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository tasks = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claims = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient client = mock(TencentCiAuditClient.class);
+        when(works.findPendingVideos(5)).thenReturn(List.of(work));
+        when(claims.claimAndCreateSubmittingTask(eq(17L), any())).thenAnswer(invocation -> {
+            WorkAuditTaskEntity task = invocation.getArgument(1);
+            assertThat(task.getMediaType()).isEqualTo(MediaTypeDict.AUDIO.getCode());
+            task.setId(107L);
+            return task;
+        });
+        when(client.submitAudio("audio.mp3")).thenReturn(new TencentCiAuditResult(
+                "audio-job", "Submitted", AuditResultDict.UNKNOWN, null, null, null, false, false, "{}"));
+        new WorkAuditService(works, tasks, claims, client, properties()).submitPendingVideoAudits(5);
+        verify(client).submitAudio("audio.mp3");
+        verify(client, never()).submitVideo(anyString(), anyInt(), anyInt());
+        verify(claims).markVideoSubmittedAndKeepWorkAuditing(eq(107L), eq(17L), eq(1), anyString(), eq("audio-job"), eq("{}"));
+    }
+
+    /** 音频查询复用既有成功落库流程，不能查询视频云接口。 */
+    @Test
+    void audioPassShouldUseAudioQueryAndExistingCompletion() {
+        WorkAuditTaskEntity task = videoTask(108L, 18L, 3);
+        task.setMediaType(MediaTypeDict.AUDIO.getCode());
+        WorkAuditWorkRepository works = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository tasks = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claims = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient client = mock(TencentCiAuditClient.class);
+        when(tasks.findQueryableVideoTasks(eq(1000), eq(120), any())).thenReturn(List.of(task));
+        when(tasks.claimVideoQuery(eq(108L), anyString(), any(), any(), eq(120))).thenReturn(true);
+        when(client.queryAudio("video-job-id")).thenReturn(new TencentCiAuditResult(
+                "video-job-id", "Success", AuditResultDict.PASS, 0, "Normal", 0, true, false, "{}"));
+
+        new WorkAuditService(works, tasks, claims, client, properties()).queryPendingVideoResults(1000);
+
+        verify(client, never()).queryVideo(anyString());
+        verify(claims).markVideoTaskSuccessAndUpdateWork(
+                eq(108L), eq(18L), eq(1), anyString(),
+                eq(AuditResultDict.PASS), eq("Success"), eq(0), eq("Normal"), eq(0),
+                eq(List.<TencentCiAuditRisk>of()), eq("{}"), eq(WorkAuditStatusDict.PASSED), eq(null));
+    }
+
     /** 一轮任务必须按既定顺序执行各类审核链路。 */
     @Test
     void runOneRoundShouldFollowDesignedSequence() {

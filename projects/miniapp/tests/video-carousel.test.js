@@ -52,6 +52,7 @@ function createDisplayComponent(definition, works) {
     setData(patch) { Object.assign(this.data, patch) },
     triggerEvent(name, detail) { events.push({ name, detail }) }
   }
+  Object.assign(component, definition.methods)
   definition.lifetimes.attached.call(component)
   return { component, events }
 }
@@ -148,7 +149,8 @@ test('both display components consume their package-local carousel math module',
       setData(patch) { Object.assign(this.data, patch) }
     }
 
-    definition.lifetimes.attached.call(component)
+    Object.assign(component, definition.methods)
+  definition.lifetimes.attached.call(component)
 
     assert.deepEqual(component.data.cardStates, marker)
     assert.deepEqual(calls, [{ works, offset: 0 }])
@@ -207,7 +209,7 @@ test('both display components use a stage-wide drag surface, approved copy and n
     assert.equal(json.component, true)
     assert.equal(json.styleIsolation, 'isolated')
     assert.match(js, /Component\s*\(\s*\{/)
-    for (const property of ['componentKey', 'title', 'works', 'showTitle', 'showSwipeHint', 'themeMode']) {
+    for (const property of ['componentKey', 'title', 'works', 'showComponentTitle', 'showTitle', 'showSwipeHint', 'themeMode']) {
       assert.match(js, new RegExp(`${property}:\\s*\\{`))
     }
     assert.match(js, /triggerEvent\('play'/)
@@ -219,7 +221,7 @@ test('both display components use a stage-wide drag surface, approved copy and n
     assert.match(wxml, /class="video-carousel-stage"[\s\S]*bindtouchend="handleTouchEnd"/)
     assert.match(wxml, /class="video-carousel-stage"[\s\S]*bindtouchcancel="handleTouchCancel"/)
     assert.match(wxml, /class="video-carousel-card[\s\S]*bindtap="handleCardTap"/)
-    assert.match(wxml, /wx:if="\{\{title\}\}"/)
+    assert.match(wxml, /wx:if="\{\{showComponentTitle && title\}\}"/)
     assert.match(wxml, /wx:if="\{\{showTitle\}\}"/)
     assert.match(wxml, /wx:if="\{\{showSwipeHint && works.length > 1\}\}"/)
     assert.match(wxml, /video-carousel-placeholder/)
@@ -231,5 +233,137 @@ test('both display components use a stage-wide drag surface, approved copy and n
     assert.match(wxss, /height:\s*360rpx/)
     assert.match(wxss, /\.video-carousel-stage\s*\{[^}]*width:\s*calc\(100%\s*-\s*48rpx\);[^}]*margin:\s*0\s+24rpx;/)
     assert.match(wxss, /\.theme-dark \.video-carousel-hint,\s*\.theme-dark \.video-carousel-empty\s*\{\s*color:\s*#c1c7ce;\s*\}/)
+  }
+})
+
+test('portrait style follows current selection, measured track and individual description', () => {
+  for (const root of [PERSONAL_ROOT, TEAM_ROOT]) {
+    const definition = loadDisplayComponentWithMathOverride(root, loadUtility(root).buildCardStates)
+    const works = [{ workId: 1, description: '首件' }, { workId: 2, description: '第二件' }, { workId: 3 }]
+    const { component, events } = createDisplayComponent(definition, works)
+    component.createSelectorQuery = () => ({ select() { return this }, boundingClientRect(callback) { callback({ width: 300 }); return this }, exec() {} })
+    component.measurePortraitTrack()
+    assert.equal(component.data.portraitNextMargin, 60)
+    assert.equal(component.data.portraitHeight, (240 - 6) * 1.25)
+    component.handlePortraitChange({ detail: { current: 1 } })
+    assert.equal(component.data.currentIndex, 1)
+    component.data.displayStyle = 'STACKED'
+    definition.properties.displayStyle.observer.call(component)
+    assert.equal(component.data.currentIndex, 1)
+    definition.properties.works.observer.call(component, works.slice())
+    assert.equal(component.data.currentIndex, 1)
+    component.handlePortraitPlay({ currentTarget: { dataset: { index: 1 } } })
+    assert.equal(events[0].detail.work.description, '第二件')
+  }
+})
+
+test('portrait exposed next card selects it before playback and fallback follows 48rpx gutters', () => {
+  for (const root of [PERSONAL_ROOT, TEAM_ROOT]) {
+    const definition = loadDisplayComponentWithMathOverride(root, loadUtility(root).buildCardStates)
+    const { component, events } = createDisplayComponent(definition, [{ workId: 1 }, { workId: 2 }])
+    assert.equal(component.data.portraitNextMargin, (375 - 24) * 0.2)
+    component.handlePortraitPlay({ currentTarget: { dataset: { index: 1 } } })
+    assert.equal(component.data.currentIndex, 1)
+    assert.equal(events.length, 0)
+    component.handlePortraitPlay({ currentTarget: { dataset: { index: 1 } } })
+    assert.equal(events.length, 1)
+    assert.equal(events[0].detail.work.workId, 2)
+    component.handlePortraitPlay({ currentTarget: { dataset: { index: 9 } } })
+    assert.equal(events.length, 1)
+    const wxml = fs.readFileSync(path.join(root, 'components/video-carousel/video-carousel.wxml'), 'utf8')
+    const wxss = fs.readFileSync(path.join(root, 'components/video-carousel/video-carousel.wxss'), 'utf8')
+    assert.match(wxml, /<swiper\s+wx:if="\{\{displayStyle === 'PORTRAIT_CARDS'\}\}"/)
+    assert.match(wxml, /next-margin="\{\{portraitNextMargin\}\}px"/)
+    assert.match(wxml, /bindchange="handlePortraitChange"/)
+    assert.match(wxml, /bindtap="handlePortraitPlay"/)
+    assert.match(wxml, /showDescription && item.description/)
+    assert.match(wxss, /\.video-carousel-portrait-track\s*\{[^}]*width:calc\(100% - 48rpx\)/)
+    assert.doesNotMatch(wxss, /\.video-carousel-work-title\s*\{/)
+  }
+})
+
+
+test('personal and team component title settings default on and survive saving independently of work titles', async () => {
+  const personal = require('../utils/portfolios')
+  const team = require('../pages/team-portfolios/utils/team-portfolios')
+  for (const value of [undefined, null, true, false, 'false']) {
+    const source = { title: '保留的组件标题', showComponentTitle: value, showTitle: false }
+    const expected = value !== false
+    const personalConfig = personal.normalizeVideoCarouselConfig(Object.assign({}, source, { workIds: [1, 2, 3] }))
+    const teamConfig = team.normalizeTeamVideoCarouselConfig(Object.assign({}, source, {
+      items: [1, 2, 3].map(workId => ({ memberUserId: 7, workId }))
+    }))
+    const component = personal.createComponent('VIDEO_CAROUSEL', { componentKey: 'title-toggle', config: personalConfig })
+    const updated = personal.updateVideoCarouselConfig({ components: [component] }, 'title-toggle', personalConfig)
+    const savedPersonal = JSON.parse(JSON.stringify(personal.buildDraftPayload(updated, 1, 'title-toggle'))).config.components[0].config
+    const normalizedTeam = team.normalizeTeamPortfolioConfig({ components: [
+      { componentKey: 'title-toggle', componentType: 'VIDEO_CAROUSEL', enabled: true, config: teamConfig }
+    ] })
+    let savedTeam
+    await team.saveTeamPortfolioDraft(async options => {
+      savedTeam = JSON.parse(JSON.stringify(options.data)).config.components[0].config
+    }, 8, normalizedTeam, 1, 'title-toggle')
+    for (const saved of [savedPersonal, savedTeam]) {
+      assert.equal(saved.showComponentTitle, expected)
+      assert.equal(saved.showTitle, false)
+      assert.equal(saved.title, source.title)
+    }
+    assert.equal(savedPersonal.showComponentTitle, savedTeam.showComponentTitle)
+  }
+  for (const normalize of [personal.normalizeVideoCarouselConfig, team.normalizeTeamVideoCarouselConfig]) {
+    assert.equal(normalize({ title: '', showComponentTitle: false }).title, '视频作品')
+  }
+})
+
+test('preview and visitor title rendering defaults on and preserves explicit off in primary and secondary menus', () => {
+  const { normalizeVisitorPortfolio } = require('../utils/visitor-portfolio')
+  const { normalizeTeamVisitorPortfolio } = require('../pages/team-portfolios/utils/team-visitor-portfolio')
+  for (const showComponentTitle of [undefined, null, true, false]) {
+    const expected = showComponentTitle !== false
+    const data = { title: '原组件标题', showComponentTitle, showTitle: false, works: [{ workId: 1, mediaType: 'VIDEO' }] }
+    const personalComponent = Object.assign({ componentKey: 'video', componentType: 'VIDEO_CAROUSEL' }, data)
+    const teamComponent = { componentKey: 'video', componentType: 'VIDEO_CAROUSEL', data }
+    for (const preview of [true, false]) {
+      const personal = normalizeVisitorPortfolio({ renderData: { preview, components: [personalComponent],
+        bottomNav: { enabled: true, items: [{ key: 'home', title: '首页' }, { key: 'video', title: '视频', components: [personalComponent] }] }
+      } })
+      const team = normalizeTeamVisitorPortfolio({ renderData: { preview, components: [teamComponent],
+        bottomNav: { enabled: true, items: [{ key: 'home', title: '首页' }, { key: 'video', title: '视频', components: [teamComponent] }] }
+      } })
+      for (const rendered of [personal.components[0], personal.bottomNav.items[1].components[0], team.components[0].data, team.bottomNav.items[1].components[0].data]) {
+        assert.equal(rendered.showComponentTitle, expected)
+        assert.equal(rendered.showTitle, false)
+        assert.equal(rendered.title, data.title)
+      }
+    }
+    const legacy = normalizeVisitorPortfolio({ config: {
+      components: [{ componentKey: 'video', componentType: 'VIDEO_CAROUSEL', config: data }]
+    } })
+    assert.equal(legacy.components[0].showComponentTitle, expected)
+  }
+  for (const [topLevel, fallback, expected] of [[undefined, false, false], [null, false, false], [false, true, false], [true, false, true]]) {
+    const rendered = normalizeVisitorPortfolio({ renderData: { components: [{
+      componentKey: 'video', componentType: 'VIDEO_CAROUSEL', works: [{ workId: 1 }],
+      showComponentTitle: topLevel, config: { showComponentTitle: fallback }
+    }] } }).components[0]
+    assert.equal(rendered.showComponentTitle, expected)
+  }
+})
+
+test('both package components default the component title on and remove its node when disabled', () => {
+  for (const root of [PERSONAL_ROOT, TEAM_ROOT]) {
+    const definition = loadDisplayComponentWithMathOverride(root, loadUtility(root).buildCardStates)
+    assert.equal(definition.properties.showComponentTitle.type, Boolean)
+    assert.equal(definition.properties.showComponentTitle.value, true)
+    assert.equal(definition.properties.showTitle.value, true)
+    const wxml = fs.readFileSync(path.join(root, 'components/video-carousel/video-carousel.wxml'), 'utf8')
+    assert.match(wxml, /<view wx:if="\{\{showComponentTitle && title\}\}" class="video-carousel-title">\{\{title\}\}<\/view>/)
+    assert.doesNotMatch(wxml, /hidden="[^"\n]*showComponentTitle|visibility:[^"\n]*showComponentTitle/)
+  }
+  for (const extension of ['js', 'wxml', 'wxss']) {
+    assert.equal(
+      fs.readFileSync(path.join(PERSONAL_ROOT, `components/video-carousel/video-carousel.${extension}`), 'utf8'),
+      fs.readFileSync(path.join(TEAM_ROOT, `components/video-carousel/video-carousel.${extension}`), 'utf8')
+    )
   }
 })

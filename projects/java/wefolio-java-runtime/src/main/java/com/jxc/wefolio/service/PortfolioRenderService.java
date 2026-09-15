@@ -1,10 +1,15 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
+import com.jxc.wefolio.common.PortfolioTextColorSupport;
+
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.common.PortfolioTextTypographySupport;
 import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioComponentTypeDict;
+import com.jxc.wefolio.dict.PortfolioTextBackgroundTreatmentDict;
+import com.jxc.wefolio.dict.PortfolioTextVerticalAlignmentDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
@@ -226,6 +231,9 @@ public class PortfolioRenderService {
     /** COS 服务 */
     private final CosService cosService;
 
+    /** 全局音频展示数据。 */
+    private final PortfolioBackgroundAudioService backgroundAudioService;
+
     /**
      * 构建作品集渲染模型。
      *
@@ -255,24 +263,24 @@ public class PortfolioRenderService {
         render.setMaintenanceText(maintenanceText);
         render.setVisitRecordId(visitRecordId);
         if (underMaintenance) {
-            render.setStyle(buildStyle(PortfolioConfigDto.DEFAULT_BACKGROUND_COLOR));
+            render.setStyle(buildStyle(null));
             render.setComponents(List.of());
             render.setBottomNav(buildDisabledBottomNav());
             return render;
         }
         Long ownerId = portfolio == null ? null : portfolio.getOwnerId();
-        render.setStyle(buildStyle(config == null || config.getStyle() == null
-                ? null
-                : config.getStyle().getBackgroundColor()));
+        render.setBackgroundAudio(backgroundAudioService.renderPersonal(config == null ? null : config.getBackgroundAudio(), ownerId));
+        render.setStyle(buildStyle(config == null ? null : config.getStyle()));
         HyperlinkRenderContext hyperlinkContext = buildHyperlinkRenderContext(ownerId, preview, config);
+        Map<Long, WorkEntity> backgroundWorks = loadTextBackgroundWorks(ownerId, config);
         render.setComponents(buildComponents(
                 ownerId,
                 config == null ? null : config.getComponents(),
-                hyperlinkContext));
+                hyperlinkContext, backgroundWorks));
         render.setBottomNav(buildBottomNav(
                 ownerId,
                 config == null ? null : config.getBottomNav(),
-                hyperlinkContext));
+                hyperlinkContext, backgroundWorks));
         return render;
     }
 
@@ -287,14 +295,15 @@ public class PortfolioRenderService {
     private List<PortfolioRenderDto.Component> buildComponents(
             Long ownerId,
             List<PortfolioConfigDto.Component> components,
-            HyperlinkRenderContext hyperlinkContext
+            HyperlinkRenderContext hyperlinkContext,
+            Map<Long, WorkEntity> backgroundWorks
     ) {
         return safeList(components).stream()
                 .filter(component -> component != null && !Boolean.FALSE.equals(component.getEnabled()))
                 .sorted(Comparator
                         .comparing(this::safeComponentSortOrder)
                         .thenComparing(component -> defaultString(component.getComponentKey())))
-                .map(component -> buildComponent(ownerId, component, hyperlinkContext))
+                .map(component -> buildComponent(ownerId, component, hyperlinkContext, backgroundWorks))
                 .filter(Objects::nonNull)
                 .toList();
     }
@@ -302,13 +311,16 @@ public class PortfolioRenderService {
     /**
      * 构建页面样式。
      *
-     * @param configuredBackgroundColor 配置背景色
+     * @param configuredStyle 配置页面样式
      * @return 页面渲染样式
      */
-    private PortfolioRenderDto.Style buildStyle(String configuredBackgroundColor) {
-        String backgroundColor = normalizeBackgroundColor(configuredBackgroundColor);
+    private PortfolioRenderDto.Style buildStyle(PortfolioConfigDto.Style configuredStyle) {
+        String backgroundColor = normalizeBackgroundColor(configuredStyle == null
+                ? null : configuredStyle.getBackgroundColor());
         PortfolioRenderDto.Style style = new PortfolioRenderDto.Style();
         style.setBackgroundColor(backgroundColor);
+        style.setComponentSpacingRpx(PortfolioComponentSpacingSupport.normalize(configuredStyle == null
+                ? null : configuredStyle.getComponentSpacingRpx()));
         style.setThemeMode(resolveThemeMode(backgroundColor));
         return style;
     }
@@ -324,7 +336,8 @@ public class PortfolioRenderService {
     private PortfolioRenderDto.BottomNav buildBottomNav(
             Long ownerId,
             PortfolioConfigDto.BottomNav configuredBottomNav,
-            HyperlinkRenderContext hyperlinkContext
+            HyperlinkRenderContext hyperlinkContext,
+            Map<Long, WorkEntity> backgroundWorks
     ) {
         if (configuredBottomNav == null || !Boolean.TRUE.equals(configuredBottomNav.getEnabled())) {
             return buildDisabledBottomNav();
@@ -342,7 +355,7 @@ public class PortfolioRenderService {
             item.setKey(defaultString(configuredItem.getKey()));
             item.setTitle(defaultString(configuredItem.getTitle()));
             if (index > 0) {
-                item.setComponents(buildComponents(ownerId, configuredItem.getComponents(), hyperlinkContext));
+                item.setComponents(buildComponents(ownerId, configuredItem.getComponents(), hyperlinkContext, backgroundWorks));
             }
             items.add(item);
         }
@@ -400,7 +413,8 @@ public class PortfolioRenderService {
     private PortfolioRenderDto.Component buildComponent(
             Long ownerId,
             PortfolioConfigDto.Component component,
-            HyperlinkRenderContext hyperlinkContext
+            HyperlinkRenderContext hyperlinkContext,
+            Map<Long, WorkEntity> backgroundWorks
     ) {
         PortfolioRenderDto.Component render = new PortfolioRenderDto.Component();
         String componentTypeCode = defaultString(component.getComponentType());
@@ -415,11 +429,16 @@ public class PortfolioRenderService {
             return render;
         }
         switch (componentType) {
+            case TEXT_GRID -> render.setTextGrid(PortfolioTextGridConfigNormalizer.normalize(componentConfig));
+            case CONTACT_INFO -> render.setContactInfo(PortfolioContactInfoConfigSupport.normalize(componentConfig));
             case CAROUSEL -> render.setWorks(buildWorks(
                     ownerId,
                     asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS)),
                     CAROUSEL_MEDIA_TYPES));
             case VIDEO_CAROUSEL -> {
+                render.setDisplayStyle(PortfolioComponentDisplayOptionsSupport.displayStyle(componentConfig));
+                render.setShowDescription(PortfolioComponentDisplayOptionsSupport.showDescription(componentConfig));
+                render.setShowComponentTitle(PortfolioComponentDisplayOptionsSupport.showComponentTitle(componentConfig));
                 render.setWorks(buildWorks(
                         ownerId,
                         asLongList(componentConfig.get(CONFIG_KEY_WORK_IDS)),
@@ -439,7 +458,20 @@ public class PortfolioRenderService {
             case SCHEDULE_QUERY -> render.setScheduleQuery(buildScheduleQuery(componentConfig));
             case QR_CONTACT -> render.setQrContact(buildQrContact(componentConfig));
             case CONTACT_FORM -> render.setContactForm(buildContactForm(componentConfig));
-            case TEXT_SECTION -> render.setTextSection(buildTextSection(componentConfig));
+            case TEXT_SECTION -> {
+                PortfolioRenderDto.TextSection text = buildTextSection(componentConfig);
+                applyTextBackground(text, componentConfig, backgroundWorks);
+                text.setVerticalAlignment(defaultString(asString(componentConfig.get(
+                        PortfolioTextBackgroundConfigSupport.VERTICAL_ALIGNMENT)), PortfolioTextVerticalAlignmentDict.CENTER.getCode()));
+                render.setTextSection(text);
+            }
+            case STRUCTURED_TEXT_SECTION -> {
+                Map<String,Object> normalized = PortfolioStructuredTextConfigSupport.forRender(componentConfig, false);
+                PortfolioRenderDto.StructuredTextSection text = new PortfolioRenderDto.StructuredTextSection();
+                text.setBlocks(asStructuredBlocks(normalized));
+                applyTextBackground(text, normalized, backgroundWorks);
+                render.setStructuredTextSection(text);
+            }
             case DIVIDER -> render.setDivider(buildDivider(componentConfig));
             case HYPERLINK -> {
                 PortfolioRenderDto.Hyperlink hyperlink = buildHyperlink(componentConfig, hyperlinkContext);
@@ -615,6 +647,8 @@ public class PortfolioRenderService {
             Map<String, Object> componentConfig
     ) {
         applyWorkDisplayOptions(render, componentConfig);
+        render.setOpenMode(PortfolioComponentDisplayOptionsSupport.openMode(componentConfig));
+        render.setDetailOptions(PortfolioComponentDisplayOptionsSupport.detailOptions(componentConfig));
         Long workId = asLong(componentConfig.get(CONFIG_KEY_WORK_ID));
         if (workId == null || workId <= 0L) {
             return;
@@ -778,6 +812,7 @@ public class PortfolioRenderService {
      * @return 个人资料
      */
     private PortfolioRenderDto.Profile buildProfile(Map<String, Object> componentConfig) {
+        componentConfig = PortfolioProfileConfigSupport.normalize(componentConfig);
         Map<String, Object> profileConfig = asObjectMap(componentConfig.get(CONFIG_KEY_PROFILE));
         PortfolioRenderDto.Profile profile = new PortfolioRenderDto.Profile();
         profile.setAvatarUrl(asString(profileConfig.get(PROFILE_KEY_AVATAR_URL)));
@@ -788,6 +823,12 @@ public class PortfolioRenderService {
         profile.setWechatQrUrl(asString(profileConfig.get(PROFILE_KEY_WECHAT_QR_URL)));
         profile.setVisibleFields(asObjectMap(componentConfig.get(CONFIG_KEY_VISIBLE_FIELDS)));
         profile.setTags(buildTags(profileConfig.get(CONFIG_KEY_TAGS)));
+        profile.setProfileLayout((String) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_LAYOUT));
+        profile.setProfileBorder((Boolean) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_BORDER));
+        profile.setProfileBorderWidthRpx((Integer) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_BORDER_WIDTH_RPX));
+        profile.setProfileBorderColor((String) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_BORDER_COLOR));
+        profile.setProfileHorizontalMarginRpx((Integer) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_HORIZONTAL_MARGIN_RPX));
+        profile.setProfileVerticalMarginRpx((Integer) componentConfig.get(PortfolioProfileConfigSupport.PROFILE_VERTICAL_MARGIN_RPX));
         return profile;
     }
 
@@ -876,7 +917,59 @@ public class PortfolioRenderService {
                 componentConfig.get(PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY)));
         textSection.setFontSizeRpx(normalizeTextFontSizeRpx(
                 componentConfig.get(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY)));
+        textSection.setColor(PortfolioTextColorSupport.forRender(
+                componentConfig.get(PortfolioTextColorSupport.COLOR_CONFIG_KEY)));
+        textSection.setLineHeight(PortfolioTextLineHeightSupport.forRender(componentConfig));
         return textSection;
+    }
+
+    /** 一次加载主页面与全部导航页面中已启用的文字背景。 */
+    private Map<Long,WorkEntity> loadTextBackgroundWorks(Long ownerId, PortfolioConfigDto config) {
+        if (ownerId == null || config == null) { return Map.of(); }
+        Set<Long> ids = new LinkedHashSet<>();
+        for (PortfolioComponentTraversal.ComponentLocation location : PortfolioComponentTraversal.listComponentLocations(config)) {
+            PortfolioConfigDto.Component component = location.component();
+            if (component == null || Boolean.FALSE.equals(component.getEnabled()) || component.getConfig() == null) { continue; }
+            PortfolioComponentTypeDict type = PortfolioComponentTypeDict.fromCode(component.getComponentType());
+            if (type != PortfolioComponentTypeDict.TEXT_SECTION && type != PortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION) { continue; }
+            if (Boolean.TRUE.equals(component.getConfig().get(PortfolioTextBackgroundConfigSupport.ENABLED))) {
+                Long id = asLong(component.getConfig().get(PortfolioTextBackgroundConfigSupport.WORK_ID));
+                if (id != null && id > 0) { ids.add(id); }
+            }
+        }
+        return loadWorkMap(ownerId, new ArrayList<>(ids));
+    }
+
+    /** 授权资源才生成 URL；背景失效时保留文字及已保存开关。 */
+    private void applyTextBackground(PortfolioRenderDto.TextBackground target, Map<String,Object> config,
+                                     Map<Long,WorkEntity> works) {
+        boolean enabled = Boolean.TRUE.equals(config.get(PortfolioTextBackgroundConfigSupport.ENABLED));
+        target.setBackgroundEnabled(enabled);
+        target.setBackgroundTreatment(defaultString(asString(config.get(PortfolioTextBackgroundConfigSupport.TREATMENT)),
+                PortfolioTextBackgroundTreatmentDict.GRADIENT.getCode()));
+        Long workId = enabled ? asLong(config.get(PortfolioTextBackgroundConfigSupport.WORK_ID)) : null;
+        target.setBackgroundWorkId(workId);
+        WorkEntity work = workId == null ? null : works.get(workId);
+        if (enabled && work != null && PortfolioTextBackgroundConfigSupport.supportsMedia(work.getMediaType())
+                && (!MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())
+                    || WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus()))
+                && hasText(work.getMediaObjectKey())) {
+            PortfolioRenderDto.BackgroundWork background = new PortfolioRenderDto.BackgroundWork();
+            background.setWorkId(work.getId()); background.setMediaType(work.getMediaType());
+            background.setUrl(cosService.publicUrl(work.getMediaObjectKey()));
+            if (MediaTypeDict.VIDEO.getCode().equals(work.getMediaType()) && hasText(work.getCoverObjectKey())) {
+                background.setPosterUrl(cosService.publicUrl(work.getCoverObjectKey()));
+            }
+            background.setWidth(work.getWidth()); background.setHeight(work.getHeight());
+            target.setBackgroundWork(background);
+        }
+        target.setBackgroundInvalid(enabled && target.getBackgroundWork() == null);
+    }
+
+    /** 纯规则已保证区块形状，安全提取强类型有序列表。 */
+    @SuppressWarnings("unchecked")
+    private List<Map<String,Object>> asStructuredBlocks(Map<String,Object> config) {
+        return (List<Map<String,Object>>) config.get(PortfolioStructuredTextConfigSupport.BLOCKS);
     }
 
     /**

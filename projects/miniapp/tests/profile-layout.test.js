@@ -112,7 +112,7 @@ test('wechat QR editor sits directly below intro inside profile fields panel', (
   assert.ok(qrStart < tagPanelStart)
   assert.match(
     profileWxml,
-    /class="panel profile-fields-panel"[\s\S]*>个人简介<[\s\S]*<textarea[^>]*\/>\s*<\/view>\s*<view class="form-row qr-form-row">[\s\S]*>微信二维码</
+    /class="panel profile-fields-panel"[\s\S]*>个人简介<[\s\S]*<textarea[^>]*\/>[\s\S]*data-field="contactPhone"[\s\S]*data-field="contactWechat"[\s\S]*<view class="form-row qr-form-row">[\s\S]*>微信二维码</
   )
 })
 

@@ -1,11 +1,15 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.PortfolioBackgroundAudioService;
+import static org.mockito.Mockito.mock;
+
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioRenderDto;
+import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentRenderer;
@@ -17,6 +21,8 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentRenderer;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentRenderer;
+import com.jxc.wefolio.service.teamportfolio.component.structuredtextsection.TeamStructuredTextSectionComponentRenderer;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
 import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentRenderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,11 +34,13 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -42,6 +50,10 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class TeamPortfolioRenderServiceTest {
+    /** 结构化文字组件策略模拟。 */
+    @Mock private TeamStructuredTextSectionComponentRenderer structuredTextRenderer;
+    /** 背景资源支持模拟。 */
+    @Mock private TeamTextBackgroundSupport textBackgroundSupport;
 
     @Mock private TeamProfileComponentRenderer teamProfileRenderer;
     @Mock private TeamCarouselComponentRenderer carouselRenderer;
@@ -54,6 +66,72 @@ class TeamPortfolioRenderServiceTest {
     @Mock private TeamContactFormComponentRenderer contactRenderer;
     @Mock private TeamQrContactComponentRenderer qrRenderer;
     @Mock private TeamVideoCarouselComponentRenderer videoCarouselRenderer;
+
+    /** 团队联系信息展示补历史无边框默认值，开启和关闭时均透传完整外观配置。 */
+    @Test
+    void rendersContactBorderSettingsAndLegacyDefaults() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var contact = component("contact", TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true);
+        contact.setConfig(JSONObject.of("contactPhone", "123"));
+        var input = config(List.of(contact));
+        assertThat(service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData())
+                .containsEntry("contactBorder", false).containsEntry("contactBorderWidthRpx", 1)
+                .containsEntry("contactBorderColor", "AUTO").containsEntry("horizontalMarginRpx", 0)
+                .containsEntry("verticalMarginRpx", 0);
+        for (boolean enabled : List.of(false, true)) {
+            contact.setConfig(JSONObject.of("contactPhone", "123", "contactBorder", enabled, "contactBorderWidthRpx", 8,
+                    "contactBorderColor", "#aabbcc", "horizontalMarginRpx", 96, "verticalMarginRpx", 24));
+            assertThat(service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData())
+                    .containsEntry("contactPhone", "123").containsEntry("contactBorder", enabled)
+                    .containsEntry("contactBorderWidthRpx", 8).containsEntry("contactBorderColor", "#AABBCC")
+                    .containsEntry("horizontalMarginRpx", 96).containsEntry("verticalMarginRpx", 24);
+        }
+    }
+
+    /** 团队网格渲染补旧版默认值，并完整透传作者设置的外侧留白。 */
+    @Test void rendersGridOuterMarginsAndLegacyDefaults() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        var input = config(List.of(grid));
+        var values = service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData();
+        assertThat(values).containsEntry("horizontalMarginRpx", 0).containsEntry("verticalMarginRpx", 0);
+        values.put("horizontalMarginRpx", 96); values.put("verticalMarginRpx", 24); grid.setConfig(values);
+        assertThat(service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData())
+                .containsEntry("columns", 2).containsEntry("horizontalMarginRpx", 96).containsEntry("verticalMarginRpx", 24);
+    }
+
+    /** 团队展示保留跨八行的合并单元格及原文，配置序列化后不截断新增行。 */
+    @Test void rendersEightRowGridWithoutTruncation() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        grid.setConfig(JSONObject.of("rows", 8, "columns", 1, "columnWeights", List.of(1),
+                "rowMinHeightsRpx", List.of(180, 180, 180, 180, 180, 180, 180, 180),
+                "cells", List.of(Map.of("cellKey", "merged", "row", 0, "column", 0, "rowSpan", 8, "columnSpan", 1,
+                        "blocks", List.of(Map.of("blockKey", "block", "runs", List.of(Map.of("runKey", "run", "text", "八行文字"))))))));
+        var rendered = service().render(JSON.toJSONString(config(List.of(grid))), context)
+                .getComponents().getFirst().getData();
+        assertThat(rendered).containsEntry("rows", 8).containsEntry("columns", 1);
+        assertThat(rendered.getJSONArray("rowMinHeightsRpx")).hasSize(8);
+        assertThat(rendered.getJSONArray("cells").getJSONObject(0)).containsEntry("rowSpan", 8);
+        assertThat(rendered.getJSONArray("cells").getJSONObject(0).getJSONArray("blocks").getJSONObject(0)
+                .getJSONArray("runs").getJSONObject(0)).containsEntry("text", "八行文字");
+    }
+
+    /** 边框开关不影响已保存宽度颜色的渲染透传，旧配置仍返回主题色默认值。 */
+    @Test void rendersGridBorderOptionsAndLegacyDefaults() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        var input = config(List.of(grid));
+        var defaults = service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData();
+        assertThat(defaults).containsEntry("cellBorderWidthRpx", 1).containsEntry("cellBorderColor", "AUTO");
+        for (boolean enabled : List.of(false, true)) {
+            defaults.put("cellBorder", enabled); defaults.put("cellBorderWidthRpx", 8); defaults.put("cellBorderColor", "#aabbcc");
+            grid.setConfig(defaults);
+            assertThat(service().render(JSON.toJSONString(input), context).getComponents().getFirst().getData())
+                    .containsEntry("cellBorder", enabled).containsEntry("cellBorderWidthRpx", 8)
+                    .containsEntry("cellBorderColor", "#AABBCC");
+        }
+    }
 
     /**
      * 渲染仅分发已启用的团队组件，并保持其稳定排序。
@@ -77,6 +155,9 @@ class TeamPortfolioRenderServiceTest {
         assertThat(render.getTitle()).isEqualTo("团队作品集");
         assertThat(render.getComponents()).extracting(TeamPortfolioRenderDto.Component::getComponentType)
                 .containsExactly(
+                        TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(),
+                        TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(),
+                        TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode(),
                         TeamPortfolioComponentTypeDict.VIDEO_CAROUSEL.getCode(),
                         TeamPortfolioComponentTypeDict.QR_CONTACT.getCode(),
                         TeamPortfolioComponentTypeDict.CONTACT_FORM.getCode(),
@@ -89,7 +170,13 @@ class TeamPortfolioRenderServiceTest {
                         TeamPortfolioComponentTypeDict.CAROUSEL.getCode(),
                         TeamPortfolioComponentTypeDict.TEAM_PROFILE.getCode());
         assertThat(render.getComponents()).allSatisfy(component ->
-                assertThat(component.getData().getString("renderer")).isEqualTo(component.getComponentType()));
+                {
+                    if (TeamPortfolioComponentTypeDict.TEXT_GRID.getCode().equals(component.getComponentType())) {
+                        assertThat(component.getData().getJSONArray("cells")).hasSize(4);
+                    } else if (TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode().equals(component.getComponentType())) {
+                        assertThat(component.getData()).containsKeys("contactPhone", "contactWechat");
+                    } else { assertThat(component.getData().getString("renderer")).isEqualTo(component.getComponentType()); }
+                });
         verify(teamProfileRenderer).render(any(JSONObject.class), eq(context));
         verify(carouselRenderer).render(any(JSONObject.class), eq(context));
         verify(singleWorkRenderer).render(any(JSONObject.class), eq(context));
@@ -302,6 +389,62 @@ class TeamPortfolioRenderServiceTest {
     }
 
     /**
+     * 顶层入口须一次汇总主页与次级菜单背景，并把同一授权缓存传给两种文字策略。
+     */
+    @Test
+    void renderShouldBatchMainAndSecondaryTextBackgroundsAndSkipDisabledComponents() {
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 5);
+        TeamPortfolioConfigDto.ComponentEnvelope plain = component(
+                "home-text", TeamPortfolioComponentTypeDict.TEXT_SECTION.getCode(), 1000, true);
+        plain.setConfig(JSONObject.of("backgroundEnabled", true, "backgroundWorkId", 71L));
+        TeamPortfolioConfigDto.ComponentEnvelope structured = component(
+                "more-text", TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode(), 1000, true);
+        structured.setConfig(JSONObject.of("backgroundEnabled", true, "backgroundWorkId", 72L));
+        TeamPortfolioConfigDto.ComponentEnvelope disabled = component(
+                "disabled-text", TeamPortfolioComponentTypeDict.TEXT_SECTION.getCode(), 2000, false);
+        disabled.setConfig(JSONObject.of("backgroundEnabled", true, "backgroundWorkId", 73L));
+        TeamPortfolioConfigDto config = config(List.of(plain));
+        TeamPortfolioConfigDto.BottomNav bottomNav = new TeamPortfolioConfigDto.BottomNav();
+        bottomNav.setEnabled(true);
+        bottomNav.setItems(List.of(menu("nav_home", "主页", null),
+                menu("nav_more", "介绍", List.of(structured, disabled))));
+        config.setBottomNav(bottomNav);
+        Map<Long, WorkEntity> authorized = Map.of(71L, new WorkEntity(), 72L, new WorkEntity());
+        List<TeamPortfolioComponentContext> dispatchedContexts = new ArrayList<>();
+        when(textBackgroundSupport.load(anyList(), eq(context))).thenAnswer(invocation -> {
+            List<JSONObject> backgrounds = invocation.getArgument(0);
+            assertThat(backgrounds).extracting(item -> item.getLong("backgroundWorkId"))
+                    .containsExactly(71L, 72L);
+            return authorized;
+        });
+        when(textRenderer.render(any(JSONObject.class), any(TeamPortfolioComponentContext.class)))
+                .thenAnswer(invocation -> {
+                    dispatchedContexts.add(invocation.getArgument(1));
+                    return JSONObject.of("content", "主页文字");
+                });
+        when(structuredTextRenderer.render(any(JSONObject.class), any(TeamPortfolioComponentContext.class)))
+                .thenAnswer(invocation -> {
+                    dispatchedContexts.add(invocation.getArgument(1));
+                    return JSONObject.of("blocks", List.of(JSONObject.of("content", "次级菜单文字")));
+                });
+
+        TeamPortfolioRenderDto rendered = service().render(JSON.toJSONString(config), context);
+
+        verify(textBackgroundSupport).load(anyList(), eq(context));
+        assertThat(dispatchedContexts).hasSize(2);
+        assertThat(dispatchedContexts.get(1)).isSameAs(dispatchedContexts.getFirst());
+        assertThat(dispatchedContexts.getFirst().textBackgroundWorks()).isSameAs(authorized);
+        assertThat(dispatchedContexts.getFirst().teamId()).isEqualTo(11L);
+        assertThat(dispatchedContexts.getFirst().portfolioId()).isEqualTo(22L);
+        assertThat(dispatchedContexts.getFirst().revision()).isEqualTo(5);
+        assertThat(context.textBackgroundWorks()).isNull();
+        assertThat(rendered.getComponents()).extracting(TeamPortfolioRenderDto.Component::getComponentKey)
+                .containsExactly("home-text");
+        assertThat(rendered.getBottomNav().getItems().get(1).getComponents())
+                .extracting(TeamPortfolioRenderDto.Component::getComponentKey).containsExactly("more-text");
+    }
+
+    /**
      * 十类组件在第一菜单和次级菜单中必须保持完全相同的渲染数据契约。
      */
     @Test
@@ -358,6 +501,7 @@ class TeamPortfolioRenderServiceTest {
                 case MEMBER_PORTFOLIO_GRID -> when(gridRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case MEMBER_PORTFOLIO_LIST -> when(listRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case TEXT_SECTION -> when(textRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
+                case STRUCTURED_TEXT_SECTION -> when(structuredTextRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case SCHEDULE_QUERY -> when(scheduleRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case CONTACT_FORM -> when(contactRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
                 case QR_CONTACT -> when(qrRenderer.render(any(JSONObject.class), eq(context))).thenReturn(rendered);
@@ -368,12 +512,13 @@ class TeamPortfolioRenderServiceTest {
 
     private TeamPortfolioRenderService service() {
         return new TeamPortfolioRenderService(teamProfileRenderer, carouselRenderer, singleWorkRenderer, dividerRenderer, gridRenderer,
-                listRenderer, textRenderer, scheduleRenderer, contactRenderer, qrRenderer, videoCarouselRenderer);
+                listRenderer, textRenderer, scheduleRenderer, contactRenderer, qrRenderer, videoCarouselRenderer, structuredTextRenderer, textBackgroundSupport,
+                mock(PortfolioBackgroundAudioService.class));
     }
 
     private void verifyNoRendererInteractions() {
         verifyNoInteractions(teamProfileRenderer, carouselRenderer, singleWorkRenderer, dividerRenderer, gridRenderer, listRenderer,
-                textRenderer, scheduleRenderer, contactRenderer, qrRenderer, videoCarouselRenderer);
+                textRenderer, scheduleRenderer, contactRenderer, qrRenderer, videoCarouselRenderer, structuredTextRenderer, textBackgroundSupport);
     }
 
     private TeamPortfolioConfigDto config(List<TeamPortfolioConfigDto.ComponentEnvelope> components) {

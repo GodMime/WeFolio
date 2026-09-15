@@ -1,6 +1,12 @@
 {
   "usingComponents": {
+    "background-audio-control": "../components/background-audio-control/background-audio-control",
+    "text-color-editor": "../components/text-color-editor/text-color-editor",
+    "structured-text-editor": "/pages/portfolios/components/structured-text-editor/structured-text-editor",
+    "text-background-editor": "/pages/portfolios/components/text-background-editor/text-background-editor",
     "navigation-bar": "/components/navigation-bar/navigation-bar",
-    "single-work-picker": "/pages/portfolios/components/single-work-picker/single-work-picker"
+    "single-work-picker": "/pages/portfolios/components/single-work-picker/single-work-picker",
+    "text-grid-editor": "../components/text-grid-editor/text-grid-editor",
+    "contact-info-editor": "../components/contact-info-editor/contact-info-editor"
   }
 }

@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio.component.singlework;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
@@ -73,6 +74,8 @@ public class TeamSingleWorkComponentRenderer {
         rendered.put("showTitle", config.getShowTitle());
         rendered.put("showDescription", config.getShowDescription());
         rendered.put("work", snapshot);
+        rendered.put(PortfolioComponentDisplayOptionsSupport.OPEN_MODE, config.getOpenMode());
+        rendered.put(PortfolioComponentDisplayOptionsSupport.DETAIL_OPTIONS, config.getDetailOptions());
         return rendered;
     }
 
@@ -95,6 +98,8 @@ public class TeamSingleWorkComponentRenderer {
         parsed.setWorkId(workId);
         parsed.setShowTitle(config.get("showTitle") instanceof Boolean value ? value : Boolean.TRUE);
         parsed.setShowDescription(config.get("showDescription") instanceof Boolean value ? value : Boolean.FALSE);
+        parsed.setOpenMode(PortfolioComponentDisplayOptionsSupport.openMode(config));
+        parsed.setDetailOptions(PortfolioComponentDisplayOptionsSupport.detailOptions(config));
         return parsed;
     }
 

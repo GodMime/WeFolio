@@ -45,7 +45,19 @@
         <view class="panel-heading pe-page-card-heading">
           <view class="heading-copy">
             <view class="section-title pe-page-card-title">页面设置</view>
-            <view class="section-desc pe-page-card-description">设置作品集背景与底部导航</view>
+            <view class="section-desc pe-page-card-description">设置组件间距、背景与底部导航</view>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">组件间距</view>
+            <view class="field-limit">{{config.style.componentSpacingRpx}} rpx</view>
+          </view>
+          <slider class="component-spacing-slider" min="{{componentSpacingMinRpx}}" max="{{componentSpacingMaxRpx}}" step="1" value="{{config.style.componentSpacingRpx}}" activeColor="#212529" block-size="22" bindchanging="handleComponentSpacingChange" bindchange="handleComponentSpacingChange" aria-label="组件间距" />
+          <view class="component-spacing-range">
+            <text>{{componentSpacingMinRpx}} rpx</text>
+            <text>{{componentSpacingMaxRpx}} rpx</text>
           </view>
         </view>
 
@@ -68,6 +80,35 @@
             ></view>
             <button class="background-custom-button" bindtap="handleOpenBackgroundColorSheet">自定义</button>
           </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">背景音频</view>
+            <switch checked="{{config.backgroundAudio.enabled}}" bindchange="handleBackgroundAudioSwitch" aria-label="开启背景音频" color="#212529" />
+          </view>
+          <block wx:if="{{config.backgroundAudio.enabled}}">
+            <view class="section-desc pe-page-card-description">全局配置；关闭后保留选择，移除后取消引用</view>
+            <view wx:if="{{config.backgroundAudio.workId}}" class="section-desc pe-page-card-description">{{backgroundAudioSelected.title || '已选择音频'}}</view>
+            <button wx:if="{{config.backgroundAudio.workId}}" class="background-audio-action pe-page-action-secondary" disabled="{{!backgroundAudioResource.mediaUrl}}" bindtap="handleToggleBackgroundAudio">{{backgroundAudioPlaying ? '暂停试听' : '试听音频'}}</button>
+            <view class="background-audio-styles">
+              <view wx:for="{{backgroundAudioStyles}}" wx:key="value" class="background-audio-style {{config.backgroundAudio.displayStyle === item.value ? 'audio-style-selected' : ''}}" data-style="{{item.value}}" bindtap="handleBackgroundAudioStyle" aria-role="radio" aria-checked="{{config.backgroundAudio.displayStyle === item.value}}" aria-label="{{item.label}}">
+                <view class="background-audio-sample"><background-audio-control display-style="{{item.value}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" sample="{{true}}" /></view>
+                <view class="background-audio-style-label">{{item.label}}{{config.backgroundAudio.displayStyle === item.value ? ' · 已选' : ''}}</view>
+              </view>
+            </view>
+            <button class="background-audio-action pe-page-action-secondary" bindtap="handleChooseBackgroundAudio">从音频作品中选择</button>
+            <button wx:if="{{config.backgroundAudio.workId}}" class="background-audio-action pe-page-action-secondary" bindtap="handleRemoveBackgroundAudio">移除音频</button>
+            <view wx:if="{{backgroundAudioPickerVisible}}" class="background-audio-options">
+              <button wx:for="{{backgroundAudioOptions}}" wx:key="id" class="background-audio-option" data-index="{{index}}" bindtap="handleSelectBackgroundAudio">
+                <text>{{item.title || '未命名音频'}}</text>
+              </button>
+              <view wx:if="{{backgroundAudioLoading}}" class="section-desc pe-page-card-description">加载中…</view>
+              <view wx:if="{{!backgroundAudioLoading && backgroundAudioOptions.length === 0}}" class="section-desc pe-page-card-description">暂无可用音频，请先上传并等待审核通过</view>
+              <button wx:if="{{backgroundAudioHasMore}}" class="background-audio-action pe-page-action-secondary {{backgroundAudioLoading ? 'pe-action-loading' : ''}}" bindtap="loadBackgroundAudioOptions" loading="{{backgroundAudioLoading}}" disabled="{{backgroundAudioLoading}}">加载更多</button>
+              <button class="background-audio-action pe-page-action-secondary" bindtap="handleCloseBackgroundAudioPicker">收起选择</button>
+            </view>
+          </block>
         </view>
 
         <view class="form-row">
@@ -211,17 +252,23 @@
         ></slider>
         <view
           class="background-hue-thumb"
-          style="left: {{backgroundColorHsv.hue / 3.59}}%; background-color: {{backgroundHueColor}};"
+          style="{{backgroundHueThumbStyle}}"
         ></view>
       </view>
-      <input
-        class="background-hex-input pe-sheet-field"
-        value="{{backgroundColorDraft}}"
-        bindinput="handleBackgroundHexInput"
-        bindblur="handleBackgroundHexBlur"
-        maxlength="7"
-        placeholder="#FFFFFF"
-      />
+      <view class="background-hex-row">
+        <input
+          class="background-hex-input pe-sheet-field"
+          type="text"
+          value="{{backgroundColorDraft}}"
+          bindinput="handleBackgroundHexInput"
+          bindblur="handleBackgroundHexBlur"
+          maxlength="7"
+          placeholder="#FFFFFF"
+          disabled="{{!backgroundColorSheetVisible}}"
+          aria-label="十六进制背景色，可直接输入"
+        />
+        <button class="background-hex-copy" catchtap="handleCopyBackgroundColor" disabled="{{!backgroundColorSheetVisible}}" aria-label="复制背景色值">复制</button>
+      </view>
       <view class="background-color-preview-bar">
         <view class="background-color-preview-chip" style="background-color: {{backgroundColorDraft}};"></view>
         <view class="background-color-preview-text">预览 {{backgroundColorDraft}}</view>
@@ -496,14 +543,19 @@
   </view>
 
   <view class="pe-sheet-mask {{componentWorkSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseComponentWorkSheet">
-    <view class="component-work-list-panel pe-sheet-panel pe-sheet-size-long {{componentWorkSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+    <view class="component-work-list-panel pe-sheet-panel pe-sheet-size-long {{componentWorkSheetVisible ? 'pe-sheet-panel-visible' : ''}} {{editingComponentType === 'VIDEO_CAROUSEL' ? 'video-carousel-editor-panel' : ''}}" catchtap="noop">
       <view class="pe-sheet-grabber"></view>
-      <view class="pe-sheet-heading">
+      <view class="component-work-heading pe-sheet-heading">
         <view class="pe-sheet-title">{{componentWorkSheetTitle}}</view>
-        <view class="pe-sheet-meta">{{componentWorkSelectedCountText}}</view>
+        <view class="component-work-count pe-sheet-meta">{{componentWorkSelectedCountText}}</view>
+        <view wx:if="{{editingComponentType === 'VIDEO_CAROUSEL'}}" class="video-carousel-settings-toggle" catchtap="handleToggleVideoCarouselSettings" aria-role="button" aria-label="{{videoCarouselSettingsCollapsed ? '展开视频轮播设置' : '收起视频轮播设置'}}" aria-expanded="{{!videoCarouselSettingsCollapsed}}">
+          <text>{{videoCarouselSettingsCollapsed ? '设置' : '收起'}}</text><view class="video-carousel-settings-chevron {{videoCarouselSettingsCollapsed ? 'collapsed' : ''}}"></view>
+        </view>
       </view>
 
       <single-work-picker
+        open-mode="{{componentWorkOpenMode}}" detail-options="{{componentWorkDetailOptions}}"
+        binddetailoptionschange="handleSingleWorkDetailOptionsChange"
         wx:if="{{editingComponentType === 'SINGLE_WORK'}}"
         current-selection="{{componentWorkCurrentSelection}}"
         keyword="{{componentWorkKeyword}}"
@@ -529,33 +581,38 @@
       ></single-work-picker>
 
       <block wx:else>
-      <view wx:if="{{editingComponentType === 'VIDEO_CAROUSEL'}}" class="video-carousel-editor-settings">
+      <view wx:if="{{editingComponentType === 'VIDEO_CAROUSEL' && videoCarouselSettingsCollapsed}}" class="video-carousel-settings-summary">{{videoCarouselDisplayStyle === 'PORTRAIT_CARDS' ? '竖向横滑' : '堆叠轮播'}} · {{videoCarouselShowComponentTitle ? (videoCarouselTitle || '视频作品') : '无组件标题'}}</view>
+      <view wx:if="{{editingComponentType === 'VIDEO_CAROUSEL'}}" class="video-carousel-editor-settings {{videoCarouselSettingsCollapsed ? 'video-carousel-editor-settings-collapsed' : ''}}">
+        <view class="display-style-options">
+          <view class="display-style-choice {{videoCarouselDisplayStyle !== 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="STACKED" bindtap="handleVideoCarouselStyleChange" aria-role="radio" aria-checked="{{videoCarouselDisplayStyle !== 'PORTRAIT_CARDS'}}"><view class="style-thumbnail stacked"><view></view><view></view><view></view></view><text>堆叠轮播</text></view>
+          <view class="display-style-choice {{videoCarouselDisplayStyle === 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="PORTRAIT_CARDS" bindtap="handleVideoCarouselStyleChange" aria-role="radio" aria-checked="{{videoCarouselDisplayStyle === 'PORTRAIT_CARDS'}}"><view class="style-thumbnail portrait"><view></view><view></view></view><text>竖向横滑</text></view>
+        </view>
         <view class="video-carousel-title-setting">
-          <view class="video-carousel-setting-heading">
-            <view class="field-label">组件标题</view>
-            <view class="video-carousel-title-count">{{videoCarouselTitleCount}} / 10</view>
+          <view class="video-carousel-setting-label">组件标题</view>
+          <view wx:if="{{videoCarouselShowComponentTitle}}" class="video-carousel-title-field">
+            <input class="video-carousel-title-input pe-sheet-field" value="{{videoCarouselTitle}}" maxlength="-1" placeholder="视频作品" bindinput="handleVideoCarouselTitleInput" aria-label="组件标题内容" />
+            <view class="video-carousel-title-count">{{videoCarouselTitleCount}}/10</view>
           </view>
-          <input
-            class="video-carousel-title-input pe-sheet-field"
-            value="{{videoCarouselTitle}}"
-            maxlength="-1"
-            placeholder="视频作品"
-            bindinput="handleVideoCarouselTitleInput"
-          />
+          <view wx:else class="video-carousel-title-hidden">不展示</view>
+          <view class="video-carousel-toggle"><switch checked="{{videoCarouselShowComponentTitle}}" color="#212529" bindchange="handleVideoCarouselComponentTitleChange" aria-label="展示组件标题" /></view>
         </view>
         <view class="video-carousel-switch-setting">
-          <view class="video-carousel-switch-copy">
-            <view class="video-carousel-switch-title">显示作品标题</view>
-            <view class="video-carousel-switch-note">在卡片下方展示每个视频的标题</view>
+          <view class="video-carousel-switch-copy"><view class="video-carousel-switch-title">作品标题</view>
+            <view class="video-carousel-setting-help" data-option="showTitle" catchtap="handleVideoCarouselSettingHelp" aria-role="button" aria-label="查看作品标题说明"><text>?</text></view>
           </view>
-          <switch checked="{{videoCarouselShowTitle}}" color="#212529" bindchange="handleVideoCarouselShowTitleChange" />
+          <view class="video-carousel-toggle"><switch checked="{{videoCarouselShowTitle}}" color="#212529" bindchange="handleVideoCarouselShowTitleChange" aria-label="展示作品标题" /></view>
         </view>
         <view class="video-carousel-switch-setting">
-          <view class="video-carousel-switch-copy">
-            <view class="video-carousel-switch-title">显示滑动提示</view>
-            <view class="video-carousel-switch-note">提示访客可左右拖动浏览视频</view>
+          <view class="video-carousel-switch-copy"><view class="video-carousel-switch-title">作品描述</view>
+            <view class="video-carousel-setting-help" data-option="showDescription" catchtap="handleVideoCarouselSettingHelp" aria-role="button" aria-label="查看作品描述说明"><text>?</text></view>
           </view>
-          <switch checked="{{videoCarouselShowSwipeHint}}" color="#212529" bindchange="handleVideoCarouselShowSwipeHintChange" />
+          <view class="video-carousel-toggle"><switch checked="{{videoCarouselShowDescription}}" color="#212529" bindchange="handleVideoCarouselDescriptionChange" aria-label="展示作品描述" /></view>
+        </view>
+        <view class="video-carousel-switch-setting">
+          <view class="video-carousel-switch-copy"><view class="video-carousel-switch-title">滑动提示</view>
+            <view class="video-carousel-setting-help" data-option="showSwipeHint" catchtap="handleVideoCarouselSettingHelp" aria-role="button" aria-label="查看滑动提示说明"><text>?</text></view>
+          </view>
+          <view class="video-carousel-toggle"><switch checked="{{videoCarouselShowSwipeHint}}" color="#212529" bindchange="handleVideoCarouselShowSwipeHintChange" aria-label="展示滑动提示" /></view>
         </view>
       </view>
       <view class="component-work-tools">
@@ -653,7 +710,39 @@
 
       <scroll-view class="profile-form-scroll profile-sheet-scroll pe-sheet-scroll" scroll-y type="list">
         <view class="profile-form-list-content">
+          <view class="profile-form-section">
+            <view class="profile-form-section-title">资料布局</view>
+            <view class="profile-layout-options">
+              <view wx:for="{{profileLayoutOptions}}" wx:key="value" class="profile-layout-option pe-sheet-choice {{profileLayout === item.value ? 'pe-sheet-choice-selected' : ''}}" data-value="{{item.value}}" catchtap="handleProfileLayoutChange" aria-role="button" aria-label="{{item.label}}">{{item.label}}</view>
+            </view>
+          </view>
           <view class="profile-sheet-fields-panel">
+            <view class="profile-visibility-option pe-sheet-choice">
+              <view class="profile-visibility-label">卡片边框</view>
+              <switch checked="{{profileBorderConfig.profileBorder}}" color="#212529" bindchange="handleProfileBorderChange" />
+            </view>
+            <view class="profile-border-settings {{profileBorderConfig.profileBorder ? 'is-expanded' : ''}}">
+              <view class="profile-border-settings-content">
+                <view class="field-heading">
+                  <view class="field-label">线框粗细</view>
+                  <view class="profile-field-limit">{{profileBorderConfig.profileBorderWidthRpx}}</view>
+                </view>
+                <slider min="{{profileBorderMinWidthRpx}}" max="{{profileBorderMaxWidthRpx}}" step="1" value="{{profileBorderConfig.profileBorderWidthRpx}}" activeColor="#212529" block-size="22" disabled="{{!profileSheetVisible || !profileBorderConfig.profileBorder}}" bindchanging="handleProfileBorderWidthChange" bindchange="handleProfileBorderWidthChange" />
+                <view class="field-label">外侧留白</view>
+                <view wx:for="{{profileMarginOptions}}" wx:key="field">
+                  <view class="field-heading">
+                    <view class="field-label">{{item.label}}</view>
+                    <view class="profile-field-limit">{{profileBorderConfig[item.field]}}</view>
+                  </view>
+                  <slider min="{{profileMarginMinRpx}}" max="{{profileMarginMaxRpx}}" step="1" value="{{profileBorderConfig[item.field]}}" activeColor="#212529" block-size="22" data-field="{{item.field}}" disabled="{{!profileSheetVisible || !profileBorderConfig.profileBorder}}" bindchanging="handleProfileMarginChange" bindchange="handleProfileMarginChange" />
+                </view>
+                <view class="field-heading">
+                  <view class="field-label">边框颜色</view>
+                  <view class="profile-border-auto pe-sheet-choice {{profileBorderConfig.profileBorderColor === 'AUTO' ? 'pe-sheet-choice-selected' : ''}}" catchtap="handleProfileBorderAutoColor" aria-role="button" aria-label="边框颜色跟随主题">跟随主题</view>
+                </view>
+                <text-color-editor label="边框颜色" inline="{{true}}" color="{{profileBorderConfig.profileBorderColor}}" active="{{profileSheetVisible && profileBorderConfig.profileBorder}}" bindchange="handleProfileBorderColorChange" />
+              </view>
+            </view>
             <view class="form-row">
               <view class="profile-avatar-editor">
                 <view class="profile-avatar-preview" catchtap="handleChooseProfileAvatar">
@@ -917,7 +1006,7 @@
         <view class="pe-sheet-meta">{{qrContactForm.qrUrlSource === 'CUSTOM' ? '自定义' : '资料'}}</view>
       </view>
 
-      <scroll-view class="profile-form-scroll" scroll-y type="list">
+      <scroll-view class="profile-form-scroll qr-contact-form-scroll" scroll-y type="list">
         <view class="profile-form-list-content">
           <view class="profile-sheet-fields-panel">
             <view class="form-row qr-source-row">
@@ -1035,7 +1124,7 @@
         <view class="pe-sheet-title">编辑文字说明</view>
       </view>
 
-      <scroll-view class="text-section-form pe-sheet-scroll" scroll-y type="list">
+      <scroll-view class="text-section-form pe-sheet-scroll" scroll-y type="list" lower-threshold="80" bindscrolltolower="handleTextBackgroundScrollToLower">
         <view class="text-section-form-content">
           <view class="form-row">
             <view class="field-heading">
@@ -1044,7 +1133,7 @@
             </view>
             <textarea
               class="profile-sheet-textarea text-section-sheet-textarea pe-sheet-field pe-sheet-field-textarea {{textSectionTypography.fontClass}}"
-              style="{{textSectionTypography.fontSizeStyle}}"
+              style="{{textSectionTypography.fontSizeStyle}}{{textSectionTypography.lineHeightStyle}}"
               value="{{textSectionForm.content}}"
               placeholder="请输入给访客看的说明文字"
               maxlength="{{textSectionMaxLength}}"
@@ -1100,8 +1189,19 @@
           </view>
 
           <view class="form-row">
+            <view class="field-heading"><view class="field-label">行间距（0.5–3.0 倍）</view></view>
+            <view class="text-section-line-height-stepper">
+              <button data-delta="{{-textSectionLineHeightEditor.step}}" bindtap="handleTextSectionLineHeightStep" disabled="{{textSectionLineHeightEditor.decreaseDisabled}}" aria-label="减小行间距">−</button>
+              <input type="digit" value="{{textSectionLineHeightEditor.value}}" placeholder="{{textSectionLineHeightEditor.placeholder}}" bindinput="handleTextSectionLineHeightInput" aria-label="行间距，0.5至3.0倍" />
+              <text>倍</text>
+              <button data-delta="{{textSectionLineHeightEditor.step}}" bindtap="handleTextSectionLineHeightStep" disabled="{{textSectionLineHeightEditor.increaseDisabled}}" aria-label="增大行间距">＋</button>
+            </view>
+            <view wx:if="{{textSectionLineHeightEditor.error}}" class="text-section-line-height-error">{{textSectionLineHeightEditor.error}}</view>
+          </view>
+
+          <view class="form-row">
             <view class="field-heading">
-              <view class="field-label">对齐方式</view>
+              <view class="field-label">左右对齐方式</view>
             </view>
             <view class="schedule-query-mode-list">
               <view
@@ -1118,6 +1218,11 @@
               </view>
             </view>
           </view>
+          <view class="form-row">
+            <view class="field-heading"><view class="field-label">颜色</view></view>
+            <text-color-editor color="{{textSectionForm.color}}" active="{{textSectionSheetVisible}}" bindchange="handleTextSectionColorChange" />
+          </view>
+          <text-background-editor id="text-background-picker" wx:if="{{textSectionSheetVisible}}" config="{{textSectionForm}}" options="{{textBackgroundOptions}}" loading="{{textBackgroundLoading}}" error="{{textBackgroundError}}" has-more="{{textBackgroundHasMore}}" bindchange="handleTextBackgroundChange" bindrequest="handleTextBackgroundRequest" />
         </view>
       </scroll-view>
 
@@ -1127,6 +1232,10 @@
       </view>
     </view>
   </view>
+
+  <text-grid-editor background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'TEXT_GRID'}}" config="{{newComponentConfig}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
+  <contact-info-editor background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'CONTACT_INFO'}}" config="{{newComponentConfig}}" is-new="{{!newComponentKey}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
+  <structured-text-editor visible="{{structuredTextSheetVisible}}" config="{{structuredTextConfig}}" is-new="{{structuredTextIsNew}}" background-options="{{textBackgroundOptions}}" background-loading="{{textBackgroundLoading}}" background-error="{{textBackgroundError}}" background-has-more="{{textBackgroundHasMore}}" background-selection="{{textBackgroundSelection}}" bindconfirm="handleConfirmStructuredText" bindcancel="handleCancelStructuredText" bindbackgroundrequest="handleTextBackgroundRequest" bindbackgroundchange="handleStructuredTextBackgroundChange" />
 
   <view class="divider-sheet-mask pe-sheet-mask {{dividerSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseDividerSheet">
     <view class="divider-sheet-panel pe-sheet-panel pe-sheet-size-compact {{dividerSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
@@ -1141,20 +1250,7 @@
           <view class="field-heading">
             <view class="field-label">颜色</view>
           </view>
-          <view class="divider-color-list">
-            <view
-              wx:for="{{dividerColorOptions}}"
-              wx:key="value"
-              class="divider-color-option pe-sheet-choice {{dividerForm.color === item.value ? 'pe-sheet-choice-selected' : ''}}"
-              data-value="{{item.value}}"
-              catchtap="handleDividerColorTap"
-              aria-role="radio"
-              aria-checked="{{dividerForm.color === item.value}}"
-            >
-              <view class="divider-color-swatch" style="background-color: {{item.colorValue}};"></view>
-              <view class="divider-color-label">{{item.label}}</view>
-            </view>
-          </view>
+          <text-color-editor label="分割线颜色" color="{{dividerPickerColor}}" active="{{dividerSheetVisible}}" bindchange="handleDividerColorChange" />
         </view>
 
         <view class="form-row">

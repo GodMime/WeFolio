@@ -246,8 +246,10 @@ public class FeishuWorkAuditNotifier {
                                 + formatPreviousReasons(submission.previousReasons()))));
         elements.add(Map.of(
                 "tag", DIV_TAG,
-                "text", text(LARK_MARKDOWN_TAG,
-                        "**" + MEDIA_SECTION_TITLE + "**\n[查看作品](" + context.mediaUrl() + ")")));
+                "text", MediaTypeDict.AUDIO.getCode().equals(submission.mediaType())
+                        ? text(PLAIN_TEXT_TAG, MEDIA_SECTION_TITLE + "\n" + context.mediaUrl())
+                        : text(LARK_MARKDOWN_TAG,
+                                "**" + MEDIA_SECTION_TITLE + "**\n[查看作品](" + context.mediaUrl() + ")")));
         elements.add(Map.of("tag", HORIZONTAL_RULE_TAG));
         elements.add(Map.of(
                 "tag", NOTE_TAG,

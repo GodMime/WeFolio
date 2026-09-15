@@ -1,5 +1,6 @@
 {
   "usingComponents": {
+    "background-audio-control": "../components/background-audio-control/background-audio-control",
     "navigation-bar": "/components/navigation-bar/navigation-bar",
     "portfolio-bottom-nav": "/components/portfolio-bottom-nav/portfolio-bottom-nav",
     "timeline-share-guide": "/components/timeline-share-guide/timeline-share-guide",
@@ -13,7 +14,10 @@
     "portfolio-single-work": "/pages/portfolios/components/single-work/single-work",
     "portfolio-qr-contact": "/pages/portfolios/components/qr-contact/qr-contact",
     "portfolio-text-section": "/pages/portfolios/components/text-section/text-section",
+    "portfolio-structured-text-section": "/pages/portfolios/components/structured-text-section/structured-text-section",
     "portfolio-divider": "/pages/portfolios/components/divider/divider",
-    "portfolio-hyperlink": "/pages/portfolios/components/hyperlink/hyperlink"
+    "portfolio-hyperlink": "/pages/portfolios/components/hyperlink/hyperlink",
+    "portfolio-text-grid": "../components/text-grid/text-grid",
+    "portfolio-contact-info": "../components/contact-info/contact-info"
   }
 }

@@ -2,6 +2,7 @@ package com.jxc.wefolio.service.teamportfolio.component.videocarousel;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport;
 import lombok.Data;
 
 import java.util.List;
@@ -33,6 +34,9 @@ public class TeamVideoCarouselComponentConfig {
     /** 组件标题 */
     private String title;
 
+    /** 是否展示组件标题，缺省开启且关闭时保留标题文字。 */
+    private boolean showComponentTitle = true;
+
     /** 有序视频作品条目 */
     private List<Item> items;
 
@@ -42,6 +46,11 @@ public class TeamVideoCarouselComponentConfig {
     /** 是否展示滑动提示 */
     private boolean showSwipeHint;
 
+    /** 轮播样式。 */
+    private String displayStyle;
+    /** 作品说明开关。 */
+    private boolean showDescription;
+
     /**
      * 转换为只含展示开关和资源标识的 JSON。
      *
@@ -50,6 +59,7 @@ public class TeamVideoCarouselComponentConfig {
     public JSONObject toJsonObject() {
         JSONObject config = new JSONObject();
         config.put(CONFIG_KEY_TITLE, title);
+        config.put(PortfolioComponentDisplayOptionsSupport.SHOW_COMPONENT_TITLE, showComponentTitle);
         JSONArray jsonItems = new JSONArray();
         for (Item item : items == null ? List.<Item>of() : items) {
             JSONObject jsonItem = new JSONObject();
@@ -60,6 +70,8 @@ public class TeamVideoCarouselComponentConfig {
         config.put(CONFIG_KEY_ITEMS, jsonItems);
         config.put(CONFIG_KEY_SHOW_TITLE, showTitle);
         config.put(CONFIG_KEY_SHOW_SWIPE_HINT, showSwipeHint);
+        config.put(PortfolioComponentDisplayOptionsSupport.DISPLAY_STYLE, displayStyle);
+        config.put(PortfolioComponentDisplayOptionsSupport.SHOW_DESCRIPTION, showDescription);
         return config;
     }
 

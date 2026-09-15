@@ -1,6 +1,9 @@
 #!/bin/bash
 set -eo pipefail
 
+# === 打印当前日期和时间 ===
+date '+>>> 当前日期和时间：%Y-%m-%d %H:%M:%S'
+
 # === 切换到脚本所在目录（确保从任意位置执行都能正确找到 pom.xml 和 target/），执行完回到原目录 ===
 ORIG_DIR="$(pwd)"
 trap 'cd "$ORIG_DIR"' EXIT

@@ -90,7 +90,7 @@ test('normalizes team theme and menu components while keeping private data opaqu
     }
   })
   assert.equal(config.share.title, '团队')
-  assert.equal(config.editorSchemaRevision, 3)
+  assert.equal(config.editorSchemaRevision, 10)
   assert.deepEqual(config.style, { backgroundColor: '#1A2B3C' })
   assert.deepEqual(config.components.map((item) => item.componentKey), ['a', 'b'])
   assert.equal(config.components[1].config, privateConfig)
@@ -216,7 +216,7 @@ test('team component mutations target the selected menu and keep team component 
   ])
 })
 
-test('team text sections keep revision three, unknown fields, and new defaults', () => {
+test('team text sections keep current revision, unknown fields, and new defaults', () => {
   const {
     addTeamComponent,
     getTeamMenuComponentList,
@@ -239,8 +239,8 @@ test('team text sections keep revision three, unknown fields, and new defaults',
     }]
   })
 
-  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 3)
-  assert.equal(normalized.editorSchemaRevision, 3)
+  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 10)
+  assert.equal(normalized.editorSchemaRevision, 10)
   assert.equal(normalized.components[0].config, futureConfig)
 
   const added = addTeamComponent(normalized, 'TEXT_SECTION')
@@ -261,12 +261,15 @@ test('team video carousel defaults normalize ordered items and enforce publish c
     validateTeamPortfolioForPublish
   } = loadUtility('team-portfolios.js')
   const added = addTeamComponent({ components: [] }, 'VIDEO_CAROUSEL')
-  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 3)
+  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 10)
   assert.deepEqual(getTeamMenuComponentList(added)[0].config, {
     title: '视频作品',
     items: [],
+    showComponentTitle: true,
     showTitle: true,
-    showSwipeHint: true
+    showSwipeHint: true,
+    displayStyle: 'STACKED',
+    showDescription: false
   })
   const normalized = normalizeTeamPortfolioConfig({
     components: [{
@@ -291,8 +294,11 @@ test('team video carousel defaults normalize ordered items and enforce publish c
       { memberUserId: 2, workId: 20 },
       { memberUserId: 3, workId: 30 }
     ],
+    showComponentTitle: true,
     showTitle: true,
-    showSwipeHint: false
+    showSwipeHint: false,
+    displayStyle: 'STACKED',
+    showDescription: false
   })
   assert.equal(validateTeamPortfolioForPublish(normalized).message, '视频轮播至少选择3个视频')
   normalized.components[0].config.items.push({ memberUserId: 4, workId: 40 })
@@ -308,7 +314,7 @@ test('team video carousel defaults normalize ordered items and enforce publish c
   assert.equal(validateTeamPortfolioForPublish(normalized).message, '视频轮播最多选择8个视频')
 })
 
-test('team component library request advertises revision three', async () => {
+test('team component library request advertises current revision', async () => {
   const { fetchTeamComponentLibrary } = loadUtility('team-portfolios.js')
   const calls = []
   await fetchTeamComponentLibrary(async (options) => {
@@ -317,8 +323,23 @@ test('team component library request advertises revision three', async () => {
   })
   assert.deepEqual(calls, [{
     url: '/api/mine/team-portfolios/component-library',
-    data: { editorSchemaRevision: 3 }
+    data: { editorSchemaRevision: 10 }
   }])
+})
+
+test('team divider draft and publish validation preserve custom and legacy colors', async () => {
+  const { normalizeTeamPortfolioConfig, saveTeamPortfolioDraft, validateTeamPortfolioForPublish } = loadUtility('team-portfolios.js')
+  for (const color of ['BLACK', 'WHITE', 'GRAY', 'TRANSPARENT', '#000000', '#FFFFFF', '#F5F6F8', '#12abef']) {
+    const config = normalizeTeamPortfolioConfig({ components: [{
+      componentKey: 'divider-color', componentType: 'DIVIDER', enabled: true,
+      config: { color, heightPx: 24 }
+    }] })
+    assert.equal(config.editorSchemaRevision, 10)
+    assert.equal(validateTeamPortfolioForPublish(config).valid, true)
+    let saved
+    await saveTeamPortfolioDraft(async (options) => { saved = options.data.config }, 9, config, 1, 'divider-color-draft')
+    assert.equal(saved.components[0].config.color, color)
+  }
 })
 
 test('team navigation helpers add rename and remove menus without losing the promoted first menu', () => {
@@ -360,7 +381,7 @@ test('team publish validation returns the first local menu and component error',
   const { validateTeamPortfolioForPublish } = loadUtility('team-portfolios.js')
   const duplicate = {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 3,
+    editorSchemaRevision: 10,
     style: { backgroundColor: '#FFFFFF' },
     components: [{ componentKey: 'same', componentType: 'DIVIDER', enabled: true, config: {} }],
     bottomNav: {
@@ -397,7 +418,7 @@ test('team publish validation rejects raw navigation errors before normalization
   } = loadUtility('team-portfolios.js')
   const config = {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 3,
+    editorSchemaRevision: 10,
     style: { backgroundColor: '#FFFFFF' },
     components: [{ componentKey: 'home', componentType: 'DIVIDER', enabled: true, config: {} }],
     bottomNav: {
@@ -457,10 +478,10 @@ test('team publish validation rejects raw navigation errors before normalization
   })
 
   const unsupportedRevision = JSON.parse(JSON.stringify(config))
-  unsupportedRevision.editorSchemaRevision = 4
+  unsupportedRevision.editorSchemaRevision = 11
   const normalizedUnsupportedRevision =
     normalizeTeamPortfolioConfig(unsupportedRevision)
-  assert.equal(normalizedUnsupportedRevision.editorSchemaRevision, 4)
+  assert.equal(normalizedUnsupportedRevision.editorSchemaRevision, 11)
   assert.deepEqual(validateTeamPortfolioForPublish(normalizedUnsupportedRevision), {
     valid: false,
     menuKey: '',
@@ -646,7 +667,7 @@ test('team utility tree only imports approved main-package infrastructure', () =
     'upload-file.js',
     'id.js',
     'lunar.js',
-    'portfolio-text-typography.js'
+    'portfolio-text-typography.js', 'portfolio-font-loader.js', 'visit-activity-lifecycle.js', 'visit-activity-lifecycle'
   ])
   const forbidden = [/pages\/portfolios/, /pages\/visitor-(portfolio|schedule)/, /components\/portfolio-/, /utils\/portfolios\.js$/, /utils\/visitor-(portfolio|session)\.js$/]
   const files = fs.readdirSync(TEAM_UTILS_ROOT).filter((name) => name.endsWith('.js'))
@@ -697,4 +718,23 @@ test('recursively rejects personal and cross-component imports in the team packa
       }
     }
   }
+})
+
+
+test('team grid creation uses gray borders and normalization keeps selected and legacy border settings', () => {
+  const { addTeamComponent, normalizeTeamPortfolioConfig } = loadUtility('team-portfolios.js')
+  const created = addTeamComponent({ components: [] }, 'TEXT_GRID')
+  const grid = created.components[0].config
+  assert.equal(grid.cellBorderWidthRpx, 1)
+  assert.equal(grid.cellBorderColor, '#D7DADD')
+  grid.cellBorder = false; grid.cellBorderWidthRpx = 8; grid.cellBorderColor = '#abcdef'
+  const normalized = normalizeTeamPortfolioConfig({ ...created, editorSchemaRevision: 5 })
+  assert.equal(normalized.editorSchemaRevision, 10)
+  assert.equal(normalized.components[0].config.cellBorder, false)
+  assert.equal(normalized.components[0].config.cellBorderWidthRpx, 8)
+  assert.equal(normalized.components[0].config.cellBorderColor, '#ABCDEF')
+  delete grid.cellBorderWidthRpx; delete grid.cellBorderColor
+  const legacy = normalizeTeamPortfolioConfig({ ...created, editorSchemaRevision: 5 })
+  assert.equal(legacy.components[0].config.cellBorderWidthRpx, 1)
+  assert.equal(legacy.components[0].config.cellBorderColor, 'AUTO')
 })

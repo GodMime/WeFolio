@@ -20,7 +20,7 @@ const COMPONENT_CASES = [
   {
     name: 'profile',
     properties: { profile: Object },
-    wxml: [/class="profile-section portfolio-theme-\{\{themeMode\}\}"/, /bindtap="handlePreviewQr"/],
+    wxml: [/class="profile-section portfolio-theme-\{\{themeMode\}\} \{\{profile\.profileLayout === 'HORIZONTAL' \? 'profile-horizontal' : ''\}\} \{\{profileBorderVisible \? 'profile-bordered' : ''\}\}"/, /bindtap="handlePreviewQr"/],
     wxss: [/\.profile-bio\s*\{[\s\S]*white-space:\s*pre-wrap;/]
   },
   {
@@ -73,7 +73,7 @@ const COMPONENT_CASES = [
     properties: { textSection: Object },
     wxml: [
       /class="text-section/,
-      /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}"/
+      /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}\{\{textColorStyle\}\}\{\{lineHeightStyle\}\}"/
     ],
     wxss: [
       /^@import "\.\.\/\.\.\/\.\.\/\.\.\/styles\/portfolio-text-typography\.wxss";/m,
@@ -130,7 +130,7 @@ test('text section typography applies only to the body copy', () => {
 
   assert.match(
     wxml,
-    /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}"/
+    /class="text-content \{\{textSection\.fontClass\}\}"[^>]*style="\{\{textSection\.fontSizeStyle\}\}\{\{textColorStyle\}\}\{\{lineHeightStyle\}\}"/
   )
   assert.match(wxml, /class="component-title"/)
   assert.doesNotMatch(
@@ -268,6 +268,39 @@ test('personal portfolio renderers are nine isolated four-file components with e
     const wxss = fs.readFileSync(path.join(directory, `${componentCase.name}.wxss`), 'utf8')
     for (const pattern of componentCase.wxss) assert.match(wxss, pattern)
   }
+})
+
+test('personal profile border observer clears stale styles and uses theme color safely', () => {
+  const definition = loadComponent('profile')
+  const { instance } = createComponentHarness(definition)
+  definition.observers.profile.call(instance, { profileBorder: true, profileBorderWidthRpx: 6, profileBorderColor: '#ab1234' })
+  assert.equal(instance.data.profileBorderVisible, true)
+  assert.equal(instance.data.profileBorderStyle, 'border-width: 6rpx; border-color: #AB1234;')
+  assert.equal(instance.data.profileSpacingStyle, 'padding: 0rpx 32rpx;')
+  definition.observers.profile.call(instance, { profileBorder: true, profileBorderColor: 'AUTO' })
+  assert.equal(instance.data.profileBorderStyle, 'border-width: 1rpx; border-color: var(--portfolio-border);')
+  definition.observers.profile.call(instance, { profileBorder: true, profileBorderWidthRpx: 99, profileBorderColor: '#112233;display:none' })
+  assert.equal(instance.data.profileBorderStyle, 'border-width: 1rpx; border-color: var(--portfolio-border);')
+  definition.observers.profile.call(instance, { profileBorder: false, profileBorderWidthRpx: 6, profileBorderColor: '#AB1234' })
+  assert.equal(instance.data.profileBorderVisible, false)
+  assert.equal(instance.data.profileBorderStyle, '')
+  assert.equal(instance.data.profileSpacingStyle, '')
+})
+
+test('personal profile spacing uses the outer wrapper only while its border is enabled', () => {
+  const definition = loadComponent('profile')
+  const { instance } = createComponentHarness(definition)
+  const config = { profileBorder: true, profileHorizontalMarginRpx: 96, profileVerticalMarginRpx: 48 }
+  definition.observers.profile.call(instance, config)
+  assert.equal(instance.data.profileSpacingStyle, 'padding: 48rpx 96rpx;')
+  definition.observers.profile.call(instance, { ...config, profileBorder: false })
+  assert.equal(instance.data.profileSpacingStyle, '')
+  definition.observers.profile.call(instance, config)
+  assert.equal(instance.data.profileSpacingStyle, 'padding: 48rpx 96rpx;')
+  definition.observers.profile.call(instance, { ...config, profileHorizontalMarginRpx: 0, profileVerticalMarginRpx: 0 })
+  assert.equal(instance.data.profileSpacingStyle, 'padding: 0rpx 0rpx;')
+  definition.observers.profile.call(instance, { ...config, profileHorizontalMarginRpx: '0;display:none', profileVerticalMarginRpx: -1 })
+  assert.equal(instance.data.profileSpacingStyle, 'padding: 0rpx 32rpx;')
 })
 
 test('personal portfolio interactive components emit page-compatible event details', () => {

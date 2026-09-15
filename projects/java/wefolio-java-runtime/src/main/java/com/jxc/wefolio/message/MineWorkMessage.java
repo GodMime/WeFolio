@@ -5,6 +5,21 @@ package com.jxc.wefolio.message;
  */
 public interface MineWorkMessage {
 
+    /** 自定义音频封面的目标媒体限制。 */
+    String AUDIO_COVER_MEDIA_TYPE_MESSAGE = "只有音频作品可以选择图片作品作为封面";
+
+    /** 音频封面仅引用本人有效图片，不接受上传文件或任意路径。 */
+    String AUDIO_COVER_SOURCE_MESSAGE = "请选择本人有效且审核通过的图片作品作为音频封面";
+
+    /** 共享封面引用尚未解除时保留原图片。 */
+    String AUDIO_COVER_DELETE_BLOCKED_MESSAGE = "图片正在作为音频封面使用，请先更换音频封面";
+
+    /** 音频作品数量超限提示。 */
+    String AUDIO_WORK_COUNT_LIMIT_TEMPLATE = "音频作品最多保留 %d 个";
+
+    /** 音频文件大小超限提示。 */
+    String AUDIO_TOO_LARGE_MESSAGE = "音频作品不能超过 50MB";
+
     /** 图片作品数量超限提示模板 */
     String IMAGE_WORK_COUNT_LIMIT_TEMPLATE = "图片作品数量已达上限（%d个），请删除部分图片作品后再上传";
 
@@ -13,6 +28,9 @@ public interface MineWorkMessage {
 
     /** 动图作品数量超限提示模板 */
     String ANIMATION_WORK_COUNT_LIMIT_TEMPLATE = "动图作品最多保留 %d 个";
+
+    /** 动图文件大小超限提示。 */
+    String ANIMATION_TOO_LARGE_MESSAGE = "动图作品必须小于 32MB";
 
     /** 上传任务保存失败提示 */
     String UPLOAD_TASK_SAVE_FAILED_MESSAGE = "上传任务创建失败，请刷新后重试";

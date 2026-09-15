@@ -168,6 +168,13 @@ public class MineProfileService {
     /** 当月微信二维码变更次数列 */
     private static final String COL_WECHAT_QR_UPDATE_COUNT = "wechat_qr_update_count";
 
+    /** 联系手机密文列。 */
+    private static final String COL_CONTACT_PHONE = "contact_phone_ciphertext";
+    /** 联系微信密文列。 */
+    private static final String COL_CONTACT_WECHAT = "contact_wechat_ciphertext";
+    /** 联系资料专用三态加密。 */
+    private final UserContactCryptoService userContactCryptoService;
+
     /** 用户资料 Mapper */
     private final UserEntityMapper userEntityMapper;
 
@@ -244,6 +251,16 @@ public class MineProfileService {
                 user::setCity, value -> updateWrapper.set(COL_CITY, value));
         applyStringField(request.getIntro(), INTRO_MAX_LENGTH, "个人简介",
                 user::setIntro, value -> updateWrapper.set(COL_INTRO, value));
+        if (request.getContactPhone() != null) {
+            String ciphertext = userContactCryptoService.encryptPhone(PortfolioContactInfoConfigSupport.phone(request.getContactPhone()));
+            user.setContactPhoneCiphertext(ciphertext);
+            updateWrapper.set(COL_CONTACT_PHONE, ciphertext);
+        }
+        if (request.getContactWechat() != null) {
+            String ciphertext = userContactCryptoService.encryptWechat(PortfolioContactInfoConfigSupport.wechat(request.getContactWechat()));
+            user.setContactWechatCiphertext(ciphertext);
+            updateWrapper.set(COL_CONTACT_WECHAT, ciphertext);
+        }
         if (request.getTags() != null) {
             String profileTags = JSON.toJSONString(normalizeTags(request.getTags()));
             user.setProfileTags(profileTags);
@@ -685,8 +702,26 @@ public class MineProfileService {
         response.setProfession(defaultString(user.getProfession()));
         response.setCity(defaultString(user.getCity()));
         response.setIntro(defaultString(user.getIntro()));
+        response.setContactPhone(readContactField(user.getId(), COL_CONTACT_PHONE, user.getContactPhoneCiphertext(),
+                defaultString(user.getPhoneNumber()), userContactCryptoService::decryptPhone));
+        response.setContactWechat(readContactField(user.getId(), COL_CONTACT_WECHAT, user.getContactWechatCiphertext(),
+                "", userContactCryptoService::decryptWechat));
         response.setTags(parseTags(user.getProfileTags()));
         return response;
+    }
+
+    /** 单条损坏密文降级展示，不修改存储；系统配置错误继续上抛。 */
+    private String readContactField(Long userId, String field, String ciphertext, String fallback,
+            java.util.function.Function<String, String> decrypt) {
+        if (ciphertext == null) { return fallback; }
+        try {
+            return defaultString(decrypt.apply(ciphertext));
+        } catch (BusinessException exception) {
+            if (!MineProfileMessage.CONTACT_CRYPTO_INVALID.equals(exception.getMessage())) { throw exception; }
+            // 只记录定位所需用户标识与字段名，不记录原文、密文及可能夹带敏感值的异常。
+            log.warn("联系资料解密失败，使用展示默认值 userId={} field={}", userId, field);
+            return fallback;
+        }
     }
 
     /**

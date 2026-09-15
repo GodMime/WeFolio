@@ -1,0 +1,7 @@
+{
+  "component": true,
+  "usingComponents": {
+    "contact-info": "../contact-info/contact-info",
+    "text-color-editor": "../text-color-editor/text-color-editor"
+  }
+}

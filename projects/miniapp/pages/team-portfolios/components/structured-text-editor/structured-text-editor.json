@@ -1,0 +1,1 @@
+{ "component": true, "usingComponents": { "text-background-editor": "../text-background-editor/text-background-editor", "text-color-editor": "../text-color-editor/text-color-editor" } }

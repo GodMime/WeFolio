@@ -12,7 +12,8 @@ public enum MediaTypeDict {
 
     IMAGE("IMAGE", "图片"),
     VIDEO("VIDEO", "视频"),
-    ANIMATION("ANIMATION", "动图");
+    ANIMATION("ANIMATION", "动图"),
+    AUDIO("AUDIO", "音频");
 
     private final String code;
     private final String displayName;

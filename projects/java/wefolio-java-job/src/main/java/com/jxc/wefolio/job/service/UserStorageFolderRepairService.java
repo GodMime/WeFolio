@@ -19,7 +19,7 @@ import java.util.List;
 public class UserStorageFolderRepairService {
 
     /** 当前代码版本需要确保存在的用户目录 */
-    private static final List<String> REQUIRED_USER_FOLDERS = List.of("work/animation/");
+    private static final List<String> REQUIRED_USER_FOLDERS = List.of("work/animation/", "work/audio/");
 
     private final UserStorageFolderRepairRepository repository;
 

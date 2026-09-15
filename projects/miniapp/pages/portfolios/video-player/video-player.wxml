@@ -1,0 +1,6 @@
+<view class="portfolio-video-page">
+  <video wx:if="{{available}}" id="portfolioVideoPlayer" class="portfolio-video" src="{{url}}" poster="{{poster}}" title="{{title}}" direction="{{90}}" controls="{{true}}" show-fullscreen-btn="{{true}}" show-play-btn="{{true}}" show-center-play-btn="{{true}}" autoplay="{{true}}" object-fit="contain" bindplay="handleVideoPlay" bindpause="handleVideoPause" bindended="handleVideoEnded" binderror="handleVideoError" bindfullscreenchange="handleFullscreenChange" />
+  <view wx:if="{{loadingContext}}" class="portfolio-video-message" aria-live="polite">正在加载视频…</view>
+  <view wx:elif="{{!available}}" class="portfolio-video-message"><text>视频暂不可用</text><button class="portfolio-video-button" bindtap="handleBack">返回作品集</button></view>
+  <view wx:if="{{available && !fullscreen && title}}" class="portfolio-video-title">{{title}}</view>
+</view>

@@ -4,6 +4,15 @@ package com.jxc.wefolio.message;
  * 作品集报错信息 — 统一维护作品集维护端、访客端和联系线索相关提示。
  */
 public interface PortfolioMessage {
+    /** 联系组件发布必填。 */
+    String CONTACT_INFO_REQUIRED = "请至少填写一项联系信息";
+    /** 网格配置结构错误。 */
+    String TEXT_GRID_INVALID = "文字网格配置无效，请检查行列、单元格和文字样式";
+    /** 网格发布必填。 */
+    String TEXT_GRID_CONTENT_REQUIRED = "请至少添加一处文字";
+    /** 新展示配置值域错误。 */
+    String COMPONENT_DISPLAY_OPTIONS_INVALID = "组件展示配置无效";
+
 
     /** 个人作品集数量超限提示模板 */
     String PERSONAL_PORTFOLIO_COUNT_LIMIT_TEMPLATE = "个人作品集数量已达上限（%d个），请删除部分个人作品集后再新建";
@@ -237,7 +246,7 @@ public interface PortfolioMessage {
     String TEXT_SECTION_FONT_UNSUPPORTED_MESSAGE = "文字说明字体不支持";
 
     /** 文字说明字号无效提示 */
-    String TEXT_SECTION_FONT_SIZE_INVALID_MESSAGE = "文字说明字号必须为20至48之间的整数";
+    String TEXT_SECTION_FONT_SIZE_INVALID_MESSAGE = "文字说明字号必须为10至96之间的整数";
 
     /** 分割线颜色不支持提示 */
     String DIVIDER_COLOR_UNSUPPORTED_MESSAGE = "分割线颜色不支持";
@@ -289,6 +298,15 @@ public interface PortfolioMessage {
 
     /** 展示作品数量超限提示 */
     String DISPLAY_WORK_COUNT_LIMIT_MESSAGE = "选择的作品数量过多";
+
+    /** 背景音频字段无效提示。 */
+    String BACKGROUND_AUDIO_CONFIG_INVALID = "背景音频配置不正确";
+
+    /** 开启背景音频但未选择作品。 */
+    String BACKGROUND_AUDIO_REQUIRED = "开启背景音频后，请从音频作品中选择";
+
+    /** 背景音频作品不可用。 */
+    String BACKGROUND_AUDIO_UNAVAILABLE = "所选背景音频不可用，请重新选择";
 
     /** 组件为空提示 */
     String PORTFOLIO_COMPONENT_EMPTY_MESSAGE = "作品集组件不能为空";

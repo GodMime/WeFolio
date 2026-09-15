@@ -20,7 +20,13 @@ public enum PortfolioComponentTypeDict {
     QR_CONTACT("QR_CONTACT", "二维码联系", 2),
     CONTACT_FORM("CONTACT_FORM", "预留联系信息", 2),
     TEXT_SECTION("TEXT_SECTION", "文字说明", 2),
-    DIVIDER("DIVIDER", "分割线", 2);
+    DIVIDER("DIVIDER", "分割线", 2),
+    /** 独立区块样式的结构化文字说明。 */
+    STRUCTURED_TEXT_SECTION("STRUCTURED_TEXT_SECTION", "结构化文字说明", 5),
+    /** 自由合并的文字网格。 */
+    TEXT_GRID("TEXT_GRID", "文字网格", 6),
+    /** 独立联系资料快照。 */
+    CONTACT_INFO("CONTACT_INFO", "联系信息", 6);
 
     private final String code;
     private final String displayName;

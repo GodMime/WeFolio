@@ -150,7 +150,7 @@ public class TeamSingleWorkComponentService {
     }
 
     /**
-     * 按团队分页查询指定成员可展示的图片、视频和动图作品。
+     * 按团队分页查询成员作品；缺省返回图片、视频和动图，AUDIO 仅返回音频。
      *
      * @param teamId 团队 ID
      * @param memberUserId 成员用户 ID
@@ -158,6 +158,7 @@ public class TeamSingleWorkComponentService {
      * @param page 页码
      * @param pageSize 页大小
      * @param selectedWorkId 当前配置引用的作品 ID
+     * @param mediaType 可选媒体筛选，背景音频候选传 AUDIO
      * @return 作品分页与当前选择
      */
     public TeamSingleWorkPageResponse pageTeamWorks(
@@ -166,8 +167,11 @@ public class TeamSingleWorkComponentService {
             long userId,
             int page,
             int pageSize,
-            Long selectedWorkId
+            Long selectedWorkId,
+            String mediaType
     ) {
+        List<String> mediaTypes = MediaTypeDict.AUDIO.getCode().equals(mediaType)
+                ? List.of(MediaTypeDict.AUDIO.getCode()) : SUPPORTED_MEDIA_TYPES;
         int normalizedPage = page <= 0 ? DEFAULT_PAGE : page;
         int normalizedPageSize = pageSize <= 0
                 ? DEFAULT_PAGE_SIZE
@@ -177,7 +181,7 @@ public class TeamSingleWorkComponentService {
 
         Page<WorkEntity> resultPage = workEntityMapper.selectPage(
                 new Page<>(normalizedPage, normalizedPageSize),
-                eligibleWorksQuery(memberUserId));
+                eligibleWorksQuery(memberUserId, mediaTypes));
         List<WorkEntity> records = resultPage.getRecords() == null ? List.of() : resultPage.getRecords();
         TeamSingleWorkPageResponse response = new TeamSingleWorkPageResponse();
         response.setPage(normalizedPage);
@@ -185,7 +189,7 @@ public class TeamSingleWorkComponentService {
         response.setTotal(resultPage.getTotal());
         response.setHasMore(resultPage.getCurrent() < resultPage.getPages());
         response.setWorks(records.stream().map(this::toPageWorkItem).toList());
-        response.setSelectedWork(findSelectedWork(memberUserId, selectedWorkId));
+        response.setSelectedWork(findSelectedWork(memberUserId, selectedWorkId, mediaTypes));
         return response;
     }
 
@@ -232,11 +236,16 @@ public class TeamSingleWorkComponentService {
      * @return 作品候选查询条件
      */
     private LambdaQueryWrapper<WorkEntity> eligibleWorksQuery(long memberUserId) {
+        return eligibleWorksQuery(memberUserId, SUPPORTED_MEDIA_TYPES);
+    }
+
+    /** 使用已确定的媒体白名单构造分页及回显查询。 */
+    private LambdaQueryWrapper<WorkEntity> eligibleWorksQuery(long memberUserId, List<String> mediaTypes) {
         return Wrappers.lambdaQuery(WorkEntity.class)
                 .eq(WorkEntity::getUserId, memberUserId)
                 .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
                 .eq(WorkEntity::getAuditStatus, WorkAuditStatusDict.PASSED.getCode())
-                .in(WorkEntity::getMediaType, SUPPORTED_MEDIA_TYPES)
+                .in(WorkEntity::getMediaType, mediaTypes)
                 .orderByAsc(WorkEntity::getSortOrder)
                 .orderByAsc(WorkEntity::getId);
     }
@@ -248,15 +257,15 @@ public class TeamSingleWorkComponentService {
      * @param selectedWorkId 当前配置引用的作品 ID
      * @return 有效作品项，不可用时返回空
      */
-    private TeamSingleWorkPageResponse.WorkItem findSelectedWork(long memberUserId, Long selectedWorkId) {
+    private TeamSingleWorkPageResponse.WorkItem findSelectedWork(long memberUserId, Long selectedWorkId, List<String> mediaTypes) {
         if (selectedWorkId == null || selectedWorkId <= 0) {
             return null;
         }
         WorkEntity selectedWork = workEntityMapper.selectOne(
-                eligibleWorksQuery(memberUserId)
+                eligibleWorksQuery(memberUserId, mediaTypes)
                         .eq(WorkEntity::getId, selectedWorkId)
                         .last(QUERY_LIMIT_ONE));
-        if (!isEligibleSelectedWork(memberUserId, selectedWorkId, selectedWork)) {
+        if (!isEligibleSelectedWork(memberUserId, selectedWorkId, selectedWork, mediaTypes)) {
             return null;
         }
         return toPageWorkItem(selectedWork);
@@ -273,14 +282,15 @@ public class TeamSingleWorkComponentService {
     private boolean isEligibleSelectedWork(
             long memberUserId,
             Long selectedWorkId,
-            WorkEntity selectedWork
+            WorkEntity selectedWork,
+            List<String> mediaTypes
     ) {
         return selectedWork != null
                 && selectedWorkId.equals(selectedWork.getId())
                 && Long.valueOf(memberUserId).equals(selectedWork.getUserId())
                 && WorkStatusDict.ACTIVE.getCode().equals(selectedWork.getStatus())
                 && WorkAuditStatusDict.PASSED.getCode().equals(selectedWork.getAuditStatus())
-                && SUPPORTED_MEDIA_TYPES.contains(selectedWork.getMediaType());
+                && mediaTypes.contains(selectedWork.getMediaType());
     }
 
     /**

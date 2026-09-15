@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service.teamportfolio.component;
 
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
+import static org.mockito.Mockito.mock;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.TeamEntity;
@@ -442,6 +444,26 @@ class TeamDisplayComponentsTest {
                 .isEmpty();
     }
 
+    /** 新颜色经规范化后原样渲染，旧枚举与透明色继续保持原契约。 */
+    @Test
+    void dividerShouldAcceptHexRenderItAndPreserveLegacyColors() {
+        var validator = new TeamDividerComponentValidator();
+        var renderer = new TeamDividerComponentRenderer();
+        var context = new TeamPortfolioComponentContext(11L, 21L, 3);
+        Map<String, String> colors = Map.of("#000000", "#000000", "#FFFFFF", "#FFFFFF",
+                "#f5f6f8", "#F5F6F8", "#12aBcD", "#12ABCD", "BLACK", "BLACK",
+                "WHITE", "WHITE", "GRAY", "GRAY", "TRANSPARENT", "TRANSPARENT");
+        colors.forEach((source, expected) -> {
+            var normalized = validator.normalizeAndValidate(JSONObject.of("color", source, "heightPx", 24), context);
+            assertThat(normalized).containsEntry("color", expected).containsEntry("heightPx", 24);
+            assertThat(renderer.render(normalized, context)).isEqualTo(normalized);
+        });
+        for (String invalid : List.of("#FFF", "#FFFFFF00", "#GG0000", "red", "rgb(0,0,0)", "#FFFFFF;background:red")) {
+            assertThatThrownBy(() -> validator.normalizeAndValidate(JSONObject.of("color", invalid), context))
+                    .isInstanceOf(BusinessException.class).hasMessage("分割线颜色不支持");
+        }
+    }
+
     /**
      * 分割线应拒绝不支持颜色以及非正整数高度。
      */
@@ -477,22 +499,26 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionShouldPreserveContentAndApplyDefaultAlignment() {
-        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
         JSONObject normalized = validator.normalizeAndValidate(
                 JSON.parseObject("{\"content\":\"  保留空格  \"}"), context);
-        JSONObject rendered = new TeamTextSectionComponentRenderer().render(normalized, context);
+        JSONObject rendered = new TeamTextSectionComponentRenderer(mock(TeamTextBackgroundSupport.class)).render(normalized, context);
         normalized.put("content", "被修改");
 
         assertThat(rendered).isEqualTo(JSON.parseObject("""
                 {
                   "content":"  保留空格  ",
+                  "color":"AUTO",
                   "alignment":"LEFT",
                   "fontFamily":"SYSTEM",
-                  "fontSizeRpx":32
+                  "fontSizeRpx":32,
+                  "backgroundEnabled":false,
+                  "backgroundTreatment":"GRADIENT",
+                  "verticalAlignment":"CENTER"
                 }
                 """));
-        assertThat(new TeamTextSectionComponentReferenceExtractor()
+        assertThat(new TeamTextSectionComponentReferenceExtractor(mock(TeamTextBackgroundSupport.class))
                 .extract(COMPONENT_KEY, COMPONENT_PATH, rendered, context))
                 .isEmpty();
     }
@@ -502,7 +528,7 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionShouldValidateTypographyBeforeDtoConversion() {
-        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
 
         JSONObject normalized = validator.normalizeAndValidate(JSON.parseObject("""
@@ -510,32 +536,41 @@ class TeamDisplayComponentsTest {
                   "content":"团队说明",
                   "alignment":"CENTER",
                   "fontFamily":"WECHAT_SANS_SS",
-                  "fontSizeRpx":48
+                  "fontSizeRpx":96
                 }
                 """), context);
         assertThat(normalized)
                 .containsEntry("fontFamily", "WECHAT_SANS_SS")
-                .containsEntry("fontSizeRpx", 48);
+                .containsEntry("fontSizeRpx", 96);
         assertThat(validator.normalizeAndValidate(JSON.parseObject("""
                 {
                   "content":"团队说明",
                   "fontFamily":"SYSTEM",
-                  "fontSizeRpx":20
+                  "fontSizeRpx":10
                 }
                 """), context))
                 .containsEntry("fontFamily", "SYSTEM")
-                .containsEntry("fontSizeRpx", 20);
+                .containsEntry("fontSizeRpx", 10);
+
+        TeamTextSectionComponentRenderer renderer = new TeamTextSectionComponentRenderer(mock(TeamTextBackgroundSupport.class));
+        for (int size : List.of(10, 11, 19, 20, 48, 49, 95, 96)) {
+            JSONObject source = JSON.parseObject("{\"content\":\"团队说明\"}");
+            source.put("fontSizeRpx", size);
+            JSONObject saved = validator.normalizeAndValidate(source, context);
+            assertThat(saved).containsEntry("fontSizeRpx", size);
+            assertThat(renderer.render(saved, context)).containsEntry("fontSizeRpx", size);
+        }
 
         for (String json : List.of(
                 "{\"content\":\"说明\",\"fontSizeRpx\":28.5}",
                 "{\"content\":\"说明\",\"fontSizeRpx\":\"28\"}",
                 "{\"content\":\"说明\",\"fontSizeRpx\":2147483648}",
-                "{\"content\":\"说明\",\"fontSizeRpx\":19}",
-                "{\"content\":\"说明\",\"fontSizeRpx\":49}"
+                "{\"content\":\"说明\",\"fontSizeRpx\":9}",
+                "{\"content\":\"说明\",\"fontSizeRpx\":97}"
         )) {
             assertThatThrownBy(() -> validator.normalizeAndValidate(JSON.parseObject(json), context))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessage("文字说明字号必须为20至48之间的整数");
+                    .hasMessage("文字说明字号必须为10至96之间的整数");
         }
         for (String fontFamily : List.of("WECHAT_SANS_STD", "UNKNOWN")) {
             assertThatThrownBy(() -> validator.normalizeAndValidate(
@@ -555,7 +590,7 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionShouldKeepValidationErrorPriority() {
-        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
 
         assertThatThrownBy(() -> validator.normalizeAndValidate(JSON.parseObject("""
@@ -607,7 +642,7 @@ class TeamDisplayComponentsTest {
                 }
                 """), context))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("文字说明字号必须为20至48之间的整数");
+                .hasMessage("文字说明字号必须为10至96之间的整数");
     }
 
     /**
@@ -615,16 +650,18 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionRendererShouldRejectLossyOrInvalidTypography() {
-        TeamTextSectionComponentRenderer renderer = new TeamTextSectionComponentRenderer();
+        TeamTextSectionComponentRenderer renderer = new TeamTextSectionComponentRenderer(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
 
         for (String json : List.of(
                 "{\"content\":\"说明\",\"fontSizeRpx\":28.5}",
-                "{\"content\":\"说明\",\"fontSizeRpx\":\"28\"}"
+                "{\"content\":\"说明\",\"fontSizeRpx\":\"28\"}",
+                "{\"content\":\"说明\",\"fontSizeRpx\":9}",
+                "{\"content\":\"说明\",\"fontSizeRpx\":97}"
         )) {
             assertThatThrownBy(() -> renderer.render(JSON.parseObject(json), context))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessage("文字说明字号必须为20至48之间的整数");
+                    .hasMessage("文字说明字号必须为10至96之间的整数");
         }
         for (String fontFamily : List.of("WECHAT_SANS_STD", "UNKNOWN")) {
             assertThatThrownBy(() -> renderer.render(
@@ -644,7 +681,7 @@ class TeamDisplayComponentsTest {
      */
     @Test
     void textSectionShouldValidateContentAndUnicodeCodePointBoundary() {
-        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator();
+        TeamTextSectionComponentValidator validator = new TeamTextSectionComponentValidator(mock(TeamTextBackgroundSupport.class));
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 21L, 3);
         String twoCodeUnitCharacter = "😀";
 
@@ -682,7 +719,7 @@ class TeamDisplayComponentsTest {
         assertFields(TeamProfileComponentConfig.TeamSnapshot.class, "teamId", "avatarUrl", "teamName", "intro");
         assertFields(TeamDividerComponentConfig.class, "color", "heightPx");
         assertFields(TeamTextSectionComponentConfig.class,
-                "content", "alignment", "fontFamily", "fontSizeRpx");
+                "content", "alignment", "fontFamily", "fontSizeRpx", "color", "lineHeight");
     }
 
     /**
@@ -727,7 +764,9 @@ class TeamDisplayComponentsTest {
         for (Path sourceFile : sourceFiles) {
             String source = Files.readString(sourceFile);
             Path componentPath = sourceRoot.relativize(sourceFile.getParent());
-            assertThat(source).doesNotContain(forbiddenPersonalReferences.toArray(String[]::new));
+            // 明确允许两端共用的纯背景配置规则，个人业务服务依赖仍然禁止。
+            String isolatedSource = source.replace("import com.jxc.wefolio.service.PortfolioTextBackgroundConfigSupport;", "");
+            assertThat(isolatedSource).doesNotContain(forbiddenPersonalReferences.toArray(String[]::new));
             assertThat(source).doesNotContain(forbiddenCrossComponentPackages.get(componentPath).toArray(String[]::new));
         }
     }

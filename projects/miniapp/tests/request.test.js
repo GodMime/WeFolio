@@ -36,6 +36,7 @@ test('request client injects bearer token and unwraps successful response data',
 
   assert.equal(capturedOptions.url, 'http://api.test/api/mine/dashboard')
   assert.equal(capturedOptions.header.Authorization, 'Bearer wf-dev-user-7')
+  assert.equal(capturedOptions.header['X-WeFolio-Capabilities'], undefined)
   assert.deepEqual(data, { ok: true })
 })
 
@@ -150,6 +151,38 @@ test('request client clears visitor token and reports visitor auth mode on 401',
     VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY
   ])
 })
+
+for (const scenario of [
+  { name: '旧令牌请求迟到', initialToken: 'expired-token', currentToken: 'new-token' },
+  { name: '无令牌请求迟到', initialToken: '', currentToken: 'new-token' },
+  { name: '显式使用其他令牌', initialToken: 'current-token', currentToken: 'current-token', authorization: 'Bearer other-token' }
+]) {
+  test(`访客401只清理本次使用的令牌：${scenario.name}`, async () => {
+    const storage = { [VISITOR_TOKEN_STORAGE_KEY]: scenario.initialToken }
+    let pending
+    const client = createRequestClient({
+      wxApi: {
+        getStorageSync: key => storage[key],
+        removeStorageSync: key => { delete storage[key] },
+        request: options => { pending = options }
+      }
+    })
+    const promise = client.request({
+      url: '/api/visitor/portfolios/PF001/events',
+      authMode: 'visitor',
+      ...(scenario.authorization ? { header: { Authorization: scenario.authorization } } : {})
+    })
+    // 模拟请求在途期间另一请求完成登录刷新，令牌与有效期必须一起保留。
+    storage[VISITOR_TOKEN_STORAGE_KEY] = scenario.currentToken
+    const expiresAt = Date.now() + 60000
+    storage[VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY] = expiresAt
+    pending.success({ statusCode: 401, data: { message: '访客未登录' } })
+
+    await assert.rejects(promise, error => error.authRequired && error.authMode === 'visitor')
+    assert.equal(storage[VISITOR_TOKEN_STORAGE_KEY], scenario.currentToken)
+    assert.equal(storage[VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY], expiresAt)
+  })
+}
 
 test('request client omits empty GET query parameters', async () => {
   let capturedOptions

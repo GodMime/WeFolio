@@ -1,5 +1,7 @@
 package com.jxc.wefolio.dto.teamportfolio;
 
+import com.jxc.wefolio.dto.BackgroundAudioRenderDto;
+
 import com.alibaba.fastjson2.JSONObject;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
@@ -42,6 +44,9 @@ public class TeamPortfolioRenderDto {
 
     /** 页面渲染样式 */
     private Style style;
+
+    /** 全局背景音频展示数据。 */
+    private BackgroundAudioRenderDto backgroundAudio;
 
     /** 渲染组件 */
     private List<Component> components = new ArrayList<>();

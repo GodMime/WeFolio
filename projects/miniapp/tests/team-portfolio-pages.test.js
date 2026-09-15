@@ -131,7 +131,7 @@ test('team visitor page binds navigation and guide back buttons to page-stack st
   const wxml = read('visitor-portfolio/team-visitor-portfolio.wxml')
   const json = JSON.parse(read('visitor-portfolio/team-visitor-portfolio.json'))
 
-  assert.match(wxml, /<navigation-bar title="团队作品集" back="\{\{showNavigationBack && !timelineGuideVisible\}\}" color="\{\{navigationColor\}\}" background="\{\{backgroundColor\}\}" \/>/)
+  assert.match(wxml, /<navigation-bar\b[^>]*title="团队作品集" back="\{\{showNavigationBack && !timelineGuideVisible\}\}" color="\{\{navigationColor\}\}" background="\{\{backgroundColor\}\}" \/>/)
   assert.equal(json.usingComponents['timeline-share-guide'], '/components/timeline-share-guide/timeline-share-guide')
   assert.match(wxml, /<timeline-share-guide[^>]*back="\{\{showNavigationBack\}\}"[^>]*bindback="handleTimelineGuideBack"[^>]*bindclose="handleCloseTimelineGuide"/)
 })
@@ -264,7 +264,7 @@ test('standard team editor independently matches the personal editor interaction
   assert.match(js, /validateTeamPortfolioForPublish/)
   assert.match(js, /visitTeamPortfolioComponents/)
   assert.match(js, /moveTeamComponent/)
-  assert.match(js, /TEAM_BACKGROUND_COLORS\s*=\s*Object\.freeze\(\['#151515', '#FFFFFF', '#F5F6F8'\]\)/)
+  assert.match(js, /TEAM_BACKGROUND_COLORS\s*=\s*Object\.freeze\(\['#000000', '#FFFFFF', '#F5F6F8'\]\)/)
   assert.match(js, /TEAM_BOTTOM_NAV_COUNTS\s*=\s*Object\.freeze\(\[1, 2, 3, 4\]\)/)
   assert.doesNotMatch(js, /portfolio-standard-edit/)
   for (const selector of [
@@ -448,9 +448,13 @@ test('team text section sheet keeps legacy typography and saves all fields only 
   assert.equal(page.data.textSectionSheetVisible, true)
   assert.deepEqual(page.data.textSectionForm, {
     content: '原说明',
+    color: 'AUTO',
     alignment: 'LEFT',
     fontFamily: 'SYSTEM',
-    fontSizeRpx: 32
+    fontSizeRpx: 32,
+    backgroundEnabled: false,
+    backgroundTreatment: 'GRADIENT',
+    verticalAlignment: 'CENTER'
   })
 
   page.handleTextSectionInput({ detail: { value: '团队说明' } })
@@ -473,10 +477,14 @@ test('team text section sheet keeps legacy typography and saves all fields only 
   assert.equal(page.data.textSectionSheetVisible, false)
   assert.deepEqual(page.data.config.components[0].config, {
     content: '团队说明',
+    color: 'AUTO',
     alignment: 'CENTER',
     fontFamily: 'SYSTEM',
     fontSizeRpx: 28,
-    futureField: 'keep'
+    futureField: 'keep',
+    backgroundEnabled: false,
+    backgroundTreatment: 'GRADIENT',
+    verticalAlignment: 'CENTER'
   })
   page.cleanup()
 })
@@ -654,18 +662,126 @@ test('team video carousel keeps global order while members act as filters', asyn
 
   page.handleTeamVideoTitleInput({ detail: { value: '一二三四五六七八九十😀' } })
   page.handleTeamVideoShowTitleChange({ detail: { value: false } })
+  page.handleTeamVideoStyleChange({ currentTarget: { dataset: { style: 'PORTRAIT_CARDS' } } })
+  page.handleTeamVideoDescriptionChange({ detail: { value: true } })
   page.handleConfirmComponentEditor()
   assert.deepEqual(page.data.config.components[0].config, {
     title: '一二三四五六七八九十',
+    showComponentTitle: true,
     items: [
       { memberUserId: 8, workId: 81 },
       { memberUserId: 9, workId: 91 },
       { memberUserId: 9, workId: 92 }
     ],
     showTitle: false,
-    showSwipeHint: true
+    showSwipeHint: true, displayStyle: 'PORTRAIT_CARDS', showDescription: true
   })
   page.cleanup()
+})
+
+test('team video component heading defaults on for legacy configurations and preserves text when hidden', async () => {
+  for (const showComponentTitle of [undefined, null, true, false]) {
+    const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+    try {
+      page.updateConfig({
+        components: [{
+          componentKey: 'video-heading', componentType: 'VIDEO_CAROUSEL', enabled: true,
+          config: {
+            title: '团队佳作', showComponentTitle,
+            items: [{ memberUserId: 8, workId: 1 }, { memberUserId: 8, workId: 2 }, { memberUserId: 8, workId: 3 }],
+            showTitle: false
+          }
+        }]
+      })
+      await page.openTeamVideoCarouselSheet('video-heading')
+      assert.equal(page.data.teamVideoShowComponentTitle, showComponentTitle !== false)
+      assert.equal(page.data.teamVideoShowTitle, false)
+      assert.equal(page.data.teamVideoSettingsCollapsed, false)
+
+      page.handleTeamVideoShowComponentTitleChange({ detail: { value: false } })
+      assert.equal(page.data.teamVideoTitle, '团队佳作')
+      page.handleTeamVideoToggleSettings()
+      assert.equal(page.data.teamVideoSettingsCollapsed, true)
+      page.handleConfirmComponentEditor()
+      assert.equal(page.data.config.components[0].config.showComponentTitle, false)
+      assert.equal(page.data.config.components[0].config.title, '团队佳作')
+      assert.equal(page.data.config.components[0].config.showTitle, false)
+
+      await page.openTeamVideoCarouselSheet('video-heading')
+      assert.equal(page.data.teamVideoShowComponentTitle, false)
+      assert.equal(page.data.teamVideoSettingsCollapsed, false)
+      page.handleTeamVideoShowComponentTitleChange({ detail: { value: true } })
+      assert.equal(page.data.teamVideoTitle, '团队佳作')
+      page.handleConfirmComponentEditor()
+      assert.equal(page.data.config.components[0].config.showComponentTitle, true)
+      assert.equal(page.data.config.components[0].config.title, '团队佳作')
+    } finally {
+      page.cleanup()
+    }
+  }
+})
+
+test('team video settings can reopen after collapsing and cancellation leaves the saved heading unchanged', async () => {
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}))
+  try {
+    page.updateConfig({
+      components: [{
+        componentKey: 'video-heading', componentType: 'VIDEO_CAROUSEL', enabled: true,
+        config: { title: '原始标题', items: [] }
+      }]
+    })
+    await page.openTeamVideoCarouselSheet('video-heading')
+    page.handleTeamVideoToggleSettings()
+    assert.equal(page.data.teamVideoSettingsCollapsed, true)
+    page.handleTeamVideoToggleSettings()
+    assert.equal(page.data.teamVideoSettingsCollapsed, false)
+    page.handleTeamVideoTitleInput({ detail: { value: '尚未保存' } })
+    page.handleTeamVideoShowComponentTitleChange({ detail: { value: false } })
+    page.handleCloseComponentEditor()
+    assert.equal(page.data.config.components[0].config.title, '原始标题')
+    assert.equal(page.data.config.components[0].config.showComponentTitle, true)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team video help is read-only and outer scrolling delegates pagination only for video editing', () => {
+  const modals = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), { showModal(options) { modals.push(options) } })
+  try {
+    const initialData = JSON.stringify(page.data)
+    for (const setting of ['title', 'description', 'swipeHint', 'unknown']) {
+      page.handleTeamVideoSettingHelp({ currentTarget: { dataset: { setting } } })
+    }
+    assert.equal(modals.length, 3)
+    assert.ok(modals.every((modal) => modal.showCancel === false && modal.content && modal.confirmText === '知道了'))
+    assert.equal(JSON.stringify(page.data), initialData)
+    let loadCount = 0
+    page.handleTeamVideoLoadMore = () => { loadCount += 1 }
+    page.handleTeamVideoEditorScrollToLower()
+    assert.equal(loadCount, 0)
+    page.data.activeComponentType = 'VIDEO_CAROUSEL'
+    page.handleTeamVideoEditorScrollToLower()
+    assert.equal(loadCount, 1)
+  } finally {
+    page.cleanup()
+  }
+})
+
+test('team compact video editor keeps controls inline and one scroll area with fixed actions', () => {
+  const wxml = read('standard-edit/team-portfolio-standard-edit.wxml')
+  const wxss = read('standard-edit/team-portfolio-standard-edit.wxss')
+  assert.match(wxml, /team-video-settings-toggle[^>]*catchtap="handleTeamVideoToggleSettings"[^>]*aria-expanded="\{\{!teamVideoSettingsCollapsed\}\}"/)
+  assert.match(wxml, /wx:if="\{\{teamVideoSettingsCollapsed\}\}" class="team-video-settings-summary"/)
+  assert.match(wxml, /wx:if="\{\{teamVideoShowComponentTitle\}\}" class="team-video-title-field"/)
+  assert.match(wxml, /checked="\{\{teamVideoShowComponentTitle\}\}"[^>]*bindchange="handleTeamVideoShowComponentTitleChange"/)
+  assert.match(wxml, /bindscrolltolower="handleTeamVideoEditorScrollToLower"/)
+  assert.doesNotMatch(wxml, /<scroll-view[^>]*class="team-video-work-scroll"/)
+  assert.doesNotMatch(wxml, /team-video-search-input pe-sheet-field|team-video-switch-note|team-video-work-option pe-sheet-choice/)
+  assert.match(readCssRule(wxss, '.team-video-editor-settings .display-style-choice'), /height:88rpx;.*display:flex;/)
+  assert.match(readCssRule(wxss, '.team-video-switch-setting'), /min-height:72rpx;/)
+  assert.match(readCssRule(wxss, '.team-video-editor-compact .component-editor-scroll'), /max-height:none;/)
+  assert.match(readCssRule(wxss, '.team-video-work-option'), /min-height:112rpx;.*border-bottom:1rpx/)
 })
 
 test('team video carousel blocks ninth selection and keeps selections after source failure', async () => {
@@ -873,7 +989,7 @@ test('team preview and visitor use the personal portfolio content baseline witho
   const listWxss = read('components/member-portfolio-list/member-portfolio-list.wxss')
 
   for (const page of [previewWxml, visitorWxml]) {
-    assert.equal(Array.from(page.matchAll(/class="folio-component"/g)).length, 10)
+    assert.equal(Array.from(page.matchAll(/class="folio-component"/g)).length, 13)
   }
 
   for (const pageStyles of [previewWxss, visitorWxss]) {

@@ -1,6 +1,9 @@
 #!/bin/bash
 set -eo pipefail
 
+# === 打印当前日期和时间 ===
+date '+>>> 当前日期和时间：%Y-%m-%d %H:%M:%S'
+
 # === 脚本目录 ===
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

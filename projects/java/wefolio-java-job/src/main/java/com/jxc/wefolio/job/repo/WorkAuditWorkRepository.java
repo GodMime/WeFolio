@@ -141,7 +141,7 @@ public class WorkAuditWorkRepository {
     private List<WorkAuditWorkEntity> findPendingWorks(String mediaType, int limit) {
         return workMapper.selectList(Wrappers.<WorkAuditWorkEntity>lambdaQuery()
                 .eq(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.PENDING.getCode())
-                .eq(WorkAuditWorkEntity::getMediaType, mediaType)
+                .in(WorkAuditWorkEntity::getMediaType, asyncMediaTypes(mediaType))
                 .isNull(WorkAuditWorkEntity::getManualAuditNo)
                 .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED)
                 .orderByAsc(WorkAuditWorkEntity::getId)
@@ -152,12 +152,18 @@ public class WorkAuditWorkRepository {
     private long countPendingWorks(String mediaType) {
         return workMapper.selectCount(Wrappers.<WorkAuditWorkEntity>lambdaQuery()
                 .eq(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.PENDING.getCode())
-                .eq(WorkAuditWorkEntity::getMediaType, mediaType)
+                .in(WorkAuditWorkEntity::getMediaType, asyncMediaTypes(mediaType))
                 .isNull(WorkAuditWorkEntity::getManualAuditNo)
                 .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED));
     }
 
     private int normalizedLimit(int limit) {
         return Math.max(limit, 0);
+    }
+
+    /** 原视频异步队列同时承接音频，保留原批次容量、排序与恢复机制。 */
+    private List<String> asyncMediaTypes(String mediaType) {
+        return MediaTypeDict.VIDEO.getCode().equals(mediaType)
+                ? List.of(mediaType, MediaTypeDict.AUDIO.getCode()) : List.of(mediaType);
     }
 }

@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service.teamportfolio.component;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.common.auth.AuthContext;
+import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
@@ -55,6 +57,59 @@ import static org.mockito.Mockito.when;
  */
 class TeamSingleWorkComponentTest {
 
+    /** 音频候选复用原分页接口，必须先校验成员并在分页 SQL 中只选音频。 */
+    @Test
+    void audioCandidatesShouldReuseAuthorizedMemberPagination() {
+        TeamPortfolioAccessService access = mock(TeamPortfolioAccessService.class);
+        TeamMemberEntityMapper members = mock(TeamMemberEntityMapper.class);
+        UserEntityMapper users = mock(UserEntityMapper.class);
+        WorkEntityMapper works = mock(WorkEntityMapper.class);
+        TeamEntity team = new TeamEntity();
+        team.setId(11L);
+        when(access.requireTeamRole(eq(11L), eq(99L), any()))
+                .thenReturn(new TeamPortfolioAccessService.TeamPortfolioAccess(null, team, member(), true, true));
+        when(members.selectOne(any())).thenReturn(member());
+        when(users.selectById(7L)).thenReturn(user());
+        when(works.selectPage(any(Page.class), any())).thenAnswer(invocation -> {
+            LambdaQueryWrapper<WorkEntity> query = invocation.getArgument(1);
+            assertThat(query.getSqlSegment()).contains("media_type IN", "user_id =", "audit_status =");
+            assertThat(query.getParamNameValuePairs().values()).contains("AUDIO", "PASSED", 7L)
+                    .doesNotContain("IMAGE", "VIDEO", "ANIMATION");
+            return new Page<WorkEntity>(1, 20, 0);
+        });
+        TeamSingleWorkComponentService service = new TeamSingleWorkComponentService(
+                access, members, users, works, mock(CosService.class));
+        AuthContextHolder.set(new AuthContext(99L, "test"));
+        try {
+            assertThat(service.pageTeamWorks(11L, 7L, 99L, 1, 20, null, "AUDIO").getWorks()).isEmpty();
+        } finally {
+            AuthContextHolder.clear();
+        }
+    }
+
+    /** 背景音频沿用成员授权检查，同时不能被选为正文单作品。 */
+    @Test
+    void audioValidationShouldKeepMemberAuthorizationAndBodyMediaBoundary() {
+        TeamMemberEntityMapper members = mock(TeamMemberEntityMapper.class);
+        UserEntityMapper users = mock(UserEntityMapper.class);
+        WorkEntityMapper works = mock(WorkEntityMapper.class);
+        WorkEntity audio = work();
+        audio.setMediaType(MediaTypeDict.AUDIO.getCode());
+        when(works.selectById(9L)).thenReturn(audio);
+        when(works.selectList(any())).thenReturn(List.of(audio));
+        when(members.selectList(any())).thenReturn(List.of(member()));
+        when(users.selectBatchIds(any())).thenReturn(List.of(user()));
+        TeamSingleWorkComponentValidator validator = new TeamSingleWorkComponentValidator(members, users, works);
+        validator.validateAudio(9L, CONTEXT);
+        assertThatThrownBy(() -> validator.normalizeAndValidate(
+                JSONObject.of("memberUserId", 7L, "workId", 9L), CONTEXT)).isInstanceOf(BusinessException.class);
+        audio.setAuditStatus(WorkAuditStatusDict.PENDING.getCode());
+        assertThatThrownBy(() -> validator.validateAudio(9L, CONTEXT)).isInstanceOf(BusinessException.class);
+        audio.setAuditStatus(WorkAuditStatusDict.PASSED.getCode());
+        when(members.selectList(any())).thenReturn(List.of());
+        assertThatThrownBy(() -> validator.validateAudio(9L, CONTEXT)).isInstanceOf(BusinessException.class);
+    }
+
     /** 团队上下文。 */
     private static final TeamPortfolioComponentContext CONTEXT =
             new TeamPortfolioComponentContext(11L, 22L, 3);
@@ -97,7 +152,7 @@ class TeamSingleWorkComponentTest {
         JSONObject normalized = validator.normalizeAndValidate(raw, CONTEXT);
 
         assertThat(normalized.keySet())
-                .containsExactly("memberUserId", "workId", "showTitle", "showDescription");
+                .containsExactly("memberUserId", "workId", "showTitle", "showDescription", "openMode", "detailOptions");
         assertThat(normalized.getBooleanValue("showTitle")).isFalse();
         assertThat(normalized.getBooleanValue("showDescription")).isTrue();
 
@@ -243,7 +298,7 @@ class TeamSingleWorkComponentTest {
         TeamSingleWorkComponentService service = new TeamSingleWorkComponentService(
                 accessService, memberMapper, userMapper, workMapper, cosService);
 
-        TeamSingleWorkPageResponse response = service.pageTeamWorks(11L, 7L, 99L, 1, 2, 9L);
+        TeamSingleWorkPageResponse response = service.pageTeamWorks(11L, 7L, 99L, 1, 2, 9L, null);
 
         assertThat(response.getPage()).isEqualTo(1);
         assertThat(response.getPageSize()).isEqualTo(2);
@@ -295,8 +350,8 @@ class TeamSingleWorkComponentTest {
         TeamSingleWorkComponentService service = new TeamSingleWorkComponentService(
                 accessService, memberMapper, userMapper, workMapper, cosService);
 
-        TeamSingleWorkPageResponse defaults = service.pageTeamWorks(11L, 7L, 99L, 0, 0, 9L);
-        TeamSingleWorkPageResponse capped = service.pageTeamWorks(11L, 7L, 99L, 2, 101, null);
+        TeamSingleWorkPageResponse defaults = service.pageTeamWorks(11L, 7L, 99L, 0, 0, 9L, null);
+        TeamSingleWorkPageResponse capped = service.pageTeamWorks(11L, 7L, 99L, 2, 101, null, null);
 
         assertThat(requestedPages).containsExactly(List.of(1L, 20L), List.of(2L, 100L));
         assertThat(defaults.getPage()).isEqualTo(1);
@@ -342,7 +397,7 @@ class TeamSingleWorkComponentTest {
         TeamSingleWorkComponentService service = new TeamSingleWorkComponentService(
                 accessService, memberMapper, userMapper, workMapper, cosService);
 
-        TeamSingleWorkPageResponse response = service.pageTeamWorks(11L, 7L, 99L, 2, 2, null);
+        TeamSingleWorkPageResponse response = service.pageTeamWorks(11L, 7L, 99L, 2, 2, null, null);
 
         assertThat(response.getPage()).isEqualTo(2);
         assertThat(response.getPageSize()).isEqualTo(2);
@@ -391,7 +446,7 @@ class TeamSingleWorkComponentTest {
             when(workMapper.selectOne(any())).thenReturn(invalid);
 
             TeamSingleWorkPageResponse response =
-                    service.pageTeamWorks(11L, 7L, 99L, 1, 20, 9L);
+                    service.pageTeamWorks(11L, 7L, 99L, 1, 20, 9L, null);
 
             assertThat(response.getSelectedWork()).isNull();
         }
@@ -416,7 +471,7 @@ class TeamSingleWorkComponentTest {
         TeamSingleWorkComponentService service = new TeamSingleWorkComponentService(
                 accessService, memberMapper, userMapper, workMapper, cosService);
 
-        assertThatThrownBy(() -> service.pageTeamWorks(11L, 7L, 99L, 1, 20, 9L))
+        assertThatThrownBy(() -> service.pageTeamWorks(11L, 7L, 99L, 1, 20, 9L, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(TeamPortfolioMessage.SINGLE_WORK_MEMBER_UNAVAILABLE);
         verify(workMapper, never()).selectPage(any(Page.class), any());

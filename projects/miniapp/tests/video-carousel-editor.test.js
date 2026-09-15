@@ -81,6 +81,23 @@ test('personal video candidate list renders formatted duration', () => {
   assert.match(wxml, /item\.durationText/)
 })
 
+test('personal compact video settings keep title and switches in rows and release space when collapsed', () => {
+  const root = path.join(MINIAPP_ROOT, 'pages/portfolios/standard-edit')
+  const wxml = fs.readFileSync(path.join(root, 'portfolio-standard-edit.wxml'), 'utf8')
+  const wxss = fs.readFileSync(path.join(root, 'portfolio-standard-edit.wxss'), 'utf8')
+  const rowRule = wxss.match(/\.video-carousel-title-setting,\s*\.video-carousel-switch-setting\s*\{([^}]*)\}/)
+  assert.ok(rowRule)
+  assert.match(rowRule[1], /display:\s*flex;/)
+  assert.match(rowRule[1], /align-items:\s*center;/)
+  assert.match(wxss, /\.video-carousel-editor-settings-collapsed\s*\{\s*display:\s*none;/)
+  assert.match(wxss, /\.component-work-scroll\s*\{[^}]*flex:\s*1 1 auto;[^}]*height:\s*0;/)
+  assert.match(wxml, /wx:if="\{\{videoCarouselShowComponentTitle\}\}" class="video-carousel-title-field"/)
+  assert.match(wxml, /checked="\{\{videoCarouselShowComponentTitle\}\}"[^>]*bindchange="handleVideoCarouselComponentTitleChange"/)
+  assert.match(wxml, /checked="\{\{videoCarouselShowTitle\}\}"[^>]*bindchange="handleVideoCarouselShowTitleChange"/)
+  assert.match(wxml, /aria-expanded="\{\{!videoCarouselSettingsCollapsed\}\}"/)
+  assert.doesNotMatch(wxml, /class="video-carousel-switch-note"/)
+})
+
 test('team member-first editors share one accessible member selector contract', () => {
   const sharedStylePath = path.join(
     MINIAPP_ROOT,

@@ -1,11 +1,16 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import java.util.Map;
+import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
+
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.message.PortfolioMessage;
+import com.jxc.wefolio.service.PortfolioContactInfoConfigSupport;
 import com.jxc.wefolio.service.teamportfolio.component.carousel.TeamCarouselComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.contactform.TeamContactFormComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.divider.TeamDividerComponentValidator;
@@ -16,6 +21,8 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.component.structuredtextsection.TeamStructuredTextSectionComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.TeamTextBackgroundSupport;
 import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentValidator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +46,246 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class TeamPortfolioConfigValidatorTest {
 
+    /** 团队联系信息边框经过草稿序列化、发布及旧版跨菜单移动后完整保留。 */
+    @Test
+    void contactBorderSurvivesDraftPublishAndLegacyMenuMove() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var appearance = Map.<String, Object>of("contactBorder", true, "contactBorderWidthRpx", 8,
+                "contactBorderColor", "#AABBCC", "horizontalMarginRpx", 32, "verticalMarginRpx", 24);
+        var values = new JSONObject(appearance); values.put("contactPhone", "123"); values.put("contactBorderColor", "#aabbcc");
+        var contact = component("contact", TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true);
+        contact.setConfig(values);
+        var input = config(List.of(contact)); input.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var saved = JSON.parseObject(JSON.toJSONString(service().normalizeForDraft(input, null, context)), TeamPortfolioConfigDto.class);
+        assertThat(saved.getComponents().getFirst().getConfig()).containsAllEntriesOf(appearance);
+        service().validateForPublish(saved, context);
+        for (boolean explicitDefaults : List.of(false, true)) {
+            var editedValues = new JSONObject(); editedValues.put("contactPhone", "456");
+            if (explicitDefaults) { editedValues.putAll(PortfolioContactInfoConfigSupport.normalize(Map.of())); editedValues.put("contactPhone", "456"); }
+            var edited = component("contact", TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true);
+            edited.setConfig(editedValues);
+            var home = component("other", TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true);
+            home.setConfig(JSONObject.of("contactWechat", "小映"));
+            var incoming = config(List.of(home)); incoming.setEditorSchemaRevision(8);
+            incoming.setBottomNav(bottomNav(menu("nav_home", "首页", null), menu("nav_contact", "联系", List.of(edited))));
+            var merged = service().normalizeForDraft(incoming, saved, context);
+            assertThat(merged.getBottomNav().getItems().get(1).getComponents().getFirst().getConfig())
+                    .containsAllEntriesOf(appearance).containsEntry("contactPhone", "456");
+            assertThat(editedValues).doesNotContainEntry("contactBorder", true);
+            incoming.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+            var current = service().normalizeForDraft(incoming, saved, context);
+            assertThat(current.getBottomNav().getItems().get(1).getComponents().getFirst().getConfig())
+                    .containsEntry("contactBorder", false).containsEntry("horizontalMarginRpx", 0);
+        }
+        values.put("contactBorder", false);
+        assertThat(service().normalizeForDraft(input, saved, context).getComponents().getFirst().getConfig())
+                .containsEntry("contactBorder", false).containsEntry("contactBorderWidthRpx", 8)
+                .containsEntry("contactBorderColor", "#AABBCC").containsEntry("horizontalMarginRpx", 32)
+                .containsEntry("verticalMarginRpx", 24);
+    }
+
+    /** 团队根组件与菜单组件在所有复制路径中保留显式空值，交由草稿与发布校验拒绝。 */
+    @Test
+    void rejectsExplicitNullContactAppearanceInRootAndMenu() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var existing = config(List.of()); existing.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        for (String field : PortfolioContactInfoConfigSupport.APPEARANCE_FIELDS) {
+            for (boolean inMenu : List.of(false, true)) {
+                var values = JSONObject.of("contactPhone", "123"); values.put(field, null);
+                var contact = component("contact", TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true);
+                contact.setConfig(values);
+                var home = component("other", TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true);
+                home.setConfig(JSONObject.of("contactWechat", "小映"));
+                var input = config(inMenu ? List.of(home) : List.of(contact));
+                input.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+                if (inMenu) { input.setBottomNav(bottomNav(menu("nav_home", "首页", null), menu("nav_contact", "联系", List.of(contact)))); }
+                for (TeamPortfolioConfigDto previous : new TeamPortfolioConfigDto[]{null, existing}) {
+                    assertThatThrownBy(() -> service().normalizeForDraft(input, previous, context))
+                            .as("联系信息外观显式空值 %s，菜单位 %s", field, inMenu).isInstanceOf(BusinessException.class)
+                            .hasMessageContaining(PortfolioMessage.COMPONENT_DISPLAY_OPTIONS_INVALID);
+                }
+                assertThatThrownBy(() -> service().validateForPublish(input, context)).isInstanceOf(BusinessException.class)
+                        .hasMessageContaining(PortfolioMessage.COMPONENT_DISPLAY_OPTIONS_INVALID);
+            }
+        }
+    }
+
+    /** 团队双列留白经过序列化和发布保留，旧版保存保护未知字段，新版允许清零。 */
+    @Test void gridMarginsSurviveDraftPublishAndLegacySave() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        var input = config(List.of(grid)); input.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        JSONObject values = JSON.parseObject(JSON.toJSONString(service().normalizeForDraft(input, null, context)
+                .getComponents().getFirst().getConfig()));
+        values.getJSONArray("cells").getJSONObject(0).getJSONArray("blocks").getJSONObject(0)
+                .getJSONArray("runs").getJSONObject(0).put("text", "双列文字");
+        values.put("horizontalMarginRpx", 32); values.put("verticalMarginRpx", 24); grid.setConfig(values);
+        var saved = JSON.parseObject(JSON.toJSONString(service().normalizeForDraft(input, null, context)), TeamPortfolioConfigDto.class);
+        assertThat(saved.getComponents().getFirst().getConfig()).containsEntry("horizontalMarginRpx", 32)
+                .containsEntry("verticalMarginRpx", 24);
+        service().validateForPublish(saved, context);
+        for (boolean explicitDefault : List.of(false, true)) {
+            if (explicitDefault) { values.put("horizontalMarginRpx", 0); values.put("verticalMarginRpx", 0); }
+            else { values.remove("horizontalMarginRpx"); values.remove("verticalMarginRpx"); }
+            input.setEditorSchemaRevision(7);
+            assertThat(service().normalizeForDraft(input, saved, context).getComponents().getFirst().getConfig())
+                    .containsEntry("columns", 2).containsEntry("horizontalMarginRpx", 32).containsEntry("verticalMarginRpx", 24);
+            input.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+            assertThat(service().normalizeForDraft(input, saved, context).getComponents().getFirst().getConfig())
+                    .containsEntry("horizontalMarginRpx", 0).containsEntry("verticalMarginRpx", 0);
+        }
+    }
+
+    /** 团队兼容复制不能把留白字段的显式空值转成缺省合法值，菜单中的网格也须检查。 */
+    @Test void rejectsExplicitNullGridMarginsInDraftAndPublish() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        for (String field : List.of("horizontalMarginRpx", "verticalMarginRpx")) {
+            var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+            var input = config(List.of(grid)); input.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+            grid.setConfig(service().normalizeForDraft(input, null, context).getComponents().getFirst().getConfig());
+            grid.getConfig().put(field, null);
+            for (boolean inMenu : List.of(false, true)) {
+                if (inMenu) {
+                    input.setComponents(List.of(component("contact", TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true)));
+                    input.setBottomNav(bottomNav(menu("nav_home", "首页", null), menu("nav_works", "作品", List.of(grid))));
+                }
+                assertThatThrownBy(() -> service().normalizeForDraft(input, null, context))
+                        .as("草稿不能丢弃显式空值 %s", field).isInstanceOf(BusinessException.class);
+                assertThatThrownBy(() -> service().validateForPublish(input, context))
+                        .as("发布不能丢弃显式空值 %s", field).isInstanceOf(BusinessException.class);
+            }
+        }
+    }
+
+    /** 八行合并网格经过团队草稿保存和 JSON 往返后仍保留完整跨度并允许发布。 */
+    @Test void eightRowGridSurvivesDraftSerializationAndPublishValidation() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        grid.setConfig(JSONObject.of("rows", 8, "columns", 1, "columnWeights", List.of(1),
+                "rowMinHeightsRpx", List.of(180, 180, 180, 180, 180, 180, 180, 180),
+                "cells", List.of(Map.of("cellKey", "merged", "row", 0, "column", 0, "rowSpan", 8, "columnSpan", 1,
+                        "blocks", List.of(Map.of("blockKey", "block", "runs", List.of(Map.of("runKey", "run", "text", "八行文字"))))))));
+        var input = config(List.of(grid));
+        input.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var saved = JSON.parseObject(JSON.toJSONString(service().normalizeForDraft(input, null, context)), TeamPortfolioConfigDto.class);
+        var savedGrid = saved.getComponents().getFirst().getConfig();
+        assertThat(savedGrid).containsEntry("rows", 8).containsEntry("columns", 1);
+        assertThat(savedGrid.getJSONArray("rowMinHeightsRpx")).hasSize(8);
+        assertThat(savedGrid.getJSONArray("cells").getJSONObject(0)).containsEntry("rowSpan", 8);
+        service().validateForPublish(saved, context);
+    }
+
+    /** 新边框字段经过真实草稿入口和 JSON 往返保留，上一版编辑器保存不清空。 */
+    @Test void gridBorderOptionsSurviveDraftSerializationAndPreviousEditorSave() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        var input = config(List.of(grid)); input.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        var initial = service().normalizeForDraft(input, null, context);
+        var values = initial.getComponents().getFirst().getConfig();
+        values.put("cellBorder", true); values.put("cellBorderWidthRpx", 8); values.put("cellBorderColor", "#aabbcc");
+        grid.setConfig(values);
+        var saved = JSON.parseObject(JSON.toJSONString(service().normalizeForDraft(input, null, context)), TeamPortfolioConfigDto.class);
+        assertThat(saved.getComponents().getFirst().getConfig()).containsEntry("cellBorderWidthRpx", 8)
+                .containsEntry("cellBorderColor", "#AABBCC");
+        values.remove("cellBorderWidthRpx"); values.remove("cellBorderColor"); values.put("cellBorder", false);
+        input.setEditorSchemaRevision(5);
+        var legacySave = service().normalizeForDraft(input, saved, context);
+        assertThat(legacySave.getComponents().getFirst().getConfig()).containsEntry("cellBorder", false)
+                .containsEntry("cellBorderWidthRpx", 8).containsEntry("cellBorderColor", "#AABBCC");
+        input.setEditorSchemaRevision(TeamPortfolioConfigDto.EDITOR_SCHEMA_REVISION_CURRENT);
+        values.put("cellBorderWidthRpx", null);
+        assertThatThrownBy(() -> service().normalizeForDraft(input, saved, context)).isInstanceOf(BusinessException.class);
+        values.remove("cellBorderWidthRpx"); values.put("cellBorderColor", null);
+        assertThatThrownBy(() -> service().normalizeForDraft(input, saved, context)).isInstanceOf(BusinessException.class);
+    }
+
+    /** 联系和网格均走真实纯规则，菜单空网格阻止发布。 */
+    @Test void newTextComponentsUseSharedDraftAndPublishRules() {
+        var contact = component("contact", TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(), 1000, true);
+        contact.setConfig(JSONObject.of("contactWechat", "  小映 "));
+        var grid = component("grid", TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(), 1000, true);
+        var input = config(List.of(contact)); input.setEditorSchemaRevision(5);
+        input.setBottomNav(bottomNav(menu("nav_home", "首页", null), menu("nav_works", "作品", List.of(grid))));
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var draft = service().normalizeForDraft(input, null, context);
+        assertThat(draft.getComponents().getFirst().getConfig()).containsEntry("contactWechat", "小映");
+        assertThat(draft.getBottomNav().getItems().get(1).getComponents().getFirst().getConfig().getJSONArray("cells")).hasSize(4);
+        assertThatThrownBy(() -> service().validateForPublish(draft, context)).isInstanceOf(BusinessException.class).hasMessage("请至少添加一处文字");
+    }
+
+    /** 背景字段缺省保留，显式提交直接生效，不依赖能力头。 */
+    @Test
+    void teamBackgroundAudioMergeShouldUseFieldPresence() {
+        TeamPortfolioConfigDto base = config(List.of(component("divider", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        TeamPortfolioConfigDto stored = service().normalizeForDraft(base, null, context);
+        assertThat(stored.getBackgroundAudio().getEnabled()).isFalse();
+        stored.getBackgroundAudio().setWorkId(19L);
+        stored.getBackgroundAudio().setEnabled(true);
+        assertThat(service().normalizeForDraft(base, stored, context).getBackgroundAudio().getWorkId()).isEqualTo(19L);
+        base.setBackgroundAudio(new BackgroundAudioConfigDto());
+        assertThat(service().normalizeForDraft(base, stored, context).getBackgroundAudio().getWorkId()).isNull();
+        assertThat(stored.getBackgroundAudio().getWorkId()).isEqualTo(19L);
+        verify(singleWorkValidator).validateAudio(19L, context);
+    }
+
+    /** 新字段版本保护与音频缺省/显式关闭独立组合，当前端 false 仍能生效。 */
+    @Test void displayOptionsAndAudioPresenceRulesComposeForLegacyAndCurrentEditors() {
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        when(singleWorkValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenAnswer(call -> {
+            JSONObject result = new JSONObject((JSONObject) call.getArgument(0));
+            result.put("openMode", com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport.openMode(result));
+            result.put("detailOptions", com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport.detailOptions(result));
+            return result;
+        });
+        var saved = component("single", "SINGLE_WORK", 1000, true);
+        saved.setConfig(JSONObject.of("memberUserId", 7L, "workId", 9L, "openMode", "DETAIL_PAGE",
+                "detailOptions", JSONObject.of("showTitle", true, "showDescription", true)));
+        var existing = config(List.of(saved)); existing.setEditorSchemaRevision(5);
+        var audio = new BackgroundAudioConfigDto(); audio.setEnabled(true); existing.setBackgroundAudio(audio);
+        for (Integer revision : new Integer[]{null, 4, 5}) {
+            for (boolean explicitAudio : List.of(false, true)) {
+                for (boolean explicitOptions : List.of(false, true)) {
+                    var incomingSingle = component("single", "SINGLE_WORK", 1000, true);
+                    var values = JSONObject.of("memberUserId", 7L, "workId", 9L, "showDescription", false);
+                    if (explicitOptions) {
+                        values.put("openMode", "INLINE");
+                        values.put("detailOptions", JSONObject.of("showTitle", false, "showDescription", false));
+                    }
+                    incomingSingle.setConfig(values);
+                    var incoming = config(List.of(incomingSingle)); incoming.setEditorSchemaRevision(revision);
+                    if (explicitAudio) { incoming.setBackgroundAudio(new BackgroundAudioConfigDto()); }
+                    var normalized = service().normalizeForDraft(incoming, existing, context);
+                    var actual = normalized.getComponents().getFirst().getConfig();
+                    boolean current = Integer.valueOf(5).equals(revision);
+                    assertThat(actual.getString("openMode")).isEqualTo(current ? "INLINE" : "DETAIL_PAGE");
+                    assertThat(actual.getJSONObject("detailOptions").getBoolean("showTitle"))
+                            .isEqualTo(!current || !explicitOptions);
+                    assertThat(actual.getBoolean("showDescription")).isFalse();
+                    assertThat(normalized.getBackgroundAudio().getEnabled()).isEqualTo(!explicitAudio);
+                    assertThat(existing.getBackgroundAudio().getEnabled()).isTrue();
+                }
+            }
+        }
+    }
+
+    /** 团队旧请求保留背景音频，开启但无选择的草稿不能发布。 */
+    @Test
+    void backgroundAudioShouldBePreservedForLegacyTeamSave() {
+        TeamPortfolioConfigDto base = config(List.of(component("divider", TeamPortfolioComponentTypeDict.DIVIDER.getCode(), 1000, true)));
+        JSONObject json = JSON.parseObject(JSON.toJSONString(base));
+        json.put("backgroundAudio", Map.of("enabled", true, "displayStyle", "MINI_PLAYER"));
+        TeamPortfolioConfigDto stored = json.toJavaObject(TeamPortfolioConfigDto.class);
+        TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        TeamPortfolioConfigDto draft = service().normalizeForDraft(base, stored, context);
+        JSONObject audio = JSON.parseObject(JSON.toJSONString(draft)).getJSONObject("backgroundAudio");
+        assertThat(audio).isNotNull();
+        assertThat(audio.getBoolean("enabled")).isTrue();
+        assertThat(audio.getString("displayStyle")).isEqualTo("MINI_PLAYER");
+        assertThatThrownBy(() -> service().validateForPublish(draft, context)).isInstanceOf(BusinessException.class)
+                .hasMessage("开启背景音频后，请从音频作品中选择");
+    }
+
     @Mock
     private TeamProfileComponentValidator teamProfileValidator;
     @Mock
@@ -53,6 +300,10 @@ class TeamPortfolioConfigValidatorTest {
     private TeamMemberPortfolioListComponentValidator listValidator;
     @Mock
     private TeamTextSectionComponentValidator textValidator;
+
+    /** 结构化文字组件策略模拟。 */
+    @Mock
+    private TeamStructuredTextSectionComponentValidator structuredTextValidator;
     @Mock
     private TeamScheduleQueryComponentValidator scheduleValidator;
     @Mock
@@ -561,7 +812,7 @@ class TeamPortfolioConfigValidatorTest {
                 case SCHEDULE_QUERY -> when(scheduleValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case CONTACT_FORM -> when(contactValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
                 case QR_CONTACT -> when(qrValidator.normalizeAndValidate(any(JSONObject.class), eq(context))).thenReturn(normalized);
-                case VIDEO_CAROUSEL -> {
+                case VIDEO_CAROUSEL, STRUCTURED_TEXT_SECTION -> {
                     // revision 3 新组件由独立用例覆盖；本用例只验证 revision 2 已有组件集合。
                 }
             }
@@ -570,12 +821,12 @@ class TeamPortfolioConfigValidatorTest {
 
     private TeamPortfolioConfigValidator service() {
         return new TeamPortfolioConfigValidator(teamProfileValidator, carouselValidator, singleWorkValidator, dividerValidator, gridValidator,
-                listValidator, textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator);
+                listValidator, textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator, structuredTextValidator);
     }
 
     private void verifyNoComponentValidatorInteractions() {
         verifyNoInteractions(teamProfileValidator, carouselValidator, singleWorkValidator, dividerValidator, gridValidator, listValidator,
-                textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator);
+                textValidator, scheduleValidator, contactValidator, qrValidator, videoCarouselValidator, structuredTextValidator);
     }
 
     private TeamPortfolioConfigDto config(List<TeamPortfolioConfigDto.ComponentEnvelope> components) {

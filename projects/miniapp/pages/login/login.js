@@ -3,8 +3,13 @@ const {
   precheckMaintainerWechatLogin,
   maintainerWechatLogin
 } = require('../../utils/session')
+const { request } = require('../../utils/request')
 
 const REFERRAL_CODE_MAX_LENGTH = 16
+const LOGIN_TAB_EXPERIENCE = 'experience'
+const LOGIN_TAB_MAINTAINER = 'maintainer'
+const LOGIN_PAGE_CONFIG_URL = '/api/auth/login-page-config'
+const AUTH_MODE_NONE = 'none'
 
 function normalizeReferralCode(value) {
   if (typeof value !== 'string') {
@@ -53,7 +58,7 @@ function tryWxPluginLogin() {
 
 Page({
   data: {
-    activeTab: 'maintainer',
+    activeTab: LOGIN_TAB_EXPERIENCE,
     prechecking: false,
     precheckReady: false,
     phoneAuthorizationRequired: false,
@@ -65,18 +70,53 @@ Page({
 
   onLoad(options = {}) {
     const referralCode = normalizeReferralCode(options.referralCode)
+    this._defaultTabLocked = Boolean(referralCode)
     if (referralCode) {
       this.setData({
-        activeTab: 'maintainer',
+        activeTab: LOGIN_TAB_MAINTAINER,
         referralCode
       })
     }
+    this.loadLoginPageConfig()
     this.runWechatLoginPrecheck()
+  },
+
+  onHide() {
+    this._defaultTabLocked = true
+  },
+
+  onUnload() {
+    this._defaultTabLocked = true
+  },
+
+  async loadLoginPageConfig() {
+    try {
+      const config = await request({
+        url: LOGIN_PAGE_CONFIG_URL,
+        method: 'GET',
+        authMode: AUTH_MODE_NONE
+      })
+      // 默认配置只影响首次展示，不能覆盖推荐入口、用户操作或离页后的状态。
+      if (this._defaultTabLocked || this.data.loading) {
+        return
+      }
+      this.setData({
+        activeTab: config && config.defaultTab === LOGIN_TAB_MAINTAINER
+          ? LOGIN_TAB_MAINTAINER
+          : LOGIN_TAB_EXPERIENCE
+      })
+    } catch (error) {
+      // 兼容尚未部署此接口的后端和网络失败，保留本地体验默认值。
+    }
   },
 
   handleTabTap(event) {
     const tab = event.currentTarget.dataset.tab
-    if (!tab || tab === this.data.activeTab) {
+    if (tab !== LOGIN_TAB_EXPERIENCE && tab !== LOGIN_TAB_MAINTAINER) {
+      return
+    }
+    this._defaultTabLocked = true
+    if (tab === this.data.activeTab) {
       return
     }
     this.setData({
@@ -85,12 +125,14 @@ Page({
   },
 
   handleExperienceTap() {
+    this._defaultTabLocked = true
     wx.redirectTo({
       url: '/pages/mock/index/index'
     })
   },
 
   handleReferralInput(event) {
+    this._defaultTabLocked = true
     this.setData({
       referralCode: event.detail.value || ''
     })
@@ -137,6 +179,7 @@ Page({
   },
 
   handleMaintainerAuthTap() {
+    this._defaultTabLocked = true
     if (this.data.prechecking || this.data.loading) {
       return
     }
@@ -151,6 +194,7 @@ Page({
   },
 
   handleRegisterPhone(event) {
+    this._defaultTabLocked = true
     if (
       this.data.prechecking
       || this.data.loading
@@ -180,6 +224,7 @@ Page({
   },
 
   async authorizeByWechat(options = {}) {
+    this._defaultTabLocked = true
     if (this.data.loading) {
       return
     }

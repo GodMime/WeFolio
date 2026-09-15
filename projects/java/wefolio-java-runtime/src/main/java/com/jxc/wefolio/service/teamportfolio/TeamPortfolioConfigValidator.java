@@ -1,7 +1,11 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.common.PortfolioBackgroundAudioSupport;
+
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioContactInfoConfigSupport;
+import com.jxc.wefolio.service.PortfolioTextGridConfigNormalizer;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
@@ -17,6 +21,7 @@ import com.jxc.wefolio.service.teamportfolio.component.schedulequery.TeamSchedul
 import com.jxc.wefolio.service.teamportfolio.component.singlework.TeamSingleWorkComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.teamprofile.TeamProfileComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.textsection.TeamTextSectionComponentValidator;
+import com.jxc.wefolio.service.teamportfolio.component.structuredtextsection.TeamStructuredTextSectionComponentValidator;
 import com.jxc.wefolio.service.teamportfolio.component.videocarousel.TeamVideoCarouselComponentValidator;
 import org.springframework.stereotype.Service;
 
@@ -73,6 +78,8 @@ public class TeamPortfolioConfigValidator {
     private final TeamMemberPortfolioGridComponentValidator gridValidator;
     private final TeamMemberPortfolioListComponentValidator listValidator;
     private final TeamTextSectionComponentValidator textValidator;
+    /** 结构化文字组件策略。 */
+    private final TeamStructuredTextSectionComponentValidator structuredTextValidator;
     private final TeamScheduleQueryComponentValidator scheduleValidator;
     private final TeamContactFormComponentValidator contactValidator;
     private final TeamQrContactComponentValidator qrValidator;
@@ -92,7 +99,8 @@ public class TeamPortfolioConfigValidator {
             TeamScheduleQueryComponentValidator scheduleValidator,
             TeamContactFormComponentValidator contactValidator,
             TeamQrContactComponentValidator qrValidator,
-            TeamVideoCarouselComponentValidator videoCarouselValidator
+            TeamVideoCarouselComponentValidator videoCarouselValidator,
+            TeamStructuredTextSectionComponentValidator structuredTextValidator
     ) {
         this.teamProfileValidator = teamProfileValidator;
         this.carouselValidator = carouselValidator;
@@ -105,6 +113,7 @@ public class TeamPortfolioConfigValidator {
         this.contactValidator = contactValidator;
         this.qrValidator = qrValidator;
         this.videoCarouselValidator = videoCarouselValidator;
+        this.structuredTextValidator = structuredTextValidator;
     }
 
     /**
@@ -160,6 +169,10 @@ public class TeamPortfolioConfigValidator {
         normalized.setEditorSchemaRevision(config.getEditorSchemaRevision());
         normalized.setShare(normalizeShare(config.getShare()));
         normalized.setStyle(normalizeStyle(config.getStyle()));
+        normalized.setBackgroundAudio(PortfolioBackgroundAudioSupport.normalize(config.getBackgroundAudio()));
+        if (normalized.getBackgroundAudio().getWorkId() != null) {
+            singleWorkValidator.validateAudio(normalized.getBackgroundAudio().getWorkId(), context);
+        }
         normalized.setBottomNav(normalizeBottomNavMetadata(config.getBottomNav()));
 
         List<TeamPortfolioConfigDto.ComponentEnvelope> allComponents = allSourceComponents(config);
@@ -211,6 +224,16 @@ public class TeamPortfolioConfigValidator {
             TeamPortfolioComponentContext context
     ) {
         TeamPortfolioConfigDto validated = normalizeForDraft(normalizedDraftConfig, null, context);
+        PortfolioBackgroundAudioSupport.validateForPublish(validated.getBackgroundAudio());
+        for (var location : TeamPortfolioComponentTraversal.listComponentLocations(validated)) {
+            var component = location.component();
+            if (component == null || !Boolean.TRUE.equals(component.getEnabled())) { continue; }
+            if (TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode().equals(component.getComponentType())) {
+                PortfolioContactInfoConfigSupport.validateForPublish(component.getConfig());
+            } else if (TeamPortfolioComponentTypeDict.TEXT_GRID.getCode().equals(component.getComponentType())) {
+                PortfolioTextGridConfigNormalizer.validateForPublish(component.getConfig());
+            }
+        }
         if (!Boolean.TRUE.equals(validated.getBottomNav().getEnabled())) {
             return validated;
         }
@@ -449,6 +472,8 @@ public class TeamPortfolioConfigValidator {
     ) {
         JSONObject config = componentConfig == null ? new JSONObject() : componentConfig;
         return switch (componentType) {
+            case TEXT_GRID -> new JSONObject(PortfolioTextGridConfigNormalizer.normalize(config));
+            case CONTACT_INFO -> new JSONObject(PortfolioContactInfoConfigSupport.normalize(config));
             case TEAM_PROFILE -> teamProfileValidator.normalizeAndValidate(config, context);
             case CAROUSEL -> carouselValidator.normalizeAndValidate(config, context);
             case SINGLE_WORK -> singleWorkValidator.normalizeAndValidate(config, context);
@@ -456,6 +481,7 @@ public class TeamPortfolioConfigValidator {
             case MEMBER_PORTFOLIO_GRID -> gridValidator.normalizeAndValidate(config, context);
             case MEMBER_PORTFOLIO_LIST -> listValidator.normalizeAndValidate(config, context);
             case TEXT_SECTION -> textValidator.normalizeAndValidate(config, context);
+            case STRUCTURED_TEXT_SECTION -> structuredTextValidator.normalizeAndValidate(config, context);
             case SCHEDULE_QUERY -> scheduleValidator.normalizeAndValidate(config, context);
             case CONTACT_FORM -> contactValidator.normalizeAndValidate(config, context);
             case QR_CONTACT -> qrValidator.normalizeAndValidate(config, context);

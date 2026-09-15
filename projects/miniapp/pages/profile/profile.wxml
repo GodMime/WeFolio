@@ -60,6 +60,14 @@
             </view>
             <textarea class="input textarea" value="{{form.intro}}" data-field="intro" bindinput="handleInput" maxlength="500" auto-height />
           </view>
+          <view class="form-row">
+            <view class="field-heading"><view class="label">联系手机</view><view class="field-limit">{{fieldCounters.contactPhone}}</view></view>
+            <input class="input" value="{{form.contactPhone}}" data-field="contactPhone" bindinput="handleInput" maxlength="64" placeholder="填写联系手机" />
+          </view>
+          <view class="form-row">
+            <view class="field-heading"><view class="label">联系微信</view><view class="field-limit">{{fieldCounters.contactWechat}}</view></view>
+            <input class="input" value="{{form.contactWechat}}" data-field="contactWechat" bindinput="handleInput" maxlength="128" placeholder="填写联系微信" />
+          </view>
           <view class="form-row qr-form-row">
             <view class="qr-heading">
               <view class="section-title">微信二维码</view>

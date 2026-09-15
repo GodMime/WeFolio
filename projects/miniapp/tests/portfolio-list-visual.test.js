@@ -22,6 +22,42 @@ const styleFiles = [
 ]
 const FORMAL_PORTFOLIO_STYLE_FILE = 'pages/portfolios/portfolios.wxss'
 
+test('portfolio skeleton preserves card geometry and contains no interactive or remote content', () => {
+  const wxml = read('pages/portfolios/portfolios.wxml')
+  const wxss = read(FORMAL_PORTFOLIO_STYLE_FILE)
+  const template = wxml.match(/<template name="portfolio-loading-skeleton">([\s\S]*?)<\/template>/)[1]
+
+  assert.doesNotMatch(template, /<button|<image|bindtap|catchtap|https?:\/\//)
+  assert.match(template, /aria-hidden="true"/)
+  assert.match(readRule(wxss, '.portfolio-loading-skeleton'), /pointer-events:\s*none/)
+
+  // 比较骨架与真实卡片的外尺寸，防止后续单独调样式导致载入时跳动。
+  for (const [skeleton, content, properties] of [
+    ['.portfolio-skeleton-row', '.portfolio-item-card', ['min-height', 'padding', 'gap', 'border-radius']],
+    ['.portfolio-skeleton-cover', '.portfolio-cover', ['width', 'height', 'border-radius']]
+  ]) {
+    for (const property of properties) {
+      const rule = new RegExp(`(?:^|;)\\s*${property}:\\s*([^;]+)`)
+      assert.equal(readRule(wxss, skeleton).match(rule)[1], readRule(wxss, content).match(rule)[1])
+    }
+  }
+})
+
+test('portfolio loading placeholders and errors never replace an already loaded list', () => {
+  const wxml = read('pages/portfolios/portfolios.wxml')
+
+  for (const [loading, loaded, error, refreshing] of [
+    ['loading', 'loaded', 'errorMessage', 'pullDownRefreshing'],
+    ['teamLoading', 'teamLoaded', 'teamErrorMessage', 'teamPullDownRefreshing']
+  ]) {
+    assert.match(wxml, new RegExp(`<template wx:if="\\{\\{${loading} && !${loaded}\\}\\}" is="portfolio-loading-skeleton"`))
+    assert.match(wxml, new RegExp(`wx:elif="\\{\\{${error} && !${loaded}\\}\\}" class="inline-state error"`))
+    assert.match(wxml, new RegExp(`<view wx:if="\\{\\{${loaded} && ${error}\\}\\}" class="refresh-error"`))
+    assert.match(wxml, new RegExp(`wx:if="\\{\\{!${loaded}\\}\\}"[\\s\\S]*?class="summary-skeleton"`))
+    assert.match(wxml, new RegExp(`wx:if="\\{\\{${loading} && !${refreshing}\\}\\}" class="portfolio-loading-spinner summary-refresh-spinner"`))
+  }
+})
+
 test('mock portfolio scroll viewport occupies the remaining page height on device', () => {
   const wxss = read('pages/mock/styles/portfolios.wxss')
   const scrollRule = readRule(wxss, '.portfolio-scroll')
@@ -160,9 +196,17 @@ test('bottom navigation uses the Travel SVG icons and exact proportions', () => 
   ;['schedule', 'work', 'portfolio', 'mine'].forEach((icon) => {
     const inactiveSvg = read(`assets/system/tabbar/${icon}.svg`)
     const activeSvg = read(`assets/system/tabbar/${icon}-active.svg`)
-    assert.doesNotMatch(inactiveSvg, /#8B96A3|#B88A44|#212529|#FFFFFF/i)
+    assert.doesNotMatch(inactiveSvg, /#8B96A3|#B88A44|#212529/i)
     assert.match(inactiveSvg, /#868E96/i)
-    assert.doesNotMatch(activeSvg, /#8B96A3|#B88A44|#212529|#868E96/i)
+    assert.doesNotMatch(activeSvg, /#8B96A3|#B88A44|#868E96/i)
     assert.match(activeSvg, /#FFFFFF/i)
+    if (icon === 'work') {
+      // 播放标记使用反差色，避免与右下角方框同色而不可见。
+      assert.match(inactiveSvg, /<path\b[^>]*fill="#FFFFFF"/i)
+      assert.match(activeSvg, /<path\b[^>]*fill="#212529"/i)
+    } else {
+      assert.doesNotMatch(inactiveSvg, /#FFFFFF/i)
+      assert.doesNotMatch(activeSvg, /#212529/i)
+    }
   })
 })

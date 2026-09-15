@@ -1,6 +1,9 @@
 package com.jxc.wefolio.service.teamportfolio.component.singlework;
 
+import java.util.Map;
+
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport;
 import lombok.Data;
 
 /**
@@ -21,6 +24,11 @@ public class TeamSingleWorkComponentConfig {
     /** 是否展示作品说明。 */
     private Boolean showDescription;
 
+    /** 打开方式。 */
+    private String openMode;
+    /** 独立详情展示开关。 */
+    private Map<String, Object> detailOptions;
+
     /**
      * 转换为严格白名单配置。
      *
@@ -32,6 +40,8 @@ public class TeamSingleWorkComponentConfig {
         config.put("workId", workId);
         config.put("showTitle", showTitle);
         config.put("showDescription", showDescription);
+        config.put(PortfolioComponentDisplayOptionsSupport.OPEN_MODE, openMode);
+        config.put(PortfolioComponentDisplayOptionsSupport.DETAIL_OPTIONS, detailOptions);
         return config;
     }
 }

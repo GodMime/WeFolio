@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio.component.singlework;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.JoinStatusDict;
 import com.jxc.wefolio.dict.MediaTypeDict;
@@ -15,6 +16,7 @@ import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.message.TeamPortfolioMessage;
+import com.jxc.wefolio.message.PortfolioMessage;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -51,8 +53,20 @@ public class TeamSingleWorkComponentValidator {
      */
     public JSONObject normalizeAndValidate(JSONObject config, TeamPortfolioComponentContext context) {
         TeamSingleWorkComponentConfig normalized = parseConfig(config);
-        validateResources(normalized, context);
+        validateResources(normalized, context, false);
         return normalized.toJsonObject();
+    }
+
+    /** 背景音频复用成员授权和作品状态检查，不扩大正文单作品组件的媒体范围。 */
+    public void validateAudio(Long workId, TeamPortfolioComponentContext context) {
+        WorkEntity work = workEntityMapper.selectById(workId);
+        if (work == null) {
+            throw new BusinessException(PortfolioMessage.BACKGROUND_AUDIO_UNAVAILABLE);
+        }
+        TeamSingleWorkComponentConfig config = new TeamSingleWorkComponentConfig();
+        config.setMemberUserId(work.getUserId());
+        config.setWorkId(workId);
+        validateResources(config, context, true);
     }
 
     /**
@@ -69,6 +83,8 @@ public class TeamSingleWorkComponentValidator {
         normalized.setWorkId(parsePositiveLong(config.get("workId")));
         normalized.setShowTitle(parseBoolean(config.get("showTitle"), true));
         normalized.setShowDescription(parseBoolean(config.get("showDescription"), false));
+        normalized.setOpenMode(PortfolioComponentDisplayOptionsSupport.openMode(config));
+        normalized.setDetailOptions(PortfolioComponentDisplayOptionsSupport.detailOptions(config));
         return normalized;
     }
 
@@ -77,7 +93,8 @@ public class TeamSingleWorkComponentValidator {
      */
     private void validateResources(
             TeamSingleWorkComponentConfig config,
-            TeamPortfolioComponentContext context
+            TeamPortfolioComponentContext context,
+            boolean audio
     ) {
         List<TeamMemberEntity> memberships = teamMemberEntityMapper.selectList(
                 Wrappers.lambdaQuery(TeamMemberEntity.class)
@@ -104,7 +121,7 @@ public class TeamSingleWorkComponentValidator {
                 .filter(item -> item != null && config.getWorkId().equals(item.getId()))
                 .findFirst()
                 .orElse(null);
-        if (!isUsableWork(work, config.getMemberUserId())) {
+        if (!isUsableWork(work, config.getMemberUserId(), audio)) {
             throw new BusinessException(TeamPortfolioMessage.SINGLE_WORK_UNAVAILABLE);
         }
     }
@@ -112,14 +129,15 @@ public class TeamSingleWorkComponentValidator {
     /**
      * 判断作品是否符合单个作品展示要求。
      */
-    private boolean isUsableWork(WorkEntity work, Long memberUserId) {
+    private boolean isUsableWork(WorkEntity work, Long memberUserId, boolean audio) {
         return work != null
                 && memberUserId.equals(work.getUserId())
                 && WorkStatusDict.ACTIVE.getCode().equals(work.getStatus())
                 && WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus())
-                && (MediaTypeDict.IMAGE.getCode().equals(work.getMediaType())
+                && (audio ? MediaTypeDict.AUDIO.getCode().equals(work.getMediaType())
+                : (MediaTypeDict.IMAGE.getCode().equals(work.getMediaType())
                 || MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())
-                || MediaTypeDict.ANIMATION.getCode().equals(work.getMediaType()));
+                || MediaTypeDict.ANIMATION.getCode().equals(work.getMediaType())));
     }
 
     /**

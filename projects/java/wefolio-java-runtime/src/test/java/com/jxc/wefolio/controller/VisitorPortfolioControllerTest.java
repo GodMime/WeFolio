@@ -23,8 +23,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.boot.test.system.CapturedOutput;
-import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -47,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 访客作品集控制器测试 — 固定访客端接口路径和访问注解。
  */
-@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
+@ExtendWith(MockitoExtension.class)
 class VisitorPortfolioControllerTest {
 
     /** 访客作品集服务模拟 */
@@ -163,9 +161,9 @@ class VisitorPortfolioControllerTest {
                 .isEmpty();
     }
 
-    /** 旧留资入口必须继续委派旧方法并打印弃用告警。 */
+    /** 旧留资入口必须继续委派旧方法。 */
     @Test
-    void legacyContactLeadShouldKeepDeprecatedWarning(CapturedOutput output) {
+    void legacyContactLeadShouldKeepLegacyDelegation() {
         VisitorPortfolioController controller =
                 new VisitorPortfolioController(visitorPortfolioService, contactLeadService);
         ContactLeadSubmitRequest request = new ContactLeadSubmitRequest();
@@ -178,8 +176,6 @@ class VisitorPortfolioControllerTest {
         assertThat(actual.getData()).isSameAs(response);
         verify(contactLeadService).submit("PF001", request);
         verify(contactLeadService, never()).submitV2(anyString(), any());
-        assertThat(output).contains("访客调用已弃用的联系线索接口")
-                .contains("shareCode=PF001");
     }
 
     /** 计费业务故障必须返回 400 失败响应。 */

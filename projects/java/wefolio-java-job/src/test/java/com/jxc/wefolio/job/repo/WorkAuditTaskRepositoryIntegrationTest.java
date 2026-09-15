@@ -28,6 +28,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class WorkAuditTaskRepositoryIntegrationTest {
 
+    /** 音频复用异步提交、查询及过期恢复条件，不掉出原队列。 */
+    @Test
+    void audioShouldReuseAsyncTaskQueriesAndClaims() {
+        insertWork(11L, "AUDITING", 1, 0L);
+        insertVideoTask(101L, 11L, "SUBMITTING", 1, 0, NOW.minusMinutes(1), 1);
+        jdbcTemplate.update("UPDATE wf_work_audit_task SET media_type = 'AUDIO' WHERE id = 101");
+        assertThat(repository.findRetryableExpiredVideoSubmitTasks(20, 3, NOW))
+                .extracting(WorkAuditTaskEntity::getId).containsExactly(101L);
+        assertThat(repository.claimExpiredVideoSubmit(101L, "audio-owner", NOW, NOW.plusMinutes(5), 3)).isTrue();
+        assertThat(repository.markVideoSubmitted(101L, "audio-owner", "audio-job", "{}")).isTrue();
+        assertThat(repository.findQueryableVideoTasks(20, 120, NOW.plusMinutes(10)))
+                .extracting(WorkAuditTaskEntity::getId).containsExactly(101L);
+        assertThat(repository.claimVideoQuery(101L, "query-owner", NOW.plusMinutes(10), NOW.plusMinutes(15), 120)).isTrue();
+    }
+
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 13, 12, 0);
 
     private JdbcTemplate jdbcTemplate;

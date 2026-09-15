@@ -9,6 +9,8 @@ import com.jxc.wefolio.annotation.SystemAccess;
 import com.jxc.wefolio.annotation.TimelineAnonymousAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.controller.VisitActivitySessionController;
+import com.jxc.wefolio.dto.VisitActivityUpdateRequest;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.exception.AuthenticationRequiredException;
@@ -360,6 +362,29 @@ class AuthAspectTest {
     private void detachLogAppender(ListAppender<ILoggingEvent> appender) {
         Logger logger = (Logger) LoggerFactory.getLogger(AuthAspect.class);
         logger.detachAppender(appender);
+    }
+
+    /** 新活动接口允许匹配的朋友圈作用域，并拒绝个人令牌用于团队路径及反向使用。 */
+    @Test
+    void activityEndpointsEnforcePersonalAndTeamAnonymousScopes() throws Throwable {
+        for (String type : List.of("PERSONAL", "TEAM")) {
+            MockHttpServletRequest request = new MockHttpServletRequest();request.setMethod("PUT");
+            request.setRequestURI("/api/visitor/" + (type.equals("PERSONAL") ? "portfolios" : "team-portfolios")
+                    + "/PF001/visit-sessions/1/activity");
+            request.addHeader("Authorization", "Bearer activity-token");
+            request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Map.of("shareCode", "PF001", "sessionId", "1"));
+            RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+            Method method = VisitActivitySessionController.class.getMethod(type.equals("PERSONAL") ? "personal" : "team",
+                    String.class, Long.class, VisitActivityUpdateRequest.class);
+            when(joinPoint.getSignature()).thenReturn(methodSignature);when(methodSignature.getMethod()).thenReturn(method);
+            when(visitorAuthTokenService.resolveAuthenticatedVisitor("Bearer activity-token"))
+                    .thenReturn(Optional.of(timelineAnonymousVisitorToken(type + ":PF001")));
+            when(joinPoint.proceed()).thenReturn(Response.success(0L));
+            assertThat(aspect().authenticate(joinPoint)).isInstanceOf(Response.class);
+            when(visitorAuthTokenService.resolveAuthenticatedVisitor("Bearer activity-token"))
+                    .thenReturn(Optional.of(timelineAnonymousVisitorToken((type.equals("PERSONAL") ? "TEAM" : "PERSONAL") + ":PF001")));
+            assertThatThrownBy(() -> aspect().authenticate(joinPoint)).isInstanceOf(AuthenticationRequiredException.class);
+        }
     }
 
     private void setRequest(String authorization) {

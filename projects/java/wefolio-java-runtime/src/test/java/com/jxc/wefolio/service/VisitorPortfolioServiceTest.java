@@ -3,6 +3,7 @@ package com.jxc.wefolio.service;
 import com.jxc.wefolio.common.auth.VisitorContext;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
+import com.jxc.wefolio.dict.PortfolioTypeDict;
 import com.jxc.wefolio.dict.BillingWindowScopeDict;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
@@ -25,6 +26,8 @@ import com.jxc.wefolio.entity.ScheduleEntity;
 import com.jxc.wefolio.entity.ScheduleQueryRecordEntity;
 import com.jxc.wefolio.entity.SlotDefinitionEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.VisitActivitySessionEntity;
+import com.jxc.wefolio.dto.VisitActivityTrackingDto;
 import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
@@ -59,6 +62,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -1026,6 +1030,37 @@ class VisitorPortfolioServiceTest {
         verify(portfolioVisitService, never()).recordEvent(any(), any(Long.class), any());
     }
 
+    /** 新活动会话应用边界。 */
+    @Mock
+    private VisitActivitySessionApplicationService activityService;
+
+    /** 新协议返回会话恢复基准；本人自访不会创建采集会话。 */
+    @Test
+    void trackedOpenReturnsSessionBaselineAndOwnerSkipsTracking() {
+        PortfolioEntity portfolio = publishedPortfolio();
+        VisitorEntity visitor = new VisitorEntity();visitor.setId(1024L);visitor.setVisitorKey("visitor-key");visitor.setOpenid("openid");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolio);
+        when(visitorService.resolveForOpen(eq("wx-code"), isNull(), eq("PERSONAL:88"), any()))
+                .thenReturn(new VisitorService.VisitorSession(visitor, false));
+        VisitRecordEntity record = new VisitRecordEntity();record.setId(33L);
+        VisitActivitySessionEntity session = new VisitActivitySessionEntity();session.setId(77L);session.setActiveDurationMs(45000L);
+        VisitorPortfolioOpenRequest request = new VisitorPortfolioOpenRequest();request.setLoginCode("wx-code");
+        request.setIdempotencyKey("open-key");VisitActivityTrackingDto tracking = new VisitActivityTrackingDto();
+        tracking.setVersion(1);tracking.setClientSessionKey("client-key");request.setTracking(tracking);
+        when(activityService.open(eq(portfolio), eq(PortfolioTypeDict.PERSONAL.getCode()), eq(1024L), eq("visitor-key"),
+                isNull(),eq("open-key"),eq(tracking))).thenReturn(
+                    new VisitActivitySessionTransactionService.OpenResult(record,session));
+        var response = service().openPortfolio("PF001",request);
+        assertThat(response.getTrackingSessionId()).isEqualTo(77L);
+        assertThat(response.getTrackingActiveDurationMs()).isEqualTo(45000L);
+        verifyNoInteractions(portfolioVisitService);
+        clearInvocations(activityService);
+        when(ownerSelfVisitService.isOwnerSelfVisitor(eq(7L),eq("openid"),eq(88L),eq(1024L),any())).thenReturn(true);
+        var ownerResponse = service().openPortfolio("PF001",request);
+        assertThat(ownerResponse.getTrackingSessionId()).isNull();
+        verifyNoInteractions(activityService);
+    }
+
     private VisitorPortfolioService service() {
         return new VisitorPortfolioService(
                 portfolioEntityMapper,
@@ -1039,7 +1074,8 @@ class VisitorPortfolioServiceTest {
                 ownerSelfVisitService,
                 pointBalanceGateService,
                 pointBillingWindowService,
-                performanceLogger()
+                performanceLogger(),
+                activityService
         );
     }
 

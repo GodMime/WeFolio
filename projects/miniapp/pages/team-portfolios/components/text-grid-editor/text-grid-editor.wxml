@@ -1,0 +1,67 @@
+<view class="grid-mask {{visible ? 'is-visible' : ''}}" catchtap="handleCancel"><view class="grid-panel" catchtap="noop">
+<view class="grid-header"><text>文字网格</text><text class="grid-meta">{{count}} / 2000 字</text></view>
+<view class="grid-tabs"><view wx:for="{{tabs}}" wx:key="value" class="grid-tab {{tab === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="handleTab" aria-role="button" aria-label="{{item.label}}">{{item.label}}<view wx:if="{{tab === item.value}}" class="grid-tab-indicator"></view></view></view>
+<scroll-view class="grid-scroll" scroll-y type="list" scroll-top="{{scrollTop}}" bindscroll="handleScroll"><view class="grid-body">
+<view wx:if="{{tab === 'layout'}}" class="grid-options"><view class="grid-field"><text>行数</text><block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{draft.rows}}" data-field="rows" bindblur="handleResize" /></block></view><view class="grid-field"><text>列数</text><block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{draft.columns}}" data-field="columns" bindblur="handleResize" /></block></view></view>
+<view wx:if="{{tab !== 'appearance'}}" class="grid-selector" style="height:{{draft.rows * 90}}rpx"><view wx:for="{{cells}}" wx:key="cellKey" class="grid-selector-cell {{item.selected ? 'selected' : ''}}" style="{{item.style}}" data-index="{{index}}" bindtap="handleCell">{{item.label}}</view></view>
+<block wx:if="{{tab === 'layout'}}"><view class="grid-meta">选择连续完整的矩形区域后合并。最多 8 行、5 列。</view><view class="grid-options grid-layout-actions"><button class="grid-button" bindtap="handleMerge" disabled="{{selectedKeys.length < 2}}">合并</button><button class="grid-button" bindtap="handleSplit" disabled="{{!canSplitCell}}">拆分当前格</button><button class="grid-button" bindtap="handleUndo" disabled="{{!undoCount && !hasInvalidDraft}}">撤销 {{undoCount}}</button></view><view class="grid-label">列宽比例</view><view wx:for="{{draft.columnWeights}}" wx:key="index" class="grid-field"><text>第 {{index + 1}} 列（1–4）</text><block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{item}}" data-field="columnWeights" data-index="{{index}}" bindblur="handleArray" /></block></view></block>
+<block wx:if="{{tab === 'content'}}"><view class="grid-label">{{cell.row + 1}} 行 {{cell.column + 1}} 列 · 段落</view><view class="grid-options"><view wx:for="{{cell.blocks}}" wx:key="blockKey" class="grid-option {{blockIndex === index ? 'selected' : ''}}" data-index="{{index}}" bindtap="handleSelectBlock">第 {{index + 1}} 段</view><view class="grid-content-actions"><button class="grid-button" bindtap="handleAddBlock" disabled="{{cell.blocks.length >= 8}}">＋ 段落</button><button class="grid-button" bindtap="handleRemoveBlock">删除当前段落</button></view></view>
+<view class="grid-label">文字片段 · 每个片段可单独设置样式</view><view class="grid-options"><view wx:for="{{block.runs}}" wx:key="runKey" class="grid-option {{runIndex === index ? 'selected' : ''}}" data-index="{{index}}" bindtap="handleSelectRun">片段 {{index + 1}}</view><view class="grid-content-actions"><button class="grid-button" bindtap="handleAddRun" disabled="{{block.runs.length >= 8}}">＋ 片段</button><button class="grid-button" bindtap="handleRemoveRun">删除当前片段</button></view></view>
+<textarea class="grid-textarea" value="{{run.text}}" maxlength="-1" data-field="text" bindinput="handleField" placeholder="填写文字，例如 10；新增片段填写 年" />
+<view class="grid-field"><text>字号（{{rpxFields.fontSizeRpx.min}}–{{rpxFields.fontSizeRpx.max}} rpx）</text><view class="grid-stepper">
+  <button class="grid-button grid-step-button" data-field="fontSizeRpx" data-delta="{{-rpxStep}}" bindtap="handleRpxStep" disabled="{{run.fontSizeRpx <= rpxFields.fontSizeRpx.min}}" aria-label="减小字号">−</button>
+  <block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{run.fontSizeRpx}}" data-field="fontSizeRpx" bindblur="handleField" /></block>
+  <button class="grid-button grid-step-button" data-field="fontSizeRpx" data-delta="{{rpxStep}}" bindtap="handleRpxStep" disabled="{{run.fontSizeRpx >= rpxFields.fontSizeRpx.max}}" aria-label="增大字号">＋</button>
+</view></view>
+<view class="grid-label">字重</view><view class="grid-options"><view wx:for="{{weights}}" wx:key="value" class="grid-option {{run.fontWeight === item.value ? 'selected' : ''}}" data-field="fontWeight" data-value="{{item.value}}" bindtap="handleField">{{item.label}}</view></view>
+<view class="grid-label">字体</view><view class="grid-options"><view wx:for="{{fonts}}" wx:key="value" class="grid-option {{run.fontFamily === item.value ? 'selected' : ''}}" data-field="fontFamily" data-value="{{item.value}}" bindtap="handleField">{{item.label}}</view></view>
+<view class="grid-label">文字颜色</view><text-color-editor color="{{run.color}}" active="{{visible && tab === 'content'}}" bindchange="handleRunColor" />
+<view class="grid-label">段落对齐</view><view class="grid-options"><view wx:for="{{alignments}}" wx:key="value" class="grid-option {{block.alignment === item.value ? 'selected' : ''}}" data-scope="block" data-field="alignment" data-value="{{item.value}}" bindtap="handleField">{{item.label}}</view></view>
+<view class="grid-field"><text>段落行间距（倍）</text><view class="grid-stepper">
+  <button class="grid-button grid-step-button" data-delta="{{-lineHeightEditor.step}}" bindtap="handleLineHeightStep" disabled="{{lineHeightEditor.decreaseDisabled}}" aria-label="减小段落行间距">−</button>
+  <block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input grid-line-height-input" type="digit" value="{{lineHeightEditor.value}}" placeholder="{{lineHeightEditor.placeholder}}" bindinput="handleLineHeightInput" aria-label="段落行间距" /></block>
+  <button class="grid-button grid-step-button" data-delta="{{lineHeightEditor.step}}" bindtap="handleLineHeightStep" disabled="{{lineHeightEditor.increaseDisabled}}" aria-label="增大段落行间距">＋</button>
+</view></view>
+<view class="grid-meta">行间距范围 {{lineHeightEditor.min}}–{{lineHeightEditor.max}} 倍，每次调节 {{lineHeightEditor.step}}。</view>
+<view class="grid-field"><text>段前间距（rpx）</text><view class="grid-stepper">
+  <button class="grid-button grid-step-button" data-field="marginTopRpx" data-delta="{{-rpxStep}}" bindtap="handleRpxStep" disabled="{{block.marginTopRpx <= rpxFields.marginTopRpx.min}}" aria-label="减少段前间距">−</button>
+  <block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{block.marginTopRpx}}" data-scope="block" data-field="marginTopRpx" bindblur="handleField" /></block>
+  <button class="grid-button grid-step-button" data-field="marginTopRpx" data-delta="{{rpxStep}}" bindtap="handleRpxStep" disabled="{{block.marginTopRpx >= rpxFields.marginTopRpx.max}}" aria-label="增加段前间距">＋</button>
+</view></view>
+<view class="grid-field"><text>段后间距（rpx）</text><view class="grid-stepper">
+  <button class="grid-button grid-step-button" data-field="marginBottomRpx" data-delta="{{-rpxStep}}" bindtap="handleRpxStep" disabled="{{block.marginBottomRpx <= rpxFields.marginBottomRpx.min}}" aria-label="减少段后间距">−</button>
+  <block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{block.marginBottomRpx}}" data-scope="block" data-field="marginBottomRpx" bindblur="handleField" /></block>
+  <button class="grid-button grid-step-button" data-field="marginBottomRpx" data-delta="{{rpxStep}}" bindtap="handleRpxStep" disabled="{{block.marginBottomRpx >= rpxFields.marginBottomRpx.max}}" aria-label="增加段后间距">＋</button>
+</view></view>
+<view class="grid-label">格内垂直对齐</view><view class="grid-options"><view wx:for="{{verticals}}" wx:key="value" class="grid-option {{cell.verticalAlignment === item.value ? 'selected' : ''}}" data-scope="cell" data-field="verticalAlignment" data-value="{{item.value}}" bindtap="handleField">{{item.label}}</view></view></block>
+<block wx:if="{{tab === 'appearance'}}">
+<view class="grid-label">外侧留白</view>
+<view wx:for="{{outerSpacing}}" wx:key="field" class="grid-field"><text>{{item.label}}（0–96 rpx）</text><view class="grid-stepper">
+  <button class="grid-button grid-step-button" data-field="{{item.field}}" data-delta="{{-rpxStep}}" bindtap="handleRpxStep" disabled="{{draft[item.field] <= rpxFields[item.field].min}}" aria-label="减少{{item.label}}">−</button>
+  <block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{draft[item.field]}}" data-field="{{item.field}}" bindblur="handleAppearance" /></block>
+  <button class="grid-button grid-step-button" data-field="{{item.field}}" data-delta="{{rpxStep}}" bindtap="handleRpxStep" disabled="{{draft[item.field] >= rpxFields[item.field].max}}" aria-label="增加{{item.label}}">＋</button>
+</view></view>
+<view class="grid-label">格子外观</view>
+<view wx:for="{{appearance}}" wx:key="field" class="grid-field"><text>{{item.label}}（0–48 rpx）</text><view class="grid-stepper">
+  <button class="grid-button grid-step-button" data-field="{{item.field}}" data-delta="{{-rpxStep}}" bindtap="handleRpxStep" disabled="{{draft[item.field] <= rpxFields[item.field].min}}" aria-label="减少{{item.label}}">−</button>
+  <block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{draft[item.field]}}" data-field="{{item.field}}" bindblur="handleAppearance" /></block>
+  <button class="grid-button grid-step-button" data-field="{{item.field}}" data-delta="{{rpxStep}}" bindtap="handleRpxStep" disabled="{{draft[item.field] >= rpxFields[item.field].max}}" aria-label="增加{{item.label}}">＋</button>
+</view></view><view class="grid-field"><text>细边框</text><switch checked="{{draft.cellBorder}}" data-field="cellBorder" bindchange="handleAppearance" color="#17202a" /></view>
+<view class="grid-border-settings {{draft.cellBorder ? 'is-visible' : ''}}" aria-hidden="{{!draft.cellBorder}}">
+  <view class="grid-field"><text>线框宽度（1–12 rpx）</text><view class="grid-stepper">
+    <button class="grid-button grid-step-button" data-field="cellBorderWidthRpx" data-delta="{{-rpxStep}}" bindtap="handleRpxStep" disabled="{{!draft.cellBorder || draft.cellBorderWidthRpx <= rpxFields.cellBorderWidthRpx.min}}" aria-label="减小线框宽度">−</button>
+    <block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{draft.cellBorderWidthRpx}}" bindblur="handleBorderWidth" disabled="{{!draft.cellBorder}}" aria-label="线框宽度" /></block>
+    <button class="grid-button grid-step-button" data-field="cellBorderWidthRpx" data-delta="{{rpxStep}}" bindtap="handleRpxStep" disabled="{{!draft.cellBorder || draft.cellBorderWidthRpx >= rpxFields.cellBorderWidthRpx.max}}" aria-label="增大线框宽度">＋</button>
+  </view></view>
+  <slider class="grid-border-width-slider" min="1" max="12" step="1" value="{{draft.cellBorderWidthRpx}}" bindchange="handleBorderWidth" disabled="{{!draft.cellBorder}}" activeColor="#212529" backgroundColor="#E9ECEF" block-color="#212529" block-size="20" />
+  <view class="grid-label">线框颜色</view>
+  <text-color-editor inline="{{true}}" palette="border" label="线框颜色" color="{{borderColor}}" active="{{visible && tab === 'appearance' && draft.cellBorder}}" bindchange="handleBorderColor" />
+</view>
+<view class="grid-label">格子底色</view><text-color-editor inline="{{true}}" label="格子底色" black-color="#000000" color="{{draft.cellBackground}}" active="{{visible && tab === 'appearance'}}" bindchange="handleBackground" /><view class="grid-label">每行最小高度（80–600 rpx）</view>
+<view wx:for="{{draft.rowMinHeightsRpx}}" wx:key="index" class="grid-field"><text>第 {{index + 1}} 行</text><view class="grid-stepper">
+  <button class="grid-button grid-step-button" data-field="rowMinHeightsRpx" data-index="{{index}}" data-delta="{{-rpxStep}}" bindtap="handleRpxStep" disabled="{{item <= rpxFields.rowMinHeightsRpx.min}}" aria-label="减小第{{index + 1}}行最小高度">−</button>
+  <block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{item}}" data-field="rowMinHeightsRpx" data-index="{{index}}" bindblur="handleArray" /></block>
+  <button class="grid-button grid-step-button" data-field="rowMinHeightsRpx" data-index="{{index}}" data-delta="{{rpxStep}}" bindtap="handleRpxStep" disabled="{{item >= rpxFields.rowMinHeightsRpx.max}}" aria-label="增大第{{index + 1}}行最小高度">＋</button>
+</view></view></block>
+<view wx:if="{{error}}" class="grid-error">{{error}}</view><view class="grid-label">效果预览</view><text-grid config="{{draft}}" theme-mode="{{previewThemeMode}}" /></view></scroll-view>
+<view class="grid-actions"><button class="grid-button grid-action-button" bindtap="handleCancel">取消</button><button class="grid-button grid-action-button primary" bindtap="handleConfirm">完成</button></view></view></view>

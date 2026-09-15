@@ -1,4 +1,4 @@
-<view class="page-shell visitor-portfolio-page portfolio-theme-{{portfolio.themeMode}}" style="background-color: {{portfolio.style.backgroundColor}};">
+<view class="page-shell visitor-portfolio-page portfolio-theme-{{portfolio.themeMode}}" style="background-color: {{portfolio.style.backgroundColor}}; --portfolio-component-spacing: {{portfolio.style.componentSpacingRpx}}rpx;">
   <navigation-bar title="{{portfolio.title || '个人作品集'}}" back="{{showNavigationBack && !timelineGuideVisible}}" color="{{portfolio.themeMode === 'dark' ? '#f8f9fa' : '#212529'}}" background="{{portfolio.style.backgroundColor}}"></navigation-bar>
 
   <scroll-view scroll-y scroll-top="{{portfolioScrollTop}}" class="visitor-scroll">
@@ -9,7 +9,7 @@
       </block>
 
       <block wx:elif="{{item.componentType === 'VIDEO_CAROUSEL'}}">
-        <video-carousel component-key="{{item.componentKey}}" title="{{item.title}}" works="{{item.works}}" show-title="{{item.showTitle}}" show-swipe-hint="{{item.showSwipeHint}}" theme-mode="{{portfolio.themeMode}}" bindplay="handleVideoCarouselPlay"></video-carousel>
+        <video-carousel component-key="{{item.componentKey}}" title="{{item.title}}" show-component-title="{{item.showComponentTitle}}" works="{{item.works}}" show-title="{{item.showTitle}}" show-swipe-hint="{{item.showSwipeHint}}" theme-mode="{{portfolio.themeMode}}" bindplay="handleVideoCarouselPlay" display-style="{{item.displayStyle}}" show-description="{{item.showDescription}}"></video-carousel>
       </block>
 
       <block wx:elif="{{item.componentType === 'PROFILE'}}">
@@ -50,6 +50,7 @@
 
       <block wx:elif="{{item.componentType === 'SINGLE_WORK'}}">
         <portfolio-single-work
+            open-mode="{{item.openMode}}" binddetail="handleWorkDetail"
           component-key="{{item.componentKey}}"
           work="{{item.work}}"
           show-title="{{item.showTitle}}"
@@ -59,7 +60,7 @@
           theme-mode="{{portfolio.themeMode}}"
           class="portfolio-single-work-instance"
           bindsingleworktap="handleSingleWorkTap"
-          bindvideoerror="handleSingleWorkVideoError"
+          bindvideoplay="pauseBackgroundAudio" bindvideoerror="handleSingleWorkVideoError"
         ></portfolio-single-work>
       </block>
 
@@ -94,7 +95,12 @@
       </block>
 
       <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
-        <portfolio-text-section text-section="{{item.textSection}}" theme-mode="{{portfolio.themeMode}}"></portfolio-text-section>
+        <portfolio-text-section text-section="{{item.textSection}}" background-video-paused="{{videoPreviewVisible}}" theme-mode="{{portfolio.themeMode}}"></portfolio-text-section>
+      </block>
+      <block wx:elif="{{item.componentType === 'TEXT_GRID'}}"><portfolio-text-grid config="{{item.textGrid}}" theme-mode="{{portfolio.themeMode}}" /></block>
+        <block wx:elif="{{item.componentType === 'CONTACT_INFO'}}"><portfolio-contact-info config="{{item.contactInfo}}" theme-mode="{{portfolio.themeMode}}" /></block>
+        <block wx:elif="{{item.componentType === 'STRUCTURED_TEXT_SECTION'}}">
+        <portfolio-structured-text-section background-video-paused="{{videoPreviewVisible}}" structured-text-section="{{item.structuredTextSection}}" theme-mode="{{portfolio.themeMode}}" />
       </block>
 
       <block wx:elif="{{item.componentType === 'DIVIDER'}}">
@@ -126,30 +132,6 @@
     theme-mode="{{portfolio.themeMode}}"
     bindchange="handleBottomNavChange"
   ></portfolio-bottom-nav>
-
-  <root-portal wx:if="{{videoPreviewVisible}}">
-    <view class="work-video-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
-      <view class="work-video-panel" catchtap="handleVideoPreviewPanelTap">
-        <view class="work-video-heading">
-          <view class="work-video-title">{{videoPreview.title}}</view>
-          <view class="work-video-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
-        </view>
-        <video
-          id="portfolioWorkVideo"
-          class="work-video-player"
-          src="{{videoPreview.src}}"
-          poster="{{videoPreview.poster}}"
-          controls="{{true}}"
-          autoplay="{{true}}"
-          show-fullscreen-btn="{{true}}"
-          show-center-play-btn="{{true}}"
-          enable-progress-gesture="{{true}}"
-          object-fit="contain"
-          binderror="handleVideoPreviewError"
-        ></video>
-      </view>
-    </view>
-  </root-portal>
 
   <portfolio-contact-form
     view-mode="modal"
@@ -219,4 +201,7 @@
   <root-portal wx:if="{{clipboardPromptVisible}}">
     <view class="clipboard-prompt-card portfolio-theme-{{portfolio.themeMode}}">{{clipboardPromptText}}</view>
   </root-portal>
+  <view wx:if="{{backgroundAudioResource.enabled && backgroundAudioResource.mediaUrl && !loading && !errorMessage}}" class="portfolio-background-audio" style="position: fixed; top: {{backgroundAudioTop}}px; right: 12px; z-index: 20;">
+    <background-audio-control draggable="{{true}}" anchor-top="{{backgroundAudioTop}}" display-style="{{backgroundAudioResource.displayStyle}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" bindtoggle="handleToggleBackgroundAudio" />
+  </view>
 </view>

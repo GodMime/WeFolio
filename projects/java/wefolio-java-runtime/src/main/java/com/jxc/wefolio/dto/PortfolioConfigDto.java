@@ -15,10 +15,19 @@ public class PortfolioConfigDto {
     public static final String SCHEMA_VERSION_STANDARD_PERSONAL_V1 = "standard-personal-v1";
 
     /** 当前编辑器配置能力版本 */
-    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 4;
+    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 14;
 
     /** 默认页面背景色 */
     public static final String DEFAULT_BACKGROUND_COLOR = "#FFFFFF";
+
+    /** 默认组件间距，单位 rpx。 */
+    public static final int DEFAULT_COMPONENT_SPACING_RPX = 32;
+
+    /** 组件间距下限，单位 rpx。 */
+    public static final int MIN_COMPONENT_SPACING_RPX = 0;
+
+    /** 组件间距上限，单位 rpx。 */
+    public static final int MAX_COMPONENT_SPACING_RPX = 96;
 
     /** Schema 版本 */
     private String schemaVersion;
@@ -31,6 +40,9 @@ public class PortfolioConfigDto {
 
     /** 页面样式 */
     private Style style;
+
+    /** 全局背景音频；请求缺省保持 null，供旧客户端兼容合并判断。 */
+    private BackgroundAudioConfigDto backgroundAudio;
 
     /** 按 sortOrder 升序渲染的组件列表 */
     private List<Component> components;
@@ -62,6 +74,9 @@ public class PortfolioConfigDto {
 
         /** 页面背景色 */
         private String backgroundColor;
+
+        /** 组件间距，单位 rpx；请求缺省保持 null，由服务端兼容合并后赋默认值 32。 */
+        private Integer componentSpacingRpx;
     }
 
     /**

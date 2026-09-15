@@ -22,6 +22,9 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class ContentLimitService {
 
+    /** 本期每用户音频作品数量上限。 */
+    private static final int AUDIO_MAX_COUNT = 100;
+
     private final ContentLimitProperties contentLimitProperties;
     private final WorkEntityMapper workEntityMapper;
     private final PortfolioEntityMapper portfolioEntityMapper;
@@ -69,6 +72,9 @@ public class ContentLimitService {
     }
 
     private int resolveWorkMaxCount(String mediaType) {
+        if (MediaTypeDict.AUDIO.getCode().equals(mediaType)) {
+            return AUDIO_MAX_COUNT;
+        }
         if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
             return contentLimitProperties.getWorkImageMaxCount();
         }
@@ -82,6 +88,9 @@ public class ContentLimitService {
     }
 
     private String resolveWorkLimitMessageTemplate(String mediaType) {
+        if (MediaTypeDict.AUDIO.getCode().equals(mediaType)) {
+            return MineWorkMessage.AUDIO_WORK_COUNT_LIMIT_TEMPLATE;
+        }
         if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
             return MineWorkMessage.IMAGE_WORK_COUNT_LIMIT_TEMPLATE;
         }

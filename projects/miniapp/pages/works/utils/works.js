@@ -17,11 +17,13 @@ const WORK_TAG_PICKER_ROW_STEP = 72
 const WORK_TAG_PICKER_MAX_HEIGHT = 520
 const DEFAULT_AUDIT_STATUS = 'PENDING'
 const MAX_AUDIT_REASON_COUNT = 20
+const DEFAULT_AUDIO_COVER_URL = 'https://cdn2.we-folio.dingchenyong.top/system/default-audio-cover-v1-200kb.png'
 
 const MEDIA_TYPE_TEXT = {
   IMAGE: '图片',
   VIDEO: '视频',
-  ANIMATION: '动图'
+  ANIMATION: '动图',
+  AUDIO: '音频'
 }
 
 const AUDIT_STATUS_TEXT = {
@@ -213,7 +215,7 @@ function normalizeTag(raw = {}) {
 function normalizeWork(raw = {}) {
   const mediaType = trimText(raw.mediaType) || 'IMAGE'
   const tags = Array.isArray(raw.tags) ? raw.tags.map(normalizeTag) : []
-  const coverUrl = trimText(raw.coverUrl)
+  const coverUrl = trimText(raw.coverUrl) || (mediaType === 'AUDIO' ? DEFAULT_AUDIO_COVER_URL : '')
   const referenceCount = toNumber(raw.referenceCount)
   const aspectRatio = trimText(raw.aspectRatio)
   const auditStatus = normalizeAuditStatus(raw)
@@ -225,13 +227,14 @@ function normalizeWork(raw = {}) {
     title: trimText(raw.title) || '未命名作品',
     originalFileName: trimText(raw.originalFileName),
     mediaUrl: trimText(raw.mediaUrl),
+    mediaObjectKey: trimText(raw.mediaObjectKey),
     coverUrl,
     hasCover: Boolean(coverUrl),
     mimeType: trimText(raw.mimeType),
     fileSize: toNumber(raw.fileSize),
     fileSizeText: formatFileSize(raw.fileSize),
     durationMs: toNumber(raw.durationMs),
-    durationText: mediaType === 'VIDEO' ? formatDuration(raw.durationMs) : '',
+    durationText: mediaType === 'VIDEO' || mediaType === 'AUDIO' ? formatDuration(raw.durationMs) : '',
     frameCount: Math.max(0, Math.floor(toNumber(raw.frameCount))),
     coverFrameNumber: Math.max(0, Math.floor(toNumber(raw.coverFrameNumber))),
     width: toNumber(raw.width),
@@ -446,6 +449,9 @@ function buildWorkUpdatePayload(form = {}) {
     title: trimText(form.title),
     description: trimText(form.description)
   }
+  if (Object.prototype.hasOwnProperty.call(form, 'audioCoverObjectKey')) {
+    payload.audioCoverObjectKey = trimText(form.audioCoverObjectKey)
+  }
   if (Object.prototype.hasOwnProperty.call(form, 'coverFrameTimeMs')) {
     const frameTimeMs = Math.max(0, Math.round(toNumber(form.coverFrameTimeMs)))
     payload.coverFrameTimeMs = frameTimeMs
@@ -560,6 +566,7 @@ function validateWorkForm(form = {}) {
 }
 
 module.exports = {
+  DEFAULT_AUDIO_COVER_URL,
   TITLE_LIMIT,
   DESCRIPTION_LIMIT,
   DEFAULT_WORK_TAG_COLOR: DEFAULT_TAG_COLOR,

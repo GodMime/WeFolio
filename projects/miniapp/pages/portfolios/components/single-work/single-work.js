@@ -1,5 +1,6 @@
 Component({
   properties: {
+    openMode: { type: String, value: 'INLINE' },
     themeMode: {
       type: String,
       value: 'light'
@@ -39,6 +40,10 @@ Component({
 
   methods: {
     handleSingleWorkTap(event) {
+      if (this.data.openMode === 'DETAIL_PAGE') {
+        this.triggerEvent('detail', { componentKey: this.data.componentKey })
+        return
+      }
       const dataset = event.currentTarget && event.currentTarget.dataset
       this.triggerEvent('singleworktap', Object.assign({
         componentKey: this.data.componentKey
@@ -50,6 +55,10 @@ Component({
         componentKey: this.data.componentKey,
         error: event.detail
       })
+    },
+
+    handleVideoPlay() {
+      this.triggerEvent('videoplay', { componentKey: this.data.componentKey })
     },
 
     handleAnimationLoadError() {

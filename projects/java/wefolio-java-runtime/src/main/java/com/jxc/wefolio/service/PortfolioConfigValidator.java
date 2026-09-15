@@ -1,5 +1,10 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
+import com.jxc.wefolio.common.PortfolioTextColorSupport;
+import com.jxc.wefolio.common.PortfolioDividerColorSupport;
+import com.jxc.wefolio.common.PortfolioBackgroundAudioSupport;
+
 import com.jxc.wefolio.common.PortfolioTextTypographySupport;
 import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.MediaTypeDict;
@@ -14,6 +19,7 @@ import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.message.PortfolioMessage;
+import com.jxc.wefolio.message.PortfolioTextMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -245,25 +251,8 @@ public class PortfolioConfigValidator {
             TEXT_SECTION_ALIGNMENT_RIGHT
     );
 
-    /** 分割线黑色 */
-    private static final String DIVIDER_COLOR_BLACK = "BLACK";
-
-    /** 分割线白色 */
-    private static final String DIVIDER_COLOR_WHITE = "WHITE";
-
     /** 分割线灰色 */
     private static final String DIVIDER_COLOR_GRAY = "GRAY";
-
-    /** 分割线透明 */
-    private static final String DIVIDER_COLOR_TRANSPARENT = "TRANSPARENT";
-
-    /** 支持的分割线颜色 */
-    private static final Set<String> DIVIDER_COLORS = Set.of(
-            DIVIDER_COLOR_BLACK,
-            DIVIDER_COLOR_WHITE,
-            DIVIDER_COLOR_GRAY,
-            DIVIDER_COLOR_TRANSPARENT
-    );
 
     /** 默认分割线高度 */
     private static final int DEFAULT_DIVIDER_HEIGHT_PX = 16;
@@ -319,8 +308,19 @@ public class PortfolioConfigValidator {
      */
     private static final List<ConfigFieldMergeStep> CONFIG_FIELD_MERGE_STEPS = List.of(
             new ConfigFieldMergeStep(2, (target, source) -> {
-                target.setStyle(source.getStyle());
+                // 独立复制该版本引入的背景色，避免后续间距合并改写请求或已有草稿。
+                PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
+                style.setBackgroundColor(source.getStyle() == null
+                        ? null : source.getStyle().getBackgroundColor());
+                target.setStyle(style);
                 target.setBottomNav(source.getBottomNav());
+            }),
+            new ConfigFieldMergeStep(12, (target, source) -> {
+                if (target.getStyle() == null) {
+                    target.setStyle(new PortfolioConfigDto.Style());
+                }
+                target.getStyle().setComponentSpacingRpx(source.getStyle() == null
+                        ? null : source.getStyle().getComponentSpacingRpx());
             })
     );
 
@@ -402,6 +402,17 @@ public class PortfolioConfigValidator {
         normalized.setEditorSchemaRevision(config.getEditorSchemaRevision());
         normalized.setShare(copyShare(config.getShare()));
         normalized.setStyle(normalizeStyle(config.getStyle()));
+        normalized.setBackgroundAudio(PortfolioBackgroundAudioSupport.normalize(config.getBackgroundAudio()));
+        Long audioWorkId = normalized.getBackgroundAudio().getWorkId();
+        if (audioWorkId != null) {
+            WorkEntity audio = workEntityMapper.selectById(audioWorkId);
+            if (audio == null || !userId.equals(audio.getUserId())
+                    || !MediaTypeDict.AUDIO.getCode().equals(audio.getMediaType())
+                    || !WorkStatusDict.ACTIVE.getCode().equals(audio.getStatus())
+                    || !WorkAuditStatusDict.PASSED.getCode().equals(audio.getAuditStatus())) {
+                throw new BusinessException(PortfolioMessage.BACKGROUND_AUDIO_UNAVAILABLE);
+            }
+        }
 
         PortfolioConfigDto.BottomNav normalizedBottomNav = normalizeBottomNavMetadata(config.getBottomNav());
         normalized.setBottomNav(normalizedBottomNav);
@@ -456,6 +467,16 @@ public class PortfolioConfigValidator {
      */
     public void validateForPublish(Long userId, PortfolioConfigDto normalizedDraftConfig) {
         PortfolioConfigDto validated = normalizeForDraft(userId, normalizedDraftConfig, null);
+        PortfolioBackgroundAudioSupport.validateForPublish(validated.getBackgroundAudio());
+        for (var location : PortfolioComponentTraversal.listComponentLocations(validated)) {
+            var component = location.component();
+            if (component == null || !Boolean.TRUE.equals(component.getEnabled())) { continue; }
+            if (PortfolioComponentTypeDict.CONTACT_INFO.getCode().equals(component.getComponentType())) {
+                PortfolioContactInfoConfigSupport.validateForPublish(component.getConfig());
+            } else if (PortfolioComponentTypeDict.TEXT_GRID.getCode().equals(component.getComponentType())) {
+                PortfolioTextGridConfigNormalizer.validateForPublish(component.getConfig());
+            }
+        }
         PortfolioConfigDto.BottomNav bottomNav = validated.getBottomNav();
         if (bottomNav == null || !Boolean.TRUE.equals(bottomNav.getEnabled())) {
             return;
@@ -475,7 +496,7 @@ public class PortfolioConfigValidator {
     /**
      * 合并新旧编辑器请求配置。
      * <p>
-     * schemaVersion、share 以本次请求为准；components 先按组件版本兼容规则与现有草稿合并。
+     * schemaVersion、share 以本次请求为准；先合并顶层版本字段和音频缺省特例，再保护组件类型及新字段。
      * editorSchemaRevision 本身：新请求用新值，旧请求保留草稿中的值。
      * 其余版本相关字段按 {@link #CONFIG_FIELD_MERGE_STEPS} 逐版本合并。
      *
@@ -487,12 +508,10 @@ public class PortfolioConfigValidator {
             PortfolioConfigDto incomingConfig,
             PortfolioConfigDto existingDraftConfig
     ) {
-        PortfolioConfigDto componentMerged = PortfolioComponentCompatibilityMerger.merge(
-                incomingConfig, existingDraftConfig);
         PortfolioConfigDto merged = new PortfolioConfigDto();
-        merged.setSchemaVersion(componentMerged.getSchemaVersion());
-        merged.setShare(componentMerged.getShare());
-        merged.setComponents(componentMerged.getComponents());
+        merged.setSchemaVersion(incomingConfig.getSchemaVersion());
+        merged.setShare(incomingConfig.getShare());
+        merged.setComponents(incomingConfig.getComponents());
 
         // editorSchemaRevision 本身：新请求用新值，缺省或显式低版本请求保留草稿中已有的新能力版本
         Integer incomingRevision = incomingConfig.getEditorSchemaRevision();
@@ -514,12 +533,19 @@ public class PortfolioConfigValidator {
                     && existingDraftConfig.getEditorSchemaRevision() >= step.introducedAtRevision();
 
             if (incomingHasFields) {
-                step.mergeFields().accept(merged, componentMerged);
+                step.mergeFields().accept(merged, incomingConfig);
             } else if (existingHasFields) {
                 step.mergeFields().accept(merged, existingDraftConfig);
             }
             // 两边都没有 → 保持 null，由后续 normalize 赋默认值
         }
+        // 音频在顶层版本字段之后按缺省保留特例处理，不受新能力版本限制。
+        merged.setBackgroundAudio(existingDraftConfig != null && incomingConfig.getBackgroundAudio() == null
+                ? existingDraftConfig.getBackgroundAudio() : incomingConfig.getBackgroundAudio());
+        Integer persistedRevision = merged.getEditorSchemaRevision();
+        merged.setEditorSchemaRevision(incomingRevision);
+        merged = PortfolioComponentCompatibilityMerger.merge(merged, existingDraftConfig);
+        merged.setEditorSchemaRevision(persistedRevision);
         return merged;
     }
 
@@ -535,6 +561,8 @@ public class PortfolioConfigValidator {
         normalized.setBackgroundColor(BACKGROUND_COLOR_PATTERN.matcher(backgroundColor).matches()
                 ? backgroundColor.toUpperCase()
                 : PortfolioConfigDto.DEFAULT_BACKGROUND_COLOR);
+        normalized.setComponentSpacingRpx(PortfolioComponentSpacingSupport.normalize(
+                style == null ? null : style.getComponentSpacingRpx()));
         return normalized;
     }
 
@@ -685,6 +713,12 @@ public class PortfolioConfigValidator {
             PortfolioConfigDto config
     ) {
         List<PortfolioReferenceEntity> references = new ArrayList<>();
+        if (config.getBackgroundAudio() != null && config.getBackgroundAudio().getWorkId() != null) {
+            PortfolioReferenceEntity audioReference = PortfolioBackgroundAudioSupport.reference(config.getBackgroundAudio());
+            audioReference.setPortfolioId(portfolioId);
+            audioReference.setConfigScope(configScope);
+            references.add(audioReference);
+        }
         for (PortfolioComponentTraversal.ComponentLocation location
                 : PortfolioComponentTraversal.listComponentLocations(config)) {
             PortfolioConfigDto.Component component = location.component();
@@ -734,6 +768,16 @@ public class PortfolioConfigValidator {
                         component,
                         componentPath
                 );
+                case TEXT_SECTION, STRUCTURED_TEXT_SECTION -> {
+                    Map<String,Object> values = component.getConfig();
+                    if (values != null && Boolean.TRUE.equals(values.get(PortfolioTextBackgroundConfigSupport.ENABLED))) {
+                        Long workId = asLong(values.get(PortfolioTextBackgroundConfigSupport.WORK_ID));
+                        if (workId != null && workId > 0) {
+                            references.add(reference(portfolioId, configScope, ReferenceTypeDict.WORK.getCode(),
+                                    workId, component, componentPath + PortfolioTextBackgroundConfigSupport.REFERENCE_PATH, 0));
+                        }
+                    }
+                }
                 case HYPERLINK -> addHyperlinkReferences(
                         references,
                         portfolioId,
@@ -782,6 +826,9 @@ public class PortfolioConfigValidator {
             ));
         }
         switch (componentType) {
+            case PROFILE -> component.setConfig(PortfolioProfileConfigSupport.normalize(component.getConfig()));
+            case CONTACT_INFO -> component.setConfig(PortfolioContactInfoConfigSupport.normalize(component.getConfig()));
+            case TEXT_GRID -> component.setConfig(PortfolioTextGridConfigNormalizer.normalize(component.getConfig()));
             case CAROUSEL -> validateCarousel(userId, component);
             case VIDEO_CAROUSEL -> validateVideoCarousel(userId, component);
             case WORK_GRID -> validateWorkDisplayGroups(userId, component, WORK_GRID_MAX_COUNT, 2);
@@ -791,7 +838,15 @@ public class PortfolioConfigValidator {
             case SCHEDULE_QUERY -> validateScheduleQuery(component);
             case QR_CONTACT -> validateQrContact(component);
             case CONTACT_FORM -> validateContactForm(component);
-            case TEXT_SECTION -> validateTextSection(component);
+            case TEXT_SECTION -> {
+                validateTextSection(component);
+                PortfolioTextBackgroundConfigSupport.apply(component.getConfig(), false, true);
+                validateTextBackground(userId, component.getConfig());
+            }
+            case STRUCTURED_TEXT_SECTION -> {
+                component.setConfig(PortfolioStructuredTextConfigSupport.normalize(component.getConfig(), false));
+                validateTextBackground(userId, component.getConfig());
+            }
             case DIVIDER -> validateDivider(component);
             default -> {
             }
@@ -851,6 +906,10 @@ public class PortfolioConfigValidator {
 
         Map<String, Object> normalized = new LinkedHashMap<>();
         normalized.put(CONFIG_KEY_TITLE, title);
+        normalized.put(PortfolioComponentDisplayOptionsSupport.DISPLAY_STYLE, PortfolioComponentDisplayOptionsSupport.displayStyle(source));
+        normalized.put(CONFIG_KEY_SHOW_DESCRIPTION, PortfolioComponentDisplayOptionsSupport.showDescription(source));
+        normalized.put(PortfolioComponentDisplayOptionsSupport.SHOW_COMPONENT_TITLE,
+                PortfolioComponentDisplayOptionsSupport.showComponentTitle(source));
         normalized.put(CONFIG_KEY_WORK_IDS, workIds);
         Object showTitle = source.get(CONFIG_KEY_SHOW_TITLE);
         normalized.put(CONFIG_KEY_SHOW_TITLE, showTitle instanceof Boolean value ? value : Boolean.TRUE);
@@ -936,6 +995,8 @@ public class PortfolioConfigValidator {
         }
         Map<String, Object> normalizedConfig = new LinkedHashMap<>();
         normalizedConfig.put(CONFIG_KEY_WORK_ID, workId);
+        normalizedConfig.put(PortfolioComponentDisplayOptionsSupport.OPEN_MODE, PortfolioComponentDisplayOptionsSupport.openMode(component.getConfig()));
+        normalizedConfig.put(PortfolioComponentDisplayOptionsSupport.DETAIL_OPTIONS, PortfolioComponentDisplayOptionsSupport.detailOptions(component.getConfig()));
         Object showTitle = component.getConfig().get(CONFIG_KEY_SHOW_TITLE);
         normalizedConfig.put(CONFIG_KEY_SHOW_TITLE, showTitle instanceof Boolean value ? value : Boolean.TRUE);
         Object showDescription = component.getConfig().get(CONFIG_KEY_SHOW_DESCRIPTION);
@@ -1139,6 +1200,21 @@ public class PortfolioConfigValidator {
         component.getConfig().put(CONFIG_KEY_ALIGNMENT, alignment);
         component.getConfig().put(PortfolioTextTypographySupport.FONT_FAMILY_CONFIG_KEY, fontFamily);
         component.getConfig().put(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY, fontSizeRpx);
+        component.getConfig().put(PortfolioTextColorSupport.COLOR_CONFIG_KEY,
+                PortfolioTextColorSupport.normalize(component.getConfig().get(PortfolioTextColorSupport.COLOR_CONFIG_KEY)));
+        PortfolioTextLineHeightSupport.normalizeOptional(component.getConfig(), component.getConfig());
+    }
+
+    /** 验证个人背景真实归属、可用媒体类型；新支持的视频必须已审核通过。 */
+    private void validateTextBackground(Long userId, Map<String,Object> config) {
+        if (!Boolean.TRUE.equals(config.get(PortfolioTextBackgroundConfigSupport.ENABLED))) { return; }
+        Long workId = PortfolioTextBackgroundConfigSupport.positiveLong(config.get(PortfolioTextBackgroundConfigSupport.WORK_ID));
+        WorkEntity work = loadUsableWorks(userId, List.of(workId)).get(workId);
+        if (work == null || !PortfolioTextBackgroundConfigSupport.supportsMedia(work.getMediaType())
+                || (MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())
+                    && !WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus()))) {
+            throw new BusinessException(PortfolioTextMessage.BACKGROUND_UNAVAILABLE);
+        }
     }
 
     /**
@@ -1151,7 +1227,7 @@ public class PortfolioConfigValidator {
                 asString(component.getConfig().get(CONFIG_KEY_DIVIDER_COLOR)),
                 DIVIDER_COLOR_GRAY
         );
-        if (!DIVIDER_COLORS.contains(color)) {
+        if (!PortfolioDividerColorSupport.isSupported(color)) {
             throw new BusinessException(PortfolioMessage.DIVIDER_COLOR_UNSUPPORTED_MESSAGE);
         }
         Object heightSource = component.getConfig().get(CONFIG_KEY_DIVIDER_HEIGHT_PX);
@@ -1159,7 +1235,7 @@ public class PortfolioConfigValidator {
         if (heightPx == null || heightPx <= 0) {
             throw new BusinessException(PortfolioMessage.DIVIDER_HEIGHT_INVALID_MESSAGE);
         }
-        component.getConfig().put(CONFIG_KEY_DIVIDER_COLOR, color);
+        component.getConfig().put(CONFIG_KEY_DIVIDER_COLOR, PortfolioDividerColorSupport.normalize(color));
         component.getConfig().put(CONFIG_KEY_DIVIDER_HEIGHT_PX, heightPx);
     }
 

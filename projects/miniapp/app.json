@@ -51,7 +51,9 @@
         "standard-preview/portfolio-standard-preview",
         "visitor-portfolio/visitor-portfolio",
         "visitor-schedule/visitor-schedule",
-        "unavailable/portfolio-unavailable"
+        "unavailable/portfolio-unavailable",
+        "work-detail/portfolio-work-detail",
+        "video-player/video-player"
       ]
     },
     {
@@ -70,7 +72,9 @@
         "standard-edit/team-portfolio-standard-edit",
         "standard-preview/team-portfolio-standard-preview",
         "contact-leads/team-contact-leads",
-        "visitor-portfolio/team-visitor-portfolio"
+        "visitor-portfolio/team-visitor-portfolio",
+        "work-detail/team-portfolio-work-detail",
+        "video-player/video-player"
       ]
     }
   ],

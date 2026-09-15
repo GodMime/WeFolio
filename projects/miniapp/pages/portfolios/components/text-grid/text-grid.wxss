@@ -1,0 +1,12 @@
+@import "../../../../styles/portfolio-text-typography.wxss";
+.text-grid-spacing { width:100%; box-sizing:border-box; }
+.text-grid-root { width:100%; min-width:0; box-sizing:border-box; position:relative; }
+.text-grid-canvas { position:relative; width:100%; overflow:visible; }
+.text-grid-cell { position:absolute; box-sizing:border-box; display:flex; flex-direction:column; overflow:visible; }
+.text-grid-block { box-sizing:border-box; min-width:0; flex-shrink:0; }
+.text-grid-line { display:block; white-space:pre-wrap; word-break:break-word; overflow-wrap:break-word; line-height:1.5; min-height:1px; }
+.text-grid-measure { position:absolute; left:-20000px; top:0; pointer-events:none; opacity:0; }
+.text-grid-measure-content { box-sizing:content-box; }
+.text-grid-natural { display:flex; flex-direction:column; }
+.text-grid-natural .text-grid-cell { position:relative !important; left:auto !important; top:auto !important; width:100% !important; height:auto !important; flex-shrink:0; }
+.text-grid-error { padding:24rpx; color:#8a4b09; }
