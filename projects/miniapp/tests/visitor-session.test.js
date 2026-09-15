@@ -4,10 +4,63 @@ const { openVisitorSession, requestWithVisitorSessionRefresh } = require('../uti
 const { openTeamVisitorSession, requestWithTeamVisitorSessionRefresh } = require('../pages/team-portfolios/utils/team-visitor-session')
 const { createVisitActivityContext } = require('../pages/portfolios/utils/visit-activity')
 const { visitActivityLifecycle } = require('../utils/visit-activity-lifecycle')
+const { createRequestClient, VISITOR_TOKEN_STORAGE_KEY } = require('../utils/request')
 
 function wxApi() { return { login: ({ success }) => success({ code: 'test-login' }), setStorageSync() {}, getStorageSync() { return [] }, removeStorageSync() {} } }
 
 for (const type of ['PERSONAL', 'TEAM']) {
+  test(`${type}刷新完成后旧401迟到，心跳与业务请求仍使用新令牌重试`, async (t) => {
+    const storage = new Map()
+    const pending = new Map()
+    const retried = []
+    let openCount = 0
+    const prefix = type === 'TEAM' ? '/api/visitor/team-portfolios/shared' : '/api/visitor/portfolios/shared'
+    const api = {
+      ...wxApi(),
+      getStorageSync: key => storage.get(key),
+      setStorageSync: (key, value) => storage.set(key, value),
+      removeStorageSync: key => storage.delete(key),
+      request(options) {
+        if (options.url.endsWith('/open')) {
+          openCount += 1
+          options.success({ statusCode: 200, data: { success: true, data: {
+            visitorKey: 'visitor', trackingSessionId: 7, trackingActiveDurationMs: 0,
+            token: openCount === 1 ? 'old-token' : 'new-token', expiresInSeconds: 60
+          } } })
+          return
+        }
+        if (!pending.has(options.url)) { pending.set(options.url, options); return }
+        retried.push(options)
+        const authorized = options.header.Authorization === 'Bearer new-token'
+        options.success({ statusCode: authorized ? 200 : 401,
+          data: authorized ? { success: true, data: 'ok' } : { message: '访客未登录' } })
+      }
+    }
+    const context = createVisitActivityContext({ portfolioType: type, shareCode: 'shared', wxApi: api, setTimer: () => 1, clearTimer() {} })
+    t.after(() => context.dispose())
+    const options = { shareCode: 'shared', browserContext: context, wxApi: api, requestFn: createRequestClient({ wxApi: api }).request }
+    if (type === 'TEAM') await openTeamVisitorSession(options)
+    else await openVisitorSession('shared', options)
+    const execute = suffix => {
+      const requestOptions = { url: `${prefix}/${suffix}`, method: 'PUT', authMode: 'visitor' }
+      return type === 'TEAM' ? requestWithTeamVisitorSessionRefresh({ ...options, requestOptions })
+        : requestWithVisitorSessionRefresh(requestOptions, options)
+    }
+    const heartbeat = execute('visit-sessions/7/activity')
+    const business = execute('schedule-query')
+    const [first, second] = [...pending.values()]
+    assert.equal(first.header.Authorization, 'Bearer old-token')
+    assert.equal(second.header.Authorization, 'Bearer old-token')
+    first.success({ statusCode: 401, data: { message: '访客未登录' } })
+    assert.equal(await heartbeat, 'ok')
+    // 第二个旧401必须晚于第一次刷新和重试，才能覆盖共享存储被误清空的竞态。
+    second.success({ statusCode: 401, data: { message: '访客未登录' } })
+    assert.equal(await business, 'ok')
+    assert.equal(openCount, 2)
+    assert.deepEqual(retried.map(item => item.header.Authorization), ['Bearer new-token', 'Bearer new-token'])
+    assert.equal(storage.get(VISITOR_TOKEN_STORAGE_KEY), 'new-token')
+  })
+
   test(`${type}首页、档期、资料同时401只刷新一次，复用原双键并替换资料令牌`, async () => {
     const api = wxApi()
     const context = createVisitActivityContext({ portfolioType: type, shareCode: 'shared', wxApi: api, setTimer: () => 1, clearTimer() {} })

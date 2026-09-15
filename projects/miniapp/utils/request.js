@@ -142,7 +142,10 @@ function createRequestClient(options = {}) {
           if (response.statusCode === 401) {
             if (isVisitorAuthMode(authMode)) {
               try {
-                clearVisitorToken()
+                // 旧请求的401可能晚于会话刷新；只清除本次实际使用且仍在存储中的令牌。
+                if (token && header.Authorization === `Bearer ${token}` && getVisitorToken() === token) {
+                  clearVisitorToken()
+                }
               } catch (error) {
                 // 清理本地访客令牌失败不改变本次认证失败结果。
               }

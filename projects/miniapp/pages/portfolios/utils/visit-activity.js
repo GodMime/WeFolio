@@ -160,7 +160,9 @@ function createVisitActivityContext(options = {}) {
       }
     },
     acceptSession(response = {}) {
-      if (isInvalid() || disposed || !checkIdentity(response)) return
+      if (isInvalid() || disposed) return
+      // 团队维护响应不创建访客；缺省身份不代表切换身份，仍需交给页面展示维护状态。
+      if ((!response.underMaintenance || response.visitorKey) && !checkIdentity(response)) return
       latestSession = response
       if (!response.trackingSessionId || response.underMaintenance) {
         sample(); sessionId = null; anchor = null; recovery = null; stopTimer()

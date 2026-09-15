@@ -135,6 +135,62 @@ test('身份变化或后端未返回会话不采集、不恢复旧归属', () =>
   h2.context.dispose()
 })
 
+test('维护响应省略访客身份时仍可展示，并停止计时、恢复和当前补报', async () => {
+  const h = harness({ portfolioType: 'TEAM' })
+  h.advance(1000)
+  h.context.beginRecovery()
+  const response = { underMaintenance: true, renderData: { components: [] } }
+  h.context.acceptSession(response)
+  assert.equal(h.context.isInvalid(), false)
+  assert.equal(h.context.getSession(), response)
+  assert.equal(h.context.snapshot().sessionId, null)
+  assert.equal(h.context.snapshot().recovering, false)
+  assert.equal(h.tasks.size, 0)
+  assert.deepEqual(h.storage[VISIT_ACTIVITY_STORAGE_KEY], [])
+  const stoppedDuration = h.context.snapshot().activeDurationMs
+  h.advance(10000)
+  await h.context.flush()
+  assert.equal(h.context.snapshot().activeDurationMs, stoppedDuration)
+  assert.deepEqual(h.sent, [])
+  h.context.dispose()
+})
+
+test('维护响应仍拒绝明确变化的身份，正常响应仍拒绝变化的活动会话', () => {
+  const changedIdentity = harness({ portfolioType: 'TEAM' })
+  changedIdentity.context.acceptSession({ underMaintenance: true, visitorKey: 'other' })
+  assert.equal(changedIdentity.context.isInvalid(), true)
+  const changedSession = harness({ portfolioType: 'TEAM' })
+  changedSession.context.acceptSession({ visitorKey: 'visitor-1', trackingSessionId: 2, trackingActiveDurationMs: 0 })
+  assert.equal(changedSession.context.isInvalid(), true)
+})
+
+test('团队重认证取得既有无身份维护响应后交给上层展示', async () => {
+  const { requestWithTeamVisitorSessionRefresh } = require('../pages/team-portfolios/utils/team-visitor-session')
+  const h = harness({ portfolioType: 'TEAM' })
+  const response = { shareCode: 'share', underMaintenance: true, renderData: { components: [] } }
+  let renderedResponse = null
+  let requests = 0
+  h.context.onRefresh = session => { renderedResponse = session }
+  const result = await requestWithTeamVisitorSessionRefresh({
+    shareCode: 'share', browserContext: h.context,
+    wxApi: { ...h.wxApi, login: ({ success }) => success({ code: 'test-login-code' }) },
+    requestOptions: { url: '/api/visitor/team-portfolios/share/events' },
+    requestFn: async options => {
+      requests += 1
+      if (options.url.endsWith('/open')) return response
+      if (requests === 1) throw Object.assign(new Error('测试令牌过期'), { authRequired: true })
+      return 'retried'
+    }
+  })
+  assert.equal(result, 'retried')
+  assert.equal(renderedResponse, response)
+  assert.equal(h.context.isInvalid(), false)
+  assert.equal(h.context.snapshot().sessionId, null)
+  assert.deepEqual(h.storage[VISIT_ACTIVITY_STORAGE_KEY], [])
+  assert.equal(h.tasks.size, 0)
+  h.context.dispose()
+})
+
 test('回拨后时钟追上原基准不会重复累计同一段时间，补报队列也不会被小幅回拨删除', async () => {
   const h = harness({ sendActivity: async () => { throw new Error('offline') } })
   h.advance(2000); await h.context.flush(); h.advance(-1000)
