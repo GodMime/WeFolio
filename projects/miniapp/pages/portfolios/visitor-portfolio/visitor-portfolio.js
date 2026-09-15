@@ -23,7 +23,7 @@ const {
   normalizeVisitorPortfolio,
   switchDisplayGroup,
   switchPortfolioMenu
-} = require('../../../utils/visitor-portfolio')
+} = require('../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../utils/visitor-profile')
 const { createClipboardPromptController } = require('../utils/portfolio-hyperlink')
 const { request } = require('../../../utils/request')
@@ -32,7 +32,7 @@ const {
   SOURCE_TYPE_WECHAT_SHARE_CARD,
   openVisitorSession,
   requestWithVisitorSessionRefresh
-} = require('../../../utils/visitor-session')
+} = require('../utils/visitor-session')
 const {
   createAnonymousSessionId,
   isWechatTimelineSinglePage

@@ -36,7 +36,7 @@ const block = key => ({ blockKey: key, type: 'TITLE', content: key })
 
 test('个人普通文字颜色只在完成后写回，取消和迟到取色不改变原配置', () => {
   const page = harness('standard-edit/portfolio-standard-edit', false)
-  const utils = require('../utils/portfolios')
+  const utils = require('../pages/portfolios/utils/portfolios')
   page.data.config = utils.addComponent(page.data.config, 'TEXT_SECTION')
   const key = page.data.config.components.at(-1).componentKey
   page.openTextSectionSheet(key)
@@ -67,7 +67,7 @@ test('结构化组件详情与整体副本隔离，取消新增不留组件，�
   assert.equal(JSON.stringify(page.data.config), before)
   page.openStructuredTextSheet()
   page.handleConfirmStructuredText({ detail: { blocks: [block('a')] } })
-  const components = require('../utils/portfolios').getMenuComponentList(page.data.config, page.data.activeMenuKey)
+  const components = require('../pages/portfolios/utils/portfolios').getMenuComponentList(page.data.config, page.data.activeMenuKey)
   assert.equal(components.at(-1).componentType, 'STRUCTURED_TEXT_SECTION')
   assert.equal(components.at(-1).config.blocks[0].color, 'AUTO')
 })
@@ -123,7 +123,7 @@ test('左滑仅展开，纵向滚动不删除，超量内容不截断', () => {
 
 test('普通背景副本关闭取消恢复，保存关闭清除背景 ID', () => {
   const page = harness('standard-edit/portfolio-standard-edit', false)
-  const utils = require('../utils/portfolios')
+  const utils = require('../pages/portfolios/utils/portfolios')
   page.data.config = utils.addComponent(page.data.config, 'TEXT_SECTION')
   const item = page.data.config.components.at(-1)
   Object.assign(item.config, { content: '文字', backgroundEnabled: true, backgroundWorkId: 7, backgroundTreatment: 'ORIGINAL' })
@@ -258,7 +258,7 @@ test('下拉关闭组件丢弃全部，下拉关闭详情只丢弃局部', t => 
 
 test('页面草稿保存和发布前拦截失效背景或非法结构化内容并定位组件', async () => {
   const page = harness('standard-edit/portfolio-standard-edit', false)
-  const utils = require('../utils/portfolios')
+  const utils = require('../pages/portfolios/utils/portfolios')
   page.data.config = utils.addComponent(page.data.config, 'STRUCTURED_TEXT_SECTION')
   const item = page.data.config.components.at(-1)
   item.config = { blocks: [block('a')], backgroundEnabled: true, backgroundWorkId: 7, backgroundInvalid: true }
@@ -319,7 +319,7 @@ test('重复列表条目展示不丢失，删除中间编辑条目保留后续�
 test('持久化背景按 ID 恢复，不依赖作品第一页，失效与过期响应不清理原ID', async () => {
   const pending = []
   const page = harness('standard-edit/portfolio-standard-edit', false, params => new Promise(resolve => pending.push({ params, resolve })))
-  const utils = require('../utils/portfolios')
+  const utils = require('../pages/portfolios/utils/portfolios')
   page.data.config = utils.addComponent(page.data.config, 'TEXT_SECTION')
   const item = page.data.config.components.at(-1)
   Object.assign(item.config, { content: '介绍', backgroundEnabled: true, backgroundWorkId: 99 })
@@ -361,7 +361,7 @@ test('异步恢复结构化背景只更新等待中的匹配资源，不覆盖�
 })
 
 test('当前背景详情401执行维护者登录处理，取消后的401忽略且不伪装为背景失效', async () => {
-  const utils = require('../utils/portfolios')
+  const utils = require('../pages/portfolios/utils/portfolios')
   const previousWx = global.wx
   const redirects = []
   const removed = []
@@ -397,7 +397,7 @@ test('当前背景详情401执行维护者登录处理，取消后的401忽略�
 function createBackgroundRetryHarness(structured) {
   const pending = []
   const page = harness('standard-edit/portfolio-standard-edit', false, params => new Promise((resolve, reject) => pending.push({ params, resolve, reject })))
-  const utils = require('../utils/portfolios')
+  const utils = require('../pages/portfolios/utils/portfolios')
   page.data.config = utils.addComponent(page.data.config, structured ? 'STRUCTURED_TEXT_SECTION' : 'TEXT_SECTION')
   const component = page.data.config.components.at(-1)
   component.config = { content: '初始说明', blocks: [block('a'), block('b')], backgroundEnabled: true, backgroundWorkId: 7 }
@@ -704,7 +704,7 @@ test('个人普通与结构化背景续页失败保留候选，重试继续请�
       params => new Promise((resolve, reject) => pending.push({ params, resolve, reject })))
     if (structured) page.openStructuredTextSheet()
     else {
-      page.data.config = require('../utils/portfolios').addComponent(page.data.config, 'TEXT_SECTION')
+      page.data.config = require('../pages/portfolios/utils/portfolios').addComponent(page.data.config, 'TEXT_SECTION')
       page.openTextSectionSheet(page.data.config.components.at(-1).componentKey)
     }
     const initial = page.handleTextBackgroundRequest({ detail: { reset: true, keyword: '婚礼' } })

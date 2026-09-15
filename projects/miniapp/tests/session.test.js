@@ -21,7 +21,7 @@ test('维护者登录、令牌清除与401不影响同一访客的上下文和�
       removeStorageSync: key => { delete storage[key] }, showToast() {}, redirectTo() {} }
     const portfolioType = packageName === 'portfolios' ? 'PERSONAL' : 'TEAM'
     const requestVisit = portfolioType === 'PERSONAL'
-      ? require('../utils/visitor-session').requestWithVisitorSessionRefresh
+      ? require('../pages/portfolios/utils/visitor-session').requestWithVisitorSessionRefresh
       : (requestOptions, options) => require('../pages/team-portfolios/utils/team-visitor-session')
         .requestWithTeamVisitorSessionRefresh({ ...options, requestOptions })
     const context = createVisitActivityContext({ shareCode: 'another-owner', portfolioType, wxApi, now: () => now,

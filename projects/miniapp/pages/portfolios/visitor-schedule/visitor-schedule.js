@@ -1,5 +1,5 @@
-const { requestWithVisitorSessionRefresh } = require('../../../utils/visitor-session')
-const { normalizeVisitorSchedule } = require('../../../utils/visitor-portfolio')
+const { requestWithVisitorSessionRefresh } = require('../utils/visitor-session')
+const { normalizeVisitorSchedule } = require('../utils/visitor-portfolio')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 

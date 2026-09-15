@@ -3,7 +3,7 @@ const {
   formatLunarDayMeta,
   formatLunarFullText,
   toLunarDate
-} = require('../../../utils/lunar')
+} = require('./lunar')
 
 const DEFAULT_SLOT_COLOR = '#c28f4b'
 

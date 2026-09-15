@@ -5,7 +5,7 @@ const {
   formatLunarDayMeta,
   formatLunarFullText,
   toLunarDate
-} = require('../../../utils/lunar')
+} = require('./lunar')
 
 const MOCK_LOGIN_REQUIRED_MESSAGE = '请去“我的”页面注册登录'
 const MOCK_AVATAR_URL = 'https://cdn2.we-folio.dingchenyong.top/demo/demo-avatar.png'

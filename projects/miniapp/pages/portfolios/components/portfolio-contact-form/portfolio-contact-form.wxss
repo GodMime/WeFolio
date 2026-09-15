@@ -1,4 +1,4 @@
-@import "../../styles/portfolio-theme.wxss";
+@import "../../../../styles/portfolio-theme.wxss";
 
 .form-section,
 .form-entry-section {

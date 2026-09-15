@@ -1,7 +1,7 @@
 const {
   CONTACT_FORM_DISPLAY_MODES
 } = require('../../utils/portfolios')
-const { noop } = require('../../utils/noop')
+const { noop } = require('../../../../utils/noop')
 
 const DEFAULT_CONTACT_FORM_TITLE = '预留联系信息'
 const DEFAULT_SUBMIT_TEXT = '提交'

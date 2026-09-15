@@ -1,4 +1,4 @@
-<!-- 参考正式组件：components/portfolio-contact-form/portfolio-contact-form.wxml；本组件仅维护本地 Mock 表单。 -->
+<!-- 参考正式组件：pages/portfolios/components/portfolio-contact-form/portfolio-contact-form.wxml；本组件仅维护本地 Mock 表单。 -->
 <view wx:if="{{viewMode !== modalMode}}" class="portfolio-contact-form portfolio-theme-{{themeMode}}">
   <view wx:if="{{contactComponent.contactForm.displayMode === inlineMode}}" class="form-section">
     <view class="component-title">{{contactComponent.contactForm.title || defaultTitle}}</view>

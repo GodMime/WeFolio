@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 const { createRequire } = require('node:module')
-const { normalizePortfolioRender, switchPortfolioMenu } = require('../utils/visitor-portfolio')
+const { normalizePortfolioRender, switchPortfolioMenu } = require('../pages/portfolios/utils/visitor-portfolio')
 const {
   normalizeTeamVisitorPortfolio,
   switchTeamPortfolioMenu

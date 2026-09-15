@@ -731,7 +731,7 @@ test('preview page passes schedule query context to shared component', () => {
     'utf8'
   ))
 
-  assert.equal(json.usingComponents['portfolio-schedule-query'], '/components/portfolio-schedule-query/portfolio-schedule-query')
+  assert.equal(json.usingComponents['portfolio-schedule-query'], '/pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query')
   assert.match(wxml, /<portfolio-schedule-query[\s\S]*portfolio-id="\{\{portfolioId\}\}"[\s\S]*preview="\{\{true\}\}"[\s\S]*preview-scope="\{\{previewScope\}\}"/)
   assert.match(wxml, /<portfolio-schedule-query[\s\S]*component-key="\{\{item\.componentKey\}\}"[\s\S]*schedule-query="\{\{item\.scheduleQuery\}\}"/)
   assert.doesNotMatch(wxml, /<button class="secondary-action">档期查询<\/button>/)
@@ -864,10 +864,10 @@ test('contact form components support modal entry and inline form in actual page
     path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.json'),
     'utf8'
   ))
-  const componentWxml = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxml')
+  const componentWxml = readExisting('pages/portfolios/components/portfolio-contact-form/portfolio-contact-form.wxml')
 
-  assert.equal(previewJson.usingComponents['portfolio-contact-form'], '/components/portfolio-contact-form/portfolio-contact-form')
-  assert.equal(visitorJson.usingComponents['portfolio-contact-form'], '/components/portfolio-contact-form/portfolio-contact-form')
+  assert.equal(previewJson.usingComponents['portfolio-contact-form'], '/pages/portfolios/components/portfolio-contact-form/portfolio-contact-form')
+  assert.equal(visitorJson.usingComponents['portfolio-contact-form'], '/pages/portfolios/components/portfolio-contact-form/portfolio-contact-form')
   ;[previewWxml, visitorWxml].forEach((wxml) => {
     assert.match(wxml, /<portfolio-contact-form[\s\S]*contact-component="\{\{item\}\}"[\s\S]*bindcontactinput="handleContactInput"[\s\S]*bindopenmodal="handleOpenContactFormModal"/)
     assert.match(wxml, /<portfolio-contact-form[\s\S]*view-mode="modal"[\s\S]*modal-visible="\{\{contactFormModalVisible\}\}"[\s\S]*contact-component="\{\{activeContactFormComponent\}\}"/)

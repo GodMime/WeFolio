@@ -193,8 +193,8 @@ test('mock portfolio preview keeps production stable states and local modal entr
 })
 
 test('mock inquiry components mirror formal entries and dark theme tokens independently', () => {
-  const formalScheduleWxss = read('components/portfolio-schedule-query/portfolio-schedule-query.wxss')
-  const formalContactWxss = read('components/portfolio-contact-form/portfolio-contact-form.wxss')
+  const formalScheduleWxss = read('pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxss')
+  const formalContactWxss = read('pages/portfolios/components/portfolio-contact-form/portfolio-contact-form.wxss')
   const mockScheduleWxss = read('components/mock/portfolio-schedule-query/portfolio-schedule-query.wxss')
   const mockContactWxss = read('components/mock/portfolio-contact-form/portfolio-contact-form.wxss')
   const mockScheduleWxml = read('components/mock/portfolio-schedule-query/portfolio-schedule-query.wxml')
@@ -242,8 +242,8 @@ test('mock inquiry components mirror formal entries and dark theme tokens indepe
     readRule(mockContactWxss, '.portfolio-contact-form.portfolio-theme-dark .contact-form-entry-button'),
     /color:\s*var\(--portfolio-text-primary\);[\s\S]*background:\s*var\(--portfolio-surface-muted\);/
   )
-  assert.match(mockScheduleWxml, /参考正式组件：components\/portfolio-schedule-query/)
-  assert.match(mockContactWxml, /参考正式组件：components\/portfolio-contact-form/)
+  assert.match(mockScheduleWxml, /参考正式组件：pages\/portfolios\/components\/portfolio-schedule-query/)
+  assert.match(mockContactWxml, /参考正式组件：pages\/portfolios\/components\/portfolio-contact-form/)
 })
 
 test('mock mine entries expose the same visible action semantics as formal entries', () => {

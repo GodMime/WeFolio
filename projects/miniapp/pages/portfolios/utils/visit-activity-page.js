@@ -1,5 +1,5 @@
 const { request } = require('../../../utils/request.js')
-const { openVisitorSession, requestWithVisitorSessionRefresh } = require('../../../utils/visitor-session')
+const { openVisitorSession, requestWithVisitorSessionRefresh } = require('./visitor-session')
 const { createVisitActivityContext } = require('./visit-activity')
 
 const API_PREFIX = '/api/visitor/portfolios'

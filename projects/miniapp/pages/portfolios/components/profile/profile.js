@@ -1,4 +1,4 @@
-const { normalizeProfileBorderConfig, PROFILE_BORDER_AUTO_COLOR } = require('../../../../utils/portfolios')
+const { normalizeProfileBorderConfig, PROFILE_BORDER_AUTO_COLOR } = require('../../utils/portfolios')
 
 Component({
   properties: {

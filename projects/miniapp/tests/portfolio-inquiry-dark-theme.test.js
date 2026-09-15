@@ -16,7 +16,7 @@ function readRule(content, selector) {
 }
 
 test('personal inline schedule query replaces light calendar surfaces in dark theme', () => {
-  const wxss = read('components/portfolio-schedule-query/portfolio-schedule-query.wxss')
+  const wxss = read('pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxss')
   const calendarRule = readRule(
     wxss,
     '.schedule-query.portfolio-theme-dark .schedule-query-inline-shell .schedule-query-calendar'
@@ -64,7 +64,7 @@ test('personal inline schedule query replaces light calendar surfaces in dark th
 })
 
 test('personal dark contact form keeps the optional schedule prompt secondary', () => {
-  const wxss = read('components/portfolio-contact-form/portfolio-contact-form.wxss')
+  const wxss = read('pages/portfolios/components/portfolio-contact-form/portfolio-contact-form.wxss')
   const placeholderRule = readRule(
     wxss,
     '.portfolio-contact-form.portfolio-theme-dark .date-field.placeholder'

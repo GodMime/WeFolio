@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { openVisitorSession, requestWithVisitorSessionRefresh } = require('../utils/visitor-session')
+const { openVisitorSession, requestWithVisitorSessionRefresh } = require('../pages/portfolios/utils/visitor-session')
 const { openTeamVisitorSession, requestWithTeamVisitorSessionRefresh } = require('../pages/team-portfolios/utils/team-visitor-session')
 const { createVisitActivityContext } = require('../pages/portfolios/utils/visit-activity')
 const { visitActivityLifecycle } = require('../utils/visit-activity-lifecycle')

@@ -26,7 +26,7 @@ const {
 const {
   hexToHsv,
   hsvToHex
-} = require('../../../utils/portfolio-color')
+} = require('../utils/portfolio-color')
 
 const PREVIEW_URL = '/pages/mock/portfolio-standard-preview/portfolio-standard-preview'
 const DEFAULT_SELECTED_COMPONENT_KEY = 'mock_carousel'

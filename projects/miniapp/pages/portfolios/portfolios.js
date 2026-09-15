@@ -1,7 +1,7 @@
 const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
-const { buildPublishPayload } = require('../../utils/portfolios')
+const { buildPublishPayload } = require('./utils/portfolios')
 const {
   deleteTeamPortfolio,
   fetchMaintainableTeams,

@@ -16,7 +16,7 @@ for (const directory of ['portfolios', 'team-portfolios']) {
       const [color, percent] = stop.trim().split(/\s+/)
       return { color: color.toUpperCase(), position: percent ? parseFloat(percent) / 100 : index / (all.length - 1) }
     })
-    const { hsvToHex } = require('../utils/portfolio-color')
+    const { hsvToHex } = require('../pages/portfolios/utils/portfolio-color')
     for (const stop of stops) {
       const actual = hsvToHex({ hue: stop.position * max, saturation: 1, value: 1 })
       for (const offset of [1, 3, 5]) {

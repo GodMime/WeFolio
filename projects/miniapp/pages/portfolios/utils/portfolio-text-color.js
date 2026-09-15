@@ -1,4 +1,4 @@
-// 主包作品集规范化与访客数据均使用颜色契约，分包组件只复用该纯规则。
+// 个人作品集规范化、访客数据与组件共享分包内的颜色契约。
 const TEXT_COLOR_AUTO = 'AUTO'
 const TEXT_COLOR_HEX = /^#[0-9a-fA-F]{6}$/
 const TEXT_COLOR_ERROR = '颜色须为跟随主题或六位十六进制颜色'

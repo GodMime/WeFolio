@@ -18,7 +18,7 @@ const {
 const {
   LEGACY_PERSONAL_FONT_SIZE_RPX,
   buildPortfolioTextTypography
-} = require('./portfolio-text-typography')
+} = require('../../../utils/portfolio-text-typography')
 
 const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   avatar: true,

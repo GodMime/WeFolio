@@ -1,5 +1,5 @@
 /**
- * 交互命名参考正式组件 components/portfolio-schedule-query/portfolio-schedule-query.js。
+ * 交互命名参考正式组件 pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.js。
  * 本组件仅维护体验版本地选择状态，不得引入网络请求或访客会话。
  */
 const DISPLAY_MODE_INLINE_CALENDAR = 'INLINE_CALENDAR'

@@ -9,7 +9,7 @@ const {
   normalizePortfolioTextFontSizeRpx,
   isValidPortfolioTextLineHeight,
   PORTFOLIO_TEXT_LINE_HEIGHT_ERROR
-} = require('./portfolio-text-typography')
+} = require('../../../utils/portfolio-text-typography')
 
 const SCHEMA_VERSION = 'standard-personal-v1'
 const EDITOR_SCHEMA_REVISION = 14
@@ -344,7 +344,7 @@ function normalizeProfileBorderConfig(raw = {}) {
   }
 }
 
-/** 主包的作品集配置和访客入口保留联系快照及边框，分包实现由一致性测试约束。 */
+/** 个人作品集配置和访客入口保留联系快照及边框，与团队实现通过一致性测试同步。 */
 function normalizeContactInfoConfig(raw = {}) {
   const safe = raw || {}
   const result = {

@@ -159,7 +159,7 @@ for (const [name, utility] of [['personal', personal], ['team', team]]) {
 }
 
 test('detail choices round trip independently from card text and remain when switching inline', () => {
-  const { normalizeSingleWorkConfig, createComponent, COMPONENT_TYPES, updateSingleWorkConfig, normalizePortfolioConfig } = require('../utils/portfolios')
+  const { normalizeSingleWorkConfig, createComponent, COMPONENT_TYPES, updateSingleWorkConfig, normalizePortfolioConfig } = require('../pages/portfolios/utils/portfolios')
   const detailOptions = { showTitle: false, showDescription: true }
   const config = normalizeSingleWorkConfig({ workId: 7, showTitle: true, showDescription: false, openMode: 'DETAIL_PAGE', detailOptions })
   assert.equal(config.showTitle, true); assert.equal(config.showDescription, false)

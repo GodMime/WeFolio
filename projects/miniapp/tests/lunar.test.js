@@ -5,7 +5,7 @@ const {
   formatLunarDayMeta,
   formatLunarFullText,
   toLunarDate
-} = require('../utils/lunar')
+} = require('../pages/portfolios/utils/lunar')
 
 test('formats lunar dates and festivals', () => {
   assert.equal(formatLunarDayMeta(toLunarDate('2026-06-19')), '端午节')

@@ -2,7 +2,7 @@ const { normalizeTextGrid, validateTextGrid } = require('../utils/portfolio-text
 const { normalizeContactInfo, validateContactInfo } = require('../utils/portfolio-contact-info')
 const { portfolioAudioPageMethods, AUDIO_STYLE_OPTIONS, normalizeAudioResource } = require('../utils/portfolio-audio-player')
 const { request } = require('../../../utils/request')
-const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('../../../utils/portfolio-text-color')
+const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('../utils/portfolio-text-color')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../../utils/session')
 const { noop } = require('../../../utils/noop')
 const { isRemoteUrl } = require('../../../utils/upload-file')
@@ -107,8 +107,8 @@ const {
   updateVideoCarouselConfig,
   validatePortfolioForPublish,
   visitPortfolioComponents
-} = require('../../../utils/portfolios')
-const { hexToHsv, hsvToHex, normalizeHexColor } = require('../../../utils/portfolio-color')
+} = require('../utils/portfolios')
+const { hexToHsv, hsvToHex, normalizeHexColor } = require('../utils/portfolio-color')
 const {
   normalizeTextBackground, finalizeTextBackground, validateTextBackground, BACKGROUND_MEDIA_TYPES, VIDEO_MEDIA_TYPE,
   normalizeStructuredTextConfig, finalizeStructuredTextConfig, validateStructuredTextConfig

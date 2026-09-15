@@ -24,7 +24,7 @@ const {
   updateComponentDividerConfig,
   updateComponentScheduleQueryConfig,
   updateComponentTextSectionConfig
-} = require('../utils/portfolios')
+} = require('../pages/portfolios/utils/portfolios')
 const { selectableWorksFor } = require('../pages/portfolios/utils/portfolio-work-media')
 
 function flushPromises() {

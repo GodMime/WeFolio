@@ -1,5 +1,5 @@
 const { buildTextBackgroundPresentation, buildTextBackgroundFrameStyle, handleTextBackgroundLoad } = require('../../utils/portfolio-text-sections')
-const { buildTextColorStyle } = require('../../../../utils/portfolio-text-color')
+const { buildTextColorStyle } = require('../../utils/portfolio-text-color')
 const { buildPortfolioTextLineHeightStyle } = require('../../../../utils/portfolio-text-typography')
 const { textBackgroundVideo } = require('../../utils/portfolio-text-background-video')
 Component({

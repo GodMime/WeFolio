@@ -325,7 +325,7 @@ for (const scope of ['portfolios', 'team-portfolios']) {
     for (const position of ['root', 'second']) {
       const page = loadPage(scope)
       const team = scope === 'team-portfolios'
-      const portfolioApi = team ? require('../pages/team-portfolios/utils/team-portfolios') : require('../utils/portfolios')
+      const portfolioApi = team ? require('../pages/team-portfolios/utils/team-portfolios') : require('../pages/portfolios/utils/portfolios')
       const normalize = team ? portfolioApi.normalizeTeamPortfolioConfig : portfolioApi.normalizePortfolioConfig
       let config = clone(page.data.config)
       if (position === 'second') {
@@ -352,7 +352,7 @@ for (const scope of ['portfolios', 'team-portfolios']) {
 
 test('personal and team visitor normalization retains all contact border settings', () => {
   const config = { ...CONTACT_TEXT, ...CUSTOM_BORDER }
-  const personal = require('../utils/visitor-portfolio')
+  const personal = require('../pages/portfolios/utils/visitor-portfolio')
   for (const raw of [{ contactInfo: config }, { config }]) {
     const component = personal.normalizeRenderComponent({ componentType: 'CONTACT_INFO', ...raw })
     assert.deepEqual(component.contactInfo, config)
@@ -368,7 +368,7 @@ test('contact border utilities remain identical across isolated business subpack
 })
 
 test('main-package and subpackage contact normalization agree for legacy, customized and malformed configs', () => {
-  const main = require('../utils/portfolios').normalizeContactInfoConfig
+  const main = require('../pages/portfolios/utils/portfolios').normalizeContactInfoConfig
   const isolated = ['portfolios', 'team-portfolios'].map(scope => require(`../pages/${scope}/utils/portfolio-contact-info`).normalizeContactInfo)
   for (const raw of [undefined, null, {}, CONTACT_TEXT, { ...CONTACT_TEXT, ...CUSTOM_BORDER },
     { contactPhone: ' 123 ', contactWechat: ' wechat ', contactBorder: true, contactBorderWidthRpx: 12, horizontalMarginRpx: 96, verticalMarginRpx: 96, contactBorderColor: '#aabbcc' },

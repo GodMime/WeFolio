@@ -1,4 +1,4 @@
-@import "../../styles/portfolio-theme.wxss";
+@import "../../../../styles/portfolio-theme.wxss";
 
 .schedule-query {
   padding: 8rpx 34rpx;

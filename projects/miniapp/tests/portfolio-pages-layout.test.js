@@ -471,8 +471,8 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   const visitorJson = JSON.parse(read('pages/portfolios/visitor-portfolio/visitor-portfolio.json'))
   const previewWxml = read('pages/portfolios/standard-preview/portfolio-standard-preview.wxml')
   const previewJson = JSON.parse(read('pages/portfolios/standard-preview/portfolio-standard-preview.json'))
-  const contactFormWxml = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxml')
-  const contactFormJs = readExisting('components/portfolio-contact-form/portfolio-contact-form.js')
+  const contactFormWxml = readExisting('pages/portfolios/components/portfolio-contact-form/portfolio-contact-form.wxml')
+  const contactFormJs = readExisting('pages/portfolios/components/portfolio-contact-form/portfolio-contact-form.js')
   const qrContactWxml = readExisting('pages/portfolios/components/qr-contact/qr-contact.wxml')
   const textSectionWxml = readExisting('pages/portfolios/components/text-section/text-section.wxml')
   const dividerWxml = readExisting('pages/portfolios/components/divider/divider.wxml')
@@ -518,10 +518,10 @@ test('visitor portfolio pages expose maintenance, QR, contact and schedule surfa
   assert.match(qrContactWxml, /class="qr-image"[\s\S]*bindtap="handlePreviewQr"/)
   assert.doesNotMatch(visitorQrMarkup, /qrContact\.title|qrContact\.description|component-title|section-desc/)
   assert.doesNotMatch(previewQrMarkup, /qrContact\.title|qrContact\.description|component-title|section-desc/)
-  assert.equal(visitorJson.usingComponents['portfolio-schedule-query'], '/components/portfolio-schedule-query/portfolio-schedule-query')
-  assert.equal(previewJson.usingComponents['portfolio-schedule-query'], '/components/portfolio-schedule-query/portfolio-schedule-query')
-  assert.equal(visitorJson.usingComponents['portfolio-contact-form'], '/components/portfolio-contact-form/portfolio-contact-form')
-  assert.equal(previewJson.usingComponents['portfolio-contact-form'], '/components/portfolio-contact-form/portfolio-contact-form')
+  assert.equal(visitorJson.usingComponents['portfolio-schedule-query'], '/pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query')
+  assert.equal(previewJson.usingComponents['portfolio-schedule-query'], '/pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query')
+  assert.equal(visitorJson.usingComponents['portfolio-contact-form'], '/pages/portfolios/components/portfolio-contact-form/portfolio-contact-form')
+  assert.equal(previewJson.usingComponents['portfolio-contact-form'], '/pages/portfolios/components/portfolio-contact-form/portfolio-contact-form')
   assert.match(visitorWxml, /<portfolio-schedule-query[\s\S]*share-code="\{\{shareCode\}\}"[\s\S]*visitor-key="\{\{visitorKey\}\}"[\s\S]*component-key="\{\{item\.componentKey\}\}"[\s\S]*schedule-query="\{\{item\.scheduleQuery\}\}"/)
   assert.match(previewWxml, /<portfolio-schedule-query[\s\S]*portfolio-id="\{\{portfolioId\}\}"[\s\S]*preview="\{\{true\}\}"[\s\S]*preview-scope="\{\{previewScope\}\}"[\s\S]*component-key="\{\{item\.componentKey\}\}"[\s\S]*schedule-query="\{\{item\.scheduleQuery\}\}"/)
   assert.match(visitorWxml, /<portfolio-contact-form[\s\S]*contact-component="\{\{item\}\}"[\s\S]*bindcontactinput="handleContactInput"[\s\S]*bindopenmodal="handleOpenContactFormModal"/)
@@ -630,7 +630,7 @@ test('portfolio media keeps images transparent and placeholders on the theme sur
 })
 
 test('contact form modal uses full-screen fixed bottom sheet layout', () => {
-  const componentWxss = readExisting('components/portfolio-contact-form/portfolio-contact-form.wxss')
+  const componentWxss = readExisting('pages/portfolios/components/portfolio-contact-form/portfolio-contact-form.wxss')
 
   ;[
     ['component', componentWxss]
@@ -675,9 +675,9 @@ test('visitor qr contact images are centered in portfolio pages', () => {
 })
 
 test('schedule query modal entry matches contact form button style', () => {
-  const scheduleQueryWxml = read('components/portfolio-schedule-query/portfolio-schedule-query.wxml')
-  const scheduleQueryWxss = read('components/portfolio-schedule-query/portfolio-schedule-query.wxss')
-  const contactFormWxss = read('components/portfolio-contact-form/portfolio-contact-form.wxss')
+  const scheduleQueryWxml = read('pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxml')
+  const scheduleQueryWxss = read('pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxss')
+  const contactFormWxss = read('pages/portfolios/components/portfolio-contact-form/portfolio-contact-form.wxss')
   const entryStart = scheduleQueryWxml.indexOf('<view class="schedule-query-entry">')
   const entryEnd = scheduleQueryWxml.indexOf('<view class="schedule-query-modal-mask', entryStart)
   const entryMarkup = scheduleQueryWxml.slice(entryStart, entryEnd)
@@ -717,8 +717,8 @@ test('schedule query modal entry matches contact form button style', () => {
 })
 
 test('schedule query calendar exposes lunar meta and quick month picker', () => {
-  const scheduleQueryWxml = read('components/portfolio-schedule-query/portfolio-schedule-query.wxml')
-  const scheduleQueryWxss = read('components/portfolio-schedule-query/portfolio-schedule-query.wxss')
+  const scheduleQueryWxml = read('pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxml')
+  const scheduleQueryWxss = read('pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxss')
   const monthPickerRule = readRule(scheduleQueryWxss, '.schedule-query-month-picker-button')
   const weekdaysRule = readRule(scheduleQueryWxss, '.schedule-query-weekdays')
   const weekdayCellRule = readRule(scheduleQueryWxss, '.schedule-query-weekdays > view')

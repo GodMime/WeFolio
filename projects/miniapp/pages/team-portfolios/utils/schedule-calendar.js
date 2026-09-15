@@ -1,7 +1,7 @@
 const {
   formatLunarDayMeta,
   toLunarDate
-} = require('../../../utils/lunar.js')
+} = require('./lunar.js')
 
 /**
  * 生成团队作品集月历日期的农历或传统节日文案。

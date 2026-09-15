@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
+const vm = require('node:vm')
 
 const { getRegisteredPageRoutes } = require('./helpers/app-pages')
 
@@ -15,6 +16,7 @@ const EXPECTED_PACKAGES = {
 }
 const PAGE_EXTENSIONS = ['.js', '.json', '.wxml', '.wxss']
 const PACKAGE_LOCAL_UTILS = {
+  mock: ['lunar.js', 'portfolio-color.js'],
   works: [
     'frame-canvas.js',
     'media.js',
@@ -28,20 +30,28 @@ const PACKAGE_LOCAL_UTILS = {
   portfolio: [
     'contact-lead.js',
     'display-switching.js',
+    'lunar.js',
     'portfolio-assets.js',
+    'portfolio-background-audio.js',
+    'portfolio-color.js',
     'portfolio-contact-form.js',
     'portfolio-hyperlink.js',
     'portfolio-publish-disclaimer.js',
     'portfolio-render-events.js',
+    'portfolio-text-color.js',
     'portfolio-work-media.js',
+    'portfolios.js',
     'single-page-mode.js',
     'team-portfolio-list.js',
+    'visitor-portfolio.js',
     'visitor-profile.js',
+    'visitor-session.js',
     'work-media.js',
     'works.js'
   ],
-  schedule: ['schedule.js'],
+  schedule: ['lunar.js', 'schedule.js'],
   teamPortfolio: [
+    'lunar.js',
     'team-contact-leads.js',
     'team-portfolio-assets.js',
     'team-portfolio-list.js',
@@ -128,9 +138,6 @@ function collectJavaScriptEntries(pageRoutes, includeApp = false) {
   if (includeApp) {
     entries.add(path.join(MINIAPP_ROOT, 'app.js'))
     configPaths.push(path.join(MINIAPP_ROOT, 'app.json'))
-    for (const componentPath of listFiles(path.join(MINIAPP_ROOT, 'components'), '.js')) {
-      entries.add(componentPath)
-    }
   }
   for (const componentPath of collectComponentJavaScript(configPaths)) {
     entries.add(componentPath)
@@ -407,7 +414,7 @@ test('JavaScript dependencies respect main and subpackage boundaries', () => {
   }
 })
 
-test('main package JavaScript used by subpackages stays reachable from a main package production entry', () => {
+test('main package utilities used by subpackages stay reachable from a registered main package production entry', () => {
   const appJson = readJson('app.json')
   const mainEntries = collectJavaScriptEntries(appJson.pages, true)
   const subpackageRoutes = appJson.subPackages.flatMap((pkg) => (
@@ -419,6 +426,7 @@ test('main package JavaScript used by subpackages stays reachable from a main pa
   const subpackageRoots = appJson.subPackages.map((pkg) => path.join(MINIAPP_ROOT, pkg.root))
   const subpackageOnlyMainJavaScript = Array.from(subpackageReachable)
     .filter((filePath) => (
+      isInside(path.join(MINIAPP_ROOT, 'utils'), filePath) &&
       !subpackageRoots.some((subpackageRoot) => isInside(subpackageRoot, filePath)) &&
       !mainReachable.has(filePath)
     ))
@@ -430,6 +438,67 @@ test('main package JavaScript used by subpackages stays reachable from a main pa
     [],
     `move subpackage-only JavaScript under its subpackage root: ${subpackageOnlyMainJavaScript.join(', ')}`
   )
+})
+
+test('portfolio tab registers with only its own subpackage and reachable main package modules', () => {
+  const appJson = readJson('app.json')
+  const packageRoot = path.join(MINIAPP_ROOT, EXPECTED_PACKAGES.portfolio)
+  const mainReachable = collectReachableJavaScript(collectJavaScriptEntries(appJson.pages, true))
+  const modules = new Map()
+  const pages = []
+  const context = vm.createContext({
+    Page(definition) { pages.push(definition) },
+    wx: {},
+    console,
+    setTimeout,
+    clearTimeout
+  })
+
+  // 模拟按真实入口裁剪后的代码包，禁止 Node 从磁盘补读未打包的主包模块。
+  function loadPackagedModule(filePath) {
+    assert.ok(
+      isInside(packageRoot, filePath) || mainReachable.has(filePath),
+      `module is not defined in the loaded packages: ${path.relative(MINIAPP_ROOT, filePath)}`
+    )
+    if (modules.has(filePath)) {
+      return modules.get(filePath).exports
+    }
+    const module = { exports: {} }
+    modules.set(filePath, module)
+    const factory = vm.runInContext(
+      `(function (require, module, exports) {\n${fs.readFileSync(filePath, 'utf8')}\n})`,
+      context,
+      { filename: filePath }
+    )
+    factory((requestPath) => {
+      const dependencyPath = resolveJavaScriptRequest(filePath, requestPath)
+      assert.ok(dependencyPath, `${path.relative(MINIAPP_ROOT, filePath)} cannot resolve ${requestPath}`)
+      return loadPackagedModule(dependencyPath)
+    }, module, module.exports)
+    return module.exports
+  }
+
+  loadPackagedModule(path.join(packageRoot, 'portfolios.js'))
+  assert.equal(pages.length, 1, 'opening the portfolio tab should register its page')
+  assert.equal(pages[0].data.ownerType, 'USER')
+  assert.equal(pages[0].data.loading, true)
+  assert.equal(typeof pages[0].onShow, 'function')
+  assert.ok(modules.has(path.join(packageRoot, 'utils/portfolio-background-audio.js')))
+})
+
+test('subpackage lunar and color utility copies stay byte-for-byte aligned', () => {
+  const packageGroups = {
+    'lunar.js': ['portfolio', 'mock', 'schedule', 'teamPortfolio'],
+    'portfolio-color.js': ['portfolio', 'mock']
+  }
+  for (const [utilityName, packageNames] of Object.entries(packageGroups)) {
+    assert.equal(fs.existsSync(path.join(MINIAPP_ROOT, 'utils', utilityName)), false)
+    const copies = packageNames.map((packageName) => fs.readFileSync(
+      path.join(MINIAPP_ROOT, EXPECTED_PACKAGES[packageName], 'utils', utilityName),
+      'utf8'
+    ))
+    assert.equal(new Set(copies).size, 1, `${utilityName} copies should stay aligned`)
+  }
 })
 
 test('works utility copies stay byte-for-byte aligned across business subpackages', () => {

@@ -284,7 +284,7 @@ test('portrait exposed next card selects it before playback and fallback follows
 
 
 test('personal and team component title settings default on and survive saving independently of work titles', async () => {
-  const personal = require('../utils/portfolios')
+  const personal = require('../pages/portfolios/utils/portfolios')
   const team = require('../pages/team-portfolios/utils/team-portfolios')
   for (const value of [undefined, null, true, false, 'false']) {
     const source = { title: '保留的组件标题', showComponentTitle: value, showTitle: false }
@@ -316,7 +316,7 @@ test('personal and team component title settings default on and survive saving i
 })
 
 test('preview and visitor title rendering defaults on and preserves explicit off in primary and secondary menus', () => {
-  const { normalizeVisitorPortfolio } = require('../utils/visitor-portfolio')
+  const { normalizeVisitorPortfolio } = require('../pages/portfolios/utils/visitor-portfolio')
   const { normalizeTeamVisitorPortfolio } = require('../pages/team-portfolios/utils/team-visitor-portfolio')
   for (const showComponentTitle of [undefined, null, true, false]) {
     const expected = showComponentTitle !== false

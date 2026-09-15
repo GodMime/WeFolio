@@ -671,7 +671,7 @@ test('visitor schedule formats its initial date with local calendar fields', () 
   assert.equal(todayText(localDate), '2026-08-07')
   assert.ok(definition)
   delete require.cache[require.resolve(pagePath)]
-  delete require.cache[require.resolve('../utils/visitor-session.js')]
+  delete require.cache[require.resolve('../pages/portfolios/utils/visitor-session.js')]
 })
 
 test('points page enables automatic marquee only for overflowing ledger descriptions', async () => {

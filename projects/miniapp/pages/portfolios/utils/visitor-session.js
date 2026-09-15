@@ -2,8 +2,8 @@ const {
   VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY,
   VISITOR_TOKEN_STORAGE_KEY,
   request
-} = require('./request')
-const { visitActivityLifecycle } = require('./visit-activity-lifecycle')
+} = require('../../../utils/request')
+const { visitActivityLifecycle } = require('../../../utils/visit-activity-lifecycle')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'
