@@ -180,6 +180,6 @@
     <view class="clipboard-prompt-card portfolio-theme-{{portfolio.themeMode}}">{{clipboardPromptText}}</view>
   </root-portal>
   <view wx:if="{{backgroundAudioResource.enabled && backgroundAudioResource.mediaUrl && !loading && !errorMessage}}" class="portfolio-background-audio" style="position: fixed; top: {{backgroundAudioTop}}px; right: 12px; z-index: 20;">
-    <background-audio-control display-style="{{backgroundAudioResource.displayStyle}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" bindtoggle="handleToggleBackgroundAudio" />
+    <background-audio-control draggable="{{true}}" anchor-top="{{backgroundAudioTop}}" display-style="{{backgroundAudioResource.displayStyle}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" bindtoggle="handleToggleBackgroundAudio" />
   </view>
 </view>

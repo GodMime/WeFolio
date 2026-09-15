@@ -1,5 +1,15 @@
 <!-- 沿用已确认 V1/V2：轻量唱片、封套抽盘、迷你播放器；不持有音频实例。 -->
-<view class="audio-control style-{{displayStyle}} {{playing ? 'is-playing' : ''}}" bindtap="handleTap" aria-role="button" aria-label="{{sample ? title : playing ? '暂停背景音频' : '播放背景音频'}}">
+<view
+  class="audio-control style-{{displayStyle}} {{playing ? 'is-playing' : ''}} {{draggable && !sample ? 'is-draggable' : ''}} {{dragging ? 'is-dragging' : ''}}"
+  style="transform: translate({{offsetX}}px, {{offsetY}}px);"
+  bindtap="handleTap"
+  bindtouchstart="handleTouchStart"
+  catchtouchmove="{{draggable && !sample ? 'handleTouchMove' : ''}}"
+  bindtouchend="handleTouchEnd"
+  bindtouchcancel="handleTouchCancel"
+  aria-role="button"
+  aria-label="{{sample ? title : playing ? '暂停背景音频' : '播放背景音频'}}"
+>
   <view wx:if="{{displayStyle === 'DISC'}}" class="audio-disc">
     <image wx:if="{{!coverFailed}}" class="audio-disc-art audio-spin" src="{{coverSource}}" mode="aspectFill" binderror="handleCoverError" />
     <view class="audio-disc-hole"></view>
