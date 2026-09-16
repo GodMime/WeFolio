@@ -174,7 +174,8 @@ class PaymentBalanceConfirmationIntegrationTest {
         refreshSessionAfterCommit();
         PointGiftOrderEntity awakened = gifts.selectById(17L);
         assertThat(awakened.getLastFailedAt()).isNull();
-        assertThat(awakened.getNextExecuteAt()).isBeforeOrEqualTo(LocalDateTime.now());
+        // 唤醒时间由数据库按毫秒生成，使用同一时钟核对可执行性，避免舍入后领先 JVM 数十微秒。
+        assertThat(awakened.getNextExecuteAt()).isBeforeOrEqualTo(gifts.selectCurrentTimestamp());
         assertThat(awakened.getLastErrorCode()).isEqualTo(WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS.name());
         when(client.queryUserBalance(any())).thenThrow(new IllegalStateException("补查临时失败"));
         giftProcessor.process(17L);
@@ -385,7 +386,7 @@ class PaymentBalanceConfirmationIntegrationTest {
         assertThat(gifts.selectById(17L).getExecutionLeaseToken()).isEqualTo("active-token");
         jdbc.update("UPDATE wf_point_gift_order SET lease_until = ? WHERE id = 17", LocalDateTime.now().minusMinutes(1));
         refreshSessionAfterCommit();
-        assertThat(gifts.selectById(17L).getNextExecuteAt()).isBeforeOrEqualTo(LocalDateTime.now());
+        assertThat(gifts.selectById(17L).getNextExecuteAt()).isBeforeOrEqualTo(gifts.selectCurrentTimestamp());
         assertThat(gifts.selectById(17L).getExecutionLeaseToken()).isNull();
         assertThat(gifts.selectById(17L).getLastFailedAt()).isNull();
         assertThat(gifts.selectById(17L).getRetryCount()).isEqualTo(1);

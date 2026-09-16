@@ -25,6 +25,7 @@ import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,7 +43,11 @@ import java.util.Objects;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PortfolioVisitService {
+
+    /** 旧客户端失效作品事件的观测标识，可用于日志聚合计数。 */
+    private static final String LEGACY_WORK_EVENT_IGNORED = "PORTFOLIO_LEGACY_WORK_EVENT_IGNORED";
 
     /** 打开个人作品集业务类型 */
     private static final String BUSINESS_TYPE_PORTFOLIO_OPEN = "PORTFOLIO_OPEN";
@@ -344,7 +349,8 @@ public class PortfolioVisitService {
     /**
      * 校验上报的作品属于已发布引用，防止省略组件键后绕过计费资源校验。
      *
-     * <p>旧版客户端可省略组件键；其已失效引用事件静默丢弃，避免阻断已打开页面的媒体展示。
+     * <p>旧版客户端可省略组件键；其已失效引用事件不入账并保留成功响应，避免阻断已打开页面的媒体展示。
+     * 忽略事件输出作品与发布版本的观测日志，不包含访客标识、令牌或请求元数据。
      * 传入组件键时仍须精确命中作品与组件引用对。
      * 不追加作品当前状态或媒体类型校验，保留旧发布配置和延迟事件的处理语义。</p>
      *
@@ -393,6 +399,10 @@ public class PortfolioVisitService {
                         && Objects.equals(reference.getDeleted(), 0L));
         if (!matched && componentKey != null) {
             throw new BusinessException(EVENT_REFERENCE_INVALID_MESSAGE);
+        }
+        if (!matched) {
+            log.info("{} portfolioId={} publishedRevision={} workId={} eventType={}",
+                    LEGACY_WORK_EVENT_IGNORED, portfolio.getId(), portfolio.getPublishedRevision(), workId, eventType);
         }
         return matched;
     }

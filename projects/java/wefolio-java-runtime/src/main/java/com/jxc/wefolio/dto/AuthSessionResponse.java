@@ -16,4 +16,7 @@ public class AuthSessionResponse {
 
     /** 小程序前台维护微信会话的节流检查间隔秒数 */
     private Long wechatSessionCheckIntervalSeconds;
+
+    /** 服务端微信会话需要刷新；新增可选字段，旧客户端可忽略且不影响维护者令牌有效性。 */
+    private Boolean wechatSessionRefreshRequired;
 }

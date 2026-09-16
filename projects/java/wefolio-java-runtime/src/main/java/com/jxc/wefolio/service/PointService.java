@@ -261,7 +261,7 @@ public class PointService {
     }
 
     /**
-     * 将微信支付充值积分原子计入账户并写入幂等流水。
+     * 按微信权威余额结算虚拟充值，只累计一次充值总额并写入幂等流水。
      *
      * @param userId 用户 ID
      * @param points 到账积分
@@ -269,35 +269,14 @@ public class PointService {
      * @param calculationSnapshot 套餐计算快照 JSON
      * @param idempotencyKey 积分流水幂等键
      * @param remark 套餐名称
+     * @param wechatBalance 微信总代币余额
+     * @param wechatPresentBalance 微信赠送代币余额
      * @return 积分变动结果
      */
-    @Transactional(rollbackFor = Exception.class)
-    public PointMutationResponse recharge(
-            Long userId,
-            long points,
-            String businessId,
-            String calculationSnapshot,
-            String idempotencyKey,
-            String remark
-    ) {
-        return rechargeInCurrentTransaction(userId, points, businessId, calculationSnapshot,
-                idempotencyKey, remark, null, null);
-    }
-
-    /** 虚拟支付按权威快照结算，只累计一次充值总额，避免迟到订单再次叠加已包含的余额。 */
     @Transactional(rollbackFor = Exception.class)
     public PointMutationResponse rechargeVirtual(
             Long userId, long points, String businessId, String calculationSnapshot,
             String idempotencyKey, String remark, long wechatBalance, long wechatPresentBalance
-    ) {
-        return rechargeInCurrentTransaction(userId, points, businessId, calculationSnapshot,
-                idempotencyKey, remark, wechatBalance, wechatPresentBalance);
-    }
-
-    /** 普通充值与虚拟支付共享幂等流水，余额更新方式由是否有权威快照决定。 */
-    private PointMutationResponse rechargeInCurrentTransaction(
-            Long userId, long points, String businessId, String calculationSnapshot,
-            String idempotencyKey, String remark, Long wechatBalance, Long wechatPresentBalance
     ) {
         requireActiveUser(userId);
         if (points <= 0L) {
@@ -322,10 +301,8 @@ public class PointService {
         }
 
         PointAccountEntity account = requireAccount(userId);
-        int updated = wechatBalance == null
-                ? pointAccountEntityMapper.addRechargedPoints(account.getId(), userId, points)
-                : pointAccountEntityMapper.applyRechargeWechatBalance(
-                        account.getId(), userId, points, wechatBalance, wechatPresentBalance);
+        int updated = pointAccountEntityMapper.applyRechargeWechatBalance(
+                account.getId(), userId, points, wechatBalance, wechatPresentBalance);
         if (updated != 1) {
             throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
         }
@@ -334,9 +311,7 @@ public class PointService {
             throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
         }
         long balanceAfter = safeLong(updatedAccount.getBalance());
-        long balanceBefore = wechatBalance == null
-                ? Math.subtractExact(balanceAfter, points)
-                : safeLong(account.getBalance());
+        long balanceBefore = safeLong(account.getBalance());
 
         PointTransactionEntity transaction = new PointTransactionEntity();
         transaction.setAccountId(updatedAccount.getId());
@@ -352,8 +327,7 @@ public class PointService {
         transaction.setCalculationSnapshot(normalizedSnapshot);
         transaction.setIdempotencyKey(normalizedIdempotencyKey);
         String normalizedRemark = normalizeOptionalString(remark);
-        transaction.setRemark(wechatBalance == null ? normalizedRemark
-                : Objects.toString(normalizedRemark, "") + VIRTUAL_RECHARGE_BALANCE_REMARK);
+        transaction.setRemark(Objects.toString(normalizedRemark, "") + VIRTUAL_RECHARGE_BALANCE_REMARK);
         transaction.setOccurredAt(LocalDateTime.now());
         pointTransactionEntityMapper.insert(transaction);
         return buildMutationFromTransaction(transaction, false, true);

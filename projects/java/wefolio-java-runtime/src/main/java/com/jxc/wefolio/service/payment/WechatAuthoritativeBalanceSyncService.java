@@ -46,6 +46,12 @@ public class WechatAuthoritativeBalanceSyncService {
         userPointMutex.execute(userId, () -> synchronizeInsideUserLock(userId, accountId, referenceNo));
     }
 
+    /** 后台核对已持有用户锁时补查退款余额，失败继续保留失效标记供现有恢复任务处理。 */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public boolean synchronizeWithinUserLock(Long userId, Long accountId, String referenceNo) {
+        return properties.isEnabled() && synchronizeInsideUserLock(userId, accountId, referenceNo);
+    }
+
     /** 登录、刷新会话及后台恢复时，只补偿有退款事实的失效账户。 */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void synchronizeStaleBalanceForUser(Long userId) {

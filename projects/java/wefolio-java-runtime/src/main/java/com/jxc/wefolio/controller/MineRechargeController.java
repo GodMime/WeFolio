@@ -8,7 +8,8 @@ import com.jxc.wefolio.dto.CreateRechargeOrderResponse;
 import com.jxc.wefolio.dto.RechargeOrderSyncResponse;
 import com.jxc.wefolio.dto.RechargeOrdersResponse;
 import com.jxc.wefolio.dto.RechargePageResponse;
-import com.jxc.wefolio.service.payment.RechargeService;
+import com.jxc.wefolio.service.payment.RechargeCommandService;
+import com.jxc.wefolio.service.payment.RechargeQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,8 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class MineRechargeController {
 
-    /** 充值应用服务。 */
-    private final RechargeService rechargeService;
+    /** 充值页与记录查询服务。 */
+    private final RechargeQueryService rechargeQueryService;
+
+    /** 建单与支付状态同步服务。 */
+    private final RechargeCommandService rechargeCommandService;
 
     /**
      * 获取充值页数据。
@@ -35,7 +39,7 @@ public class MineRechargeController {
      */
     @GetMapping("/api/mine/recharges")
     public Response<RechargePageResponse> page() {
-        return Response.success(rechargeService.getPage(AuthContextHolder.requireUserId()));
+        return Response.success(rechargeQueryService.getPage(AuthContextHolder.requireUserId()));
     }
 
     /**
@@ -48,7 +52,7 @@ public class MineRechargeController {
     public Response<CreateRechargeOrderResponse> createOrder(
             @RequestBody CreateRechargeOrderRequest request
     ) {
-        return Response.success(rechargeService.createOrder(AuthContextHolder.requireUserId(), request));
+        return Response.success(rechargeCommandService.createOrder(AuthContextHolder.requireUserId(), request));
     }
 
     /**
@@ -63,7 +67,7 @@ public class MineRechargeController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize
     ) {
-        return Response.success(rechargeService.listOrders(
+        return Response.success(rechargeQueryService.listOrders(
                 AuthContextHolder.requireUserId(), page, pageSize));
     }
 
@@ -77,7 +81,7 @@ public class MineRechargeController {
     public Response<RechargeOrderSyncResponse> syncOrder(
             @PathVariable String merchantOrderNo
     ) {
-        return Response.success(rechargeService.syncOrder(
+        return Response.success(rechargeCommandService.syncOrder(
                 AuthContextHolder.requireUserId(), merchantOrderNo));
     }
 }

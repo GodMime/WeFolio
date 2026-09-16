@@ -77,16 +77,6 @@ wechat:
     app-secret: ${WECHAT_MINIAPP_APP_SECRET}
     connect-timeout: ${WECHAT_MINIAPP_CONNECT_TIMEOUT:1s}
     read-timeout: ${WECHAT_MINIAPP_READ_TIMEOUT:3s}
-  pay:
-    enabled: ${WECHAT_PAY_ENABLED:false}
-    merchant-id: ${WECHAT_PAY_MERCHANT_ID:}
-    merchant-serial-number: ${WECHAT_PAY_MERCHANT_SERIAL_NUMBER:}
-    private-key-path: ${WECHAT_PAY_PRIVATE_KEY_PATH:}
-    api-v3-key: ${WECHAT_PAY_API_V3_KEY:}
-    public-key-id: ${WECHAT_PAY_PUBLIC_KEY_ID:}
-    public-key-path: ${WECHAT_PAY_PUBLIC_KEY_PATH:}
-    notify-url: ${WECHAT_PAY_NOTIFY_URL:https://api.we-folio.dingchenyong.top/api/payment/wechat/recharge/notify}
-    order-expire-minutes: ${WECHAT_PAY_ORDER_EXPIRE_MINUTES:15}
   virtual-payment:
     enabled: ${WECHAT_VIRTUAL_PAYMENT_ENABLED:false}
     offer-id: ${WECHAT_VIRTUAL_PAYMENT_OFFER_ID:}

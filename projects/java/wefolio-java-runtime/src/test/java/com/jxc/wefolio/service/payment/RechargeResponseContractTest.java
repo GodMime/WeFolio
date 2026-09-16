@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** 微信虚拟支付充值响应契约测试。 */
-class RechargeServiceTest {
+class RechargeResponseContractTest {
 
     /** 创建订单响应只保留虚拟支付调起字段。 */
     @Test

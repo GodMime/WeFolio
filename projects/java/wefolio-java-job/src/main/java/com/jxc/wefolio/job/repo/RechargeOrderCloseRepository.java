@@ -20,7 +20,8 @@ public class RechargeOrderCloseRepository {
     /**
      * 关闭一批已过期且仍待支付的充值订单。
      *
-     * <p>状态条件与更新时间条件放在同一条 SQL 中，避免与支付回调并发时覆盖已支付状态。</p>
+     * <p>状态与已确认支付金额同时校验，不能关闭已确认支付但仍等待本地结算的订单。
+     * 先于微信成功事实落库的关单仍可由 runtime 从 CLOSED 状态核对恢复。</p>
      *
      * @param now 本轮固定判断时点
      * @param limit 单批上限
@@ -36,6 +37,7 @@ public class RechargeOrderCloseRepository {
                 WHERE status = ?
                   AND deleted = 0
                   AND expire_at < ?
+                  AND (paid_fee IS NULL OR paid_fee <= 0)
                 ORDER BY expire_at ASC, id ASC
                 LIMIT ?
                 """;

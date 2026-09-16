@@ -771,27 +771,125 @@ test('封面SHA结果返回与后续申请票据之间离页也不请求网络',
 
 function pendingPngPage() {
   const exports = [], deleted = [], draws = []
-  const canvas = {
+  const createCanvas = () => ({
     width: 1, height: 1,
     getContext: () => ({ clearRect() {}, drawImage: (...args) => draws.push(args) }),
     createImage() { return { set src(value) { if (this.onload) this.onload() } } }
-  }
+  })
+  const canvas = createCanvas(), recoveryCanvas = createCanvas()
   const { page, api, toasts, modals } = loadPage({
     chooseMedia(options) { options.success({ tempFiles: [{ tempFilePath: '/original.png', fileType: 'image', size: 12 * MB }] }) },
     getFileSystemManager: () => ({ statSync: p => ({ size: p === '/original.png' ? 12 * MB : 9.8 * MB | 0 }), unlinkSync: p => deleted.push(p) }),
     getImageInfo(options) { options.success({ width: 3000, height: 2000, type: 'png' }) },
     canvasToTempFilePath(options) { exports.push(options) },
     createSelectorQuery() {
-      const query = { in: () => query, select: () => query, fields: () => query, exec: callback => callback([{ node: canvas }]) }
+      let selector
+      const query = { in: () => query, select: value => { selector = value; return query }, fields: () => query,
+        exec: callback => callback([{ node: selector === '#workCompressionRecoveryCanvas' ? recoveryCanvas : canvas }]) }
       return query
     }
   })
-  return { page, api, canvas, exports, deleted, draws, toasts, modals }
+  return { page, api, canvas, recoveryCanvas, exports, deleted, draws, toasts, modals }
 }
 
-test('真实PNG取消及编码租约到期均保留旧节点，迟到原生终态才释放', async t => {
+const audioChooseEvent = { currentTarget: { dataset: { mediaType: 'AUDIO' } } }
+
+test('音频选择等待可取消，旧picker迟到成功不能覆盖新一轮或删除原文件', async () => {
+  const pickers = [], deleted = []
+  const { page, toasts } = loadPage({
+    chooseMessageFile(options) { pickers.push(options) },
+    getFileSystemManager: () => ({ unlinkSync: path => deleted.push(path) }),
+    createInnerAudioContext() { assert.fail('取消后的picker结果不得开始读取') }
+  })
+  const existing = { clientId: 'existing', mediaType: 'IMAGE', size: 1024, tempFilePath: '/existing.jpg' }
+  page.data.files = [existing]
+  const first = page.handleChooseMedia(audioChooseEvent)
+  assert.equal(page.data.canCancelPreparation, true)
+  page.handleCancelPreparation()
+  await first
+  const second = page.handleChooseMedia(audioChooseEvent)
+  pickers[0].success({ tempFiles: [{ path: '/late.mp3', name: 'late.mp3', size: 1024 }] })
+  await tick()
+  assert.equal(page.data.choosing, true)
+  assert.deepEqual(page.data.files, [existing])
+  page.handleCancelPreparation()
+  await second
+  assert.deepEqual(deleted, [])
+  assert.deepEqual(toasts, [])
+})
+
+test('音频picker未回调时业务期限结束，迟到返回不能重新入列', async t => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
-  const { page, canvas, exports, deleted, modals } = pendingPngPage()
+  let picker, completed = false
+  const { page, toasts } = loadPage({ chooseMessageFile(options) { picker = options } })
+  const pending = page.handleChooseMedia(audioChooseEvent).then(() => { completed = true })
+  t.mock.timers.tick(120001)
+  await tick()
+  assert.equal(completed, true)
+  await pending
+  assert.equal(page.data.choosing, false)
+  assert.match(toasts.at(-1), /选择音频超时.*重新选择/)
+  picker.success({ tempFiles: [{ path: '/late.mp3', name: 'late.mp3', size: 1024 }] })
+  await tick()
+  assert.equal(page.data.files.length, 0)
+})
+
+test('串行音频读取可立即取消并销毁当前上下文，迟到事件不取消新读取', async () => {
+  const contexts = [], deleted = []
+  const { page } = loadPage({
+    chooseMessageFile(options) { options.success({ tempFiles: [1, 2].map(index => ({ path: `/audio-${index}.mp3`, name: `${index}.mp3`, size: 1024 })) }) },
+    getFileSystemManager: () => ({ unlinkSync: path => deleted.push(path) }),
+    createInnerAudioContext() {
+      const context = { duration: 0, destroyed: false, onCanplay(fn) { this.ready = fn }, onError(fn) { this.failed = fn }, destroy() { this.destroyed = true } }
+      contexts.push(context)
+      return context
+    }
+  })
+  const first = page.handleChooseMedia(audioChooseEvent)
+  await tick()
+  assert.equal(contexts.length, 1)
+  page.handleCancelPreparation()
+  assert.equal(contexts[0].destroyed, true)
+  await first
+  const second = page.handleChooseMedia(audioChooseEvent)
+  await tick()
+  assert.equal(contexts.length, 2)
+  contexts[0].duration = 1; contexts[0].ready(); contexts[0].failed()
+  await tick()
+  assert.equal(page.data.choosing, true)
+  assert.equal(contexts[1].destroyed, false)
+  page.handleCancelPreparation()
+  await second
+  assert.equal(contexts[1].destroyed, true)
+  assert.equal(page.data.files.length, 0)
+  assert.deepEqual(deleted, [])
+})
+
+test('音频读取离页取消后不继续后续文件或写入页面', async () => {
+  const contexts = []
+  const { page } = loadPage({
+    chooseMessageFile(options) { options.success({ tempFiles: [1, 2].map(index => ({ path: `/audio-${index}.mp3`, name: `${index}.mp3`, size: 1024 })) }) },
+    createInnerAudioContext() {
+      const context = { duration: 0, destroyed: false, onCanplay(fn) { this.ready = fn }, onError() {}, destroy() { this.destroyed = true } }
+      contexts.push(context)
+      return context
+    }
+  })
+  const pending = page.handleChooseMedia(audioChooseEvent)
+  await tick()
+  page.onUnload()
+  const patches = page.patches.length
+  await pending
+  contexts[0].duration = 1; contexts[0].ready()
+  await tick()
+  assert.equal(contexts[0].destroyed, true)
+  assert.equal(contexts.length, 1)
+  assert.equal(page.patches.length, patches)
+})
+
+test('真实PNG取消后等待旧编码，租约到期用独立节点恢复且旧回调只清旧节点', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const { page, canvas, recoveryCanvas, exports, deleted, modals } = pendingPngPage()
   const pending = page.handleChooseMedia()
   await tick()
   assert.equal(exports.length, 1)
@@ -799,28 +897,110 @@ test('真实PNG取消及编码租约到期均保留旧节点，迟到原生终�
   page.handleCancelPreparation(); await pending
   assert.strictEqual(page.compressionCanvasLease, lease)
   assert.deepEqual([canvas.width, canvas.height], [3000, 2000])
-  const sizePatches = () => page.patches.filter(patch => patch.compressionCanvasWidth !== undefined).length
-  const before = sizePatches()
-  await page.handleChooseMedia()
-  assert.equal(modals.at(-1).content, '画布处理尚未结束，请返回后重新进入')
-  assert.equal(sizePatches(), before)
-  t.mock.timers.tick(runtime.IMAGE_ATTEMPT_TIMEOUT_MS * 2 + 1)
-  assert.strictEqual(page.compressionCanvasLease, lease)
-  await page.handleChooseMedia()
+  const next = page.handleChooseMedia(); await tick()
+  assert.equal(page.data.choosingTitle, '正在等待上次处理结束')
   assert.equal(exports.length, 1)
-  assert.equal(sizePatches(), before)
+  t.mock.timers.tick(runtime.IMAGE_ATTEMPT_TIMEOUT_MS * 2 + 1)
+  await tick()
+  assert.equal(exports.length, 2)
+  assert.strictEqual(exports[0].canvas, canvas)
+  assert.strictEqual(exports[1].canvas, recoveryCanvas)
+  const recoveryLease = page.compressionCanvasLease
+  assert.notStrictEqual(recoveryLease, lease)
+  assert.deepEqual([canvas.width, canvas.height], [3000, 2000])
   exports[0].success({ tempFilePath: '/late.png' }); await tick()
   assert.deepEqual(deleted, ['/late.png'])
-  assert.equal(page.compressionCanvasLease, null)
+  assert.strictEqual(page.compressionCanvasLease, recoveryLease)
   assert.deepEqual([canvas.width, canvas.height], [1, 1])
-  const next = page.handleChooseMedia(); await tick()
-  assert.equal(exports.length, 2)
+  assert.deepEqual([recoveryCanvas.width, recoveryCanvas.height], [3000, 2000])
   exports[1].success({ tempFilePath: '/success.png' }); await next
   assert.equal(page.data.files.length, 1)
   assert.equal(page.data.files[0].tempFilePath, '/success.png')
   assert.equal(page.compressionCanvasLease, null)
+  assert.deepEqual([recoveryCanvas.width, recoveryCanvas.height], [1, 1])
+  assert.deepEqual(modals, [])
   page.onUnload()
 })
+
+test('等待旧Canvas期间取消立即退出且不修改旧节点', async () => {
+  const { page, canvas, recoveryCanvas, exports, modals } = pendingPngPage()
+  const first = page.handleChooseMedia(); await tick()
+  page.handleCancelPreparation(); await first
+  const next = page.handleChooseMedia(); await tick()
+  assert.equal(page.data.choosingTitle, '正在等待上次处理结束')
+  page.handleCancelPreparation(); await next
+  assert.equal(page.data.choosing, false)
+  assert.equal(exports.length, 1)
+  assert.deepEqual([canvas.width, canvas.height], [3000, 2000])
+  assert.deepEqual([recoveryCanvas.width, recoveryCanvas.height], [1, 1])
+  exports[0].fail({ errMsg: 'late fail' }); await tick()
+  assert.deepEqual([canvas.width, canvas.height], [1, 1])
+  assert.deepEqual(modals, [])
+})
+
+test('两个Canvas都未收尾时不创建第三个大栅格并保留重新进入提示', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+  const { page, canvas, recoveryCanvas, exports, modals } = pendingPngPage()
+  const first = page.handleChooseMedia(); await tick()
+  page.handleCancelPreparation(); await first
+  const second = page.handleChooseMedia(); await tick()
+  t.mock.timers.tick(60001); await tick()
+  assert.equal(exports.length, 2)
+  page.handleCancelPreparation(); await second
+  const third = page.handleChooseMedia(); await tick()
+  t.mock.timers.tick(60001); await third
+  assert.equal(exports.length, 2)
+  assert.deepEqual([canvas.width, canvas.height, recoveryCanvas.width, recoveryCanvas.height], [3000, 2000, 3000, 2000])
+  assert.equal(modals.at(-1).content, '画布处理尚未结束，请返回后重新进入')
+  exports[0].fail({ errMsg: 'late fail' }); exports[1].fail({ errMsg: 'late fail' })
+  await tick()
+})
+
+for (const stage of ['setData', 'query']) {
+  for (const outcome of ['cancel', 'timeout', 'failure']) {
+    test(`恢复Canvas在${stage}阶段${outcome}仅释放自身槽位`, async t => {
+      t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
+      const { page, api, canvas, recoveryCanvas, exports } = pendingPngPage()
+      const first = page.handleChooseMedia(); await tick()
+      const oldLease = page.compressionCanvasLease
+      page.handleCancelPreparation(); await first
+      t.mock.timers.tick(60001)
+      let continueStage
+      if (stage === 'setData') {
+        const setData = page.setData
+        page.setData = (patch, callback) => {
+          if (patch.compressionRecoveryCanvasWidth > 1) {
+            if (outcome === 'failure') throw new Error('setData failed')
+            setData(patch); continueStage = callback
+          } else setData(patch, callback)
+        }
+      } else {
+        api.createSelectorQuery = () => {
+          const query = { in: () => query, select: () => query, fields: () => query, exec(callback) {
+            if (outcome === 'failure') callback([])
+            else continueStage = () => callback([{ node: recoveryCanvas }])
+          } }
+          return query
+        }
+      }
+      const next = page.handleChooseMedia(); await tick()
+      if (outcome === 'cancel') page.handleCancelPreparation()
+      if (outcome === 'timeout') t.mock.timers.tick(10001)
+      await next
+      assert.strictEqual(page.compressionCanvasLeases[0], oldLease)
+      assert.equal(page.compressionCanvasLeases[1], null)
+      assert.deepEqual([canvas.width, canvas.height], [3000, 2000])
+      assert.deepEqual([recoveryCanvas.width, recoveryCanvas.height], [1, 1])
+      assert.equal(page.data.compressionRecoveryCanvasWidth, 1)
+      assert.equal(exports.length, 1)
+      if (continueStage) { continueStage(); await tick() }
+      assert.deepEqual([canvas.width, canvas.height], [3000, 2000])
+      assert.deepEqual([recoveryCanvas.width, recoveryCanvas.height], [1, 1])
+      exports[0].fail({ errMsg: 'old finished' }); await tick()
+      assert.equal(page.compressionCanvasLeases[0], null)
+    })
+  }
+}
 
 test('真实PNG离页后旧导出终态不再写setData或改动实际节点，重进使用独立Canvas', async () => {
   const old = pendingPngPage()
@@ -845,11 +1025,11 @@ test('真实PNG离页后旧导出终态不再写setData或改动实际节点，�
   next.page.onUnload()
 })
 
-test('同批第一张PNG精调超时有best时，下一图片也不能修改仍在导出的节点', async t => {
+test('同批第一张PNG精调超时有best时，下一图片等待旧终态后继续整批入列', async t => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] })
   const { page, api, canvas, exports, deleted, draws, modals } = pendingPngPage()
   api.chooseMedia = options => options.success({ tempFiles: [1, 2].map(n => ({ tempFilePath: `/original${n}.png`, fileType: 'image', size: 12 * MB })) })
-  api.getFileSystemManager = () => ({ statSync: p => ({ size: p === '/best.png' ? 9 * MB : 12 * MB }), unlinkSync: p => deleted.push(p) })
+  api.getFileSystemManager = () => ({ statSync: p => ({ size: p === '/best.png' ? 9 * MB : p === '/second.png' ? 9.8 * MB | 0 : 12 * MB }), unlinkSync: p => deleted.push(p) })
   const existing = { id: 'existing', clientId: 'existing', title: '已有', mediaType: 'IMAGE', size: 1 }
   page.data.files = [existing]
   const pending = page.handleChooseMedia(); await tick()
@@ -861,18 +1041,23 @@ test('同批第一张PNG精调超时有best时，下一图片也不能修改仍�
   const lease = page.compressionCanvasLease
   const size = [canvas.width, canvas.height], drawingCount = draws.length
   t.mock.timers.tick(runtime.IMAGE_ATTEMPT_TIMEOUT_MS + 1)
-  await pending
-  assert.equal(modals.at(-1).content, '画布处理尚未结束，请返回后重新进入')
+  await tick()
+  assert.equal(page.data.choosingTitle, '正在等待上次处理结束')
   assert.strictEqual(page.compressionCanvasLease, lease)
   assert.deepEqual([canvas.width, canvas.height], size)
   assert.equal(draws.length, drawingCount)
   assert.equal(page.data.files.length, 1)
   assert.strictEqual(page.data.files[0], existing)
-  assert.deepEqual(deleted.sort(), ['/best.png', '/oversize.png'])
+  assert.deepEqual(deleted, ['/oversize.png'])
   exports[2].success({ tempFilePath: '/late-refinement.png' }); await tick()
-  assert.equal(page.compressionCanvasLease, null)
-  assert.deepEqual([canvas.width, canvas.height], [1, 1])
+  assert.equal(exports.length, 4)
+  exports[3].success({ tempFilePath: '/second.png' }); await pending
+  assert.equal(page.data.files.length, 3)
+  assert.equal(page.data.files[1].tempFilePath, '/best.png')
+  assert.equal(page.data.files[2].tempFilePath, '/second.png')
+  assert.deepEqual(modals, [])
   assert.ok(deleted.includes('/late-refinement.png'))
+  page.onUnload()
 })
 
 test('失败上传批次不再启动已移除的排队文件，重新保存可上传当前列表', async () => {

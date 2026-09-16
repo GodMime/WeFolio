@@ -34,6 +34,7 @@ class RechargeOrderCloseRepositoryIntegrationTest {
                   expire_at TIMESTAMP NOT NULL,
                   closed_at TIMESTAMP NULL,
                   updated_at TIMESTAMP NOT NULL,
+                  paid_fee BIGINT DEFAULT 0,
                   deleted TINYINT NOT NULL DEFAULT 0,
                   version INT NOT NULL
                 )
@@ -76,6 +77,23 @@ class RechargeOrderCloseRepositoryIntegrationTest {
         assertThat(repository.closeExpiredOrders(now, 10)).isEqualTo(1);
         assertThat(status(1)).isEqualTo("PENDING_PAYMENT");
         assertThat(status(2)).isEqualTo("CLOSED");
+    }
+
+    /** 微信支付事实已持久化但尚未结算时不能关单，未确认付款的过期订单仍正常关闭。 */
+    @Test
+    void closeShouldPreserveConfirmedPaymentAwaitingLocalSettlement() {
+        LocalDateTime now = LocalDateTime.of(2026, 7, 17, 12, 0, 30);
+        insert("PENDING_PAYMENT", now.minusMinutes(3));
+        insert("PENDING_PAYMENT", now.minusMinutes(2));
+        insert("PENDING_PAYMENT", now.minusMinutes(1));
+        jdbcTemplate.update("UPDATE wf_recharge_order SET paid_fee = 100 WHERE id = 1");
+        jdbcTemplate.update("UPDATE wf_recharge_order SET paid_fee = NULL WHERE id = 3");
+
+        assertThat(repository.closeExpiredOrders(now, 10)).isEqualTo(2);
+
+        assertThat(status(1)).isEqualTo("PENDING_PAYMENT");
+        assertThat(status(2)).isEqualTo("CLOSED");
+        assertThat(status(3)).isEqualTo("CLOSED");
     }
 
     private void insert(String status, LocalDateTime expireAt) {

@@ -1,4 +1,4 @@
-const { hasLocalToken, refreshMaintainerWechatSession } = require('./session')
+const { hasLocalToken, ensureSession, refreshMaintainerWechatSession } = require('./session')
 
 const DEFAULT_CHECK_INTERVAL_SECONDS = 300
 
@@ -19,6 +19,7 @@ function createMaintainerWechatSessionController(options = {}) {
   const runtime = () => getRuntimeWx(options.wxApi)
   const hasToken = options.hasToken || (() => hasLocalToken(runtime()))
   const refreshRequest = options.refreshRequest || refreshMaintainerWechatSession
+  const sessionRequest = options.sessionRequest || ensureSession
   const setIntervalFn = options.setIntervalFn || setInterval
   const clearIntervalFn = options.clearIntervalFn || clearInterval
   let timer = null
@@ -54,7 +55,13 @@ function createMaintainerWechatSessionController(options = {}) {
     if (!hasToken()) return Promise.resolve(false)
     if (inFlight) return inFlight
     const current = checkSession()
-      .catch(() => loginAndRefresh())
+      .then(async () => {
+        // 微信本地会话有效不代表服务端版本仍可用；旧服务端未提供标记时维持原行为。
+        const session = await sessionRequest()
+        if (session && session.authenticated === true && session.wechatSessionRefreshRequired === true && hasToken()) {
+          await loginAndRefresh()
+        }
+      }, () => hasToken() ? loginAndRefresh() : false)
       .then(() => true)
       .finally(() => {
         if (inFlight === current) inFlight = null

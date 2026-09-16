@@ -30,6 +30,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -52,7 +54,7 @@ import static org.mockito.Mockito.when;
 /**
  * 作品集访问服务测试 — 覆盖打开访问、事件计数和扣费场景。
  */
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class PortfolioVisitServiceTest {
 
     /** 访问汇总 Mapper 模拟 */
@@ -83,18 +85,22 @@ class PortfolioVisitServiceTest {
                 .thenReturn(1);
     }
 
-    /** 旧页面持有已移除作品时静默丢弃事件，不能产生计数和扣费，也不阻断展示。 */
+    /** 旧页面失效事件保留兼容返回和不扣费语义，同时输出不含访客凭据的观测日志。 */
     @Test
-    void recordEventWithoutComponentKeyShouldIgnoreUnpublishedWork() {
+    void recordEventWithoutComponentKeyShouldIgnoreUnpublishedWork(CapturedOutput output) {
         when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
         VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
         request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
         request.setWorkId(11L);
         request.setIdempotencyKey("unpublished-work");
+        request.setVisitorKey("private-visitor-key");
 
         assertThatCode(() -> service().recordEvent(portfolio(), 1024L, request)).doesNotThrowAnyException();
 
         verifyNoInteractions(visitRecordEntityMapper, visitEventEntityMapper, pointBillingWindowService);
+        assertThat(output.getAll()).contains("PORTFOLIO_LEGACY_WORK_EVENT_IGNORED",
+                "portfolioId=88", "workId=11", "eventType=WORK_VIEWED")
+                .doesNotContain("private-visitor-key", "unpublished-work");
     }
 
     /** 省略组件键不能借用草稿引用、其它作品集或失效引用。 */

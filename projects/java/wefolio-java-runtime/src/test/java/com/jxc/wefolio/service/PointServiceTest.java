@@ -176,38 +176,39 @@ class PointServiceTest {
 
         assertThat(response.getBalanceAfter()).isEqualTo(100L);
         assertThat(replay.getTransactionId()).isEqualTo(100L);
-        verify(pointAccountEntityMapper, never()).addRechargedPoints(any(), any(), any());
         verify(pointAccountEntityMapper).applyRechargeWechatBalance(10L, 7L, 10L, 100L, 0L);
         verify(pointTransactionEntityMapper).insert(any(PointTransactionEntity.class));
     }
 
     @Test
-    void rechargeShouldAtomicallyIncreaseBalanceAndWriteRechargeTransaction() {
+    void virtualRechargeShouldApplyAuthoritativeBalanceAndWriteRechargeTransaction() {
         activeUser(7L);
         PointAccountEntity balanceBefore = account(10L, 7L, 20L);
         PointAccountEntity balanceAfter = account(10L, 7L, 540L);
         balanceAfter.setTotalRecharged(520L);
         when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
         when(pointAccountEntityMapper.selectOne(any())).thenReturn(balanceBefore, balanceAfter);
-        when(pointAccountEntityMapper.addRechargedPoints(10L, 7L, 520L)).thenReturn(1);
+        when(pointAccountEntityMapper.applyRechargeWechatBalance(10L, 7L, 520L, 540L, 20L)).thenReturn(1);
         doAnswer(invocation -> {
             PointTransactionEntity transaction = invocation.getArgument(0);
             transaction.setId(98L);
             return 1;
         }).when(pointTransactionEntityMapper).insert(any(PointTransactionEntity.class));
 
-        PointMutationResponse response = service().recharge(
+        PointMutationResponse response = service().rechargeVirtual(
                 7L,
                 520L,
                 "WFR20260717153000123A3B7K9M2Q5R",
                 "{\"packageCode\":\"RECHARGE_50_YUAN\"}",
                 "POINT_RECHARGE:WFR20260717153000123A3B7K9M2Q5R",
-                "50 元档"
+                "50 元档",
+                540L,
+                20L
         );
 
         ArgumentCaptor<PointTransactionEntity> transactionCaptor =
                 ArgumentCaptor.forClass(PointTransactionEntity.class);
-        verify(pointAccountEntityMapper).addRechargedPoints(10L, 7L, 520L);
+        verify(pointAccountEntityMapper).applyRechargeWechatBalance(10L, 7L, 520L, 540L, 20L);
         verify(pointAccountEntityMapper, never()).updateById(any(PointAccountEntity.class));
         verify(pointTransactionEntityMapper).insert(transactionCaptor.capture());
         assertThat(transactionCaptor.getValue()).satisfies(transaction -> {
@@ -227,7 +228,7 @@ class PointServiceTest {
     }
 
     @Test
-    void rechargeShouldReturnExistingTransactionWithoutAddingPointsAgain() {
+    void virtualRechargeShouldReturnExistingTransactionWithoutUpdatingBalanceAgain() {
         activeUser(7L);
         PointTransactionEntity existing = transaction(98L, 10L, 7L, 520L, 20L, 540L);
         existing.setTransactionType(PointTransactionTypeDict.RECHARGE.getCode());
@@ -237,35 +238,39 @@ class PointServiceTest {
         existing.setIdempotencyKey("POINT_RECHARGE:WFR20260717153000123A3B7K9M2Q5R");
         when(pointTransactionEntityMapper.selectOne(any())).thenReturn(existing);
 
-        PointMutationResponse response = service().recharge(
+        PointMutationResponse response = service().rechargeVirtual(
                 7L,
                 520L,
                 "WFR20260717153000123A3B7K9M2Q5R",
                 "{}",
                 "POINT_RECHARGE:WFR20260717153000123A3B7K9M2Q5R",
-                "50 元档"
+                "50 元档",
+                600L,
+                20L
         );
 
         assertThat(response.isIdempotent()).isTrue();
         assertThat(response.getBalanceAfter()).isEqualTo(540L);
-        verify(pointAccountEntityMapper, never()).addRechargedPoints(any(), any(), any());
+        verify(pointAccountEntityMapper, never()).applyRechargeWechatBalance(any(), any(), any(), any(), any());
         verify(pointTransactionEntityMapper, never()).insert(any(PointTransactionEntity.class));
     }
 
     @Test
-    void rechargeShouldFailWhenAtomicAccountUpdateDoesNotMatchOneRow() {
+    void virtualRechargeShouldFailWhenAtomicAccountUpdateDoesNotMatchOneRow() {
         activeUser(7L);
         when(pointTransactionEntityMapper.selectOne(any())).thenReturn(null);
         when(pointAccountEntityMapper.selectOne(any())).thenReturn(account(10L, 7L, 20L));
-        when(pointAccountEntityMapper.addRechargedPoints(10L, 7L, 520L)).thenReturn(0);
+        when(pointAccountEntityMapper.applyRechargeWechatBalance(10L, 7L, 520L, 540L, 20L)).thenReturn(0);
 
-        assertThatThrownBy(() -> service().recharge(
+        assertThatThrownBy(() -> service().rechargeVirtual(
                 7L,
                 520L,
                 "WFR20260717153000123A3B7K9M2Q5R",
                 "{}",
                 "POINT_RECHARGE:WFR20260717153000123A3B7K9M2Q5R",
-                "50 元档"
+                "50 元档",
+                540L,
+                20L
         ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("积分账户更新失败，请重试");

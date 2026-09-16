@@ -315,11 +315,21 @@ async function compressVideoToLimit(file, options = {}) {
   if (!isPositiveFinite(budget.bitrate)) {
     throw createQualityError()
   }
-  const trustedSourceBitrate = isPositiveFinite(sourceInfo.bitrate)
+  let trustedSourceBitrate = isPositiveFinite(sourceInfo.bitrate)
     ? Math.floor(Number(sourceInfo.bitrate))
     : Infinity
   let currentKbps = Math.min(budget.bitrate, trustedSourceBitrate)
-  const geometry = chooseVideoGeometry(sourceInfo, currentKbps)
+  let geometry
+  try {
+    geometry = chooseVideoGeometry(sourceInfo, currentKbps)
+  } catch (error) {
+    // 大文件的正码率也可能被原生少报；不能让它单独否定字节预算可容纳的尺寸。
+    // 仅在源码率截断导致几何不可行时重算，成品仍须通过大小、时长和质量验收。
+    if (!error || error.code !== VIDEO_QUALITY_LIMIT_ERROR_CODE || trustedSourceBitrate >= budget.bitrate) throw error
+    geometry = chooseVideoGeometry(sourceInfo, budget.bitrate)
+    trustedSourceBitrate = Infinity
+    currentKbps = budget.bitrate
+  }
   let calibratedMinBitrate = geometry.minBitrate
   let best = null
   let previousAttempt = null
@@ -355,6 +365,9 @@ async function compressVideoToLimit(file, options = {}) {
         resolution: geometry.r
       }, {
         timeoutMs: attemptTimeoutMs,
+        waitForEncoding: true,
+        encodingWaitTimeoutMs: remainingTimeout(startedAt, VIDEO_TOTAL_TIMEOUT_MS),
+        onEncodingWait: options.onEncodingWait,
         nominalTimeoutMs: VIDEO_ATTEMPT_TIMEOUT_MS,
         encoding: true,
         createsFile: true

@@ -2,7 +2,6 @@ package com.jxc.wefolio.entity;
 
 import java.time.LocalDateTime;
 
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -44,7 +43,7 @@ public class RechargeOrderEntity extends BaseEntity {
     /** 调起虚拟支付购买的代币数量，等于基础积分 */
     private Long buyQuantity;
 
-    /** 订单状态：PENDING_PAYMENT 待支付 / PAID 已支付 / PAYMENT_FAILED 支付失败 / CLOSED 已关闭 */
+    /** 订单状态：PENDING_PAYMENT 待支付 / PAID 已支付 / PAYMENT_FAILED 支付失败 / CLOSED 已关闭 / REFUNDED 已退款 */
     private String status;
 
     /** 支付渠道：WECHAT_VIRTUAL_PAYMENT 微信虚拟支付 */
@@ -59,7 +58,7 @@ public class RechargeOrderEntity extends BaseEntity {
     /** 微信支付侧订单 ID */
     private String wxpayOrderId;
 
-    /** 微信查询返回的实际支付分数 */
+    /** 微信已核实的实付金额（分）；大于零表示已确认收款，入账仍以 PAID 状态为准。 */
     private Long paidFee;
 
     /** 基础充值积分流水 ID */
@@ -67,6 +66,12 @@ public class RechargeOrderEntity extends BaseEntity {
 
     /** 套餐赠送积分订单 ID */
     private Long bonusGiftOrderId;
+
+    /** 后台下次核对时间；为空时允许首次扫描。 */
+    private LocalDateTime nextQueryAt;
+
+    /** 连续未完成核对次数，用于有界指数退避。 */
+    private Integer queryRetryCount;
 
     /** 最近查单错误码 */
     private String lastQueryErrorCode;
@@ -77,15 +82,7 @@ public class RechargeOrderEntity extends BaseEntity {
     /** 最近查单失败时间 */
     private LocalDateTime lastQueryErrorAt;
 
-    /** 旧普通微信支付预支付标识，仅在兼容代码移除前承接内存对象 */
-    @TableField(exist = false)
-    private transient String legacyPrepayId;
-
-    /** 旧普通微信支付交易号，仅在兼容代码移除前承接内存对象 */
-    @TableField(exist = false)
-    private transient String legacyPaymentTransactionId;
-
-    /** 支付完成时间 */
+    /** 首次核实支付完成的时间；不能单独作为本地积分已入账依据。 */
     private LocalDateTime paidAt;
 
     /** 关闭时间 */
@@ -96,25 +93,5 @@ public class RechargeOrderEntity extends BaseEntity {
 
     /** 待支付订单过期时间 */
     private LocalDateTime expireAt;
-
-    /** 获取旧普通微信支付预支付标识。 */
-    public String getPrepayId() {
-        return legacyPrepayId;
-    }
-
-    /** 设置旧普通微信支付预支付标识。 */
-    public void setPrepayId(String prepayId) {
-        this.legacyPrepayId = prepayId;
-    }
-
-    /** 获取旧普通微信支付交易号。 */
-    public String getPaymentTransactionId() {
-        return legacyPaymentTransactionId;
-    }
-
-    /** 设置旧普通微信支付交易号。 */
-    public void setPaymentTransactionId(String paymentTransactionId) {
-        this.legacyPaymentTransactionId = paymentTransactionId;
-    }
 
 }

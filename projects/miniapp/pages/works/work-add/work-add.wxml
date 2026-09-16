@@ -241,4 +241,5 @@
   </view>
 
   <canvas id="workCompressionCanvas" type="2d" class="work-compression-canvas" style="width: {{compressionCanvasWidth}}px; height: {{compressionCanvasHeight}}px;"></canvas>
+  <canvas id="workCompressionRecoveryCanvas" type="2d" class="work-compression-canvas" style="width: {{compressionRecoveryCanvasWidth}}px; height: {{compressionRecoveryCanvasHeight}}px;"></canvas>
 </view>

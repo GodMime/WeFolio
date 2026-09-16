@@ -31,6 +31,20 @@ test('微信原生fail对象归一化后保留原因、错误码及失败API', a
   session.dispose()
 })
 
+test('已映射的应用错误保留展示文案和原始原生诊断字段', async () => {
+  const error = Object.assign(new Error('暂时无法选择音频，请联系管理员'), {
+    errMsg: 'chooseMessageFile:fail api scope is not declared in the privacy agreement', errno: 112
+  })
+  const session = createCompressionSession({ wxApi: {} })
+  await assert.rejects(session.call(({ fail }) => fail(error), {}, { timeoutMs: 1000 }), actual => {
+    assert.equal(actual.message, '暂时无法选择音频，请联系管理员')
+    assert.equal(actual.errMsg, error.errMsg)
+    assert.equal(actual.errno, 112)
+    return true
+  })
+  session.dispose()
+})
+
 test('媒体错误展示包含阶段和原生原因，兼容picker对象和错误码', () => {
   assert.equal(typeof buildMediaErrorMessage, 'function')
   for (const [error, expected] of [
@@ -616,4 +630,113 @@ test('releasePreparedWorkFiles按clientId幂等释放并继续处理清理异常
     'wxfile://a'
   ])
   assert.deepEqual(ownedPathsByClientId, {})
+})
+
+test('编码可等待旧原生调用终态后继续，取消旧会话不提前并发编码', async () => {
+  const { callbacks, wxApi } = createWxApi()
+  const first = createCompressionSession({ wxApi })
+  const old = first.call('compressImage', {}, { timeoutMs: 1000, nominalTimeoutMs: 1000, encoding: true })
+  const cancelled = assert.rejects(old, { code: COMPRESSION_CANCELLED })
+  first.cancel(); await cancelled
+  const waiting = []
+  const second = createCompressionSession({ wxApi })
+  const next = second.call('compressImage', {}, { timeoutMs: 1000, nominalTimeoutMs: 1000,
+    encoding: true, waitForEncoding: true, encodingWaitTimeoutMs: 2000, onEncodingWait: value => waiting.push(value) })
+  await new Promise(setImmediate)
+  assert.equal(callbacks.length, 1)
+  callbacks[0].fail(new Error('old stopped'))
+  await new Promise(setImmediate)
+  assert.equal(callbacks.length, 2)
+  callbacks[1].success({ ok: true })
+  assert.deepEqual(await next, { ok: true })
+  assert.deepEqual(waiting, [true, false])
+  second.dispose()
+})
+
+test('取消编码等待立即退出且不释放其他会话的原生锁', async () => {
+  const { callbacks, wxApi } = createWxApi()
+  const first = createCompressionSession({ wxApi })
+  const old = first.call('compressImage', {}, { timeoutMs: 1000, nominalTimeoutMs: 1000, encoding: true })
+  const second = createCompressionSession({ wxApi })
+  const next = second.call('compressImage', {}, { timeoutMs: 1000, nominalTimeoutMs: 1000,
+    encoding: true, waitForEncoding: true, encodingWaitTimeoutMs: 2000 })
+  const cancelled = assert.rejects(next, { code: COMPRESSION_CANCELLED })
+  second.cancel(); await cancelled
+  assert.equal(callbacks.length, 1)
+  const third = createCompressionSession({ wxApi })
+  await assert.rejects(third.call('compressImage', {}, { timeoutMs: 1000, nominalTimeoutMs: 1000, encoding: true }), { code: COMPRESSION_BUSY })
+  callbacks[0].success({ ok: true }); await old
+  assert.equal(callbacks.length, 1)
+  first.dispose(); third.dispose()
+})
+
+test('租期到期唤醒等待者，等待时间计入编码总预算且旧终态不解新锁', async t => {
+  enableClock(t)
+  const { callbacks, wxApi } = createWxApi()
+  const first = createCompressionSession({ wxApi })
+  const old = first.call('compressImage', {}, { timeoutMs: 100, nominalTimeoutMs: 100, encoding: true })
+  const oldCancelled = assert.rejects(old, { code: COMPRESSION_CANCELLED })
+  first.cancel(); await oldCancelled
+  const second = createCompressionSession({ wxApi })
+  const next = second.call('compressImage', {}, { timeoutMs: 100, nominalTimeoutMs: 100,
+    encoding: true, waitForEncoding: true, encodingWaitTimeoutMs: 250 })
+  const timedOut = assert.rejects(next, { code: COMPRESSION_TIMEOUT })
+  t.mock.timers.tick(200)
+  await new Promise(setImmediate)
+  assert.equal(callbacks.length, 2)
+  callbacks[0].fail(new Error('late old'))
+  const third = createCompressionSession({ wxApi })
+  await assert.rejects(third.call('compressImage', {}, { timeoutMs: 100, nominalTimeoutMs: 100, encoding: true }), { code: COMPRESSION_BUSY })
+  t.mock.timers.tick(50)
+  await timedOut
+  callbacks[1].success({ ok: true })
+  second.dispose(); third.dispose()
+})
+
+test('等待超时不启动原生编码，也不影响仍持锁调用', async t => {
+  enableClock(t)
+  const { callbacks, wxApi } = createWxApi()
+  const first = createCompressionSession({ wxApi })
+  const old = first.call('compressImage', {}, { timeoutMs: 1000, nominalTimeoutMs: 1000, encoding: true })
+  const second = createCompressionSession({ wxApi })
+  const next = second.call('compressImage', {}, { timeoutMs: 100, nominalTimeoutMs: 100,
+    encoding: true, waitForEncoding: true, encodingWaitTimeoutMs: 50 })
+  const timedOut = assert.rejects(next, { code: COMPRESSION_TIMEOUT })
+  t.mock.timers.tick(50)
+  await timedOut
+  assert.equal(callbacks.length, 1)
+  callbacks[0].success({ ok: true }); await old
+  second.dispose(); first.dispose()
+})
+
+test('多个等待会话被同时唤醒后仍只允许一个原生编码', async () => {
+  const { callbacks, wxApi } = createWxApi()
+  const sessions = [0, 1, 2].map(() => createCompressionSession({ wxApi }))
+  const options = { encoding: true, timeoutMs: 1000, nominalTimeoutMs: 1000, waitForEncoding: true, encodingWaitTimeoutMs: 2000 }
+  const pending = sessions.map(session => session.call('compressImage', {}, options))
+  assert.equal(callbacks.length, 1)
+  callbacks[0].success({ index: 0 }); await new Promise(setImmediate)
+  assert.equal(callbacks.length, 2)
+  callbacks[1].success({ index: 1 }); await new Promise(setImmediate)
+  assert.equal(callbacks.length, 3)
+  callbacks[2].success({ index: 2 })
+  assert.deepEqual(await Promise.all(pending), [{ index: 0 }, { index: 1 }, { index: 2 }])
+  sessions.forEach(session => session.dispose())
+})
+
+test('等待进度回调异常不能阻止旧调用结算或泄漏等待者', async () => {
+  const { callbacks, wxApi } = createWxApi()
+  const first = createCompressionSession({ wxApi })
+  const old = first.call('compressImage', {}, { encoding: true, timeoutMs: 1000, nominalTimeoutMs: 1000 })
+  const second = createCompressionSession({ wxApi })
+  const next = second.call('compressImage', {}, { encoding: true, timeoutMs: 1000, nominalTimeoutMs: 1000,
+    waitForEncoding: true, encodingWaitTimeoutMs: 2000, onEncodingWait() { throw new Error('display failed') } })
+  next.catch(() => {})
+  callbacks[0].success({ index: 0 })
+  assert.deepEqual(await old, { index: 0 })
+  await new Promise(setImmediate)
+  assert.equal(callbacks.length, 2)
+  callbacks[1].success({ index: 1 })
+  assert.deepEqual(await next, { index: 1 })
+  first.dispose(); second.dispose()
 })

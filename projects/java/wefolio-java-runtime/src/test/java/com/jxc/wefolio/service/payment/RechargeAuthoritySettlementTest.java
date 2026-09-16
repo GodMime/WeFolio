@@ -4,6 +4,7 @@ import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
 import com.jxc.wefolio.dto.RechargeOrderSyncResponse;
 import com.jxc.wefolio.entity.RechargeOrderEntity;
+import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.RechargeOrderEntityMapper;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -47,7 +49,7 @@ class RechargeAuthoritySettlementTest {
     /** 用户锁模拟。 */
     @Mock private UserPointMutex userPointMutex;
     /** 被测充值编排服务。 */
-    @InjectMocks private RechargeService service;
+    @InjectMocks private RechargeCommandService service;
     /** 检查所有远端调用与本地结算都处于同一锁区间。 */
     private final AtomicBoolean locked = new AtomicBoolean();
     /** 本次尚未结算的充值订单。 */
@@ -71,6 +73,8 @@ class RechargeAuthoritySettlementTest {
         order.setId(1L);
         order.setUserId(7L);
         order.setMerchantOrderNo("ORDER");
+        order.setAmountFen(5000);
+        order.setBuyQuantity(500L);
         order.setStatus(RechargeOrderStatusDict.CLOSED.getCode());
         when(rechargeOrderEntityMapper.selectOne(any())).thenReturn(order);
         UserAuthEntity auth = new UserAuthEntity();
@@ -135,9 +139,30 @@ class RechargeAuthoritySettlementTest {
 
         assertThatThrownBy(() -> service.syncOrder(7L, "ORDER")).isInstanceOf(BusinessException.class);
 
-        verifyNoInteractions(transactionService, pointService);
+        verify(transactionService).recordPaymentConfirmed("ORDER", paid);
+        verify(transactionService, never()).settleVirtual(any(), any(), any());
+        verifyNoInteractions(pointService);
         assertThat(order.getStatus()).isEqualTo(RechargeOrderStatusDict.CLOSED.getCode());
         assertThat(locked.get()).isFalse();
+    }
+
+    /** 微信确认收款后补查失败，成功事实必须先保存，不能仅保留待支付状态。 */
+    @Test
+    void paidFactShouldSurviveBalanceQueryFailure() {
+        RechargeOrderTransactionService actualTransactions = new RechargeOrderTransactionService(
+                rechargeOrderEntityMapper, pointService, null, null, null);
+        ReflectionTestUtils.setField(service, "transactionService", actualTransactions);
+        lenient().when(rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo("ORDER")).thenReturn(order);
+        lenient().when(rechargeOrderEntityMapper.updateById(any(RechargeOrderEntity.class))).thenReturn(1);
+        when(wechatVirtualPaymentClient.queryUserBalance(any())).thenReturn(new WechatVirtualPaymentResult(
+                null, "临时失败", WechatVirtualPaymentErrorType.TRANSIENT, 0L, 0L, 0L, null, 0L, 0L, 503));
+
+        assertThatThrownBy(() -> service.syncOrder(7L, "ORDER")).isInstanceOf(BusinessException.class);
+
+        assertThat(order.getPaidFee()).isEqualTo(5000L);
+        assertThat(order.getPaidAt()).isNotNull();
+        assertThat(order.getStatus()).isEqualTo(RechargeOrderStatusDict.CLOSED.getCode());
+        verifyNoInteractions(pointService);
     }
 
     /** 查单响应明确来自沙箱时，不得用其支付结果结算正式环境订单。 */
@@ -174,4 +199,39 @@ class RechargeAuthoritySettlementTest {
         verifyNoInteractions(pointService);
         assertThat(locked.get()).isFalse();
     }
+    /** 保留旧客户端已入账同步的快速返回，不增加会话依赖。 */
+    @Test
+    void publicPaidSyncShouldKeepExistingResponseWithoutRemoteRequests() {
+        order.setStatus(RechargeOrderStatusDict.PAID.getCode());
+        PointAccountEntity account = new PointAccountEntity();
+        account.setBalance(123L);
+        when(pointService.ensureAccount(7L)).thenReturn(account);
+        RechargeOrderSyncResponse response = service.syncOrder(7L, "ORDER");
+        assertThat(response.getBalance()).isEqualTo(123L);
+        assertThat(response.isConfirmed()).isTrue();
+        verifyNoInteractions(wechatVirtualPaymentClient, transactionService, maintainerWechatSessionService);
+    }
+
+    /** 已确认支付后遇到不一致的失败状态仍保留事实，不能退出后台候选队列。 */
+    @Test
+    void confirmedPaymentShouldNotBeDowngradedByLaterPayError() {
+        order.setPaidFee(5000L);
+        paid = new WechatVirtualPaymentResult(0, null, WechatVirtualPaymentErrorType.SUCCESS,
+                0L, 0L, 0L, "PAYERROR", 0L, 0L, 200);
+        RechargeOrderSyncResponse response = service.syncOrder(7L, "ORDER");
+        assertThat(response.getStatus()).isEqualTo(RechargeOrderStatusDict.CLOSED.getCode());
+        assertThat(response.isConfirmed()).isFalse();
+        verifyNoInteractions(transactionService, pointService);
+    }
+
+    /** 查单本身报告会话失效也更新当前版本，供新客户端的轻量探测触发刷新。 */
+    @Test
+    void queryOrderSessionInvalidShouldInvalidateOnlyUsedVersion() {
+        paid = new WechatVirtualPaymentResult(268490009, "会话失效", WechatVirtualPaymentErrorType.SESSION_INVALID,
+                0L, 0L, 0L, null, 0L, 0L, 200);
+        assertThatThrownBy(() -> service.syncOrder(7L, "ORDER")).isInstanceOf(BusinessException.class);
+        verify(maintainerWechatSessionService).invalidateVersion(7L, 1L, "会话失效");
+        verifyNoInteractions(transactionService, pointService);
+    }
+
 }

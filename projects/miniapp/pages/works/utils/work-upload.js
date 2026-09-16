@@ -67,6 +67,7 @@ const COMPRESSION_SUMMARY_PREFIX = '已压缩：'
 const IMAGE_COMPRESSION_UNSUPPORTED_MESSAGE = '当前微信版本不支持图片压缩，请升级微信'
 const VIDEO_COMPRESSION_UNSUPPORTED_MESSAGE = '当前微信版本不支持视频压缩，请升级微信'
 const IMAGE_PROCESSING_FAILED_MESSAGE = '图片处理失败，请选择较小文件后重试'
+const WEBP_CLASSIFICATION_INCOMPLETE_MESSAGE = '无法确认此 WebP 是否为动图，请将静态图片转换为 JPEG 或 PNG，动图转换为 GIF 后重试'
 const MEDIA_EMPTY_MESSAGE = '作品文件不能为空，请重新选择'
 const MEDIA_TYPE_UNSUPPORTED_MESSAGE = '作品文件格式不支持'
 const VIDEO_DURATION_LIMIT_MESSAGE = '视频作品不能超过 10 分钟'
@@ -480,12 +481,14 @@ async function classifyChosenMediaFiles(files = [], options = {}) {
       if (isWebp(bytes)) webp = await inspectWebp(file, bytes, read)
     } catch (error) {
       if (isCompressionInterrupted(error)) throw error
-      if (large) throw new Error(ANIMATION_TOO_LARGE_MESSAGE)
+      if (large) throw new Error(WEBP_CLASSIFICATION_INCOMPLETE_MESSAGE)
       classified.push(file)
       continue
     }
-    if (large && !webp.staticImageVerified) throw new Error(ANIMATION_TOO_LARGE_MESSAGE)
     const gif = isGif(bytes)
+    if (large && !webp.staticImageVerified) {
+      throw new Error(gif || webp.animated ? ANIMATION_TOO_LARGE_MESSAGE : WEBP_CLASSIFICATION_INCOMPLETE_MESSAGE)
+    }
     if (gif || isWebp(bytes)) {
       const animated = gif || webp.animated
       classified.push(Object.assign({}, file, {
@@ -660,9 +663,11 @@ async function preflightWorkMainFiles(files, { wxApi, session, getCanvas }) {
       const info = await session.call('getImageInfo', { src: file.tempFilePath }, { timeoutMs: METADATA_TIMEOUT_MS })
       session.assertActive()
       const type = trimText(info && info.type).toLowerCase()
+      if (type === 'webp' && (!file.staticImageVerified || file.isAnimation)) {
+        throw new Error(WEBP_CLASSIFICATION_INCOMPLETE_MESSAGE)
+      }
       if (!info || !validMediaDimension(info.width) || !validMediaDimension(info.height)
-          || !['jpg', 'jpeg', 'png', 'webp'].includes(type)
-          || (type === 'webp' && (!file.staticImageVerified || file.isAnimation))) {
+          || !['jpg', 'jpeg', 'png', 'webp'].includes(type)) {
         throw new Error(IMAGE_PROCESSING_FAILED_MESSAGE)
       }
       if (type === 'jpg' || type === 'jpeg') {
@@ -700,10 +705,11 @@ async function prepareWorkMainFiles(files = [], options = {}) {
       }
       progress('reading')
       const onCompress = () => progress('compressing')
+      const onEncodingWait = waiting => progress(waiting ? 'waiting' : 'compressing')
       const next = file.mediaType === 'IMAGE'
-        ? await compressImageToLimit(file, { session, wxApi, getCanvas, onCompress, maxBytes: IMAGE_MAX_BYTES })
+        ? await compressImageToLimit(file, { session, wxApi, getCanvas, onCompress, onEncodingWait, maxBytes: IMAGE_MAX_BYTES })
         : file.mediaType === 'VIDEO'
-          ? await compressVideoToLimit(file, { session, wxApi, onCompress,
+          ? await compressVideoToLimit(file, { session, wxApi, onCompress, onEncodingWait,
             sourceInfo: sourceVideoInfos.get(file), maxBytes: VIDEO_MAX_BYTES,
             maxDurationMs: VIDEO_MAX_DURATION_SECONDS * 1000 })
           : file

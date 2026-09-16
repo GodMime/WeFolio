@@ -1158,7 +1158,7 @@ test('大静态WebP有界分类且stat覆盖picker少报大小', async () => {
   assert.equal(result.webpAlpha, 'opaque')
   assert.ok(reads.reduce((n, read) => n + read[1], 0) <= 64 * 1024)
   header.writeUInt32LE(size + 1, 16)
-  await assert.rejects(classifyChosenMediaFiles([measured], { wxApi }), /动图作品必须小于 32MB/)
+  await assert.rejects(classifyChosenMediaFiles([measured], { wxApi }), /无法确认.*WebP.*JPEG.*PNG.*GIF/)
 })
 
 test('WebP透明标志区别EXIF且VP8L提示不能证明不透明', async () => {
@@ -1197,6 +1197,56 @@ test('WebP扫描最多1024段，不读整文件，不把未扫描结束当静态
   assert.notEqual(result.staticImageVerified, true)
   assert.equal(reads.length, 1024)
   assert.ok(reads.reduce((n, read) => n + read[1], 0) <= 64 * 1024)
+})
+
+test('超过32MB但达到扫描上限的WebP不能误报为动图超限', async () => {
+  const size = 33 * 1024 * 1024
+  const chunks = Array.from({ length: 1024 }, () => ['JUNK', Buffer.alloc(0)])
+  chunks.push(['VP8 ', Buffer.from([1, 2])])
+  const source = webpFixture(chunks)
+  source.writeUInt32LE(size - 8, 4)
+  const { file, wxApi, reads } = classifiedWebpFixture(source, { size })
+
+  await assert.rejects(classifyChosenMediaFiles([file], { wxApi }), /无法确认.*WebP.*JPEG.*PNG.*GIF/)
+  assert.equal(reads.length, 1024)
+})
+
+test('超限WebP无法完整识别时提示转换格式，未超限仍原样保留', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  for (const size of [9 * 1024 * 1024, 11 * 1024 * 1024]) {
+    const source = webpFixture(Array.from({ length: 1024 }, () => ['JUNK', Buffer.alloc(0)]).concat([['ANIM', Buffer.alloc(6)]]))
+    source.writeUInt32LE(size - 8, 4)
+    const { file, wxApi } = classifiedWebpFixture(source, { size })
+    wxApi.getImageInfo = args => args.success({ width: 1920, height: 1080, type: 'webp' })
+    const session = createCompressionSession({ wxApi, protectedPaths: [file.tempFilePath] })
+    const files = await classifyChosenMediaFiles([file], { wxApi, session })
+    assert.equal(files[0].staticImageVerified, false)
+    if (size > IMAGE_MAX_BYTES) {
+      await assert.rejects(prepareWorkMainFiles(files, { wxApi, session }), /无法确认.*WebP.*JPEG.*PNG.*GIF/)
+    } else {
+      const result = await prepareWorkMainFiles(files, { wxApi, session })
+      assert.equal(result.files[0].tempFilePath, file.tempFilePath)
+      assert.equal(result.files[0].size, size)
+      assert.equal(result.files[0].mediaType, 'IMAGE')
+    }
+    session.dispose()
+  }
+})
+
+test('超10MB且带标准动画标志的WebP仍按动图原样处理', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  const flags = Buffer.alloc(10); flags[0] = 2
+  const source = webpFixture([['VP8X', flags], ['ANIM', Buffer.alloc(6)]])
+  const size = 11 * 1024 * 1024
+  source.writeUInt32LE(size - 8, 4)
+  const { file, wxApi, reads } = classifiedWebpFixture(source, { size })
+  const session = createCompressionSession({ wxApi })
+  const files = await classifyChosenMediaFiles([file], { wxApi, session })
+  const result = await prepareWorkMainFiles(files, { wxApi, session })
+  assert.equal(result.files[0].mediaType, 'ANIMATION')
+  assert.equal(result.files[0].tempFilePath, file.tempFilePath)
+  assert.equal(reads.length, 1)
+  session.dispose()
 })
 
 
@@ -1301,7 +1351,7 @@ test('统一预处理拒绝空文件，音频动图沿用既有规则且不编�
   await assert.rejects(prepareWorkMainFiles([{ ...files[1], size: 0 }], { wxApi, session }), /文件不能为空/)
 })
 
-test('大WebP动态、短读或读取失败均保留动图限制文案且不解码', async () => {
+test('大WebP区分已识别动画与短读读取失败，始终不解码未知文件', async () => {
   const size = 32 * 1024 * 1024
   for (const mode of ['dynamic', 'short', 'failure']) {
     const header = Buffer.alloc(21)
@@ -1322,7 +1372,8 @@ test('大WebP动态、短读或读取失败均保留动图限制文案且不解�
       }
     }), getImageInfo() { assert.fail('大WebP不得解码') } }
     await assert.rejects(classifyChosenMediaFiles([{ mediaType: 'IMAGE', fileName: 'big.webp',
-      tempFilePath: 'big', size }], { wxApi }), /动图作品必须小于 32MB/)
+      tempFilePath: 'big', size }], { wxApi }), mode === 'dynamic'
+      ? /动图作品必须小于 32MB/ : /无法确认.*WebP.*JPEG.*PNG.*GIF/)
     assert.equal(reads, 1)
   }
 })

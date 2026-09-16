@@ -35,6 +35,12 @@ public class RechargeRefundTransactionService {
         return userPointMutex.execute(candidate.getUserId(), () -> markRefundedInsideUserLock(merchantOrderNo));
     }
 
+    /** 后台权威核对已持有用户锁，只取得订单行锁并独立提交退款事实。 */
+    @Transactional(rollbackFor = Exception.class)
+    public RechargeOrderEntity markRefundedWithinUserLock(String merchantOrderNo) {
+        return markRefundedInsideUserLock(merchantOrderNo);
+    }
+
     /** 固定用户锁在前、订单行锁在后；锁随退款事务提交释放。 */
     private RechargeOrderEntity markRefundedInsideUserLock(String merchantOrderNo) {
         RechargeOrderEntity order = rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo(merchantOrderNo);

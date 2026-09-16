@@ -65,13 +65,13 @@ class PointAccountConcurrentMutationIntegrationTest {
     }
 
     @Test
-    void concurrentRechargeAndConsumptionShouldNotLoseAccountUpdates() throws Exception {
+    void concurrentVirtualRechargeAndConsumptionShouldNotLoseAccountUpdates() throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
         try {
             Future<Integer> recharge = executor.submit(() -> {
                 start.await();
-                return pointAccountEntityMapper.addRechargedPoints(10L, 7L, 520L);
+                return pointAccountEntityMapper.applyRechargeWechatBalance(10L, 7L, 520L, 620L, 50L);
             });
             Future<Integer> consumption = executor.submit(() -> {
                 start.await();
@@ -87,6 +87,7 @@ class PointAccountConcurrentMutationIntegrationTest {
 
         assertThat(longValue("balance")).isEqualTo(600L);
         assertThat(longValue("wechat_balance")).isEqualTo(620L);
+        assertThat(longValue("wechat_present_balance")).isEqualTo(50L);
         assertThat(longValue("pending_debit")).isEqualTo(20L);
         assertThat(longValue("total_recharged")).isEqualTo(520L);
         assertThat(longValue("total_consumed")).isEqualTo(20L);

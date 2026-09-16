@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.dto.MaintainerWechatLoginRequest;
 import com.jxc.wefolio.dto.MaintainerWechatLoginResponse;
 import com.jxc.wefolio.dto.MaintainerWechatLoginPrecheckRequest;
@@ -20,6 +21,8 @@ import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.config.RegistrationPointProperties;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.service.payment.MaintainerWechatSession;
+import com.jxc.wefolio.service.payment.MaintainerWechatSessionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -36,6 +39,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -80,6 +84,51 @@ class MiniappAuthServiceTest {
 
     @Mock
     private UniqueCodeGenerator uniqueCodeGenerator;
+
+    /** 维护者微信会话存储，用于区分客户端与服务端的可用状态。 */
+    @Mock
+    private MaintainerWechatSessionService maintainerWechatSessionService;
+
+    /** 每个用例独立的支付开关配置。 */
+    private final WechatVirtualPaymentProperties virtualPaymentProperties = new WechatVirtualPaymentProperties();
+
+    /** 服务端已失效或不存在会话时，旧登录态仍有效并提示新客户端刷新微信会话。 */
+    @Test
+    void sessionShouldRequestWechatRefreshWhenServerSessionUnavailable() {
+        virtualPaymentProperties.setEnabled(true);
+
+        var response = buildServiceForSession().buildSession(7L);
+
+        assertThat(response.isAuthenticated()).isTrue();
+        assertThat(response.getUserId()).isEqualTo(7L);
+        assertThat(JSON.parseObject(JSON.toJSONString(response)).getBoolean("wechatSessionRefreshRequired")).isTrue();
+        verify(maintainerWechatSessionService).findAvailableSession(7L);
+    }
+
+    /** 可用服务端会话不要求重新登录，响应中不能包含会话密钥。 */
+    @Test
+    void sessionShouldKeepAvailableWechatSession() {
+        virtualPaymentProperties.setEnabled(true);
+        when(maintainerWechatSessionService.findAvailableSession(7L))
+                .thenReturn(new MaintainerWechatSession(7L, 51L, "private-session-key", 1L, "127.0.0.1"));
+
+        String body = JSON.toJSONString(buildServiceForSession().buildSession(7L));
+
+        assertThat(JSON.parseObject(body).getBoolean("wechatSessionRefreshRequired")).isFalse();
+        assertThat(body).doesNotContain("private-session-key", "127.0.0.1");
+    }
+
+    /** 支付关闭或没有维护者身份时不查询服务端微信会话。 */
+    @Test
+    void sessionShouldNotProbeWechatWhenDisabledOrUnauthenticated() {
+        assertThat(JSON.parseObject(JSON.toJSONString(buildServiceForSession().buildSession(7L)))
+                .getBoolean("wechatSessionRefreshRequired")).isFalse();
+        virtualPaymentProperties.setEnabled(true);
+        assertThat(JSON.parseObject(JSON.toJSONString(buildServiceForSession().buildSession(null)))
+                .getBoolean("wechatSessionRefreshRequired")).isFalse();
+
+        verifyNoInteractions(maintainerWechatSessionService);
+    }
 
     @Test
     void rejectsLegacyPredictableBearerToken() {
@@ -535,6 +584,11 @@ class MiniappAuthServiceTest {
         return buildService(properties(), authTokenProperties("secret-for-token"));
     }
 
+    /** 会话探测用例显式注入会话存储，不改变原登录用例省略会话保存的测试边界。 */
+    private MiniappAuthService buildServiceForSession() {
+        return buildService(properties(), authTokenProperties("secret-for-token"), maintainerWechatSessionService);
+    }
+
     /**
      * 构造被测服务。
      *
@@ -545,6 +599,15 @@ class MiniappAuthServiceTest {
     private MiniappAuthService buildService(
             WechatMiniappProperties wechatProperties,
             AuthTokenProperties authTokenProperties
+    ) {
+        return buildService(wechatProperties, authTokenProperties, null);
+    }
+
+    /** 使用明确的会话存储边界构造服务。 */
+    private MiniappAuthService buildService(
+            WechatMiniappProperties wechatProperties,
+            AuthTokenProperties authTokenProperties,
+            MaintainerWechatSessionService sessionService
     ) {
         return new MiniappAuthService(
                 userEntityMapper,
@@ -562,8 +625,8 @@ class MiniappAuthServiceTest {
                         registrationPointProperties()
                 ),
                 uniqueCodeGenerator,
-                null,
-                new WechatVirtualPaymentProperties()
+                sessionService,
+                virtualPaymentProperties
         );
     }
 

@@ -1,11 +1,8 @@
 package com.jxc.wefolio.service.payment;
 
-import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
-import com.jxc.wefolio.constant.PointConstants;
 import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
 import com.jxc.wefolio.dict.RechargePackageStatusDict;
@@ -13,8 +10,6 @@ import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.dto.CreateRechargeOrderRequest;
 import com.jxc.wefolio.dto.CreateRechargeOrderResponse;
 import com.jxc.wefolio.dto.RechargeOrderSyncResponse;
-import com.jxc.wefolio.dto.RechargeOrdersResponse;
-import com.jxc.wefolio.dto.RechargePageResponse;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.RechargeOrderEntity;
 import com.jxc.wefolio.entity.RechargePackageEntity;
@@ -32,31 +27,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import com.alibaba.fastjson2.JSON;
-import java.time.Instant;
 
 /**
- * 充值应用服务 — 编排套餐查询、本地建单、微信预下单、记录与主动查单。
+ * 充值写入服务 — 编排本地建单、虚拟支付签名及支付状态同步。
+ * 主动查单、通知和后台对账均可能更新订单或账户，统一由本服务处理。
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class RechargeService {
-
-    /** 默认页码。 */
-    private static final int DEFAULT_PAGE = 1;
-
-    /** 默认每页条数。 */
-    private static final int DEFAULT_PAGE_SIZE = 20;
-
-    /** 最大每页条数。 */
-    private static final int MAX_PAGE_SIZE = 100;
+public class RechargeCommandService {
 
     /** 小程序虚拟支付模式。 */
     private static final String VIRTUAL_PAYMENT_MODE = "short_series_coin";
@@ -76,18 +60,22 @@ public class RechargeService {
     /** 本地待支付订单有效分钟数。 */
     private static final long ORDER_EXPIRE_MINUTES = 30L;
 
+    /** 微信权威查单的成功、已支付、关闭、失败和退款状态。 */
+    private static final String REMOTE_STATUS_SUCCESS = "SUCCESS";
+    /** 微信已支付状态。 */
+    private static final String REMOTE_STATUS_PAID = "PAID";
+    /** 微信已关闭状态。 */
+    private static final String REMOTE_STATUS_CLOSED = "CLOSED";
+    /** 微信支付失败状态。 */
+    private static final String REMOTE_STATUS_PAY_ERROR = "PAYERROR";
+    /** 微信退款完成状态。 */
+    private static final String REMOTE_STATUS_REFUND = "REFUND";
+
     /** 充值业务统一使用的上海时区。 */
     private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
 
-    /** 时间展示格式。 */
-    private static final DateTimeFormatter TIME_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
     /** 微信虚拟支付配置。 */
     private final WechatVirtualPaymentProperties virtualPaymentProperties;
-
-    /** 微信小程序配置。 */
-    private final WechatMiniappProperties miniappProperties;
 
     /** 用户 Mapper。 */
     private final UserEntityMapper userEntityMapper;
@@ -119,23 +107,11 @@ public class RechargeService {
     /** 维护者微信会话服务。 */
     private final MaintainerWechatSessionService maintainerWechatSessionService;
 
-    /**
-     * 获取充值页数据。
-     *
-     * @param userId 当前用户 ID
-     * @return 充值页数据
-     */
-    public RechargePageResponse getPage(Long userId) {
-        PointAccountEntity account = pointService.ensureAccount(userId);
-        List<RechargePackageEntity> packages = loadActivePackages(LocalDateTime.now());
-        RechargePageResponse response = new RechargePageResponse();
-        long balance = account.getBalance() == null ? 0L : account.getBalance();
-        response.setBalance(balance);
-        response.setLowBalance(balance < PointConstants.LOW_BALANCE_THRESHOLD);
-        response.setLowBalanceThreshold(PointConstants.LOW_BALANCE_THRESHOLD);
-        response.setPackages(packages.stream().map(this::buildPackageItem).toList());
-        return response;
-    }
+    /** 未入账订单查得退款结果时使用的独立记账事务。 */
+    private final RechargeRefundTransactionService refundTransactionService;
+
+    /** 退款记账后补查余额，失败保留失效标记。 */
+    private final WechatAuthoritativeBalanceSyncService balanceSyncService;
 
     /**
      * 创建充值订单并取得小程序调起支付参数。
@@ -171,39 +147,20 @@ public class RechargeService {
     }
 
     /**
-     * 分页查询当前用户充值记录。
-     */
-    public RechargeOrdersResponse listOrders(Long userId, int page, int pageSize) {
-        int normalizedPage = page <= 0 ? DEFAULT_PAGE : page;
-        int normalizedPageSize = pageSize <= 0
-                ? DEFAULT_PAGE_SIZE
-                : Math.min(pageSize, MAX_PAGE_SIZE);
-        Page<RechargeOrderEntity> result = rechargeOrderEntityMapper.selectPage(
-                new Page<>(normalizedPage, normalizedPageSize),
-                Wrappers.lambdaQuery(RechargeOrderEntity.class)
-                        .eq(RechargeOrderEntity::getUserId, userId)
-                        .orderByDesc(RechargeOrderEntity::getCreatedAt)
-                        .orderByDesc(RechargeOrderEntity::getId)
-        );
-        RechargeOrdersResponse response = new RechargeOrdersResponse();
-        response.setPage(result.getCurrent());
-        response.setPageSize(result.getSize());
-        response.setTotal(result.getTotal());
-        response.setHasMore(result.getCurrent() * result.getSize() < result.getTotal());
-        response.setRecords(result.getRecords().stream().map(this::buildOrderItem).toList());
-        return response;
-    }
-
-    /**
      * 主动查询并同步当前用户的一笔充值订单。
      */
     public RechargeOrderSyncResponse syncOrder(Long userId, String merchantOrderNo) {
         requirePaymentEnabled();
-        return userPointMutex.execute(userId, () -> syncOrderInsideUserLock(userId, merchantOrderNo));
+        return userPointMutex.execute(userId, () -> syncOrderInsideUserLock(userId, merchantOrderNo, false));
     }
 
-    /** 持有用户锁直至本地结算提交，避免其它余额同步穿插到充值结算之间。 */
-    private RechargeOrderSyncResponse syncOrderInsideUserLock(Long userId, String merchantOrderNo) {
+    /** 后台已持有用户锁，只核对尚未入账订单，已入账订单直接返回。 */
+    RechargeOrderSyncResponse reconcileOrderWithinUserLock(Long userId, String merchantOrderNo) {
+        return syncOrderInsideUserLock(userId, merchantOrderNo, true);
+    }
+
+    /** 已入账订单统一快速返回；未入账订单的后台核对可以落库远端退款结果。 */
+    private RechargeOrderSyncResponse syncOrderInsideUserLock(Long userId, String merchantOrderNo, boolean reconcile) {
         log.info("微信虚拟支付业务开始 operation=同步充值订单 referenceNo={} userId={}",
                 merchantOrderNo, userId);
         if (merchantOrderNo == null || merchantOrderNo.isBlank()) {
@@ -231,10 +188,26 @@ public class RechargeService {
                 order.getMerchantOrderNo(), userId, transaction.errorCode(), transaction.orderStatus(),
                 transaction.payAmount(), transaction.remoteOrderId());
         if (!transaction.isSuccessful()) {
+            if (transaction.errorType() == WechatVirtualPaymentErrorType.SESSION_INVALID) {
+                maintainerWechatSessionService.invalidateVersion(
+                        userId, session.sessionVersion(), transaction.errorMessage());
+            }
             throw new BusinessException(RechargeMessage.ORDER_QUERY_FAILED_MESSAGE);
         }
         validateAuthorityIdentity(order, openId, transaction);
-        if ("SUCCESS".equals(transaction.orderStatus()) || "PAID".equals(transaction.orderStatus())) {
+        if (reconcile && REMOTE_STATUS_REFUND.equals(transaction.orderStatus())) {
+            RechargeOrderEntity refunded = refundTransactionService.markRefundedWithinUserLock(order.getMerchantOrderNo());
+            if (refunded == null) {
+                throw new BusinessException(RechargeMessage.ORDER_NOT_FOUND_MESSAGE);
+            }
+            balanceSyncService.synchronizeWithinUserLock(userId, refunded.getAccountId(), refunded.getMerchantOrderNo());
+            return completeSync(refunded, userId, null, true);
+        }
+        if (REMOTE_STATUS_SUCCESS.equals(transaction.orderStatus()) || REMOTE_STATUS_PAID.equals(transaction.orderStatus())) {
+            if (RechargeOrderStatusDict.PAID.getCode().equals(order.getStatus())) {
+                return completeSync(order, userId, null, true);
+            }
+            transactionService.recordPaymentConfirmed(order.getMerchantOrderNo(), transaction);
             WechatVirtualPaymentResult balance = wechatVirtualPaymentClient.queryUserBalance(
                     new WechatBalanceQueryRequest(userId, order.getMerchantOrderNo(), openId,
                             session.sessionKey(), session.clientIp(), Instant.now().getEpochSecond()));
@@ -249,12 +222,18 @@ public class RechargeService {
                     order.getMerchantOrderNo(), transaction, balance);
             return completeSync(result.order(), userId, result.balance(), true);
         }
-        if ("CLOSED".equals(transaction.orderStatus())) {
+        if (RechargeOrderStatusDict.PAID.getCode().equals(order.getStatus())
+                || (order.getPaidFee() != null && order.getPaidFee() > 0L
+                && !REMOTE_STATUS_REFUND.equals(transaction.orderStatus()))) {
+            // 已核实收款后，非退款的不一致状态不能抹去成功事实，交由后台继续核对。
+            return completeSync(order, userId, null, false);
+        }
+        if (REMOTE_STATUS_CLOSED.equals(transaction.orderStatus())) {
             RechargeOrderEntity closed = transactionService.markTerminalState(
                     userId, normalizedOrderNo, RechargeOrderStatusDict.CLOSED);
             return completeSync(closed, userId, null, true);
         }
-        if ("PAYERROR".equals(transaction.orderStatus()) || "REFUND".equals(transaction.orderStatus())) {
+        if (REMOTE_STATUS_PAY_ERROR.equals(transaction.orderStatus()) || REMOTE_STATUS_REFUND.equals(transaction.orderStatus())) {
             RechargeOrderEntity failed = transactionService.markTerminalState(
                     userId, normalizedOrderNo, RechargeOrderStatusDict.PAYMENT_FAILED);
             return completeSync(failed, userId, null, true);
@@ -310,22 +289,6 @@ public class RechargeService {
             throw new BusinessException(RechargeMessage.ORDER_NOT_FOUND_MESSAGE);
         }
         return syncOrder(order.getUserId(), merchantOrderNo);
-    }
-
-    /**
-     * 加载当前有效套餐。
-     */
-    private List<RechargePackageEntity> loadActivePackages(LocalDateTime now) {
-        return rechargePackageEntityMapper.selectList(
-                Wrappers.lambdaQuery(RechargePackageEntity.class)
-                        .eq(RechargePackageEntity::getStatus, RechargePackageStatusDict.ACTIVE.getCode())
-                        .le(RechargePackageEntity::getEffectiveFrom, now)
-                        .and(wrapper -> wrapper.isNull(RechargePackageEntity::getEffectiveTo)
-                                .or()
-                                .gt(RechargePackageEntity::getEffectiveTo, now))
-                        .orderByAsc(RechargePackageEntity::getSortOrder)
-                        .orderByAsc(RechargePackageEntity::getId)
-        );
     }
 
     /**
@@ -402,21 +365,6 @@ public class RechargeService {
     }
 
     /**
-     * 构造套餐展示项。
-     */
-    private RechargePageResponse.PackageItem buildPackageItem(RechargePackageEntity rechargePackage) {
-        RechargePageResponse.PackageItem item = new RechargePageResponse.PackageItem();
-        item.setPackageId(rechargePackage.getId());
-        item.setPackageCode(rechargePackage.getPackageCode());
-        item.setPackageName(rechargePackage.getPackageName());
-        item.setAmountFen(rechargePackage.getAmountFen());
-        item.setBasePoints(rechargePackage.getBasePoints());
-        item.setBonusPoints(rechargePackage.getBonusPoints());
-        item.setTotalPoints(rechargePackage.getTotalPoints());
-        return item;
-    }
-
-    /**
      * 构造创建订单响应。
      */
     private CreateRechargeOrderResponse buildCreateResponse(
@@ -457,25 +405,6 @@ public class RechargeService {
     }
 
     /**
-     * 构造充值记录展示项。
-     */
-    private RechargeOrdersResponse.RecordItem buildOrderItem(RechargeOrderEntity order) {
-        JSONObject snapshot = JSONObject.parseObject(order.getPackageSnapshot());
-        RechargeOrdersResponse.RecordItem item = new RechargeOrdersResponse.RecordItem();
-        item.setMerchantOrderNo(order.getMerchantOrderNo());
-        item.setPackageName(snapshot.getString("packageName"));
-        item.setAmountFen(order.getAmountFen());
-        item.setBasePoints(order.getBasePoints());
-        item.setBonusPoints(order.getBonusPoints());
-        item.setTotalPoints(order.getTotalPoints());
-        item.setStatus(order.getStatus());
-        item.setStatusText(statusText(order.getStatus()));
-        item.setCreatedAt(formatTime(order.getCreatedAt()));
-        item.setPaidAt(formatTime(order.getPaidAt()));
-        return item;
-    }
-
-    /**
      * 构造同步响应。
      */
     private RechargeOrderSyncResponse buildSyncResponse(
@@ -486,35 +415,9 @@ public class RechargeService {
         RechargeOrderSyncResponse response = new RechargeOrderSyncResponse();
         response.setMerchantOrderNo(order.getMerchantOrderNo());
         response.setStatus(order.getStatus());
-        response.setStatusText(statusText(order.getStatus()));
+        response.setStatusText(RechargeOrderStatusText.format(order.getStatus()));
         response.setBalance(balance);
         response.setConfirmed(confirmed);
         return response;
-    }
-
-    /**
-     * 获取充值状态展示文案。
-     */
-    private String statusText(String status) {
-        if (RechargeOrderStatusDict.REFUNDED.getCode().equals(status)) {
-            return RechargeMessage.STATUS_REFUNDED_TEXT;
-        }
-        if (RechargeOrderStatusDict.PAID.getCode().equals(status)) {
-            return RechargeMessage.STATUS_PAID_TEXT;
-        }
-        if (RechargeOrderStatusDict.PENDING_PAYMENT.getCode().equals(status)) {
-            return RechargeMessage.STATUS_PENDING_TEXT;
-        }
-        if (RechargeOrderStatusDict.PAYMENT_FAILED.getCode().equals(status)) {
-            return RechargeMessage.STATUS_PAYMENT_FAILED_TEXT;
-        }
-        return RechargeMessage.STATUS_CLOSED_TEXT;
-    }
-
-    /**
-     * 格式化时间。
-     */
-    private String formatTime(LocalDateTime time) {
-        return time == null ? null : TIME_FORMATTER.format(time);
     }
 }

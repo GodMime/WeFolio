@@ -135,6 +135,9 @@ async function encodeNativeJpeg({ quality, width, height }, options) {
   }
   return session.call('compressImage', args, {
     timeoutMs,
+    waitForEncoding: true,
+    encodingWaitTimeoutMs: readRemainingTimeout(startedAt, totalTimeoutMs, totalTimeoutMs),
+    onEncodingWait: options.onEncodingWait,
     nominalTimeoutMs: IMAGE_ATTEMPT_TIMEOUT_MS,
     encoding: true,
     createsFile: true
@@ -396,6 +399,9 @@ async function exportCanvasImage({ canvas, image, width, height, fileType, quali
       wxApi.canvasToTempFilePath(args)
     }, exportArgs, {
       timeoutMs, nominalTimeoutMs: IMAGE_ATTEMPT_TIMEOUT_MS,
+      waitForEncoding: true,
+      encodingWaitTimeoutMs: readRemainingTimeout(startedAt, totalTimeoutMs, totalTimeoutMs),
+      onEncodingWait: options.onEncodingWait,
       encoding: true, createsFile: true, onNativeSettled: options.onNativeSettled
     })
   } catch (error) {
@@ -491,7 +497,9 @@ async function compressCanvasImage(file, info, options) {
       if (sameRaster) return
       const timeoutMs = readRemainingTimeout(startedAt, totalTimeoutMs, METADATA_TIMEOUT_MS)
       // 页面自身包装等待；先保存lease再检查取消，避免丢失迟到租用对象。
-      lease = await getCanvas({ width, height, ownerToken, timeoutMs })
+      lease = await getCanvas({ width, height, ownerToken, timeoutMs,
+        encodingWaitTimeoutMs: readRemainingTimeout(startedAt, totalTimeoutMs, totalTimeoutMs),
+        onEncodingWait: options.onEncodingWait })
       session.assertActive()
       drawnRaster = null
       if (!image) {
@@ -523,8 +531,8 @@ async function compressCanvasImage(file, info, options) {
       await ensureRaster(width, height)
       return exportCanvasImage({ canvas: lease.canvas, image, width, height, fileType, quality }, {
         ...options, reuseRaster: true,
-        onNativeStart() { nativePending = true },
-        onNativeSettled() { nativePending = false; releaseWhenIdle() }
+        onNativeStart() { nativePending = true; lease.nativePending = true },
+        onNativeSettled() { nativePending = false; lease.nativePending = false; releaseWhenIdle() }
       })
     }
     const search = jpeg ? searchJpeg : searchPng
@@ -624,6 +632,7 @@ async function compressImageToLimit(file, options = {}) {
     wxApi,
     startedAt,
     totalTimeoutMs,
+    onEncodingWait: options.onEncodingWait,
     sourceWidth: info.width,
     sourceHeight: info.height
   })

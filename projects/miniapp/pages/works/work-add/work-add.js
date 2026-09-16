@@ -44,6 +44,11 @@ const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const COVER_BATCH_PREFIX = 'cover'
 const WORK_COMPRESSION_CANVAS_ID = 'workCompressionCanvas'
+const WORK_COMPRESSION_RECOVERY_CANVAS_ID = 'workCompressionRecoveryCanvas'
+const COMPRESSION_CANVAS_SLOTS = [
+  { id: WORK_COMPRESSION_CANVAS_ID, width: 'compressionCanvasWidth', height: 'compressionCanvasHeight' },
+  { id: WORK_COMPRESSION_RECOVERY_CANVAS_ID, width: 'compressionRecoveryCanvasWidth', height: 'compressionRecoveryCanvasHeight' }
+]
 const PREPARATION_CANCELLED_MESSAGE = '已取消处理'
 const PREPARATION_READING_TEXT = '正在读取文件'
 const PREPARATION_READING_HINT = '正在准备作品信息'
@@ -55,6 +60,10 @@ const COMPRESSION_CANVAS_FAILED_MESSAGE = '图片处理失败，请选择较小�
 const COMPRESSION_MEDIA_NAMES = { VIDEO: '视频', IMAGE: '图片' }
 const MEDIA_PREPARATION_FAILED_LOG = '[work-add] media preparation failed'
 const MEDIA_PREPARATION_FAILED_TITLE = '作品处理失败'
+const AUDIO_PICKER_TIMEOUT_MS = 120 * 1000
+const AUDIO_PICKER_TIMEOUT_MESSAGE = '选择音频超时，请重新选择'
+const PREPARATION_WAITING_TEXT = '正在等待上次处理结束'
+const PREPARATION_WAITING_HINT = '上次处理结束后将自动继续，也可以取消'
 
 function preparationCancelled() {
   return Object.assign(new Error(PREPARATION_CANCELLED_MESSAGE), { code: COMPRESSION_CANCELLED })
@@ -62,14 +71,15 @@ function preparationCancelled() {
 
 function buildCompressionProgressDisplay({ mediaType, index, total, stage }) {
   const compressing = stage === 'compressing'
-  const choosingTitle = compressing
+  const waiting = stage === 'waiting'
+  const choosingTitle = waiting ? PREPARATION_WAITING_TEXT : compressing
     ? `正在压缩${COMPRESSION_MEDIA_NAMES[mediaType] || COMPRESSION_MEDIA_NAMES.IMAGE}`
     : PREPARATION_READING_TEXT
   const choosingCountText = compressing ? `第 ${index}/${total} 个` : PREPARATION_READING_COUNT_TEXT
   return {
     choosingTitle,
     choosingCountText,
-    choosingHint: compressing
+    choosingHint: waiting ? PREPARATION_WAITING_HINT : compressing
       ? `${COMPRESSION_MEDIA_NAMES[mediaType] || COMPRESSION_MEDIA_NAMES.IMAGE}压缩可能需要一点时间`
       : PREPARATION_READING_HINT,
     choosingText: compressing ? `${choosingTitle}，${choosingCountText}` : choosingTitle
@@ -127,6 +137,8 @@ Page({
     cancelPreparationText: CANCEL_PREPARATION_TEXT,
     compressionCanvasWidth: 1,
     compressionCanvasHeight: 1,
+    compressionRecoveryCanvasWidth: 1,
+    compressionRecoveryCanvasHeight: 1,
     errorMessage: '',
     unifiedTags: [],
     tagPickerVisible: false,
@@ -161,7 +173,9 @@ Page({
     this.compressionGeneration += 1
     if (this.compressionSession) this.compressionSession.cancel()
     this.compressionSession = null
-    if (this.cancelAudioRead) this.cancelAudioRead()
+    const cancelAudioRead = this.cancelAudioRead
+    this.cancelAudioRead = null
+    if (cancelAudioRead) cancelAudioRead()
     const tasks = new Set(Object.values(this.uploadTasks).concat([...this.activeUploads].map(entry => entry.task)))
     tasks.forEach((task) => {
       if (task && task.abort) {
@@ -187,6 +201,7 @@ Page({
     if (!this.activeUploads) this.activeUploads = new Set()
     if (!this.pendingPreparedReleases) this.pendingPreparedReleases = new Set()
     if (this.compressionCanvasLease === undefined) this.compressionCanvasLease = null
+    if (!this.compressionCanvasLeases) this.compressionCanvasLeases = COMPRESSION_CANVAS_SLOTS.map(() => null)
   },
 
   isCurrentPreparation(generation, session) {
@@ -210,8 +225,19 @@ Page({
     this.setData({ choosing: true, ...buildCompressionProgressDisplay({}), preparationCancelled: false, canCancelPreparation: false,
       editSheetVisible: false, editForm: null, tagPickerVisible: false })
     try {
+      // 音频的选择器与时长读取共用当前代会话，迟到回调不能进入新一轮选择。
+      if (audio) {
+        session = createCompressionSession({ wxApi: wx })
+        this.compressionSession = session
+        this.setData({ canCancelPreparation: true })
+      }
       const response = audio
-        ? await chooseAudioFiles(remainingCount, { wxApi: wx })
+        ? await session.call(({ success, fail }) => {
+          chooseAudioFiles(remainingCount, { wxApi: wx }).then(success, fail)
+        }, {}, { timeoutMs: AUDIO_PICKER_TIMEOUT_MS }).catch(error => {
+          if (error && error.code === COMPRESSION_TIMEOUT) error.message = AUDIO_PICKER_TIMEOUT_MESSAGE
+          throw error
+        })
         : await this.chooseMedia(createChooseMediaOptions(remainingCount))
       if (!this.isCurrentPreparation(generation)) return
       const rawFiles = audio ? (response.tempFiles || []).map((file) => Object.assign({}, file, { fileType: 'audio' })) : response.tempFiles || []
@@ -221,10 +247,14 @@ Page({
         for (const file of normalizedFiles) {
           if (!file.mimeType) throw new Error('音频仅支持 MP3、M4A、AAC、WAV')
           if (file.size <= 0 || file.size > AUDIO_MAX_BYTES) throw new Error('音频文件不能为空且不能超过 50MB')
-          file.durationMs = await readAudioDuration(file.tempFilePath, {
-            wxApi: wx,
-            onCancelReady: (cancel) => { this.cancelAudioRead = cancel }
-          })
+          file.durationMs = await session.call(({ success, fail }) => {
+            readAudioDuration(file.tempFilePath, {
+              wxApi: wx,
+              onCancelReady: cancel => {
+                if (this.isCurrentPreparation(generation, session)) this.cancelAudioRead = cancel
+              }
+            }).then(success, fail)
+          }, {}, { timeoutMs: METADATA_TIMEOUT_MS })
           if (!this.isCurrentPreparation(generation)) return
           file.metaText = `默认标题 · 音频 ${formatFrameTime(file.durationMs)}`
         }
@@ -312,33 +342,49 @@ Page({
     if (this.disposed || this.data.saving || !this.data.canCancelPreparation || !session) return
     this.compressionGeneration += 1
     this.compressionSession = null
+    const cancelAudioRead = this.cancelAudioRead
+    this.cancelAudioRead = null
     session.cancel()
+    if (cancelAudioRead) cancelAudioRead()
     this.setData({ choosing: false, choosingText: '', choosingTitle: '', choosingCountText: '', choosingHint: '', canCancelPreparation: false,
       preparationCancelled: true })
   },
 
-  async getCompressionCanvas({ width, height, ownerToken, timeoutMs }, session) {
+  async getCompressionCanvas({ width, height, ownerToken, timeoutMs, encodingWaitTimeoutMs, onEncodingWait }, session) {
     session.assertActive()
     if (this.disposed || this.compressionSession !== session || !ownerToken) throw preparationCancelled()
-    let lease = this.compressionCanvasLease
+    const totalDeadline = Date.now() + (encodingWaitTimeoutMs || timeoutMs)
+    let lease = this.compressionCanvasLease || this.compressionCanvasLeases.find(value => value && !value.released)
     if (lease && !lease.released && lease.ownerToken !== ownerToken) {
-      throw Object.assign(new Error(COMPRESSION_CANVAS_BUSY_MESSAGE), { code: COMPRESSION_CANVAS_BUSY })
+      await session.waitForEncodingIdle({ timeoutMs: totalDeadline - Date.now(), onWaiting: onEncodingWait })
+      session.assertActive()
+      if (this.disposed || this.compressionSession !== session) throw preparationCancelled()
+      // 原生已结束会自行释放旧槽；租约到期仍未回调时只能使用独立节点。
+      if (!lease.released && !lease.nativePending) {
+        throw Object.assign(new Error(COMPRESSION_CANVAS_BUSY_MESSAGE), { code: COMPRESSION_CANVAS_BUSY })
+      }
+      lease = null
     }
     if (!lease || lease.released) {
-      lease = { ownerToken, canvas: null, released: false }
+      const slotIndex = this.compressionCanvasLeases.findIndex(value => !value || value.released)
+      if (slotIndex < 0) throw Object.assign(new Error(COMPRESSION_CANVAS_BUSY_MESSAGE), { code: COMPRESSION_CANVAS_BUSY })
+      const slot = COMPRESSION_CANVAS_SLOTS[slotIndex]
+      lease = { ownerToken, canvas: null, released: false, nativePending: false, slotIndex, slot }
       lease.release = () => {
-        if (lease.released || this.compressionCanvasLease !== lease || lease.ownerToken !== ownerToken) return
+        if (lease.released || this.compressionCanvasLeases[slotIndex] !== lease || lease.ownerToken !== ownerToken) return
         lease.released = true
-        this.compressionCanvasLease = null
+        this.compressionCanvasLeases[slotIndex] = null
+        if (this.compressionCanvasLease === lease) this.compressionCanvasLease = null
         if (!this.disposed) {
           if (lease.canvas) { lease.canvas.width = 1; lease.canvas.height = 1 }
-          this.setData({ compressionCanvasWidth: 1, compressionCanvasHeight: 1 })
+          this.setData({ [slot.width]: 1, [slot.height]: 1 })
         }
         lease.canvas = null
       }
+      this.compressionCanvasLeases[slotIndex] = lease
       this.compressionCanvasLease = lease
     }
-    const deadline = Date.now() + timeoutMs
+    const deadline = Math.min(Date.now() + timeoutMs, totalDeadline)
     const remaining = () => {
       const milliseconds = deadline - Date.now()
       if (!(milliseconds > 0)) throw Object.assign(new Error(COMPRESSION_CANVAS_FAILED_MESSAGE), { code: COMPRESSION_TIMEOUT })
@@ -346,11 +392,11 @@ Page({
     }
     try {
       await session.call(({ success }) => {
-        this.setData({ compressionCanvasWidth: width, compressionCanvasHeight: height }, success)
+        this.setData({ [lease.slot.width]: width, [lease.slot.height]: height }, success)
       }, {}, { timeoutMs: remaining() })
       session.assertActive()
       const canvas = await session.call(({ success, fail }) => {
-        getCanvasNode(this, WORK_COMPRESSION_CANVAS_ID, wx).then(success, fail)
+        getCanvasNode(this, lease.slot.id, wx).then(success, fail)
       }, {}, { timeoutMs: remaining() })
       session.assertActive()
       if (this.disposed || this.compressionSession !== session || this.compressionCanvasLease !== lease || lease.released) throw preparationCancelled()

@@ -33,6 +33,10 @@ public class RuntimeVirtualPaymentTaskClient {
     private static final String DEBIT_RECOVERY_PATH =
             "/api/admin/points/virtual-payment/users/%d/debit-task-recoveries";
 
+    /** 充值订单支付及退款核对路径模板。 */
+    private static final String RECHARGE_RECONCILIATION_PATH =
+            "/api/admin/points/virtual-payment/recharge-orders/%d/reconciliations";
+
     /** runtime 根地址末尾斜杠匹配表达式。 */
     private static final String TRAILING_SLASH_PATTERN = "/+$";
 
@@ -77,6 +81,11 @@ public class RuntimeVirtualPaymentTaskClient {
     /** 请求 runtime 执行单条扣币任务。 */
     public TaskExecutionResult executeDebitTask(long taskId) {
         return requestExecution(DEBIT_EXECUTION_PATH.formatted(taskId));
+    }
+
+    /** 请求 runtime 核对单笔充值订单，微信调用和资金事务均由 runtime 执行。 */
+    public TaskExecutionResult reconcileRechargeOrder(long orderId) {
+        return requestExecution(RECHARGE_RECONCILIATION_PATH.formatted(orderId));
     }
 
     /** 请求 runtime 为指定用户保障活动扣币任务。 */

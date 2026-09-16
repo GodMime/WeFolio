@@ -908,7 +908,7 @@ test('PNG精调出错清理本轮无效产物并返回best；次数耗尽选实�
   h.session.dispose()
 })
 
-test('Canvas节点忙与编码锁忙保留原错误，不错误标记nativePending', async () => {
+test('Canvas节点忙保留原错误，编码锁等待取消时释放尚未导出的节点', async () => {
   const error = Object.assign(new Error('画布处理尚未结束，请返回后重新进入'), { code: 'MEDIA_COMPRESSION_CANVAS_BUSY' })
   const h = createCanvasHarness({ getFail: error })
   await assert.rejects(h.run(), actual => actual === error)
@@ -916,16 +916,22 @@ test('Canvas节点忙与编码锁忙保留原错误，不错误标记nativePendi
   h.session.dispose()
 
   const busy = createCanvasHarness()
+  const owner = createCompressionSession({ wxApi: busy.wxApi })
   let nativeCallback
-  const occupied = busy.session.call(args => { nativeCallback = args }, {}, {
+  const occupied = owner.call(args => { nativeCallback = args }, {}, {
     encoding: true, timeoutMs: 30000, nominalTimeoutMs: 30000
   })
-  await assert.rejects(busy.run(), { code: 'MEDIA_COMPRESSION_BUSY' })
+  const pending = busy.run()
+  const cancelled = assert.rejects(pending, { code: 'MEDIA_COMPRESSION_CANCELLED' })
+  await new Promise(setImmediate)
   assert.equal(busy.exports.length, 0)
+  assert.equal(busy.releases, 0)
+  busy.session.cancel()
+  await cancelled
   assert.equal(busy.releases, 1)
   nativeCallback.success({})
   await occupied
-  busy.session.dispose()
+  owner.dispose()
 })
 
 test('本地诊断只含枚举尺寸耗时，默认不开启且回调故障不影响成品', async () => {

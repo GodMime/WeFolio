@@ -681,6 +681,42 @@ test('最高可信原码率已到达时直接使用更小的合格成品', async
   assert.equal(result.tempFilePath, harness.outputPaths[0])
 })
 
+test('低报正码率与文件体积不一致时仍按可行预算编码并验收质量', async () => {
+  const harness = createVideoHarness({
+    sourceSize: 101 * 1024 * 1024,
+    sourceInfo: { duration: 600, bitrate: 500 },
+    outputSizes: [97 * 1024 * 1024],
+    outputInfos: [{ width: 1200, height: 675, duration: 600, fps: 30, type: 'mp4' }]
+  })
+  const result = await runCompression(harness)
+  assert.equal(harness.calls.length, 1)
+  assert.ok(harness.calls[0].bitrate > 500)
+  assert.ok(harness.calls[0].resolution > 480 / 1080)
+  assert.equal(result.size, 97 * 1024 * 1024)
+  assert.equal(result.durationMs, 600000)
+})
+
+test('低报原码率回退不放宽成品短边或时长质量边界', async () => {
+  for (const info of [
+    { width: 850, height: 479, duration: 600, fps: 30, type: 'mp4' },
+    { width: 1200, height: 675, duration: 601, fps: 30, type: 'mp4' }
+  ]) {
+    const harness = createVideoHarness({ sourceInfo: { duration: 600, bitrate: 500 }, outputSizes: [90 * 1024 * 1024], outputInfos: [info] })
+    await assert.rejects(runCompression(harness), /清晰度|压缩后的视频信息/)
+    assert.equal(harness.calls.length, 1)
+    assert.deepEqual(harness.removed, harness.outputPaths)
+  }
+})
+
+test('低报原码率回退仍拒绝所有超过100MB的输出', async () => {
+  const info = { width: 1200, height: 675, duration: 600, fps: 30, type: 'mp4' }
+  const harness = createVideoHarness({ sourceInfo: { duration: 600, bitrate: 500 },
+    outputSizes: [110, 110, 110].map(size => size * 1024 * 1024), outputInfos: [info, info, info] })
+  await assert.rejects(runCompression(harness), /清晰度|超过 100MB/)
+  assert.ok(harness.calls.length > 0)
+  assert.equal(harness.removed.length, harness.calls.length)
+})
+
 test('提高码率后同尺寸成品未变大时停止继续填充', async () => {
   const harness = createVideoHarness({
     outputSizes: [60 * 1024 * 1024, 59 * 1024 * 1024]

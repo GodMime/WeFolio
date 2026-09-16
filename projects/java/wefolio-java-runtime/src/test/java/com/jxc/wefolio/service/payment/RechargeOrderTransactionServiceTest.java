@@ -1,7 +1,5 @@
 package com.jxc.wefolio.service.payment;
 
-import com.jxc.wefolio.config.WechatMiniappProperties;
-import com.jxc.wefolio.config.WechatPayProperties;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
 import com.jxc.wefolio.dto.PointMutationResponse;
 import com.jxc.wefolio.entity.PointAccountEntity;
@@ -11,7 +9,6 @@ import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.RechargeOrderEntityMapper;
 import com.jxc.wefolio.service.MerchantOrderNoGenerator;
 import com.jxc.wefolio.service.PointService;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -20,19 +17,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * 充值订单事务服务测试。
@@ -57,20 +48,6 @@ class RechargeOrderTransactionServiceTest {
 
     @Mock
     private PointDebitTaskService pointDebitTaskService;
-
-    /** 微信支付配置。 */
-    private WechatPayProperties payProperties;
-
-    /** 微信小程序配置。 */
-    private WechatMiniappProperties miniappProperties;
-
-    @BeforeEach
-    void setUp() {
-        payProperties = new WechatPayProperties();
-        payProperties.setMerchantId("1900000001");
-        miniappProperties = new WechatMiniappProperties();
-        miniappProperties.setAppId("wx-test-app-id");
-    }
 
     @Test
     void createPendingOrderShouldPersistImmutablePackageSnapshot() {
@@ -166,131 +143,7 @@ class RechargeOrderTransactionServiceTest {
         assertThat(order.getPointTransactionId()).isEqualTo(88L);
         verify(pointService).rechargeVirtual(7L, 500L, MERCHANT_ORDER_NO, order.getPackageSnapshot(),
                 "POINT_RECHARGE:" + MERCHANT_ORDER_NO, "50 元档", 600L, 50L);
-        verify(pointService, never()).recharge(any(), anyLong(), any(), any(), any(), any());
         verify(rechargeOrderEntityMapper).updateById(order);
-    }
-
-    @Test
-    void settleShouldUpgradeClosedOrderToPaidAndRechargeOnce() {
-        RechargeOrderEntity order = order(RechargeOrderStatusDict.CLOSED.getCode());
-        when(rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo(MERCHANT_ORDER_NO)).thenReturn(order);
-        PointMutationResponse mutation = new PointMutationResponse();
-        mutation.setBalanceAfter(806L);
-        when(pointService.recharge(
-                7L,
-                520L,
-                MERCHANT_ORDER_NO,
-                order.getPackageSnapshot(),
-                "POINT_RECHARGE:" + MERCHANT_ORDER_NO,
-                "50 元档"
-        )).thenReturn(mutation);
-        when(rechargeOrderEntityMapper.updateById(order)).thenReturn(1);
-        WechatPayClient.Transaction transaction = successTransaction();
-
-        RechargeSettlementResult result = service().settle(transaction);
-
-        assertThat(result.balance()).isEqualTo(806L);
-        assertThat(result.order().getStatus()).isEqualTo(RechargeOrderStatusDict.PAID.getCode());
-        assertThat(result.order().getPaymentTransactionId()).isEqualTo("4200000000001");
-        assertThat(result.order().getPaidAt()).isEqualTo(LocalDateTime.of(2026, 7, 17, 15, 30, 8));
-        assertThat(result.order().getClosedAt()).isNull();
-        verify(pointService).recharge(
-                7L,
-                520L,
-                MERCHANT_ORDER_NO,
-                order.getPackageSnapshot(),
-                "POINT_RECHARGE:" + MERCHANT_ORDER_NO,
-                "50 元档"
-        );
-        verify(rechargeOrderEntityMapper).updateById(order);
-    }
-
-    @Test
-    void settleShouldReturnIdempotentlyWhenPaidTransactionMatches() {
-        RechargeOrderEntity order = order(RechargeOrderStatusDict.PAID.getCode());
-        order.setPaymentTransactionId("4200000000001");
-        when(rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo(MERCHANT_ORDER_NO)).thenReturn(order);
-
-        RechargeSettlementResult result = service().settle(successTransaction());
-
-        assertThat(result.idempotent()).isTrue();
-        verify(pointService, never()).recharge(any(), anyLong(), any(), any(), any(), any());
-        verify(rechargeOrderEntityMapper, never()).updateById(any(RechargeOrderEntity.class));
-    }
-
-    @Test
-    void settleShouldRejectAmountMismatchWithoutChangingPoints() {
-        when(rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo(MERCHANT_ORDER_NO))
-                .thenReturn(order(RechargeOrderStatusDict.PENDING_PAYMENT.getCode()));
-        WechatPayClient.Transaction transaction = new WechatPayClient.Transaction(
-                "wx-test-app-id",
-                "1900000001",
-                MERCHANT_ORDER_NO,
-                "4200000000001",
-                WechatPayClient.TradeState.SUCCESS,
-                "CNY",
-                1,
-                LocalDateTime.of(2026, 7, 17, 15, 30, 8)
-        );
-
-        assertThatThrownBy(() -> service().settle(transaction))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("微信支付金额与充值订单不一致");
-        verify(pointService, never()).recharge(any(), anyLong(), any(), any(), any(), any());
-        verify(rechargeOrderEntityMapper, never()).updateById(any(RechargeOrderEntity.class));
-    }
-
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("mismatchedTransactions")
-    void settleShouldRejectMismatchedWechatIdentityWithoutChangingPoints(
-            String scenario,
-            WechatPayClient.Transaction transaction,
-            String expectedMessage
-    ) {
-        when(rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo(MERCHANT_ORDER_NO))
-                .thenReturn(order(RechargeOrderStatusDict.PENDING_PAYMENT.getCode()));
-
-        assertThatThrownBy(() -> service().settle(transaction))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage(expectedMessage);
-        verify(pointService, never()).recharge(any(), anyLong(), any(), any(), any(), any());
-        verify(rechargeOrderEntityMapper, never()).updateById(any(RechargeOrderEntity.class));
-    }
-
-    @Test
-    void settleShouldRejectDifferentWechatTransactionForPaidOrder() {
-        RechargeOrderEntity order = order(RechargeOrderStatusDict.PAID.getCode());
-        order.setPaymentTransactionId("4200000000000");
-        when(rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo(MERCHANT_ORDER_NO))
-                .thenReturn(order);
-
-        assertThatThrownBy(() -> service().settle(successTransaction()))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("已支付订单的微信交易号不一致");
-        verify(pointService, never()).recharge(any(), anyLong(), any(), any(), any(), any());
-    }
-
-    /**
-     * 构造微信身份与金额不匹配场景。
-     *
-     * @return 参数化测试数据
-     */
-    private static Stream<Arguments> mismatchedTransactions() {
-        LocalDateTime paidAt = LocalDateTime.of(2026, 7, 17, 15, 30, 8);
-        return Stream.of(
-                Arguments.of("AppID 不匹配", new WechatPayClient.Transaction(
-                        "wx-other", "1900000001", MERCHANT_ORDER_NO, "4200000000001",
-                        WechatPayClient.TradeState.SUCCESS, "CNY", 5000, paidAt),
-                        "微信支付 AppID 与充值订单不一致"),
-                Arguments.of("商户号不匹配", new WechatPayClient.Transaction(
-                        "wx-test-app-id", "1900000002", MERCHANT_ORDER_NO, "4200000000001",
-                        WechatPayClient.TradeState.SUCCESS, "CNY", 5000, paidAt),
-                        "微信支付商户号与充值订单不一致"),
-                Arguments.of("币种不匹配", new WechatPayClient.Transaction(
-                        "wx-test-app-id", "1900000001", MERCHANT_ORDER_NO, "4200000000001",
-                        WechatPayClient.TradeState.SUCCESS, "USD", 5000, paidAt),
-                        "微信支付币种与充值订单不一致")
-        );
     }
 
     /**
@@ -303,8 +156,6 @@ class RechargeOrderTransactionServiceTest {
                 rechargeOrderEntityMapper,
                 pointService,
                 merchantOrderNoGenerator,
-                payProperties,
-                miniappProperties,
                 null,
                 pointDebitTaskService
         );
@@ -366,21 +217,4 @@ class RechargeOrderTransactionServiceTest {
         return order;
     }
 
-    /**
-     * 构造微信支付成功交易。
-     *
-     * @return 微信支付交易
-     */
-    private WechatPayClient.Transaction successTransaction() {
-        return new WechatPayClient.Transaction(
-                "wx-test-app-id",
-                "1900000001",
-                MERCHANT_ORDER_NO,
-                "4200000000001",
-                WechatPayClient.TradeState.SUCCESS,
-                "CNY",
-                5000,
-                LocalDateTime.of(2026, 7, 17, 15, 30, 8)
-        );
-    }
 }

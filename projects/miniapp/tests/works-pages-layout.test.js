@@ -657,18 +657,21 @@ test('添加作品仅中间列表纵向滚动，处理和错误提示不能挤�
   assert.doesNotMatch(wxml, /class="work-add-scroll"/)
 })
 
-test('压缩Canvas的WXML节点与查询常量一致且唯一', () => {
+test('两个压缩Canvas常驻且标识独立，旧节点不得被条件卸载', () => {
   const addJs = read('pages/works/work-add/work-add.js')
   const addWxml = read('pages/works/work-add/work-add.wxml')
   const constant = addJs.match(/\bconst\s+WORK_COMPRESSION_CANVAS_ID\s*=\s*(['"])([^'"]+)\1/)
   assert.ok(constant)
   const nodes = [...addWxml.matchAll(/<canvas\b[^>]*>/g)].map(match => match[0]).filter(tag => /class="work-compression-canvas"/.test(tag))
-  assert.equal(nodes.length, 1)
+  assert.equal(nodes.length, 2)
   assert.equal(nodes[0].match(/\bid="([^"]+)"/)[1], constant[2])
   assert.equal([...addWxml.matchAll(/\bid="([^"]+)"/g)].filter(match => match[1] === constant[2]).length, 1)
-  assert.match(addJs, /getCanvasNode\(this,\s*WORK_COMPRESSION_CANVAS_ID,\s*wx\)/)
+  assert.equal(nodes[1].match(/\bid="([^"]+)"/)[1], 'workCompressionRecoveryCanvas')
+  assert.doesNotMatch(nodes.join(''), /wx:if|wx:for/)
   assert.match(nodes[0], /compressionCanvasWidth/)
   assert.match(nodes[0], /compressionCanvasHeight/)
+  assert.match(nodes[1], /compressionRecoveryCanvasWidth/)
+  assert.match(nodes[1], /compressionRecoveryCanvasHeight/)
   assert.match(addWxml, /canCancelPreparation && !saving/)
   assert.match(addWxml, /item.compressed/)
   const style = read('pages/works/work-add/work-add.wxss').match(/\.work-compression-canvas\s*\{([^}]+)\}/)[1]

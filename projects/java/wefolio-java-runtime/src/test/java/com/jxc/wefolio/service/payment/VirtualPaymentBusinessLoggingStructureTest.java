@@ -15,7 +15,7 @@ class VirtualPaymentBusinessLoggingStructureTest {
     /** 关键业务编排器应记录开始、微信结果和本地完成三个阶段。 */
     @Test
     void criticalBusinessFlowsContainStructuredLifecycleLogs() throws IOException {
-        assertContains("RechargeService.java",
+        assertContains("RechargeCommandService.java",
                 "微信虚拟支付业务开始 operation=创建充值订单",
                 "微信虚拟支付业务完成 operation=创建充值订单",
                 "微信虚拟支付业务开始 operation=同步充值订单",
@@ -43,7 +43,7 @@ class VirtualPaymentBusinessLoggingStructureTest {
     @Test
     void businessLogStatementsDoNotReferenceSecrets() throws IOException {
         for (String fileName : List.of(
-                "RechargeService.java",
+                "RechargeCommandService.java",
                 "PointGiftOrderProcessor.java",
                 "PointDebitTaskProcessor.java",
                 "WechatAuthoritativeBalanceSyncService.java",

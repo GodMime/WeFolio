@@ -221,6 +221,10 @@ public class MiniappAuthService {
                 ? 300L
                 : wechatVirtualPaymentProperties.sessionCheckIntervalSeconds();
         response.setWechatSessionCheckIntervalSeconds(intervalSeconds);
+        // 本地 wx.checkSession 成功时，服务端仍可能因微信拒绝而将保存的版本置为失效。
+        response.setWechatSessionRefreshRequired(userId != null
+                && wechatVirtualPaymentProperties != null && wechatVirtualPaymentProperties.isEnabled()
+                && maintainerWechatSessionService.findAvailableSession(userId) == null);
         return response;
     }
 

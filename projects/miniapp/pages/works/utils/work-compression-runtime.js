@@ -16,6 +16,7 @@ const NATIVE_METHOD_MISSING_MESSAGE = '当前微信版本不支持该媒体处�
 const INVALID_NOMINAL_TIMEOUT_MESSAGE = '编码调用必须提供完整的名义超时时间'
 const LEASE_EXPIRED_LOG_MESSAGE = '媒体编码调用超过租约期限，已释放运行时锁'
 const NATIVE_SETTLED_CALLBACK_ERROR_MESSAGE = '媒体处理原生收尾回调执行失败'
+const ENCODING_WAIT_CALLBACK_ERROR_MESSAGE = '媒体编码等待进度回调执行失败'
 const MEDIA_FAILURE_MESSAGE = '媒体处理失败'
 const MEDIA_CHOOSE_FAILURE_MESSAGE = '选择作品失败'
 const NATIVE_FAILURE_MESSAGES = {
@@ -28,6 +29,7 @@ const NATIVE_FAILURE_MESSAGES = {
 }
 
 const encodingOwners = new WeakMap()
+const encodingWaiters = new WeakMap()
 
 function createRuntimeError(code, message) {
   return Object.assign(new Error(message), { code })
@@ -68,7 +70,8 @@ function nativeErrorMessage(error) {
 
 function normalizeNativeError(error, method) {
   // 微信 fail 常返回普通对象，必须补齐 message，否则页面只剩通用失败提示。
-  const normalized = Object.assign(new Error(nativeErrorMessage(error) || MEDIA_FAILURE_MESSAGE),
+  // 已映射的应用Error保留message；原生errMsg仍原样携带，供调用方记录诊断。
+  const normalized = Object.assign(new Error(error && error.message || nativeErrorMessage(error) || MEDIA_FAILURE_MESSAGE),
     error && typeof error === 'object' ? error : {}, { cause: error })
   if (typeof method === 'string') normalized.nativeMethod = method
   return normalized
@@ -108,6 +111,7 @@ function releaseEncodingOwner(wxApi, ownerToken) {
     clearTimeout(currentOwner.leaseTimer)
   }
   encodingOwners.delete(wxApi)
+  notifyEncodingWaiters(wxApi)
   return true
 }
 
@@ -127,8 +131,20 @@ function releaseExpiredEncodingOwner(wxApi, expectedOwner) {
     clearTimeout(currentOwner.leaseTimer)
   }
   encodingOwners.delete(wxApi)
+  notifyEncodingWaiters(wxApi)
   logRuntimeEvent(LEASE_EXPIRED_LOG_MESSAGE)
   return true
+}
+
+function notifyEncodingWaiters(wxApi) {
+  const waiters = encodingWaiters.get(wxApi)
+  if (waiters) Array.from(waiters).forEach(notify => notify())
+}
+
+function readEncodingOwner(wxApi) {
+  const owner = encodingOwners.get(wxApi)
+  if (owner && Date.now() >= owner.leaseExpiresAt) releaseExpiredEncodingOwner(wxApi, owner)
+  return encodingOwners.get(wxApi)
 }
 
 function acquireEncodingOwner(wxApi, ownerToken, nominalTimeoutMs) {
@@ -194,7 +210,68 @@ function createCompressionSession({ wxApi, protectedPaths = [] }) {
     }
   }
 
+  // 等待只监听锁的真实释放或既有租约到期；取消等待不能改变持锁者。
+  function waitForEncodingIdle({ timeoutMs, onWaiting } = {}) {
+    try {
+      assertActive()
+      if (!isPositiveFiniteNumber(timeoutMs)) throw createTimeoutError()
+      if (!readEncodingOwner(wxApi)) return Promise.resolve()
+    } catch (error) { return Promise.reject(error) }
+    return new Promise((resolve, reject) => {
+      let settled = false
+      let timer
+      let waiters = encodingWaiters.get(wxApi)
+      if (!waiters) { waiters = new Set(); encodingWaiters.set(wxApi, waiters) }
+      const notifyWaiting = waiting => {
+        if (typeof onWaiting !== 'function') return
+        try { onWaiting(waiting) } catch (error) {
+          // 展示异常不能传播到原生锁持有者或阻断其他会话的唤醒。
+          logRuntimeEvent(ENCODING_WAIT_CALLBACK_ERROR_MESSAGE)
+        }
+      }
+      const finish = error => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        waiters.delete(check)
+        if (!waiters.size) encodingWaiters.delete(wxApi)
+        cancelListeners.delete(cancelWait)
+        notifyWaiting(false)
+        if (error) reject(error)
+        else resolve()
+      }
+      const check = () => { if (!readEncodingOwner(wxApi)) finish() }
+      const cancelWait = () => finish(createCancelledError())
+      waiters.add(check)
+      cancelListeners.add(cancelWait)
+      timer = setTimeout(() => finish(createTimeoutError()), Number(timeoutMs))
+      notifyWaiting(true)
+    })
+  }
+
+  async function callWhenEncodingAvailable(method, args, options) {
+    const startedAt = Date.now()
+    const totalTimeoutMs = Number(options.encodingWaitTimeoutMs || options.timeoutMs)
+    while (true) {
+      assertActive()
+      const remainingMs = totalTimeoutMs - (Date.now() - startedAt)
+      if (!isPositiveFiniteNumber(remainingMs)) throw createTimeoutError()
+      if (readEncodingOwner(wxApi)) {
+        await waitForEncodingIdle({ timeoutMs: remainingMs, onWaiting: options.onEncodingWait })
+        continue
+      }
+      // 从检查到占锁之间不让出执行权，多个等待者醒来后仍逐个获取原生锁。
+      return callNative(method, args, { ...options, timeoutMs: Math.min(Number(options.timeoutMs), remainingMs) })
+    }
+  }
+
   function call(method, args = {}, options = {}) {
+    return options.encoding === true && options.waitForEncoding === true
+      ? callWhenEncodingAvailable(method, args, options)
+      : callNative(method, args, options)
+  }
+
+  function callNative(method, args = {}, options = {}) {
     let invoke
     const timeoutMs = Number(options.timeoutMs)
     const nominalTimeoutMs = Number(options.nominalTimeoutMs)
@@ -345,6 +422,7 @@ function createCompressionSession({ wxApi, protectedPaths = [] }) {
 
   return {
     call,
+    waitForEncodingIdle,
     assertActive,
     cancel,
     discard,
