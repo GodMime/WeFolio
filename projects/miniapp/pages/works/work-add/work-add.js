@@ -45,7 +45,9 @@ const SWIPE_VERTICAL_TOLERANCE = 48
 const COVER_BATCH_PREFIX = 'cover'
 const WORK_COMPRESSION_CANVAS_ID = 'workCompressionCanvas'
 const PREPARATION_CANCELLED_MESSAGE = '已取消处理'
-const PREPARATION_READING_TEXT = '正在读取作品信息'
+const PREPARATION_READING_TEXT = '正在读取文件'
+const PREPARATION_READING_HINT = '正在准备作品信息'
+const PREPARATION_READING_COUNT_TEXT = '准备中'
 const CANCEL_PREPARATION_TEXT = '取消处理'
 const COMPRESSION_CANVAS_BUSY = 'MEDIA_COMPRESSION_CANVAS_BUSY'
 const COMPRESSION_CANVAS_BUSY_MESSAGE = '画布处理尚未结束，请返回后重新进入'
@@ -58,10 +60,20 @@ function preparationCancelled() {
   return Object.assign(new Error(PREPARATION_CANCELLED_MESSAGE), { code: COMPRESSION_CANCELLED })
 }
 
-function compressionProgressText({ mediaType, index, total, stage }) {
-  return stage === 'compressing'
-    ? `正在压缩${COMPRESSION_MEDIA_NAMES[mediaType] || COMPRESSION_MEDIA_NAMES.IMAGE}，第 ${index}/${total} 个`
+function buildCompressionProgressDisplay({ mediaType, index, total, stage }) {
+  const compressing = stage === 'compressing'
+  const choosingTitle = compressing
+    ? `正在压缩${COMPRESSION_MEDIA_NAMES[mediaType] || COMPRESSION_MEDIA_NAMES.IMAGE}`
     : PREPARATION_READING_TEXT
+  const choosingCountText = compressing ? `第 ${index}/${total} 个` : PREPARATION_READING_COUNT_TEXT
+  return {
+    choosingTitle,
+    choosingCountText,
+    choosingHint: compressing
+      ? `${COMPRESSION_MEDIA_NAMES[mediaType] || COMPRESSION_MEDIA_NAMES.IMAGE}压缩可能需要一点时间`
+      : PREPARATION_READING_HINT,
+    choosingText: compressing ? `${choosingTitle}，${choosingCountText}` : choosingTitle
+  }
 }
 
 function formatFrameTime(milliseconds) {
@@ -107,6 +119,10 @@ Page({
     saving: false,
     choosing: false,
     choosingText: '',
+    choosingTitle: '',
+    choosingCountText: '',
+    choosingHint: '',
+    preparationCancelled: false,
     canCancelPreparation: false,
     cancelPreparationText: CANCEL_PREPARATION_TEXT,
     compressionCanvasWidth: 1,
@@ -189,7 +205,7 @@ Page({
     let session
     let result
     let adopted = false
-    this.setData({ choosing: true, choosingText: PREPARATION_READING_TEXT, canCancelPreparation: false,
+    this.setData({ choosing: true, ...buildCompressionProgressDisplay({}), preparationCancelled: false, canCancelPreparation: false,
       editSheetVisible: false, editForm: null, tagPickerVisible: false })
     try {
       const response = audio
@@ -228,7 +244,7 @@ Page({
           wxApi: wx, session,
           getCanvas: request => this.getCompressionCanvas(request, session),
           onProgress: progress => {
-            if (this.isCurrentPreparation(generation, session)) this.setData({ choosingText: compressionProgressText(progress) })
+            if (this.isCurrentPreparation(generation, session)) this.setData(buildCompressionProgressDisplay(progress))
           }
         })
         session.assertActive()
@@ -246,7 +262,7 @@ Page({
       if (!validation.valid) throw new Error(validation.message)
       if (session) session.assertActive()
       if (!this.isCurrentPreparation(generation, session)) return
-      this.setData({ files: nextFiles, errorMessage: '', revealedFileId: '' })
+      this.setData({ files: nextFiles, errorMessage: '', revealedFileId: '', preparationCancelled: false })
       if (result) Object.assign(this.compressionOwnedPaths, result.ownedPathsByClientId)
       adopted = true
     } catch (error) {
@@ -271,7 +287,7 @@ Page({
       if (session) session.dispose()
       if (this.isCurrentPreparation(generation, session)) {
         this.compressionSession = null
-        this.setData({ choosing: false, choosingText: '', canCancelPreparation: false })
+        this.setData({ choosing: false, choosingText: '', choosingTitle: '', choosingCountText: '', choosingHint: '', canCancelPreparation: false })
       }
     }
   },
@@ -294,7 +310,8 @@ Page({
     this.compressionGeneration += 1
     this.compressionSession = null
     session.cancel()
-    this.setData({ choosing: false, choosingText: '', canCancelPreparation: false })
+    this.setData({ choosing: false, choosingText: '', choosingTitle: '', choosingCountText: '', choosingHint: '', canCancelPreparation: false,
+      preparationCancelled: true })
   },
 
   async getCompressionCanvas({ width, height, ownerToken, timeoutMs }, session) {

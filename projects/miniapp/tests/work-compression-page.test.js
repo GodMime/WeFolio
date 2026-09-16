@@ -79,6 +79,49 @@ test('真实页面按实测、分类、预处理、补信息、校验顺序整�
   assert.equal(page.data.choosing, false)
 })
 
+test('读取和图片视频压缩分别展示标题与数量，完成后清空处理提示', async () => {
+  const gate = deferred()
+  let progress
+  let preparedFiles
+  const { page } = pipeline({ prepareWorkMainFiles(files, options) {
+    progress = options.onProgress
+    preparedFiles = files.map(file => ({ ...file, size: MB }))
+    return gate.promise
+  } })
+  assert.equal(page.data.choosingTitle, '')
+  assert.equal(page.data.choosingHint, '')
+  assert.equal(page.data.choosingCountText, '')
+  assert.equal(page.data.preparationCancelled, false)
+  const pending = page.handleChooseMedia()
+  assert.equal(page.data.choosingTitle, '正在读取文件')
+  assert.equal(page.data.choosingHint, '正在准备作品信息')
+  assert.equal(page.data.choosingCountText, '准备中')
+  await tick()
+  progress({ mediaType: 'IMAGE', index: 1, total: 2, stage: 'compressing' })
+  assert.equal(page.data.choosingTitle, '正在压缩图片')
+  assert.equal(page.data.choosingHint, '图片压缩可能需要一点时间')
+  assert.equal(page.data.choosingCountText, '第 1/2 个')
+  assert.equal(page.data.choosingText, '正在压缩图片，第 1/2 个')
+  progress({ mediaType: 'VIDEO', index: 2, total: 2, stage: 'reading' })
+  assert.equal(page.data.choosingTitle, '正在读取文件')
+  assert.equal(page.data.choosingHint, '正在准备作品信息')
+  assert.equal(page.data.choosingCountText, '准备中')
+  assert.equal(page.data.choosingText, '正在读取文件')
+  progress({ mediaType: 'VIDEO', index: 2, total: 2, stage: 'compressing' })
+  assert.equal(page.data.choosingTitle, '正在压缩视频')
+  assert.equal(page.data.choosingHint, '视频压缩可能需要一点时间')
+  assert.equal(page.data.choosingCountText, '第 2/2 个')
+  assert.equal(page.data.choosingText, '正在压缩视频，第 2/2 个')
+  gate.resolve({ files: preparedFiles, ownedPathsByClientId: {} })
+  await pending
+  assert.equal(page.data.files.length, 2)
+  assert.equal(page.data.choosingTitle, '')
+  assert.equal(page.data.choosingHint, '')
+  assert.equal(page.data.choosingCountText, '')
+  assert.equal(page.data.choosingText, '')
+  assert.equal(page.data.preparationCancelled, false)
+})
+
 for (const stage of ['picker', 'classify', 'prepare', 'enrich']) {
   test(`${stage}等待中离页与迟到回调不能写界面或toast`, async () => {
     const gate = deferred()
@@ -115,12 +158,21 @@ test('取消立即保留列表，新选择状态不被旧finally和迟到进度�
   page.handleCancelPreparation()
   assert.equal(page.data.choosing, false)
   assert.equal(page.data.choosingText, '')
+  assert.equal(page.data.choosingTitle, '')
+  assert.equal(page.data.choosingHint, '')
+  assert.equal(page.data.choosingCountText, '')
+  assert.equal(page.data.preparationCancelled, true)
+  assert.equal(page.data.files.length, 1)
   assert.strictEqual(page.data.files[0], existing)
   const lateProgress = progress
   const second = page.handleChooseMedia()
+  assert.equal(page.data.preparationCancelled, false)
   await tick()
   lateProgress({ mediaType: 'VIDEO', index: 9, total: 9, stage: 'compressing' })
-  assert.equal(page.data.choosingText, '正在读取作品信息')
+  assert.equal(page.data.choosingText, '正在读取文件')
+  assert.equal(page.data.choosingTitle, '正在读取文件')
+  assert.equal(page.data.choosingHint, '正在准备作品信息')
+  assert.equal(page.data.choosingCountText, '准备中')
   gate.reject(Object.assign(new Error('已取消处理'), { code: runtime.COMPRESSION_CANCELLED }))
   await Promise.all([first, second])
   assert.equal(count, 2)
@@ -169,6 +221,10 @@ for (const stage of ['chooseMedia', 'getVideoInfo', 'compressVideo']) {
     assert.equal(page.data.files.length, 1)
     assert.equal(page.data.choosing, false)
     assert.equal(page.data.choosingText, '')
+    assert.equal(page.data.choosingTitle, '')
+    assert.equal(page.data.choosingHint, '')
+    assert.equal(page.data.choosingCountText, '')
+    assert.equal(page.data.preparationCancelled, false)
     assert.equal(page.data.canCancelPreparation, false)
     assert.equal(page.compressionSession, null)
     failing = false
@@ -194,6 +250,10 @@ test('原生选择取消不记录失败、不覆盖已有错误和列表', async
   assert.equal(page.data.errorMessage, '原有错误')
   assert.strictEqual(page.data.files[0], existing)
   assert.equal(page.data.choosing, false)
+  assert.equal(page.data.choosingTitle, '')
+  assert.equal(page.data.choosingHint, '')
+  assert.equal(page.data.choosingCountText, '')
+  assert.equal(page.data.preparationCancelled, false)
 })
 
 function canvasPage(getCanvasNode) {
@@ -592,7 +652,11 @@ test('旧取消批次finally结束时新批次仍保持choosing与可取消状�
   await first
   assert.equal(page.data.choosing, true)
   assert.equal(page.data.canCancelPreparation, true)
-  assert.equal(page.data.choosingText, '正在读取作品信息')
+  assert.equal(page.data.choosingText, '正在读取文件')
+  assert.equal(page.data.choosingTitle, '正在读取文件')
+  assert.equal(page.data.choosingHint, '正在准备作品信息')
+  assert.equal(page.data.choosingCountText, '准备中')
+  assert.equal(page.data.preparationCancelled, false)
   page.handleCancelPreparation()
   gates[1].resolve({ files: [], ownedPathsByClientId: {} })
   await second
