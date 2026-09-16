@@ -566,6 +566,7 @@ function validateWorkForm(form = {}) {
 }
 
 module.exports = {
+  formatFileSize,
   DEFAULT_AUDIO_COVER_URL,
   TITLE_LIMIT,
   DESCRIPTION_LIMIT,

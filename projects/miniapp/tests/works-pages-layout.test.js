@@ -623,3 +623,23 @@ test('works edit sheet tag options use defined tag color styles', () => {
 
   assert.equal(coloredTagOptions.length, 3)
 })
+
+test('压缩Canvas的WXML节点与查询常量一致且唯一', () => {
+  const addJs = read('pages/works/work-add/work-add.js')
+  const addWxml = read('pages/works/work-add/work-add.wxml')
+  const constant = addJs.match(/\bconst\s+WORK_COMPRESSION_CANVAS_ID\s*=\s*(['"])([^'"]+)\1/)
+  assert.ok(constant)
+  const nodes = [...addWxml.matchAll(/<canvas\b[^>]*>/g)].map(match => match[0]).filter(tag => /class="work-compression-canvas"/.test(tag))
+  assert.equal(nodes.length, 1)
+  assert.equal(nodes[0].match(/\bid="([^"]+)"/)[1], constant[2])
+  assert.equal([...addWxml.matchAll(/\bid="([^"]+)"/g)].filter(match => match[1] === constant[2]).length, 1)
+  assert.match(addJs, /getCanvasNode\(this,\s*WORK_COMPRESSION_CANVAS_ID,\s*wx\)/)
+  assert.match(nodes[0], /compressionCanvasWidth/)
+  assert.match(nodes[0], /compressionCanvasHeight/)
+  assert.match(addWxml, /canCancelPreparation && !saving/)
+  assert.match(addWxml, /item.compressed/)
+  const style = read('pages/works/work-add/work-add.wxss').match(/\.work-compression-canvas\s*\{([^}]+)\}/)[1]
+  assert.match(style, /left:\s*-9999px/)
+  assert.match(style, /opacity:\s*0/)
+  assert.doesNotMatch(style, /display:\s*none|width:\s*1px/)
+})

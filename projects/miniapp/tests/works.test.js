@@ -583,3 +583,12 @@ test('rejects invalid work form fields', () => {
   assert.equal(validateWorkForm({ title: '一'.repeat(31) }).message, '作品标题不能超过 30 字')
   assert.equal(validateWorkForm({ title: '草坪婚礼', description: '一'.repeat(1001) }).message, '作品说明不能超过 1000 字')
 })
+
+
+test('作品大小格式器供压缩摘要复用并保持原有单位', () => {
+  const { formatFileSize } = require('../pages/works/utils/works')
+  assert.equal(formatFileSize(0), '')
+  assert.equal(formatFileSize(512), '512B')
+  assert.equal(formatFileSize(1536), '2KB')
+  assert.equal(formatFileSize(10 * 1024 * 1024), '10.0MB')
+})

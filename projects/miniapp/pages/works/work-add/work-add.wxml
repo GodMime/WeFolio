@@ -18,6 +18,11 @@
         </view>
       </button>
 
+      <view wx:if="{{choosing}}" class="compression-state">
+        <text>{{choosingText}}</text>
+        <button wx:if="{{canCancelPreparation && !saving}}" class="secondary-button" bindtap="handleCancelPreparation">{{cancelPreparationText}}</button>
+      </view>
+
       <view wx:if="{{files.length > 0}}" class="selected-panel">
         <view class="panel-heading">
           <view class="panel-title">已选作品</view>
@@ -36,7 +41,7 @@
               bindtouchcancel="handleFileTouchCancel"
             >
               <view class="selected-work-remove-pane" catchtap="handleEditPanelTap">
-                <button class="selected-work-remove-button" data-index="{{index}}" catchtap="handleRemoveFile">移除</button>
+                <button class="selected-work-remove-button" disabled="{{saving || choosing}}" data-index="{{index}}" catchtap="handleRemoveFile">移除</button>
               </view>
               <view class="selected-work-row" data-index="{{index}}" bindtap="handleOpenFileEditor">
                 <view class="selected-work-thumb {{item.isVideo ? 'video' : ''}}">
@@ -51,6 +56,7 @@
                 <view class="selected-work-copy">
                   <view class="selected-work-title">{{item.title || item.fileName}}</view>
                   <view class="selected-work-meta">{{item.metaText}}</view>
+                  <view wx:if="{{item.compressed}}" class="selected-work-compression">{{item.compressionText}}</view>
                   <view
                     wx:if="{{saving && (item.status === 'UPLOADING' || item.status === 'UPLOADED' || item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED')}}"
                     class="selected-work-progress"
@@ -136,8 +142,8 @@
       </scroll-view>
 
       <view class="tag-picker-actions">
-        <button class="tag-picker-clear" catchtap="handleClearUnifiedTags" disabled="{{tagLoading}}">清空</button>
-        <button class="tag-picker-confirm" catchtap="handleConfirmTagPicker" disabled="{{tagLoading}}">完成</button>
+        <button class="tag-picker-clear" catchtap="handleClearUnifiedTags" disabled="{{tagLoading || saving || choosing}}">清空</button>
+        <button class="tag-picker-confirm" catchtap="handleConfirmTagPicker" disabled="{{tagLoading || saving || choosing}}">完成</button>
       </view>
     </view>
   </view>
@@ -168,6 +174,7 @@
               placeholder="填写作品标题"
               data-field="title"
               bindinput="handleEditInput"
+              disabled="{{saving || choosing}}"
             />
           </view>
 
@@ -180,6 +187,7 @@
               maxlength="1000"
               data-field="description"
               bindinput="handleEditInput"
+              disabled="{{saving || choosing}}"
               auto-height="{{false}}"
             ></textarea>
           </view>
@@ -190,9 +198,10 @@
 
       <view class="work-edit-actions">
         <button class="work-edit-cancel" catchtap="handleCloseFileEditor" disabled="{{editFrameExporting}}">取消</button>
-        <button class="work-edit-confirm" catchtap="handleConfirmFileEdit" disabled="{{editFrameExporting}}">完成</button>
+        <button class="work-edit-confirm" catchtap="handleConfirmFileEdit" disabled="{{editFrameExporting || saving || choosing}}">完成</button>
       </view>
     </view>
   </view>
 
+  <canvas id="workCompressionCanvas" type="2d" class="work-compression-canvas" style="width: {{compressionCanvasWidth}}px; height: {{compressionCanvasHeight}}px;"></canvas>
 </view>

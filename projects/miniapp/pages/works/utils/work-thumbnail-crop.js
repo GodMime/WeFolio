@@ -457,6 +457,8 @@ async function cropWorkThumbnailToTempFilePath(options = {}) {
 }
 
 module.exports = {
+  getCanvasNode,
+  loadCanvasImage,
   DEFAULT_CROP_BOX_WIDTH,
   THUMB_MAX_BYTES,
   WORK_THUMBNAIL_COMPRESS_ATTEMPTS,
