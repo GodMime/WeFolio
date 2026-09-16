@@ -322,10 +322,11 @@ test('builds simplified aspect ratio from positive dimensions', () => {
   assert.equal(buildAspectRatio('bad', 1000), '')
 })
 
-test('normalizes chosen media files with default titles and media types', () => {
+test('normalizes chosen media files with original titles and media types', () => {
   const files = normalizeChosenMediaFiles([
     {
       tempFilePath: 'wxfile://tmp/photo.jpg',
+      name: 'photo.jpg',
       size: 1024,
       fileType: 'image',
       width: 1200,
@@ -354,6 +355,7 @@ test('truncates default titles from long file names to thirty characters', () =>
   const files = normalizeChosenMediaFiles([
     {
       tempFilePath: `wxfile://tmp/${longStem}.jpg`,
+      name: `${longStem}.jpg`,
       size: 1024,
       fileType: 'image'
     }

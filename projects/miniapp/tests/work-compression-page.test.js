@@ -46,7 +46,7 @@ function pipeline(overrides = {}, wxOverrides = {}) {
   const real = upload
   const methods = {
     ...real,
-    normalizeChosenMediaFiles(files) { trace.push('normalize'); return real.normalizeChosenMediaFiles(files) },
+    normalizeChosenMediaFiles(files, options) { trace.push('normalize'); return real.normalizeChosenMediaFiles(files, options) },
     measureChosenMediaFiles(files, options) { trace.push('measure'); return real.measureChosenMediaFiles(files, options) },
     async classifyChosenMediaFiles(files, options) { trace.push('classify'); return real.classifyChosenMediaFiles(files, options) },
     async prepareWorkMainFiles(files) {
@@ -77,6 +77,21 @@ test('真实页面按实测、分类、预处理、补信息、校验顺序整�
   assert.equal(page.data.files.length, 2)
   assert.equal(page.data.files[0].tempFilePath, '/prepared/IMAGE')
   assert.equal(page.data.choosing, false)
+})
+
+test('分批选择和删除后追加继续命名序号，压缩保留已生成标题', async () => {
+  const { page } = pipeline({
+    normalizeChosenMediaFiles(files, options) {
+      return upload.normalizeChosenMediaFiles(files, { ...options, now: new Date(2026, 8, 16) })
+    }
+  })
+  await page.handleChooseMedia()
+  assert.deepEqual(Array.from(page.data.files, file => file.title), ['图片 2026-09-16 00:00:00 01', '视频 2026-09-16 00:00:00 02'])
+  page.handleRemoveFile({ currentTarget: { dataset: { index: 0 } } })
+  await page.handleChooseMedia()
+  assert.deepEqual(Array.from(page.data.files, file => file.title), [
+    '视频 2026-09-16 00:00:00 02', '图片 2026-09-16 00:00:00 03', '视频 2026-09-16 00:00:00 04'
+  ])
 })
 
 test('读取和图片视频压缩分别展示标题与数量，完成后清空处理提示', async () => {

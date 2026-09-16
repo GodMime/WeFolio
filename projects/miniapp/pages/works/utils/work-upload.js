@@ -32,6 +32,7 @@ const ANIMATION_UPLOAD_CONCURRENCY = 2
 const VIDEO_UPLOAD_CONCURRENCY = 1
 const COS_UPLOAD_TIMEOUT = 10 * 60 * 1000
 const TITLE_MAX_LENGTH = 30
+const DEFAULT_TITLE_MEDIA_NAMES = { IMAGE: '图片', VIDEO: '视频', AUDIO: '音频' }
 const UPLOAD_COMPLETE_FAILURE_FALLBACK = '部分作品确认失败'
 const CHOOSE_MEDIA_TYPE_MIX = 'mix'
 const CHOOSE_MEDIA_TYPE_IMAGE = 'image'
@@ -171,6 +172,13 @@ function titleFromFileName(fileName) {
   return stem.length > TITLE_MAX_LENGTH ? stem.slice(0, TITLE_MAX_LENGTH) : stem
 }
 
+// 相册只返回临时路径时无法获知原名，使用本地日期时间与本次上传序号生成可读标题。
+function buildDefaultWorkTitle(mediaType, index, now) {
+  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const time = [now.getHours(), now.getMinutes(), now.getSeconds()].map(value => String(value).padStart(2, '0')).join(':')
+  return `${DEFAULT_TITLE_MEDIA_NAMES[mediaType]} ${date} ${time} ${String(index + 1).padStart(2, '0')}`
+}
+
 function buildThumbFileName(fileName) {
   const stem = fileStemFromFileName(fileName) || 'work'
   return `${stem}${THUMB_FILE_SUFFIX}.${THUMB_FILE_EXTENSION}`
@@ -264,7 +272,7 @@ function mimeTypeFromFile(file) {
   return file.fileType === 'video' ? 'video/mp4' : 'image/jpeg'
 }
 
-function normalizeChosenMediaFile(raw = {}, index = 0) {
+function normalizeChosenMediaFile(raw = {}, index = 0, now = new Date()) {
   const filePath = trimText(raw.tempFilePath || raw.path)
   const fileName = trimText(raw.name) || fileNameFromPath(filePath)
   const mediaType = raw.fileType === 'audio' ? 'AUDIO' : raw.fileType === 'video' ? 'VIDEO' : 'IMAGE'
@@ -278,7 +286,7 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     coverPath: trimText(raw.thumbTempFilePath),
     audioCoverUrl: mediaType === 'AUDIO' ? DEFAULT_AUDIO_COVER_URL : '',
     fileName,
-    title: titleFromFileName(fileName),
+    title: titleFromFileName(raw.name) || buildDefaultWorkTitle(mediaType, index, now),
     description: '',
     tags: [],
     isVideo: mediaType === 'VIDEO',
@@ -306,8 +314,8 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
   }
 }
 
-function normalizeChosenMediaFiles(files = []) {
-  return Array.isArray(files) ? files.map(normalizeChosenMediaFile) : []
+function normalizeChosenMediaFiles(files = [], { now = new Date(), startIndex = 0 } = {}) {
+  return Array.isArray(files) ? files.map((file, index) => normalizeChosenMediaFile(file, startIndex + index, now)) : []
 }
 
 function ascii(bytes, offset, length) {

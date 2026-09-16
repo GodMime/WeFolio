@@ -147,6 +147,8 @@ Page({
   onLoad() {
     this.disposed = false
     this.uploadTasks = {}
+    // 序号按当前页面已接纳的文件累计，删除或编辑标题后追加也不重复编号。
+    this.nextWorkTitleIndex = 0
     this.initializeCompressionState()
     if (!hasLocalToken()) {
       this.redirectToLogin()
@@ -213,7 +215,7 @@ Page({
         : await this.chooseMedia(createChooseMediaOptions(remainingCount))
       if (!this.isCurrentPreparation(generation)) return
       const rawFiles = audio ? (response.tempFiles || []).map((file) => Object.assign({}, file, { fileType: 'audio' })) : response.tempFiles || []
-      const normalizedFiles = normalizeChosenMediaFiles(rawFiles)
+      const normalizedFiles = normalizeChosenMediaFiles(rawFiles, { startIndex: this.nextWorkTitleIndex || 0 })
       let mediaFiles = []
       if (audio) {
         for (const file of normalizedFiles) {
@@ -263,6 +265,7 @@ Page({
       if (session) session.assertActive()
       if (!this.isCurrentPreparation(generation, session)) return
       this.setData({ files: nextFiles, errorMessage: '', revealedFileId: '', preparationCancelled: false })
+      this.nextWorkTitleIndex = (this.nextWorkTitleIndex || 0) + selectedFiles.length
       if (result) Object.assign(this.compressionOwnedPaths, result.ownedPathsByClientId)
       adopted = true
     } catch (error) {
