@@ -182,8 +182,41 @@ public interface PortfolioMessage {
     /** 暂不支持组件提示模板 */
     String COMPONENT_UNSUPPORTED_TEMPLATE = "暂不支持的作品集组件：%s";
 
-    /** 作品引用不可用提示 */
-    String WORK_REFERENCE_INVALID_MESSAGE = "作品集引用了不可用作品，请刷新作品列表后重试";
+    /** 单作品组件未选择作品提示 */
+    String SINGLE_WORK_REQUIRED_MESSAGE = "请选择一个作品";
+
+    /** 作品引用编号格式错误提示 */
+    String WORK_REFERENCE_ID_INVALID_MESSAGE = "作品编号无效，请重新选择作品";
+
+    /** 作品引用已失效提示；逻辑删除与不存在均无法通过正常查询读取 */
+    String WORK_REFERENCE_NOT_FOUND_MESSAGE = "引用的作品不存在或已删除，请重新选择作品";
+
+    /** 作品引用归属错误提示 */
+    String WORK_REFERENCE_NOT_OWNED_MESSAGE = "引用的作品不属于当前账号，请重新选择作品";
+
+    /** 作品仍在处理提示 */
+    String WORK_REFERENCE_PROCESSING_MESSAGE = "引用的作品正在处理中，请处理完成后重试";
+
+    /** 作品处理失败提示 */
+    String WORK_REFERENCE_PROCESSING_FAILED_MESSAGE = "引用的作品处理失败，请重新上传或选择其他作品";
+
+    /** 作品处理状态未知提示 */
+    String WORK_REFERENCE_STATUS_INVALID_MESSAGE = "引用的作品状态异常，请重新选择作品";
+
+    /** 作品尚未通过审核时的具体状态提示模板 */
+    String WORK_REFERENCE_AUDIT_STATUS_TEMPLATE = "引用的作品审核状态为“%s”，请在作品列表查看详情";
+
+    /** 作品审核状态缺失或未知时的提示 */
+    String WORK_REFERENCE_AUDIT_NOT_PASSED_MESSAGE = "引用的作品尚未审核通过，请在作品列表查看审核状态";
+
+    /** 视频轮播媒体类型错误提示 */
+    String VIDEO_CAROUSEL_VIDEO_ONLY_MESSAGE = "视频轮播只能选择视频作品";
+
+    /** 作品网格与列表媒体类型错误提示 */
+    String WORK_LIST_MEDIA_TYPE_UNSUPPORTED_MESSAGE = "作品列表只能选择图片或视频作品";
+
+    /** 单作品组件媒体类型错误提示 */
+    String SINGLE_WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE = "单个作品只能选择图片、视频或动图作品";
 
     /** 超链接展示作品为空提示 */
     String HYPERLINK_DISPLAY_WORK_REQUIRED_MESSAGE = "请选择图片或动图作品";

@@ -757,10 +757,10 @@ class PortfolioConfigValidatorTest {
                 .hasMessage(PortfolioMessage.VIDEO_CAROUSEL_WORK_DUPLICATE_MESSAGE);
         assertThatThrownBy(() -> validator().normalize(7L, nonPositive))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+                .hasMessage("作品编号无效，请重新选择作品");
         assertThatThrownBy(() -> validator().normalize(7L, fractional))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+                .hasMessage("作品编号无效，请重新选择作品");
     }
 
     /**
@@ -792,7 +792,7 @@ class PortfolioConfigValidatorTest {
 
         assertThatThrownBy(() -> validator().validateForPublish(7L, normalized))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+                .hasMessage("引用的作品正在处理中，请处理完成后重试");
 
         WorkEntity wrongOwner = video(13L, 8L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode());
         WorkEntity auditing = video(13L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.AUDITING.getCode());
@@ -803,10 +803,14 @@ class PortfolioConfigValidatorTest {
                 .thenReturn(List.of(first, second, image))
                 .thenReturn(List.of(first, second));
 
-        for (int attempt = 0; attempt < 4; attempt++) {
+        for (String message : List.of(
+                "引用的作品不属于当前账号，请重新选择作品",
+                "引用的作品审核状态为“审核中”，请在作品列表查看详情",
+                "视频轮播只能选择视频作品",
+                "引用的作品不存在或已删除，请重新选择作品")) {
             assertThatThrownBy(() -> validator().normalize(7L, videoCarouselConfig(List.of(11L, 12L, 13L))))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+                    .hasMessage(message);
         }
     }
 
@@ -898,7 +902,7 @@ class PortfolioConfigValidatorTest {
                 Map.of("workIds", List.of(13L))));
         assertThatThrownBy(() -> validator().normalize(7L, gridConfig))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+                .hasMessage("作品列表只能选择图片或视频作品");
     }
 
     @Test
@@ -919,7 +923,7 @@ class PortfolioConfigValidatorTest {
 
         assertThatThrownBy(() -> validator().normalize(7L, config))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+                .hasMessage("引用的作品审核状态为“审核中”，请在作品列表查看详情");
     }
 
     /**
@@ -946,16 +950,113 @@ class PortfolioConfigValidatorTest {
 
         assertThatThrownBy(() -> validator().normalize(7L, missingConfig))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("作品集引用了不可用作品，请刷新作品列表后重试");
+                .hasMessage("请选择一个作品");
         assertThatThrownBy(() -> validator().normalize(7L, invalidConfig))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("作品集引用了不可用作品，请刷新作品列表后重试");
+                .hasMessage("请选择一个作品");
         assertThatThrownBy(() -> validator().normalize(7L, fractionalConfig))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("作品集引用了不可用作品，请刷新作品列表后重试");
+                .hasMessage("作品编号无效，请重新选择作品");
         assertThatThrownBy(() -> validator().normalize(7L, unavailableConfig))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("作品集引用了不可用作品，请刷新作品列表后重试");
+                .hasMessage("引用的作品不属于当前账号，请重新选择作品");
+    }
+
+    /** 各作品组件都应区分作品缺失、归属错误、处理中、处理失败及异常状态。 */
+    @Test
+    void workComponentsShouldExplainUnavailableReferences() {
+        Map<String, List<WorkEntity>> cases = new LinkedHashMap<>();
+        cases.put("引用的作品不存在或已删除，请重新选择作品", List.of());
+        cases.put("引用的作品不属于当前账号，请重新选择作品",
+                List.of(work(13L, 8L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.ACTIVE.getCode())));
+        cases.put("引用的作品正在处理中，请处理完成后重试",
+                List.of(work(13L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.PROCESSING.getCode())));
+        cases.put("引用的作品处理失败，请重新上传或选择其他作品",
+                List.of(work(13L, 7L, MediaTypeDict.IMAGE.getCode(), WorkStatusDict.PROCESSING_FAILED.getCode())));
+        cases.put("引用的作品状态异常，请重新选择作品",
+                List.of(work(13L, 7L, MediaTypeDict.IMAGE.getCode(), null)));
+
+        for (var entry : cases.entrySet()) {
+            when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(entry.getValue());
+            for (var type : List.of(PortfolioComponentTypeDict.CAROUSEL,
+                    PortfolioComponentTypeDict.WORK_GRID, PortfolioComponentTypeDict.WORK_LIST,
+                    PortfolioComponentTypeDict.SINGLE_WORK)) {
+                Map<String, Object> values = type == PortfolioComponentTypeDict.SINGLE_WORK
+                        ? Map.of("workId", 13L) : Map.of("workIds", List.of(13L));
+                PortfolioConfigDto input = config(component("c_work", type.getCode(), 1000, true, values));
+                assertThatThrownBy(() -> validator().normalize(7L, input))
+                        .as("%s：%s", type, entry.getKey())
+                        .isInstanceOf(BusinessException.class)
+                        .hasMessage(entry.getKey());
+            }
+        }
+    }
+
+    /** 单作品编号格式错误不能与尚未选择作品混为一谈。 */
+    @Test
+    void singleWorkShouldExplainMalformedIdAndUnsupportedMedia() {
+        for (Object invalidId : List.of(-1L, "invalid", 1.5D)) {
+            PortfolioConfigDto input = config(component("c_work", PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                    1000, true, Map.of("workId", invalidId)));
+            assertThatThrownBy(() -> validator().normalize(7L, input))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("作品编号无效，请重新选择作品");
+        }
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                work(13L, 7L, MediaTypeDict.AUDIO.getCode(), WorkStatusDict.ACTIVE.getCode())));
+        PortfolioConfigDto input = config(component("c_work", PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                1000, true, Map.of("workId", 13L)));
+        assertThatThrownBy(() -> validator().normalize(7L, input))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("单个作品只能选择图片、视频或动图作品");
+    }
+
+    /** 视频轮播和单个动图作品应展示具体审核状态，缺失审核状态时仍应拒绝。 */
+    @Test
+    void workReferencesShouldExplainAuditStatus() {
+        for (var status : WorkAuditStatusDict.values()) {
+            if (status == WorkAuditStatusDict.PASSED) {
+                continue;
+            }
+            for (var mediaType : List.of(MediaTypeDict.VIDEO, MediaTypeDict.ANIMATION)) {
+                WorkEntity rejected = work(13L, 7L, mediaType.getCode(), WorkStatusDict.ACTIVE.getCode());
+                rejected.setAuditStatus(status.getCode());
+                when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                        video(11L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                        video(12L, 7L, WorkStatusDict.ACTIVE.getCode(), WorkAuditStatusDict.PASSED.getCode()),
+                        rejected));
+                PortfolioConfigDto input = mediaType == MediaTypeDict.VIDEO
+                        ? videoCarouselConfig(List.of(11L, 12L, 13L))
+                        : config(component("c_work", PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                                1000, true, Map.of("workId", 13L)));
+                assertThatThrownBy(() -> validator().normalize(7L, input))
+                        .isInstanceOf(BusinessException.class)
+                        .hasMessage("引用的作品审核状态为“%s”，请在作品列表查看详情", status.getDisplayName());
+            }
+        }
+        WorkEntity animation = work(13L, 7L, MediaTypeDict.ANIMATION.getCode(), WorkStatusDict.ACTIVE.getCode());
+        animation.setAuditStatus(null);
+        when(workEntityMapper.selectBatchIds(anyCollection())).thenReturn(List.of(animation));
+        PortfolioConfigDto input = config(component("c_work", PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                1000, true, Map.of("workId", 13L)));
+        assertThatThrownBy(() -> validator().normalize(7L, input))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("引用的作品尚未审核通过，请在作品列表查看审核状态");
+    }
+
+    /** 更具体的作品错误仍须保留菜单定位，同时草稿和发布使用同一规则。 */
+    @Test
+    void workReferenceReasonShouldKeepMenuContextForDraftAndPublish() {
+        PortfolioConfigDto input = navigationConfig("#FFFFFF",
+                component("c_home", PortfolioComponentTypeDict.PROFILE.getCode(), 1000, true, Map.of()),
+                List.of(component("c_work", PortfolioComponentTypeDict.SINGLE_WORK.getCode(),
+                        1000, true, Map.of("workId", 0))));
+        assertThatThrownBy(() -> validator().normalizeForDraft(7L, input, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("【作品】请选择一个作品");
+        assertThatThrownBy(() -> validator().validateForPublish(7L, input))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("【作品】请选择一个作品");
     }
 
     @Test
@@ -1582,7 +1683,7 @@ class PortfolioConfigValidatorTest {
 
         assertThatThrownBy(() -> validator().normalize(7L, config))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("作品集引用了不可用作品，请刷新作品列表后重试");
+                .hasMessage("引用的作品不属于当前账号，请重新选择作品");
     }
 
     @Test
