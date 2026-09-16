@@ -140,6 +140,36 @@ class RechargeOrderTransactionServiceTest {
         verify(rechargeOrderEntityMapper).insert(any(RechargeOrderEntity.class));
     }
 
+    /** 虚拟支付确认迟到时用权威余额结算，订单重放不会重复充值。 */
+    @Test
+    void virtualSettlementShouldUseAuthoritativeBalanceAndRemainIdempotent() {
+        RechargeOrderEntity order = order(RechargeOrderStatusDict.CLOSED.getCode());
+        order.setBuyQuantity(500L);
+        order.setBonusPoints(0);
+        when(rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo(MERCHANT_ORDER_NO)).thenReturn(order);
+        when(rechargeOrderEntityMapper.updateById(order)).thenReturn(1);
+        PointMutationResponse mutation = new PointMutationResponse();
+        mutation.setTransactionId(88L);
+        mutation.setBalanceAfter(580L);
+        when(pointService.rechargeVirtual(7L, 500L, MERCHANT_ORDER_NO, order.getPackageSnapshot(),
+                "POINT_RECHARGE:" + MERCHANT_ORDER_NO, "50 元档", 600L, 50L)).thenReturn(mutation);
+        WechatVirtualPaymentResult paid = new WechatVirtualPaymentResult(
+                0, null, WechatVirtualPaymentErrorType.SUCCESS, 0L, 0L, 0L, "PAID", 500L, 5000L, 200);
+        WechatVirtualPaymentResult balance = new WechatVirtualPaymentResult(
+                0, null, WechatVirtualPaymentErrorType.SUCCESS, 600L, 50L, 0L, null, 0L, 0L, 200);
+
+        RechargeSettlementResult first = service().settleVirtual(MERCHANT_ORDER_NO, paid, balance);
+        RechargeSettlementResult replay = service().settleVirtual(MERCHANT_ORDER_NO, paid, balance);
+
+        assertThat(first.balance()).isEqualTo(580L);
+        assertThat(replay.idempotent()).isTrue();
+        assertThat(order.getPointTransactionId()).isEqualTo(88L);
+        verify(pointService).rechargeVirtual(7L, 500L, MERCHANT_ORDER_NO, order.getPackageSnapshot(),
+                "POINT_RECHARGE:" + MERCHANT_ORDER_NO, "50 元档", 600L, 50L);
+        verify(pointService, never()).recharge(any(), anyLong(), any(), any(), any(), any());
+        verify(rechargeOrderEntityMapper).updateById(order);
+    }
+
     @Test
     void settleShouldUpgradeClosedOrderToPaidAndRechargeOnce() {
         RechargeOrderEntity order = order(RechargeOrderStatusDict.CLOSED.getCode());

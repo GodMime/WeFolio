@@ -5,6 +5,9 @@ package com.jxc.wefolio.message;
  */
 public interface PointMessage {
 
+    /** 已退款账户的权威余额尚未恢复时，暂缓维护者消费。 */
+    String REFUND_BALANCE_UNCONFIRMED_MESSAGE = "积分余额暂无法确认，请稍后重试";
+
     /** 后台积分内部密钥缺失提示 */
     String ADMIN_SECRET_MISSING_MESSAGE = "后台积分密钥未配置";
 

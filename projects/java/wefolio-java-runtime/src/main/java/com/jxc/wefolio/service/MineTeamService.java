@@ -41,6 +41,7 @@ import com.jxc.wefolio.mapper.TeamMemberChangeRequestEntityMapper;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.message.MineTeamMessage;
+import com.jxc.wefolio.service.teamportfolio.PortfolioReferenceMutex;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -276,6 +277,9 @@ public class MineTeamService {
 
     /** 团队作品集引用保护服务 */
     private final TeamPortfolioReferenceGuardService teamPortfolioReferenceGuardService;
+
+    /** 与团队作品集引用写入共用、持有到事务完成的互斥锁 */
+    private final PortfolioReferenceMutex portfolioReferenceMutex;
 
     /**
      * 获取当前用户加入的团队列表。
@@ -688,6 +692,13 @@ public class MineTeamService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MineTeamMemberChangeDetailResponse acceptMemberChangeRequest(MineTeamMemberChangeDetailRequest request) {
+        return portfolioReferenceMutex.execute(() -> acceptMemberChangeRequestLocked(request));
+    }
+
+    /** 在引用互斥区间内读取并变更成员授权，避免与团队作品集保存交错。 */
+    private MineTeamMemberChangeDetailResponse acceptMemberChangeRequestLocked(
+            MineTeamMemberChangeDetailRequest request
+    ) {
         Long userId = AuthContextHolder.requireUserId();
         TeamMemberChangeRequestEntity changeRequest = requirePendingMemberChangeForCurrentUser(request, userId);
         TeamEntity team = requireActiveTeam(changeRequest.getTeamId());
@@ -822,6 +833,11 @@ public class MineTeamService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MineTeamDetailResponse removeMember(MineTeamMemberRemoveRequest request) {
+        return portfolioReferenceMutex.execute(() -> removeMemberLocked(request));
+    }
+
+    /** 在引用互斥区间内读取并移除成员，保证引用检查和成员状态更新不可交错。 */
+    private MineTeamDetailResponse removeMemberLocked(MineTeamMemberRemoveRequest request) {
         if (request == null) {
             throw new BusinessException("成员移除内容不能为空");
         }

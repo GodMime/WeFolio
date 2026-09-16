@@ -237,7 +237,9 @@ public class PortfolioVisitService {
             VisitorPortfolioEventRequest request
     ) {
         validateEventMediaType(request);
-        validatePublishedWorkReference(portfolio, request);
+        if (!shouldRecordPublishedWorkEvent(portfolio, request)) {
+            return;
+        }
         if (hasRecordedEvent(request.getIdempotencyKey())) {
             return;
         }
@@ -307,41 +309,45 @@ public class PortfolioVisitService {
     }
 
     /**
-     * 校验新版客户端上报的作品与组件已发布引用对。
+     * 校验上报的作品属于已发布引用，防止省略组件键后绕过计费资源校验。
      *
-     * <p>旧版客户端不传 componentKey，此时保留原有行为；一旦携带则必须精确命中已发布引用。</p>
+     * <p>旧版客户端可省略组件键；其已失效引用事件静默丢弃，避免阻断已打开页面的媒体展示。
+     * 传入组件键时仍须精确命中作品与组件引用对。
+     * 不追加作品当前状态或媒体类型校验，保留旧发布配置和延迟事件的处理语义。</p>
      *
      * @param portfolio 已发布作品集
      * @param request 访客事件请求
      */
-    private void validatePublishedWorkReference(
+    private boolean shouldRecordPublishedWorkEvent(
             PortfolioEntity portfolio,
             VisitorPortfolioEventRequest request
     ) {
-        if (request == null || request.getComponentKey() == null) {
-            return;
+        if (request == null) {
+            return true;
         }
         String eventType = request.getEventType();
         if (!VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)
                 && !VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType)) {
-            return;
+            return true;
         }
-        String componentKey = request.getComponentKey().strip();
+        String componentKey = request.getComponentKey() == null ? null : request.getComponentKey().strip();
         Long workId = request.getWorkId();
-        if (componentKey.isEmpty() || workId == null || workId <= 0L || portfolio == null
+        if ((componentKey != null && componentKey.isEmpty()) || workId == null || workId <= 0L || portfolio == null
                 || portfolio.getId() == null) {
             throw new BusinessException(EVENT_REFERENCE_INVALID_MESSAGE);
         }
         request.setComponentKey(componentKey);
+        // 此处只判断是否存在匹配引用；SQL 已包含下方全部匹配条件，任意一条即能证明，故可 LIMIT 1。
         List<PortfolioReferenceEntity> references = portfolioReferenceEntityMapper.selectList(
                 Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
                         .eq(PortfolioReferenceEntity::getPortfolioId, portfolio.getId())
                         .eq(PortfolioReferenceEntity::getConfigScope, PortfolioConfigScopeDict.PUBLISHED.getCode())
                         .eq(PortfolioReferenceEntity::getReferenceType, ReferenceTypeDict.WORK.getCode())
                         .eq(PortfolioReferenceEntity::getReferenceId, workId)
-                        .eq(PortfolioReferenceEntity::getComponentKey, componentKey)
+                        .eq(componentKey != null, PortfolioReferenceEntity::getComponentKey, componentKey)
                         .eq(PortfolioReferenceEntity::getIsValid, 1)
                         .eq(PortfolioReferenceEntity::getDeleted, 0L)
+                        .last(SQL_SINGLE_LIMIT_CLAUSE)
         );
         boolean matched = (references == null ? List.<PortfolioReferenceEntity>of() : references).stream()
                 .anyMatch(reference -> reference != null
@@ -349,12 +355,13 @@ public class PortfolioVisitService {
                         && PortfolioConfigScopeDict.PUBLISHED.getCode().equals(reference.getConfigScope())
                         && ReferenceTypeDict.WORK.getCode().equals(reference.getReferenceType())
                         && Objects.equals(reference.getReferenceId(), workId)
-                        && componentKey.equals(reference.getComponentKey())
+                        && (componentKey == null || componentKey.equals(reference.getComponentKey()))
                         && Objects.equals(reference.getIsValid(), 1)
                         && Objects.equals(reference.getDeleted(), 0L));
-        if (!matched) {
+        if (!matched && componentKey != null) {
             throw new BusinessException(EVENT_REFERENCE_INVALID_MESSAGE);
         }
+        return matched;
     }
 
     /**

@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 
 /**
  * 微信代币扣币历史任务 Mapper。
+ *
+ * <p>SQL 中的任务状态值对应 PointDebitTaskStatusDict，并与 job 的 VirtualPaymentCandidateRepository
+ * 领取条件一致；状态编码变更时须同步这两处查询。</p>
  */
 @Mapper
 public interface PointDebitTaskEntityMapper extends BaseMapper<PointDebitTaskEntity> {
@@ -89,6 +92,7 @@ public interface PointDebitTaskEntityMapper extends BaseMapper<PointDebitTaskEnt
             UPDATE wf_point_debit_task
                SET status = 'WAITING',
                    next_execute_at = #{nextExecuteAt},
+                   last_failed_at = NULL,
                    execution_lease_token = NULL,
                    lease_until = NULL,
                    version = version + 1,
@@ -103,16 +107,21 @@ public interface PointDebitTaskEntityMapper extends BaseMapper<PointDebitTaskEnt
             @Param("nextExecuteAt") LocalDateTime nextExecuteAt
     );
 
-    /** 人工重试失败任务，保留原任务号和已持久化请求金额。 */
+    /** 人工重试失败任务，保留原请求和成功事实；成功标记字面量对应 WechatVirtualPaymentErrorType 枚举名称。 */
     @Update("""
             UPDATE wf_point_debit_task
                SET status = 'RETRY_WAIT',
-                   retry_count = 0,
+                   retry_count = CASE
+                       WHEN last_error_code IN ('SUCCESS', 'DUPLICATE_SUCCESS') THEN retry_count
+                       ELSE 0 END,
                    next_execute_at = CURRENT_TIMESTAMP(3),
                    execution_lease_token = NULL,
                    lease_until = NULL,
-                   last_error_code = NULL,
+                   last_error_code = CASE
+                       WHEN last_error_code IN ('SUCCESS', 'DUPLICATE_SUCCESS') THEN last_error_code
+                       ELSE NULL END,
                    last_error_message = NULL,
+                   last_failed_at = NULL,
                    version = version + 1,
                    updated_at = CURRENT_TIMESTAMP(3)
              WHERE id = #{taskId}

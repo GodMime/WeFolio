@@ -11,18 +11,31 @@ import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import com.jxc.wefolio.mapper.PointGiftOrderEntityMapper;
 import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 
 /**
  * 赠送订单独立短事务服务。
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PointGiftOrderTransactionService {
+
+    /** 已确认远端成功后的补查至少间隔一分钟，不消耗普通失败预算。 */
+    private static final Duration BALANCE_CONFIRMATION_MIN_DELAY = Duration.ofMinutes(1L);
+
+    /** 补查退避上限，长期异常由既有任务记录供人工核查。 */
+    private static final Duration BALANCE_CONFIRMATION_MAX_DELAY = Duration.ofHours(1L);
+
+    /** 已成功赠送但补查存在永久错误时的人工核查事件。 */
+    private static final String BALANCE_CONFIRMATION_MANUAL_REQUIRED_EVENT =
+            "WECHAT_BALANCE_CONFIRMATION_MANUAL_REQUIRED";
 
     /** 赠送流水幂等键前缀。 */
     private static final String GIFT_TRANSACTION_KEY_PREFIX = "wechat-gift:";
@@ -62,6 +75,25 @@ public class PointGiftOrderTransactionService {
         );
         if (renewed != 1) {
             throw new ExecutionLeaseLostException("赠送订单执行租约已被其他执行器接管");
+        }
+    }
+
+    /** 先独立提交重复赠送成功事实，补查中断时不得重新进入普通赠送失败预算。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public void recordDuplicateSuccess(Long orderId, String executionLeaseToken) {
+        renewLeaseInCurrentTransaction(orderId, executionLeaseToken);
+        if (hasRecordedSuccess(pointGiftOrderEntityMapper.selectById(orderId))) {
+            return;
+        }
+        int updated = pointGiftOrderEntityMapper.update(null,
+                Wrappers.lambdaUpdate(PointGiftOrderEntity.class)
+                        .set(PointGiftOrderEntity::getLastErrorCode,
+                                WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS.name())
+                        .set(PointGiftOrderEntity::getLastFailedAt, null)
+                        .eq(PointGiftOrderEntity::getId, orderId)
+                        .eq(PointGiftOrderEntity::getExecutionLeaseToken, executionLeaseToken));
+        if (updated != 1) {
+            throw new ExecutionLeaseLostException("重复赠送成功事实未能保存");
         }
     }
 
@@ -127,6 +159,10 @@ public class PointGiftOrderTransactionService {
                 || !ownsLease(order, executionLeaseToken)) {
             return;
         }
+        if (hasRecordedSuccess(order)) {
+            recordBalanceConfirmationFailure(order, executionLeaseToken, result);
+            return;
+        }
         int nextRetryCount = value(order.getRetryCount()) + 1;
         boolean retryable = isRetryable(result.errorType())
                 && nextRetryCount <= properties.getSettlement().getMaxRetries();
@@ -145,6 +181,58 @@ public class PointGiftOrderTransactionService {
                         .set(PointGiftOrderEntity::getLastFailedAt, LocalDateTime.now())
                         .eq(PointGiftOrderEntity::getId, orderId)
                         .eq(PointGiftOrderEntity::getExecutionLeaseToken, executionLeaseToken));
+    }
+
+    /** 读取持久成功事实；领取和租约接管都保留该字段。 */
+    public static boolean hasRecordedSuccess(PointGiftOrderEntity entity) {
+        return entity != null && (WechatVirtualPaymentErrorType.SUCCESS.name().equals(entity.getLastErrorCode())
+                || WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS.name().equals(entity.getLastErrorCode()));
+    }
+
+    /** 成功后的暂时失败退避补查，永久错误停止自动执行；均保留成功事实和普通重试次数。 */
+    private void recordBalanceConfirmationFailure(
+            PointGiftOrderEntity order, String executionLeaseToken, WechatVirtualPaymentResult result
+    ) {
+        LocalDateTime now = pointGiftOrderEntityMapper.selectCurrentTimestamp();
+        boolean blocked = result.errorType() == WechatVirtualPaymentErrorType.PERMANENT
+                || result.errorType() == WechatVirtualPaymentErrorType.CONFIGURATION;
+        Duration delay = balanceConfirmationDelay(order.getLastFailedAt(), order.getNextExecuteAt());
+        int updated = pointGiftOrderEntityMapper.update(null,
+                Wrappers.lambdaUpdate(PointGiftOrderEntity.class)
+                        .set(PointGiftOrderEntity::getStatus, blocked
+                                ? PointGiftOrderStatusDict.FAILED.getCode()
+                                : PointGiftOrderStatusDict.RETRY_WAIT.getCode())
+                        .set(!blocked, PointGiftOrderEntity::getNextExecuteAt, now.plus(delay))
+                        .set(PointGiftOrderEntity::getExecutionLeaseToken, null)
+                        .set(PointGiftOrderEntity::getLeaseUntil, null)
+                        .set(PointGiftOrderEntity::getLastErrorMessage, safeMessage(result.errorMessage()))
+                        .set(PointGiftOrderEntity::getLastFailedAt, now)
+                        .eq(PointGiftOrderEntity::getId, order.getId())
+                        .eq(PointGiftOrderEntity::getExecutionLeaseToken, executionLeaseToken));
+        if (blocked && updated == 1) {
+            log.error("event={} orderId={} remoteSuccess={} errorType={}",
+                    BALANCE_CONFIRMATION_MANUAL_REQUIRED_EVENT, order.getId(),
+                    order.getLastErrorCode(), result.errorType());
+        }
+    }
+
+    /** 两个持久时间字段的差值保存上次退避间隔，避免占用普通失败计数。 */
+    private Duration balanceConfirmationDelay(LocalDateTime lastFailedAt, LocalDateTime nextExecuteAt) {
+        if (lastFailedAt == null || nextExecuteAt == null) {
+            return BALANCE_CONFIRMATION_MIN_DELAY;
+        }
+        Duration previous = Duration.between(lastFailedAt, nextExecuteAt);
+        if (previous.compareTo(BALANCE_CONFIRMATION_MIN_DELAY) < 0) {
+            return BALANCE_CONFIRMATION_MIN_DELAY;
+        }
+        return previous.compareTo(BALANCE_CONFIRMATION_MAX_DELAY.dividedBy(2L)) >= 0
+                ? BALANCE_CONFIRMATION_MAX_DELAY : previous.multipliedBy(2L);
+    }
+
+    /** 新会话提交后提前唤醒未被执行器占用的成功赠送补查，不重复请求赠送。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public void wakeBalanceConfirmationAfterSessionRefresh(Long userId) {
+        pointGiftOrderEntityMapper.wakeBalanceConfirmation(userId);
     }
 
     /** 后台人工重试失败订单。 */

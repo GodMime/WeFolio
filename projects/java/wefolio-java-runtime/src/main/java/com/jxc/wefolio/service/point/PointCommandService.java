@@ -33,6 +33,12 @@ public class PointCommandService {
         }
     }
 
+    /** 充值已持有用户锁时创建同一用户的赠送，沿用当前结算事务且不重复获取锁。 */
+    public GiftOrderResult createGiftOrderWithinUserLock(GiftCommand command) {
+        validateGift(command);
+        return pointCommandTransactionService.createGiftOrderWithinUserLock(command);
+    }
+
     /** 按维护者语义完整扣除积分，扣除后余额不得为负。 */
     public PointMutationResult deductForMaintainer(DebitCommand command) {
         validateDebit(command);

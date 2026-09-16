@@ -7,6 +7,7 @@ import com.jxc.wefolio.config.WechatMiniappProperties;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.service.WechatAccessTokenService;
 import com.jxc.wefolio.service.WechatInteractionLogSanitizer;
+import com.jxc.wefolio.message.WechatVirtualPaymentMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -14,9 +15,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.math.BigInteger;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.Map;
 
 /**
@@ -32,11 +35,27 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
     /** 正式环境编号。 */
     private static final int FORMAL_ENVIRONMENT = 0;
 
+    /** 统一结果采用请求协议的沙箱环境编号。 */
+    private static final int SANDBOX_ENVIRONMENT = 1;
+
+    /** 官方初始化示例中的环境占位值，不代表已验证为现网。 */
+    private static final int ORDER_UNDECLARED_ENVIRONMENT_TYPE = 0;
+
+    /** 微信查单响应使用独立环境编号：1 为现网，2 为沙箱。 */
+    private static final int ORDER_FORMAL_ENVIRONMENT_TYPE = 1;
+    private static final int ORDER_SANDBOX_ENVIRONMENT_TYPE = 2;
+
     /** 默认分区。 */
     private static final String DEFAULT_ZONE_ID = "1";
 
     /** 虚拟支付币种。 */
     private static final String CURRENCY_TYPE = "CNY";
+
+    /** 兼容微信文本支付成功状态。 */
+    private static final String ORDER_STATUS_SUCCESS = "SUCCESS";
+
+    /** 可供现有错误日志采集规则识别的未知应答事件。 */
+    private static final String UNKNOWN_RESPONSE_EVENT = "WECHAT_VIRTUAL_PAYMENT_RESPONSE_UNKNOWN";
 
     /** 已支付订单的标准化状态。 */
     private static final String ORDER_STATUS_PAID = "PAID";
@@ -58,6 +77,19 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
     private static final String PRESENT_CURRENCY_PATH = "/xpay/present_currency";
     private static final String QUERY_ORDER_PATH = "/xpay/query_order";
 
+    /** 微信响应字段。 */
+    private static final String ERROR_CODE = "errcode";
+    private static final String BALANCE = "balance";
+    private static final String PRESENT_BALANCE = "present_balance";
+    private static final String USED_PRESENT_AMOUNT = "used_present_amount";
+    private static final String ORDER = "order";
+    private static final String BUY_QUANTITY = "buy_quantity";
+    private static final String PAID_FEE = "paid_fee";
+    private static final String PAY_AMOUNT = "pay_amount";
+    private static final String AMOUNT = "amount";
+    private static final String ENVIRONMENT = "env";
+    private static final String ORDER_ENVIRONMENT_TYPE = "env_type";
+
     /** 微信小程序配置。 */
     private final WechatMiniappProperties miniappProperties;
 
@@ -75,6 +107,9 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
 
     /** 微信交互日志脱敏组件。 */
     private final WechatInteractionLogSanitizer logSanitizer;
+
+    /** 本进程累计未知应答数，重启后归零；各接口由日志的 operation/path 区分。 */
+    private final AtomicLong unknownResponseCount = new AtomicLong();
 
     /** 强制使用 HTTP/1.1 的 REST 客户端。 */
     private RestClient restClient;
@@ -165,7 +200,7 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
         body.put("openid", openid);
         body.put("ts", timestampSeconds);
         body.put("zone_id", DEFAULT_ZONE_ID);
-        body.put("env", FORMAL_ENVIRONMENT);
+        body.put(ENVIRONMENT, FORMAL_ENVIRONMENT);
         return body;
     }
 
@@ -227,7 +262,12 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
                             + "elapsedMs={} retryCount={}",
                     operation, referenceNo, userId, response.httpStatus(),
                     logSanitizer.sanitizeJson(response.body()), elapsedMillis(startedAt), retryCount);
-            WechatVirtualPaymentResult result = parse(response, operation, referenceNo, userId, retryCount);
+            WechatVirtualPaymentResult result = parse(response, path, operation, referenceNo, userId, retryCount);
+            if (result.errorType() == WechatVirtualPaymentErrorType.UNKNOWN) {
+                log.error("event={} operation={} path={} httpStatus={} errcode={} unknownResponseCount={}",
+                        UNKNOWN_RESPONSE_EVENT, operation, path, response.httpStatus(), result.errorCode(),
+                        unknownResponseCount.incrementAndGet());
+            }
             return result;
         } catch (RuntimeException exception) {
             log.warn("微信交互异常 operation={} referenceNo={} userId={} elapsedMs={} retryCount={} "
@@ -243,6 +283,7 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
     /** 解析并分类微信响应，不保留完整原始报文。 */
     private WechatVirtualPaymentResult parse(
             HttpCallResult response,
+            String path,
             String operation,
             String referenceNo,
             Long userId,
@@ -250,24 +291,32 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
     ) {
         try {
             JSONObject json = JSON.parseObject(response.body());
-            Integer errorCode = json == null ? null : json.getInteger("errcode");
-            JSONObject order = json == null ? null : json.getJSONObject("order");
+            Integer errorCode = json == null || json.get(ERROR_CODE) == null ? null
+                    : Math.toIntExact(integerValue(json.get(ERROR_CODE)));
+            WechatVirtualPaymentErrorType errorType = errorClassifier.classify(errorCode, response.httpStatus());
+            JSONObject order = json == null ? null : json.getJSONObject(ORDER);
+            // 重复成功没有余额字段，必须由处理器另行查询，不能按普通成功结构校验。
+            if (errorType == WechatVirtualPaymentErrorType.SUCCESS) {
+                validateSuccessPayload(path, json, order);
+            }
             return new WechatVirtualPaymentResult(
                     errorCode,
                     json == null ? null : json.getString("errmsg"),
-                    errorClassifier.classify(errorCode, response.httpStatus()),
-                    longValue(json, "balance"),
-                    longValue(json, "present_balance"),
-                    longValue(json, "used_present_amount"),
+                    errorType,
+                    longValue(json, BALANCE),
+                    longValue(json, PRESENT_BALANCE),
+                    longValue(json, USED_PRESENT_AMOUNT),
                     normalizeOrderStatus(order, json),
-                    firstLong(order, json, "buy_quantity"),
-                    firstLong(order, json, "paid_fee", "pay_amount", "amount"),
+                    firstLong(order, json, BUY_QUANTITY),
+                    firstLong(order, json, PAID_FEE, PAY_AMOUNT, AMOUNT),
                     response.httpStatus(),
                     firstString(order, json, "openid"),
-                    firstInteger(order, json, "env"),
+                    QUERY_ORDER_PATH.equals(path)
+                            ? normalizeOrderEnvironment(order, json)
+                            : firstInteger(order, json, ENVIRONMENT),
                     firstString(order, json, "order_id", "out_trade_no")
             );
-        } catch (JSONException exception) {
+        } catch (JSONException | ArithmeticException exception) {
             log.warn("微信交互响应解析失败 operation={} referenceNo={} userId={} httpStatus={} response={} "
                             + "retryCount={} exceptionType={}",
                     operation, referenceNo, userId, response.httpStatus(),
@@ -279,10 +328,64 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
         }
     }
 
+    /** 校验普通成功响应必需的字段，避免缺失或非法数值被转换成零。 */
+    private void validateSuccessPayload(String path, JSONObject json, JSONObject order) {
+        if (QUERY_ORDER_PATH.equals(path)) {
+            String status = normalizeOrderStatus(order, json);
+            if (status == null) {
+                throw new JSONException(WechatVirtualPaymentMessage.ORDER_STATUS_MISSING_MESSAGE);
+            }
+            if (ORDER_STATUS_PAID.equals(status) || ORDER_STATUS_SUCCESS.equals(status)) {
+                if (firstLong(order, json, PAID_FEE, PAY_AMOUNT, AMOUNT) <= 0L) {
+                    throw new JSONException(WechatVirtualPaymentMessage.ORDER_AMOUNT_INVALID_MESSAGE);
+                }
+            }
+            if (firstLong(order, json, BUY_QUANTITY) < 0L) {
+                throw new JSONException(WechatVirtualPaymentMessage.ORDER_QUANTITY_INVALID_MESSAGE);
+            }
+            return;
+        }
+        long balance = requiredNonNegativeInteger(json, BALANCE);
+        if (CURRENCY_PAY_PATH.equals(path)) {
+            // 官方扣币应答只有总余额及本次赠送币用量，完整余额由处理器在成功后补查。
+            requiredNonNegativeInteger(json, USED_PRESENT_AMOUNT);
+            if (!json.containsKey(PRESENT_BALANCE)) {
+                return;
+            }
+        }
+        long presentBalance = requiredNonNegativeInteger(json, PRESENT_BALANCE);
+        if (presentBalance > balance) {
+            throw new JSONException(WechatVirtualPaymentMessage.PRESENT_BALANCE_INVALID_MESSAGE);
+        }
+    }
+
+    /** 读取存在且非负的整数字段。 */
+    private long requiredNonNegativeInteger(JSONObject json, String key) {
+        if (json == null || json.get(key) == null) {
+            throw new JSONException(WechatVirtualPaymentMessage.RESPONSE_FIELD_MISSING_MESSAGE + key);
+        }
+        long value = integerValue(json.get(key));
+        if (value < 0L) {
+            throw new JSONException(WechatVirtualPaymentMessage.RESPONSE_FIELD_NEGATIVE_MESSAGE + key);
+        }
+        return value;
+    }
+
+    /** 不接受字符串、浮点、布尔或超出长整数范围的数字。 */
+    private long integerValue(Object value) {
+        if (value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long) {
+            return ((Number) value).longValue();
+        }
+        if (value instanceof BigInteger integer) {
+            return integer.longValueExact();
+        }
+        throw new JSONException(WechatVirtualPaymentMessage.RESPONSE_INTEGER_REQUIRED_MESSAGE);
+    }
+
     /** 安全读取 JSON 长整数。 */
     private long longValue(JSONObject json, String key) {
-        Long value = json == null ? null : json.getLong(key);
-        return value == null ? 0L : value;
+        Object value = json == null ? null : json.get(key);
+        return value == null ? 0L : integerValue(value);
     }
 
     /** 优先从订单对象读取非空文本，并兼容顶层字段。 */
@@ -302,12 +405,12 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
     /** 优先从订单对象读取长整数。 */
     private long firstLong(JSONObject nested, JSONObject root, String... keys) {
         for (String key : keys) {
-            Long value = nested == null ? null : nested.getLong(key);
+            Object value = nested == null ? null : nested.get(key);
             if (value == null && root != null) {
-                value = root.getLong(key);
+                value = root.get(key);
             }
             if (value != null) {
-                return value;
+                return integerValue(value);
             }
         }
         return 0L;
@@ -315,8 +418,30 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
 
     /** 优先从订单对象读取整数。 */
     private Integer firstInteger(JSONObject nested, JSONObject root, String key) {
-        Integer value = nested == null ? null : nested.getInteger(key);
-        return value == null && root != null ? root.getInteger(key) : value;
+        Object value = nested == null ? null : nested.get(key);
+        if (value == null && root != null) {
+            value = root.get(key);
+        }
+        return value == null ? null : Math.toIntExact(integerValue(value));
+    }
+
+    /** 将查单环境编号转换为既有内部值；保留旧 env，并拒绝冲突的双字段。 */
+    private Integer normalizeOrderEnvironment(JSONObject order, JSONObject root) {
+        Integer legacyEnvironment = firstInteger(order, root, ENVIRONMENT);
+        Integer environmentType = firstInteger(order, root, ORDER_ENVIRONMENT_TYPE);
+        if (environmentType == null || environmentType == ORDER_UNDECLARED_ENVIRONMENT_TYPE) {
+            // 可选字段缺失或官方初始化示例使用 0 占位时，只沿用旧字段，不推断正式环境。
+            return legacyEnvironment;
+        }
+        int environment = switch (environmentType) {
+            case ORDER_FORMAL_ENVIRONMENT_TYPE -> FORMAL_ENVIRONMENT;
+            case ORDER_SANDBOX_ENVIRONMENT_TYPE -> SANDBOX_ENVIRONMENT;
+            default -> throw new JSONException(WechatVirtualPaymentMessage.ORDER_ENVIRONMENT_INVALID_MESSAGE);
+        };
+        if (legacyEnvironment != null && legacyEnvironment != environment) {
+            throw new JSONException(WechatVirtualPaymentMessage.ORDER_ENVIRONMENT_CONFLICT_MESSAGE);
+        }
+        return environment;
     }
 
     /** 将微信查单数字状态转换为充值业务可识别的稳定状态。 */
@@ -337,7 +462,8 @@ public class RestWechatVirtualPaymentClient implements WechatVirtualPaymentClien
         }
         return switch (numericStatus) {
             case 2, 3, 4 -> ORDER_STATUS_PAID;
-            case 5 -> ORDER_STATUS_REFUNDED;
+            // 官方 5 为订单已退款，8 为用户退款完成，均不再作为待支付状态。
+            case 5, 8 -> ORDER_STATUS_REFUNDED;
             case 6 -> ORDER_STATUS_CLOSED;
             case 7 -> ORDER_STATUS_REFUND_FAILED;
             default -> ORDER_STATUS_PENDING;

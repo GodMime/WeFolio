@@ -11,6 +11,9 @@ import java.time.LocalDateTime;
 
 /**
  * 微信代币赠送订单 Mapper。
+ *
+ * <p>SQL 中的订单状态值对应 PointGiftOrderStatusDict，并与 job 的 VirtualPaymentCandidateRepository
+ * 领取条件一致；状态编码变更时须同步这两处查询。</p>
  */
 @Mapper
 public interface PointGiftOrderEntityMapper extends BaseMapper<PointGiftOrderEntity> {
@@ -56,16 +59,38 @@ public interface PointGiftOrderEntityMapper extends BaseMapper<PointGiftOrderEnt
             @Param("leaseUntil") LocalDateTime leaseUntil
     );
 
-    /** 人工重试失败订单，复用原微信订单号。 */
+    /** 新会话提前唤醒已成功但未结算的赠送补查，保留成功事实且不抢占有效租约。 */
+    @Update("""
+            UPDATE wf_point_gift_order
+               SET next_execute_at = CURRENT_TIMESTAMP(3),
+                   last_failed_at = NULL,
+                   execution_lease_token = NULL,
+                   lease_until = NULL,
+                   version = version + 1,
+                   updated_at = CURRENT_TIMESTAMP(3)
+             WHERE user_id = #{userId}
+               AND status = 'RETRY_WAIT'
+               AND last_error_code IN ('SUCCESS', 'DUPLICATE_SUCCESS')
+               AND (lease_until IS NULL OR lease_until < CURRENT_TIMESTAMP(3))
+               AND deleted = 0
+            """)
+    int wakeBalanceConfirmation(@Param("userId") Long userId);
+
+    /** 人工重试失败订单，复用原订单及成功事实；成功标记字面量对应 WechatVirtualPaymentErrorType 枚举名称。 */
     @Update("""
             UPDATE wf_point_gift_order
                SET status = 'RETRY_WAIT',
-                   retry_count = 0,
+                   retry_count = CASE
+                       WHEN last_error_code IN ('SUCCESS', 'DUPLICATE_SUCCESS') THEN retry_count
+                       ELSE 0 END,
                    next_execute_at = CURRENT_TIMESTAMP(3),
                    execution_lease_token = NULL,
                    lease_until = NULL,
-                   last_error_code = NULL,
+                   last_error_code = CASE
+                       WHEN last_error_code IN ('SUCCESS', 'DUPLICATE_SUCCESS') THEN last_error_code
+                       ELSE NULL END,
                    last_error_message = NULL,
+                   last_failed_at = NULL,
                    version = version + 1,
                    updated_at = CURRENT_TIMESTAMP(3)
              WHERE id = #{orderId}

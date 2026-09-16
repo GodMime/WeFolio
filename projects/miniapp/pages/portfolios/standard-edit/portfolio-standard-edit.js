@@ -211,6 +211,18 @@ const BACKGROUND_COLOR_INVALID_MESSAGE = '请输入正确的颜色值'
 const TEXT_BACKGROUND_PICKER_SELECTOR = '#text-background-picker'
 const COLOR_COPY_FAILED_MESSAGE = '复制失败，请重试'
 const BOTTOM_NAV_COUNT_OPTIONS = [1, 2, 3, 4]
+const CREATE_RESULT_UNKNOWN_MESSAGE = '创建结果暂无法确认，请先从作品集列表核对，当前编辑仍在本页'
+const CREATE_RETRY_CONFIRM_TITLE = '确认重新创建'
+const CREATE_RETRY_CONFIRM_CONTENT = '请先从作品集列表确认未创建，再确认重建。未核对请取消，保留当前编辑。'
+const CREATE_RETRY_CONFIRM_TEXT = '确认重建'
+const CREATE_RETRY_CANCEL_TEXT = '暂不重建'
+const UNSAVED_EDITOR_CHANGES_MESSAGE = '草稿已保存，当前修改请再次保存'
+const PORTFOLIO_SUBMISSION_SAVE = 'SAVE'
+const PORTFOLIO_SUBMISSION_PUBLISH = 'PUBLISH'
+const PORTFOLIO_SUBMISSION_BUSY_MESSAGES = {
+  [PORTFOLIO_SUBMISSION_SAVE]: '正在保存，请稍候',
+  [PORTFOLIO_SUBMISSION_PUBLISH]: '正在发布，请稍候'
+}
 
 const DEFAULT_COMPONENT_DESCRIPTIONS = {
   CAROUSEL: '展示已选择的图片作品',
@@ -357,6 +369,35 @@ function buildSelectedCountText(workIds = []) {
 
 function clonePlainObject(value = {}) {
   return JSON.parse(JSON.stringify(value || {}))
+}
+
+/** 配置比较只忽略对象字段顺序，保留组件、菜单等数组的业务顺序。 */
+function stableEditorConfigJson(config) {
+  return JSON.stringify(config, (key, value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+    return Object.keys(value).sort().reduce((sorted, field) => {
+      sorted[field] = value[field]
+      return sorted
+    }, Object.create(null))
+  })
+}
+
+/** 创建结果未知时，由用户核对后明确决定是否重建，取消不会清除保护状态。 */
+function confirmDraftCreationRetry() {
+  return new Promise((resolve) => {
+    if (typeof wx === 'undefined' || typeof wx.showModal !== 'function') {
+      resolve(false)
+      return
+    }
+    wx.showModal({
+      title: CREATE_RETRY_CONFIRM_TITLE,
+      content: CREATE_RETRY_CONFIRM_CONTENT,
+      confirmText: CREATE_RETRY_CONFIRM_TEXT,
+      cancelText: CREATE_RETRY_CANCEL_TEXT,
+      success: (result = {}) => resolve(Boolean(result.confirm)),
+      fail: () => resolve(false)
+    })
+  })
 }
 
 function buildHyperlinkTargetOptions(response = {}) {
@@ -4070,12 +4111,21 @@ Page({
     if (this.data.portfolioId) {
       return Promise.resolve(this.data.portfolioId)
     }
-    return request({
-      url: STANDARD_PERSONAL_API_URL,
-      method: 'POST',
-      data: {
-        config: buildServerSafePortfolioConfig(this.data.config)
-      }
+    if (this.draftCreationPromise) {
+      return this.draftCreationPromise
+    }
+    const payload = clonePlainObject({ config: buildServerSafePortfolioConfig(this.data.config) })
+    const creationApproved = this.draftCreationResultUnknown
+      ? confirmDraftCreationRetry()
+      : Promise.resolve(true)
+    this.draftCreationPromise = creationApproved.then((confirmed) => {
+      if (!confirmed) throw new Error(CREATE_RESULT_UNKNOWN_MESSAGE)
+      this.draftCreationResultUnknown = false
+      return request({
+        url: STANDARD_PERSONAL_API_URL,
+        method: 'POST',
+        data: payload
+      })
     }).then((response = {}) => {
       const portfolioId = response.portfolioId
       if (!portfolioId) {
@@ -4087,28 +4137,88 @@ Page({
         publishedRevision: response.publishedRevision || 0
       }, buildPublicationStatusState(response.publicationStatus)))
       return portfolioId
+    }).catch((error) => {
+      // 只有明确的 4xx 拒绝可以重新创建；异常响应包装、重定向和超时均不能证明未提交。
+      const statusCode = Number(error && error.statusCode)
+      if (!(statusCode >= 400 && statusCode < 500 && statusCode !== 408)) {
+        this.draftCreationResultUnknown = true
+        throw new Error(CREATE_RESULT_UNKNOWN_MESSAGE)
+      }
+      throw error
+    }).finally(() => {
+      this.draftCreationPromise = null
     })
+    return this.draftCreationPromise
   },
 
   saveDraftForPortfolio(portfolioId, config = this.data.config, options = {}) {
+    // 网络结果未知时重发同一快照，不能用新内容配旧草稿版本。
+    if (!this.pendingDraftSave) {
+      this.pendingDraftSave = {
+        portfolioId,
+        payload: clonePlainObject(buildDraftPayload(config, this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_DRAFT)))
+      }
+    }
+    const pending = this.pendingDraftSave
     return request({
-      url: `${PORTFOLIO_API_PREFIX}/${portfolioId}/draft`,
+      url: `${PORTFOLIO_API_PREFIX}/${pending.portfolioId}/draft`,
       method: 'PUT',
-      data: buildDraftPayload(config, this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_DRAFT))
+      data: clonePlainObject(pending.payload)
     }).then((response = {}) => {
+      this.pendingDraftSave = null
       this.setData(Object.assign({
         portfolioId: response.portfolioId || portfolioId,
         draftRevision: response.draftRevision || this.data.draftRevision,
         publishedRevision: response.publishedRevision || this.data.publishedRevision
       }, buildPublicationStatusState(response.publicationStatus || this.data.publicationStatus)))
+      // 成功仅确认已发送的快照；期间产生的新编辑仍留在本页，由用户再次保存后才返回列表。
+      const editorChanged = stableEditorConfigJson(buildDraftPayload(this.data.config).config) !== stableEditorConfigJson(pending.payload.config)
       if (options.showToast !== false) {
-        wx.showToast({ title: '草稿已保存', icon: 'success' })
+        wx.showToast({ title: editorChanged ? UNSAVED_EDITOR_CHANGES_MESSAGE : '草稿已保存', icon: editorChanged ? 'none' : 'success' })
       }
-      if (options.returnToList !== false) {
+      if (options.returnToList !== false && !editorChanged) {
         this.returnToPortfolioList()
       }
-      return response
+      return Object.assign({}, response, { editorChanged })
+    }).catch((error) => {
+      const statusCode = Number(error && error.statusCode)
+      if (statusCode >= 400 && statusCode < 500 && statusCode !== 408) {
+        this.pendingDraftSave = null
+      }
+      throw error
     })
+  },
+
+  /** 先恢复结果未知的保存，再处理本页的新编辑。 */
+  saveEditorDraft(portfolioId, options = {}) {
+    const pending = this.pendingDraftSave
+    if (!pending) {
+      return this.uploadLocalPortfolioAssets(portfolioId)
+        .then((config) => this.saveDraftForPortfolio(portfolioId, config, options))
+    }
+    const currentConfig = buildDraftPayload(this.data.config).config
+    if (stableEditorConfigJson(currentConfig) === stableEditorConfigJson(pending.payload.config)) {
+      return this.saveDraftForPortfolio(portfolioId, undefined, options)
+    }
+    // 先确认丢失响应的保存，再用更新后的版本保存用户继续编辑的内容。
+    return this.saveDraftForPortfolio(portfolioId, undefined, { showToast: false, returnToList: false })
+      .then(() => this.uploadLocalPortfolioAssets(portfolioId))
+      .then((config) => this.saveDraftForPortfolio(portfolioId, config, options))
+  },
+
+  /** 保存与发布共享进行中操作，避免首次创建和后续保存被重复触发。 */
+  runPortfolioSubmission(action, submit) {
+    if (!this.portfolioSubmissionPromise) {
+      this.portfolioSubmissionAction = action
+      this.portfolioSubmissionPromise = Promise.resolve().then(submit).finally(() => {
+        this.portfolioSubmissionPromise = null
+        this.portfolioSubmissionAction = null
+      })
+    } else if (this.portfolioSubmissionAction !== action) {
+      // 另一动作需要用户再次点击，不排队补发发布，以免自动发布用户后来继续修改的内容。
+      wx.showToast({ title: PORTFOLIO_SUBMISSION_BUSY_MESSAGES[this.portfolioSubmissionAction], icon: 'none' })
+    }
+    return this.portfolioSubmissionPromise
   },
 
   uploadLocalShareCover(portfolioId, config = this.data.config) {
@@ -4242,22 +4352,30 @@ Page({
   },
 
   uploadLocalPortfolioAssets(portfolioId) {
-    return this.uploadLocalShareCover(portfolioId, this.data.config)
+    const editorSnapshot = clonePlainObject(this.data.config)
+    return this.uploadLocalShareCover(portfolioId, editorSnapshot)
       .then((config) => this.uploadLocalProfileImages(portfolioId, config))
       .then((config) => this.uploadLocalQrContactImages(portfolioId, config))
       .then((config) => {
-        this.applyEditorConfig(config, this.data.activeMenuKey, {
-          shareFieldCounters: buildShareFieldCounters(config.share)
-        })
+        // 上传完成的旧快照不能覆盖用户同期的新编辑，后续保存响应会据此保留编辑页。
+        if (stableEditorConfigJson(this.data.config) === stableEditorConfigJson(editorSnapshot)) {
+          this.applyEditorConfig(config, this.data.activeMenuKey, {
+            shareFieldCounters: buildShareFieldCounters(config.share)
+          })
+        }
         return config
       })
   },
 
   handleSaveDraft() {
+    return this.runPortfolioSubmission(PORTFOLIO_SUBMISSION_SAVE, () => this.performSaveDraft())
+  },
+
+  /** 完成一次保存操作，失败时保留当前编辑。 */
+  performSaveDraft() {
     if (!this.validateTextComponentsBeforeSave()) return Promise.resolve()
     return this.ensureDraftPortfolio().then((portfolioId) => {
-      return this.uploadLocalPortfolioAssets(portfolioId)
-        .then((config) => this.saveDraftForPortfolio(portfolioId, config))
+      return this.saveEditorDraft(portfolioId)
     }).catch((error) => {
       this.focusServerComponentError(error)
       wx.showToast({ title: error.message || '保存失败', icon: 'none' })
@@ -4305,6 +4423,11 @@ Page({
   },
 
   handlePublish() {
+    return this.runPortfolioSubmission(PORTFOLIO_SUBMISSION_PUBLISH, () => this.performPublish())
+  },
+
+  /** 校验并保存当前编辑后发布，保存期间有新编辑时留在本页。 */
+  performPublish() {
     this.setData({
       validationMenuKey: '',
       validationComponentKey: '',
@@ -4331,16 +4454,18 @@ Page({
         return
       }
       return this.ensureDraftPortfolio().then((portfolioId) => {
-        return this.uploadLocalPortfolioAssets(portfolioId)
-          .then((config) => this.saveDraftForPortfolio(portfolioId, config, {
-            showToast: false,
-            returnToList: false
-          }))
-          .then(() => request({
-            url: `${PORTFOLIO_API_PREFIX}/${portfolioId}/publish`,
-            method: 'POST',
-            data: buildPublishPayload(this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
-          }))
+        return this.saveEditorDraft(portfolioId, {
+          showToast: false,
+          returnToList: false
+        })
+          .then((savedDraft) => {
+            if (savedDraft.editorChanged) throw new Error(UNSAVED_EDITOR_CHANGES_MESSAGE)
+            return request({
+              url: `${PORTFOLIO_API_PREFIX}/${portfolioId}/publish`,
+              method: 'POST',
+              data: buildPublishPayload(this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
+            })
+          })
           .then((response = {}) => {
             this.setData(Object.assign({
               portfolioId: response.portfolioId || portfolioId,

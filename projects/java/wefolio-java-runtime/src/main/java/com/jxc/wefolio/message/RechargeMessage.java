@@ -77,6 +77,9 @@ public interface RechargeMessage {
     /** 充值成功状态文案。 */
     String STATUS_PAID_TEXT = "充值成功";
 
+    /** 已退款状态文案。 */
+    String STATUS_REFUNDED_TEXT = "已退款";
+
     /** 待支付状态文案。 */
     String STATUS_PENDING_TEXT = "待支付";
 

@@ -47,6 +47,16 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+/** 调整对象字段的插入顺序，不改变数组顺序或配置内容。 */
+function reverseObjectFieldOrder(value) {
+  if (Array.isArray(value)) return value.map(reverseObjectFieldOrder)
+  if (!value || typeof value !== 'object') return value
+  return Object.keys(value).reverse().reduce((result, key) => {
+    result[key] = reverseObjectFieldOrder(value[key])
+    return result
+  }, {})
+}
+
 function applyData(target, patch) {
   Object.keys(patch).forEach((key) => {
     if (!key.includes('.')) {
@@ -3501,6 +3511,274 @@ test('display group sheet cancel restores selections and confirm keeps them', as
   assert.deepEqual(page.data.config.components[0].config.groups.map((item) => item.groupKey), ['tag_8', 'tag_9'])
   assert.equal(page.data.displayGroupSheetVisible, false)
   assert.equal(page.data.displayGroupWorkScrollHeight, 0)
+})
+
+test('同页连续保存和发布共享一次创建与保存，创建请求不受后续编辑影响', async () => {
+  const creation = deferred()
+  const requests = []
+  const toasts = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return requests.length === 1 ? creation.promise : Promise.resolve({ portfolioId: 88, draftRevision: 1 })
+  }, { showToast: (options) => toasts.push(options.title) })
+  page.data.portfolioId = null
+  page.data.config.share.title = '首次创建'
+  const save = page.handleSaveDraft()
+  const secondSave = page.handleSaveDraft()
+  const publish = page.handlePublish()
+  assert.equal(save, secondSave)
+  assert.equal(save, publish)
+  assert.deepEqual(toasts, ['正在保存，请稍候'])
+  await flushPromises()
+  const sharedCreation = page.ensureDraftPortfolio()
+  page.data.config.share.title = '继续编辑'
+  assert.equal(requests[0].data.config.share.title, '首次创建')
+  creation.resolve({ portfolioId: 88, draftRevision: 0 })
+  await Promise.all([save, sharedCreation])
+  assert.equal(requests.length, 2)
+  assert.equal(requests[1].method, 'PUT')
+  assert.equal(requests[1].data.config.share.title, '继续编辑')
+})
+
+test('发布过程中点击保存会明确提示正在发布，不重复提交', async () => {
+  const saving = deferred()
+  const requests = []
+  const toasts = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return options.url.endsWith('/draft') ? saving.promise : Promise.resolve({ portfolioId: 88, publishedRevision: 1 })
+  }, {
+    showModal: (options) => options.success({ confirm: true }),
+    showToast: (options) => toasts.push(options.title)
+  })
+  page.data.portfolioId = 88
+  const publish = page.handlePublish()
+  await flushPromises()
+  const save = page.handleSaveDraft()
+  assert.equal(save, publish)
+  assert.deepEqual(toasts, ['正在发布，请稍候'])
+  saving.resolve({ portfolioId: 88, draftRevision: 1 })
+  await publish
+  assert.deepEqual(requests.map((item) => item.url), ['/api/mine/portfolios/88/draft', '/api/mine/portfolios/88/publish'])
+})
+
+test('明确创建拒绝后可继续更正并创建，未知结果不盲目重复创建', async () => {
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return Promise.reject(Object.assign(new Error('数量已达上限'), { statusCode: 400 }))
+  })
+  page.data.portfolioId = null
+  await assert.rejects(page.ensureDraftPortfolio(), /数量已达上限/)
+  page.data.config.share.title = '修改后的内容'
+  await assert.rejects(page.ensureDraftPortfolio(), /数量已达上限/)
+  assert.equal(requests.length, 2)
+  assert.equal(requests[1].data.config.share.title, '修改后的内容')
+
+  let unknownRequests = 0
+  const uncertainPage = loadPortfolioEditorPage(() => {
+    unknownRequests += 1
+    return Promise.reject(new Error('请求超时'))
+  })
+  uncertainPage.data.portfolioId = null
+  uncertainPage.data.config.share.title = '保留编辑'
+  await assert.rejects(uncertainPage.ensureDraftPortfolio(), /请先从作品集列表核对/)
+  await assert.rejects(uncertainPage.ensureDraftPortfolio(), /请先从作品集列表核对/)
+  assert.equal(unknownRequests, 1)
+  assert.equal(uncertainPage.data.config.share.title, '保留编辑')
+})
+
+test('创建收到200失败包装、重定向或408时保留未知状态，不静默重建', async () => {
+  for (const statusCode of [200, 302, 408]) {
+    const requests = []
+    const modals = []
+    const page = loadPortfolioEditorPage((options) => {
+      requests.push(options)
+      return Promise.reject(Object.assign(new Error('响应异常'), { statusCode }))
+    }, {
+      showModal: (options) => {
+        modals.push(options)
+        options.success({ confirm: false })
+      }
+    })
+    page.data.portfolioId = null
+    page.data.config.share.title = '本页编辑'
+    await assert.rejects(page.ensureDraftPortfolio(), /请先从作品集列表核对/)
+    assert.equal(page.draftCreationResultUnknown, true)
+    await assert.rejects(page.ensureDraftPortfolio(), /请先从作品集列表核对/)
+    assert.equal(requests.length, 1)
+    assert.equal(modals.length, 1)
+    assert.equal(page.draftCreationResultUnknown, true)
+    assert.equal(page.data.config.share.title, '本页编辑')
+  }
+})
+
+test('创建结果未知时取消核对不重发，明确确认后连续点击只重建一次', async () => {
+  const requests = []
+  const modals = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    if (requests.length === 1) return Promise.reject(new Error('请求超时'))
+    return Promise.resolve({ portfolioId: 88, draftRevision: requests.length === 2 ? 0 : 1 })
+  }, { showModal: (options) => modals.push(options) })
+  page.data.portfolioId = null
+  page.data.config.share.title = '仍在编辑页的内容'
+  await page.handleSaveDraft()
+  const cancelled = page.handleSaveDraft()
+  await flushPromises()
+  assert.equal(modals[0].confirmText, '确认重建')
+  assert.match(modals[0].content, /作品集列表确认未创建/)
+  modals[0].success({ confirm: false })
+  await cancelled
+  assert.equal(requests.length, 1)
+  assert.equal(page.draftCreationResultUnknown, true)
+  assert.equal(page.data.config.share.title, '仍在编辑页的内容')
+  const recovery = page.handleSaveDraft()
+  const duplicate = page.handleSaveDraft()
+  assert.equal(recovery, duplicate)
+  await flushPromises()
+  assert.equal(requests.length, 1)
+  assert.equal(modals.length, 2)
+  modals[1].success({ confirm: true })
+  await recovery
+  assert.deepEqual(requests.map((item) => item.method), ['POST', 'POST', 'PUT'])
+  assert.equal(requests[2].data.config.share.title, '仍在编辑页的内容')
+  assert.equal(page.draftCreationResultUnknown, false)
+})
+
+test('草稿响应丢失后使用原配置、版本和幂等键重试，恢复后再保存新编辑', async () => {
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(clone(options))
+    if (requests.length === 1) return Promise.reject(new Error('请求超时'))
+    return Promise.resolve({ portfolioId: 88, draftRevision: requests.length + 2 })
+  })
+  page.data.portfolioId = 88
+  page.data.draftRevision = 3
+  page.data.config.share.title = '丢失响应的草稿'
+  await page.handleSaveDraft()
+  page.data.config.share.title = '后续编辑'
+  await page.handleSaveDraft()
+  assert.equal(requests.length, 3)
+  assert.deepEqual(requests[1].data, requests[0].data)
+  assert.equal(requests[2].data.clientRevision, 4)
+  assert.equal(requests[2].data.config.share.title, '后续编辑')
+  assert.notEqual(requests[2].data.idempotencyKey, requests[0].data.idempotencyKey)
+  assert.equal(page.data.draftRevision, 5)
+  assert.equal(page.pendingDraftSave, null)
+})
+
+test('草稿收到200失败包装、重定向或408后先重放原快照及幂等键', async () => {
+  for (const statusCode of [200, 302, 408]) {
+    const requests = []
+    const page = loadPortfolioEditorPage((options) => {
+      requests.push(clone(options))
+      if (requests.length === 1) return Promise.reject(Object.assign(new Error('响应异常'), { statusCode }))
+      return Promise.resolve({ portfolioId: 88, draftRevision: requests.length + 2 })
+    })
+    page.data.portfolioId = 88
+    page.data.draftRevision = 3
+    page.data.config.share.title = '已发送的快照'
+    await page.handleSaveDraft()
+    assert.deepEqual(page.pendingDraftSave.payload, requests[0].data)
+    page.data.config.share.title = '继续编辑后的内容'
+    await page.handleSaveDraft()
+    assert.equal(requests.length, 3)
+    assert.deepEqual(requests[1].data, requests[0].data)
+    assert.equal(requests[2].data.clientRevision, 4)
+    assert.equal(requests[2].data.config.share.title, '继续编辑后的内容')
+    assert.notEqual(requests[2].data.idempotencyKey, requests[0].data.idempotencyKey)
+    assert.equal(page.pendingDraftSave, null)
+  }
+})
+
+test('草稿响应丢失但没有新编辑时只重放一次，明确拒绝后释放旧快照', async () => {
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(clone(options))
+    if (requests.length === 1) return Promise.reject(new Error('请求超时'))
+    if (requests.length === 3) return Promise.reject(Object.assign(new Error('配置错误'), { statusCode: 400 }))
+    return Promise.resolve({ portfolioId: 88, draftRevision: requests.length + 2 })
+  })
+  page.data.portfolioId = 88
+  page.data.draftRevision = 3
+  await page.handleSaveDraft()
+  page.data.config = reverseObjectFieldOrder(page.data.config)
+  await page.handleSaveDraft()
+  assert.equal(requests.length, 2)
+  assert.deepEqual(requests[1].data, requests[0].data)
+  await page.handleSaveDraft()
+  assert.equal(page.pendingDraftSave, null)
+  page.data.config.share.title = '修正配置'
+  await page.handleSaveDraft()
+  assert.equal(requests[3].data.config.share.title, '修正配置')
+  assert.notEqual(requests[3].data.idempotencyKey, requests[2].data.idempotencyKey)
+})
+
+test('配置字段顺序改变不会误判未保存，数组顺序改变仍会保留编辑页', async () => {
+  const requests = []
+  const pending = [deferred(), deferred()]
+  const navigations = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return pending[requests.length - 1].promise
+  }, {
+    redirectTo: (options) => navigations.push(options),
+    navigateBack: (options) => navigations.push(options)
+  })
+  page.data.portfolioId = 88
+  page.data.config = normalizePortfolioConfig({ components: [
+    createComponent(COMPONENT_TYPES.TEXT_SECTION, { componentKey: 'first', config: { content: '第一段' } }),
+    createComponent(COMPONENT_TYPES.TEXT_SECTION, { componentKey: 'second', config: { content: '第二段' } })
+  ] })
+  const firstSave = page.handleSaveDraft()
+  await flushPromises()
+  page.data.config = reverseObjectFieldOrder(page.data.config)
+  pending[0].resolve({ portfolioId: 88, draftRevision: 1 })
+  await firstSave
+  assert.equal(navigations.length, 1)
+  const secondSave = page.handleSaveDraft()
+  await flushPromises()
+  page.data.config.components.reverse()
+  pending[1].resolve({ portfolioId: 88, draftRevision: 2 })
+  await secondSave
+  assert.equal(navigations.length, 1)
+  assert.equal(page.data.config.components[0].componentKey, 'second')
+})
+
+test('上传素材时仅字段顺序变化仍应用上传后的地址', async () => {
+  const uploaded = deferred()
+  const requests = []
+  const page = loadPortfolioEditorPage((options) => {
+    requests.push(options)
+    return Promise.resolve({ portfolioId: 88, draftRevision: 1 })
+  }, {}, { uploadPortfolioImageAsset: () => uploaded.promise })
+  page.data.portfolioId = 88
+  page.data.config.share.coverUrl = 'wxfile://local-cover.jpg'
+  const save = page.handleSaveDraft()
+  await flushPromises()
+  page.data.config = reverseObjectFieldOrder(page.data.config)
+  uploaded.resolve('https://cdn.example.com/uploaded-cover.jpg')
+  await save
+  assert.equal(page.data.config.share.coverUrl, 'https://cdn.example.com/uploaded-cover.jpg')
+  assert.equal(requests[0].data.config.share.coverUrl, 'https://cdn.example.com/uploaded-cover.jpg')
+})
+
+test('保存进行中继续编辑时保留新内容并留在编辑页', async () => {
+  const saving = deferred()
+  const navigations = []
+  const page = loadPortfolioEditorPage(() => saving.promise, {
+    redirectTo: (options) => navigations.push(options),
+    navigateBack: (options) => navigations.push(options)
+  })
+  page.data.portfolioId = 88
+  const submission = page.handleSaveDraft()
+  await flushPromises()
+  page.data.config.share.title = '请求发出后的编辑'
+  saving.resolve({ portfolioId: 88, draftRevision: 1 })
+  await submission
+  assert.equal(page.data.config.share.title, '请求发出后的编辑')
+  assert.deepEqual(navigations, [])
 })
 
 test('saving draft in create mode creates portfolio before saving draft', async () => {

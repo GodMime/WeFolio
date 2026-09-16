@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service.payment;
 
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.jxc.wefolio.service.point.UserPointMutex;
 import com.jxc.wefolio.entity.RechargeOrderEntity;
 import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import com.jxc.wefolio.mapper.RechargeOrderEntityMapper;
@@ -18,9 +20,23 @@ public class RechargeRefundTransactionService {
     private final RechargeOrderEntityMapper rechargeOrderEntityMapper;
     private final PointAccountEntityMapper pointAccountEntityMapper;
 
+    /** 标记退款与所有权威余额查询使用同一用户锁，避免陈旧查询清除新退款标记。 */
+    private final UserPointMutex userPointMutex;
+
     /** 幂等标记退款完成，并将账户权威余额快照置为待同步。 */
     @Transactional(rollbackFor = Exception.class)
     public RechargeOrderEntity markRefunded(String merchantOrderNo) {
+        RechargeOrderEntity candidate = rechargeOrderEntityMapper.selectOne(
+                Wrappers.lambdaQuery(RechargeOrderEntity.class)
+                        .eq(RechargeOrderEntity::getMerchantOrderNo, merchantOrderNo).last("LIMIT 1"));
+        if (candidate == null) {
+            return null;
+        }
+        return userPointMutex.execute(candidate.getUserId(), () -> markRefundedInsideUserLock(merchantOrderNo));
+    }
+
+    /** 固定用户锁在前、订单行锁在后；锁随退款事务提交释放。 */
+    private RechargeOrderEntity markRefundedInsideUserLock(String merchantOrderNo) {
         RechargeOrderEntity order = rechargeOrderEntityMapper.selectForUpdateByMerchantOrderNo(merchantOrderNo);
         if (order == null) {
             return null;

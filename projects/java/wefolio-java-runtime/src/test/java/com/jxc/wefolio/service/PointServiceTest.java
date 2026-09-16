@@ -149,6 +149,38 @@ class PointServiceTest {
                 .doesNotContain("FOR UPDATE");
     }
 
+    /** 虚拟充值重放只返回原流水，迟到首次结算使用已包含充值的权威余额。 */
+    @Test
+    void virtualRechargeShouldUseSnapshotAndKeepOneLedger() {
+        activeUser(7L);
+        PointAccountEntity current = account(10L, 7L, 100L);
+        when(pointAccountEntityMapper.selectOne(any())).thenReturn(current);
+        when(pointAccountEntityMapper.applyRechargeWechatBalance(10L, 7L, 10L, 100L, 0L)).thenReturn(1);
+        when(pointTransactionEntityMapper.insert(any(PointTransactionEntity.class))).thenAnswer(invocation -> {
+            PointTransactionEntity transaction = invocation.getArgument(0);
+            transaction.setId(100L);
+            return 1;
+        });
+
+        PointMutationResponse response = service().rechargeVirtual(
+                7L, 10L, "ORDER", "{}", "POINT_RECHARGE:ORDER", "套餐", 100L, 0L);
+        ArgumentCaptor<PointTransactionEntity> captor = ArgumentCaptor.forClass(PointTransactionEntity.class);
+        verify(pointTransactionEntityMapper).insert(captor.capture());
+        assertThat(captor.getValue().getBalanceBefore()).isEqualTo(100L);
+        assertThat(captor.getValue().getBalanceAfter()).isEqualTo(100L);
+        assertThat(captor.getValue().getPointsChange()).isEqualTo(10L);
+        assertThat(captor.getValue().getRemark()).isEqualTo("套餐（余额以微信同步结果为准）");
+        when(pointTransactionEntityMapper.selectOne(any())).thenReturn(captor.getValue());
+        PointMutationResponse replay = service().rechargeVirtual(
+                7L, 10L, "ORDER", "{}", "POINT_RECHARGE:ORDER", "套餐", 100L, 0L);
+
+        assertThat(response.getBalanceAfter()).isEqualTo(100L);
+        assertThat(replay.getTransactionId()).isEqualTo(100L);
+        verify(pointAccountEntityMapper, never()).addRechargedPoints(any(), any(), any());
+        verify(pointAccountEntityMapper).applyRechargeWechatBalance(10L, 7L, 10L, 100L, 0L);
+        verify(pointTransactionEntityMapper).insert(any(PointTransactionEntity.class));
+    }
+
     @Test
     void rechargeShouldAtomicallyIncreaseBalanceAndWriteRechargeTransaction() {
         activeUser(7L);

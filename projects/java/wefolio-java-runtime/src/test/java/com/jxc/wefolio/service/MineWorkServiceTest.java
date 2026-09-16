@@ -9,6 +9,8 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.common.lock.DistributedLockExecutor;
+import com.jxc.wefolio.common.lock.TestDistributedLockExecutor;
 import com.jxc.wefolio.config.WorkAuditProperties;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
@@ -55,6 +57,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.apache.ibatis.annotations.Update;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.mockito.ArgumentCaptor;
@@ -74,6 +78,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -81,6 +86,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
@@ -93,6 +99,131 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class MineWorkServiceTest {
+
+    /** 使用与生产一致的事务完成释放约定执行作品保存。 */
+    private DistributedLockExecutor workUpdateLock = new TestDistributedLockExecutor();
+
+    /** 取得同作品的事务锁之前，不得读取作品或上传任务。 */
+    @Test
+    void updateWorkShouldAcquireTransactionLockBeforeReadingWork() {
+        workUpdateLock = mock(DistributedLockExecutor.class);
+        when(workUpdateLock.executeFairUntilTransactionCompletion(eq("work:update:18"), any()))
+                .thenAnswer(invocation -> {
+                    verifyNoInteractions(workEntityMapper, workUploadTaskEntityMapper);
+                    Supplier<MineWorkDetailResponse> action = invocation.getArgument(1);
+                    return action.get();
+                });
+
+        assertThatThrownBy(() -> service().updateWork(18L, new MineWorkUpdateRequest()))
+                .isInstanceOf(BusinessException.class);
+
+        verify(workEntityMapper).selectById(18L);
+    }
+
+    /** 响应丢失后重放当前封面或缩略图任务，即使票据已过期也能成功保存。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void updateWorkShouldReplayCurrentlyAppliedCover(boolean thumbnail) {
+        WorkEntity work = replacementCoverWork(thumbnail);
+        WorkUploadTaskEntity task = replacementCoverTask();
+        work.setCoverObjectKey(task.getObjectKey());
+        task.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        task.setConfirmedWorkId(work.getId());
+        task.setExpiresAt(LocalDateTime.now().minusDays(1));
+        stubReplacementCover(work, task);
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+
+        service().updateWork(18L, replacementCoverRequest(thumbnail));
+
+        verify(cosService).headObject(task.getObjectKey());
+        verify(workUploadTaskEntityMapper, never()).updateById(any(WorkUploadTaskEntity.class));
+        verify(cosService, never()).delete(any());
+    }
+
+    /** 已被其它作品使用的任务不能作为当前作品的重放请求。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void updateWorkShouldRejectCoverConfirmedForAnotherWork(boolean thumbnail) {
+        WorkEntity work = replacementCoverWork(thumbnail);
+        WorkUploadTaskEntity task = replacementCoverTask();
+        work.setCoverObjectKey(task.getObjectKey());
+        task.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
+        task.setConfirmedWorkId(99L);
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(workUploadTaskEntityMapper.selectById(301L)).thenReturn(task);
+
+        assertThatThrownBy(() -> service().updateWork(18L, replacementCoverRequest(thumbnail)))
+                .isInstanceOf(BusinessException.class).hasMessage(MineWorkMessage.COVER_TASK_USED_MESSAGE);
+
+        verify(cosService, never()).delete(any());
+    }
+
+    /** 乐观锁失败时保留手动上传文件，不能误删并发成功请求正在使用的对象。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void updateWorkShouldKeepUploadedCoverWhenWorkSaveFails(boolean thumbnail) {
+        WorkEntity work = replacementCoverWork(thumbnail);
+        WorkUploadTaskEntity task = replacementCoverTask();
+        stubReplacementCover(work, task);
+
+        assertThatThrownBy(() -> service().updateWork(18L, replacementCoverRequest(thumbnail)))
+                .isInstanceOf(BusinessException.class).hasMessage(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+
+        verify(cosService, never()).delete(any());
+        verify(workUploadTaskEntityMapper, never()).updateById(any(WorkUploadTaskEntity.class));
+    }
+
+    /** 任务确认竞争失败时同样保留文件，事务回滚后仍可以重试。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void updateWorkShouldKeepUploadedCoverWhenTaskConfirmationFails(boolean thumbnail) {
+        WorkEntity work = replacementCoverWork(thumbnail);
+        WorkUploadTaskEntity task = replacementCoverTask();
+        stubReplacementCover(work, task);
+        when(workEntityMapper.updateById(any(WorkEntity.class))).thenReturn(1);
+
+        assertThatThrownBy(() -> service().updateWork(18L, replacementCoverRequest(thumbnail)))
+                .isInstanceOf(BusinessException.class).hasMessage(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
+
+        verify(cosService, never()).delete(any());
+    }
+
+    /** 创建封面替换测试用的作品。 */
+    private WorkEntity replacementCoverWork(boolean thumbnail) {
+        WorkEntity work = ownedWork(18L);
+        work.setMediaType(thumbnail ? MediaTypeDict.IMAGE.getCode() : MediaTypeDict.VIDEO.getCode());
+        work.setOriginalFileName(thumbnail ? "film.jpg" : "film.mp4");
+        work.setMediaObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        work.setCoverObjectKey("WFA3B1E7A2/work/video/old-thumb.jpg");
+        return work;
+    }
+
+    /** 创建已上传的封面任务。 */
+    private WorkUploadTaskEntity replacementCoverTask() {
+        WorkUploadTaskEntity task = uploadTask(301L, "cover-edit", "WFA3B1E7A2/work/video/new-thumb.jpg", "cover-ticket");
+        task.setOriginalFileName("film-thumb.jpg");
+        task.setFileSize(90_000L);
+        return task;
+    }
+
+    /** 按媒体类型构造封面或缩略图更新请求。 */
+    private MineWorkUpdateRequest replacementCoverRequest(boolean thumbnail) {
+        MineWorkUpdateRequest request = new MineWorkUpdateRequest();
+        request.setTitle("新标题");
+        if (thumbnail) {
+            request.setThumbnailTaskId(301L);
+        } else {
+            request.setCoverTaskId(301L);
+        }
+        return request;
+    }
+
+    /** 模拟作品读取、上传任务与远端文件，不访问真实 COS。 */
+    private void stubReplacementCover(WorkEntity work, WorkUploadTaskEntity task) {
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(workUploadTaskEntityMapper.selectById(301L)).thenReturn(task);
+        when(cosService.headObject(task.getObjectKey())).thenReturn(new CosService.ObjectHead("image/jpeg", 90_000L));
+    }
 
     /** 音频与其它作品共用标签计数和排序，不依赖客户端能力头。 */
     @Test
@@ -2987,7 +3118,8 @@ class MineWorkServiceTest {
                 workUploadTransactionService,
                 contentLimitService,
                 mineWorkAuditService,
-                new WorkUploadTaskExpirationService(workUploadTaskEntityMapper));
+                new WorkUploadTaskExpirationService(workUploadTaskEntityMapper),
+                workUpdateLock);
     }
 
     private MineWorkUploadCompleteRequest.CompleteItem completeItem(Long taskId) {

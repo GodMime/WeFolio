@@ -186,6 +186,7 @@ class VirtualPaymentTaskExecutionApplicationServiceTest {
         WechatVirtualPaymentProperties properties = new WechatVirtualPaymentProperties();
         properties.setEnabled(enabled);
         return new VirtualPaymentTaskExecutionApplicationService(
-                validator, giftProcessor, debitProcessor, debitTaskService, properties);
+                validator, giftProcessor, debitProcessor, debitTaskService,
+                mock(WechatAuthoritativeBalanceSyncService.class), properties);
     }
 }

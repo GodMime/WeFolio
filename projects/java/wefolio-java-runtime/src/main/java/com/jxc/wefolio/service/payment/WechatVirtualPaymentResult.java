@@ -36,7 +36,18 @@ public record WechatVirtualPaymentResult(
                 orderStatus, buyQuantity, payAmount, httpStatus, null, null, null);
     }
 
-    /** @return 是否可按成功结果落库。 */
+    /**
+     * 使用补查的完整余额，保留资金操作自身的分类与赠送币用量。
+     * 重复应答的 usedPresentAmount 为未知占位 0，不能视为实际未消耗赠送币；
+     * 余额查询无法还原该次用量，审计时需结合任务保留的成功分类区分。
+     */
+    public WechatVirtualPaymentResult withBalanceSnapshot(WechatVirtualPaymentResult snapshot) {
+        return new WechatVirtualPaymentResult(errorCode, errorMessage, errorType,
+                snapshot.balance(), snapshot.presentBalance(), usedPresentAmount, orderStatus,
+                buyQuantity, payAmount, httpStatus, openid, environment, remoteOrderId);
+    }
+
+    /** @return 微信是否确认操作成功；扣币及重复应答仍需补齐余额后才能结算。 */
     public boolean isSuccessful() {
         return errorType == WechatVirtualPaymentErrorType.SUCCESS
                 || errorType == WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS;

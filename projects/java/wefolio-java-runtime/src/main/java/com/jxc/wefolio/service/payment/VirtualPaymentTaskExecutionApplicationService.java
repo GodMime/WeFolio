@@ -50,6 +50,9 @@ public class VirtualPaymentTaskExecutionApplicationService {
     /** 活动扣币任务保障服务。 */
     private final PointDebitTaskService pointDebitTaskService;
 
+    /** 复用恢复入口补查退款后的失效余额。 */
+    private final WechatAuthoritativeBalanceSyncService balanceSyncService;
+
     /** runtime 微信虚拟支付总开关配置。 */
     private final WechatVirtualPaymentProperties virtualPaymentProperties;
 
@@ -92,6 +95,7 @@ public class VirtualPaymentTaskExecutionApplicationService {
             if (!virtualPaymentProperties.isEnabled()) {
                 return buildRecoveryResponse(userId, null, VIRTUAL_PAYMENT_DISABLED_OUTCOME);
             }
+            balanceSyncService.synchronizeStaleBalanceForUser(userId);
             PointDebitTaskEntity task = pointDebitTaskService.ensureActiveTask(userId);
             if (task == null) {
                 return buildRecoveryResponse(userId, null, NO_PENDING_DEBIT_OUTCOME);

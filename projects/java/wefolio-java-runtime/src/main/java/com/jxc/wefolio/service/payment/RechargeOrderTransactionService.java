@@ -19,7 +19,6 @@ import com.jxc.wefolio.service.PointService;
 import com.jxc.wefolio.service.point.GiftCommand;
 import com.jxc.wefolio.service.point.GiftOrderResult;
 import com.jxc.wefolio.service.point.PointCommandService;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -210,14 +209,19 @@ public class RechargeOrderTransactionService {
     @Transactional(rollbackFor = Exception.class)
     public RechargeSettlementResult settleVirtual(
             String merchantOrderNo,
-            WechatVirtualPaymentResult result
+            WechatVirtualPaymentResult result,
+            WechatVirtualPaymentResult balance
     ) {
-        if (result == null || !result.isSuccessful()) {
+        if (result == null || !result.isSuccessful()
+                || balance == null || balance.errorType() != WechatVirtualPaymentErrorType.SUCCESS) {
             throw new BusinessException(RechargeMessage.TRADE_STATE_INVALID_MESSAGE);
         }
         RechargeOrderEntity order = requireLockedOrder(merchantOrderNo);
         if (RechargeOrderStatusDict.PAID.getCode().equals(order.getStatus())) {
             return new RechargeSettlementResult(order, null, true);
+        }
+        if (RechargeOrderStatusDict.REFUNDED.getCode().equals(order.getStatus())) {
+            throw new BusinessException(RechargeMessage.TRADE_STATE_INVALID_MESSAGE);
         }
         if (result.buyQuantity() > 0L && !Objects.equals(order.getBuyQuantity(), result.buyQuantity())) {
             throw new BusinessException(RechargeMessage.AMOUNT_MISMATCH_MESSAGE);
@@ -226,17 +230,19 @@ public class RechargeOrderTransactionService {
             throw new BusinessException(RechargeMessage.AMOUNT_MISMATCH_MESSAGE);
         }
         String packageName = JSONObject.parseObject(order.getPackageSnapshot()).getString("packageName");
-        PointMutationResponse mutation = pointService.recharge(
+        PointMutationResponse mutation = pointService.rechargeVirtual(
                 order.getUserId(),
                 order.getBasePoints().longValue(),
                 order.getMerchantOrderNo(),
                 order.getPackageSnapshot(),
                 POINT_IDEMPOTENCY_PREFIX + order.getMerchantOrderNo(),
-                packageName
+                packageName,
+                balance.balance(),
+                balance.presentBalance()
         );
         order.setPointTransactionId(mutation.getTransactionId());
         if (order.getBonusPoints() != null && order.getBonusPoints() > 0 && order.getBonusGiftOrderId() == null) {
-            GiftOrderResult gifts = pointCommandService.createGiftOrders(List.of(new GiftCommand(
+            GiftOrderResult gifts = pointCommandService.createGiftOrderWithinUserLock(new GiftCommand(
                     order.getUserId(),
                     PointSceneCodeDict.RECHARGE_BONUS_GIFT.getCode(),
                     order.getBonusPoints(),
@@ -244,7 +250,7 @@ public class RechargeOrderTransactionService {
                     order.getMerchantOrderNo(),
                     order.getPackageSnapshot(),
                     "RECHARGE_BONUS:" + order.getMerchantOrderNo()
-            )));
+            ));
             order.setBonusGiftOrderId(gifts.orders().getFirst().orderId());
         }
         order.setStatus(RechargeOrderStatusDict.PAID.getCode());

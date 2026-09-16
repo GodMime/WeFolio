@@ -5,6 +5,7 @@ import com.jxc.wefolio.entity.PointAccountEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.Select;
 
 
 /**
@@ -36,6 +37,28 @@ public interface PointAccountEntityMapper extends BaseMapper<PointAccountEntity>
             @Param("accountId") Long accountId,
             @Param("userId") Long userId,
             @Param("points") Long points
+    );
+
+    /** 使用微信当前余额结算充值，累计充值仅记录本订单基础代币，不再次相加到余额。 */
+    @Update("""
+            UPDATE wf_point_account
+               SET wechat_balance = #{wechatBalance},
+                   wechat_present_balance = #{wechatPresentBalance},
+                   balance = #{wechatBalance} - pending_debit,
+                   total_recharged = total_recharged + #{points},
+                   wechat_balance_synced_at = CURRENT_TIMESTAMP(3),
+                   version = version + 1,
+                   updated_at = CURRENT_TIMESTAMP(3)
+             WHERE id = #{accountId}
+               AND user_id = #{userId}
+               AND deleted = 0
+            """)
+    int applyRechargeWechatBalance(
+            @Param("accountId") Long accountId,
+            @Param("userId") Long userId,
+            @Param("points") Long points,
+            @Param("wechatBalance") Long wechatBalance,
+            @Param("wechatPresentBalance") Long wechatPresentBalance
     );
 
     /**
@@ -139,6 +162,27 @@ public interface PointAccountEntityMapper extends BaseMapper<PointAccountEntity>
             @Param("wechatBalance") Long wechatBalance,
             @Param("wechatPresentBalance") Long wechatPresentBalance
     );
+
+    /**
+     * 只识别同一用户、同一账户有退款事实的失效快照，首次未同步账户不属于此范围。
+     * SQL 的 REFUNDED 对应 RechargeOrderStatusDict，改编码时须同步 job 的退款恢复候选查询。
+     */
+    @Select("""
+            SELECT account.*
+              FROM wf_point_account account
+             WHERE account.user_id = #{userId}
+               AND account.wechat_balance_synced_at IS NULL
+               AND account.deleted = 0
+               AND EXISTS (
+                   SELECT 1 FROM wf_recharge_order recharge
+                    WHERE recharge.account_id = account.id
+                      AND recharge.user_id = account.user_id
+                      AND recharge.status = 'REFUNDED'
+                      AND recharge.deleted = 0
+               )
+             LIMIT 1
+            """)
+    PointAccountEntity selectRefundStaleAccount(@Param("userId") Long userId);
 
     /** 退款通知到达后将微信余额快照标记为待重新同步。 */
     @Update("""

@@ -71,6 +71,25 @@ class VirtualPaymentCandidateRepositoryIntegrationTest {
         assertThat(repository.findUsersMissingActiveDebitTasks(10)).containsExactly(7L);
     }
 
+    /** 零待扣退款可以恢复，首次未同步、跨账户退款和不可用会话不会混入候选。 */
+    @Test
+    void shouldRecoverZeroPendingRefundOnlyWithMatchingAccountAndAvailableSession() {
+        for (long userId = 1; userId <= 6; userId++) {
+            insertAccount(100L + userId, userId, 0L, 0);
+            jdbcTemplate.update("INSERT INTO wf_maintainer_wechat_session VALUES (?, ?, 0)",
+                    userId, userId == 6 ? "INVALID" : "AVAILABLE");
+        }
+        jdbcTemplate.update("INSERT INTO wf_recharge_order VALUES (1, 101, 1, 'REFUNDED', 0)");
+        jdbcTemplate.update("INSERT INTO wf_recharge_order VALUES (2, 999, 2, 'REFUNDED', 0)");
+        jdbcTemplate.update("INSERT INTO wf_recharge_order VALUES (3, 103, 3, 'PAID', 0)");
+        jdbcTemplate.update("INSERT INTO wf_recharge_order VALUES (4, 104, 4, 'REFUNDED', 1)");
+        jdbcTemplate.update("INSERT INTO wf_recharge_order VALUES (5, 105, 5, 'REFUNDED', 0)");
+        jdbcTemplate.update("INSERT INTO wf_recharge_order VALUES (6, 106, 6, 'REFUNDED', 0)");
+        jdbcTemplate.update("UPDATE wf_point_account SET wechat_balance_synced_at = CURRENT_TIMESTAMP WHERE user_id = 5");
+
+        assertThat(repository.findUsersMissingActiveDebitTasks(10)).containsExactly(1L);
+    }
+
     /** 创建查询所需的最小共享表结构。 */
     private void createTables() {
         jdbcTemplate.execute("""
@@ -98,7 +117,19 @@ class VirtualPaymentCandidateRepositoryIntegrationTest {
                   id BIGINT PRIMARY KEY,
                   user_id BIGINT NOT NULL,
                   pending_debit BIGINT NOT NULL,
+                  wechat_balance_synced_at TIMESTAMP NULL,
                   deleted TINYINT NOT NULL
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE wf_recharge_order (
+                  id BIGINT PRIMARY KEY, account_id BIGINT, user_id BIGINT,
+                  status VARCHAR(32), deleted BIGINT NOT NULL
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE wf_maintainer_wechat_session (
+                  user_id BIGINT, status VARCHAR(32), deleted BIGINT NOT NULL
                 )
                 """);
     }

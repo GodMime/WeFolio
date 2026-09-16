@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.AbstractWrapper;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
@@ -89,6 +91,10 @@ class MinePortfolioServiceTest {
         TableInfoHelper.initTableInfo(
                 new MapperBuilderAssistant(new MybatisConfiguration(), ""),
                 PortfolioEntity.class
+        );
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), ""),
+                PortfolioHistoryEntity.class
         );
     }
 
@@ -584,6 +590,101 @@ class MinePortfolioServiceTest {
         assertThat(historyCaptor.getValue().getRevisionNo()).isEqualTo(3);
     }
 
+    /** 取得图锁前读到旧版本时，重放仍使用锁内最新历史版本和当前读查询契约。 */
+    @Test
+    void saveDraftShouldReplayLatestRequestWithCurrentReadAfterEarlierSnapshot() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(3);
+        portfolio.setCurrentRevision(8);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto incoming = config();
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any())).thenReturn(incoming);
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(incoming);
+        request.setClientRevision(3);
+        request.setIdempotencyKey("draft-response-lost");
+
+        service().saveDraft(88L, request);
+        ArgumentCaptor<PortfolioHistoryEntity> historyCaptor = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(portfolioHistoryEntityMapper).insert(historyCaptor.capture());
+        PortfolioHistoryEntity savedHistory = historyCaptor.getValue();
+        assertThat(savedHistory.getRevisionNo()).isEqualTo(9);
+        JSONObject snapshot = JSON.parseObject(savedHistory.getSnapshotJson());
+        assertThat(snapshot.getInteger("draftRevision")).isEqualTo(4);
+        assertThat(snapshot.getString("idempotencyKey")).isEqualTo("draft-response-lost");
+        assertThat(snapshot.getString("requestHash")).hasSize(64);
+        // 分别模拟锁前快照和锁内当前读结果；实际 MySQL 的隔离行为不由此单元测试证明。
+        PortfolioEntity earlierSnapshot = ownedPortfolio();
+        earlierSnapshot.setDraftRevision(3);
+        earlierSnapshot.setCurrentRevision(8);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(earlierSnapshot);
+        when(portfolioHyperlinkGraphService.lockUserGraph(7L, 88L)).thenReturn(
+                new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
+        when(portfolioHistoryEntityMapper.selectOne(any())).thenAnswer(invocation -> {
+            AbstractWrapper<?, ?, ?> wrapper = invocation.getArgument(0);
+            assertThat(wrapper.getSqlSegment()).contains("portfolio_id", "revision_no").endsWith("FOR UPDATE");
+            assertThat(wrapper.getParamNameValuePairs().values()).contains(88L, 9);
+            return savedHistory;
+        });
+
+        MinePortfolioDetailResponse replay = service().saveDraft(88L, request);
+
+        assertThat(replay.getDraftRevision()).isEqualTo(4);
+        verify(portfolioEntityMapper, times(1)).updateById(any(PortfolioEntity.class));
+        verify(portfolioHistoryEntityMapper, times(1)).insert(any(PortfolioHistoryEntity.class));
+        verify(portfolioConfigValidator, times(1)).normalizeForDraft(any(), any(), any());
+        verify(portfolioHistoryEntityMapper, never()).selectList(any());
+    }
+
+    /** 同一键改发其他内容必须冲突，不能把当前草稿误报为此次请求的保存结果。 */
+    @Test
+    void saveDraftShouldRejectLatestKeyWithChangedPayload() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioConfigDto incoming = config();
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any())).thenReturn(incoming);
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(incoming);
+        request.setClientRevision(0);
+        request.setIdempotencyKey("draft-key-reused");
+        service().saveDraft(88L, request);
+        ArgumentCaptor<PortfolioHistoryEntity> historyCaptor = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(portfolioHistoryEntityMapper).insert(historyCaptor.capture());
+        when(portfolioHistoryEntityMapper.selectOne(any())).thenReturn(historyCaptor.getValue());
+        incoming.getShare().setTitle("新的请求内容");
+
+        assertThatThrownBy(() -> service().saveDraft(88L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+        verify(portfolioEntityMapper, times(1)).updateById(any(PortfolioEntity.class));
+    }
+
+    /** 后续发布或保存后只读取当前历史，旧保存请求不能跨越新的历史成功重放。 */
+    @Test
+    void saveDraftShouldKeepConflictWhenLatestHistoryIsAnotherAction() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftRevision(4);
+        portfolio.setCurrentRevision(10);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        PortfolioHistoryEntity latest = new PortfolioHistoryEntity();
+        latest.setSnapshotJson("{\"actionType\":\"PUBLISH\",\"config\":{}}");
+        when(portfolioHistoryEntityMapper.selectOne(any())).thenReturn(latest);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(config());
+        request.setClientRevision(3);
+        request.setIdempotencyKey("old-save");
+
+        assertThatThrownBy(() -> service().saveDraft(88L, request))
+                .hasMessage(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+        latest.setSnapshotJson("{\"actionType\":\"DRAFT_SAVE\",\"idempotencyKey\":\"new-save\"}");
+        assertThatThrownBy(() -> service().saveDraft(88L, request))
+                .hasMessage(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+        verify(portfolioEntityMapper, never()).updateById(any(PortfolioEntity.class));
+        verify(portfolioHistoryEntityMapper, never()).selectList(any());
+    }
+
     @Test
     void saveDraftShouldDeleteOnlyOldDraftAssetsNoLongerReferencedByEitherCurrentState() {
         String oldDraftCover = "WFA3B1E7A2/protfolio/cover-88-20260701110000-a1b2c3d4.jpg";
@@ -691,6 +792,7 @@ class MinePortfolioServiceTest {
         service().saveDraft(88L, request);
 
         ArgumentCaptor<PortfolioConfigDto> existingDraftCaptor = ArgumentCaptor.forClass(PortfolioConfigDto.class);
+        verify(portfolioHistoryEntityMapper, never()).selectOne(any());
         verify(portfolioConfigValidator).normalizeForDraft(
                 eq(7L),
                 eq(incoming),

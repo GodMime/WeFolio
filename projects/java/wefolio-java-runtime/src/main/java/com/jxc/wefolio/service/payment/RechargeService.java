@@ -27,6 +27,7 @@ import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.message.RechargeMessage;
 import com.jxc.wefolio.service.PointService;
+import com.jxc.wefolio.service.point.UserPointMutex;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -112,6 +113,9 @@ public class RechargeService {
     /** 微信虚拟支付签名器。 */
     private final WechatVirtualPaymentSigner virtualPaymentSigner;
 
+    /** 查单、查余额与结算使用同一个用户互斥区间。 */
+    private final UserPointMutex userPointMutex;
+
     /** 维护者微信会话服务。 */
     private final MaintainerWechatSessionService maintainerWechatSessionService;
 
@@ -194,14 +198,23 @@ public class RechargeService {
      * 主动查询并同步当前用户的一笔充值订单。
      */
     public RechargeOrderSyncResponse syncOrder(Long userId, String merchantOrderNo) {
+        requirePaymentEnabled();
+        return userPointMutex.execute(userId, () -> syncOrderInsideUserLock(userId, merchantOrderNo));
+    }
+
+    /** 持有用户锁直至本地结算提交，避免其它余额同步穿插到充值结算之间。 */
+    private RechargeOrderSyncResponse syncOrderInsideUserLock(Long userId, String merchantOrderNo) {
         log.info("微信虚拟支付业务开始 operation=同步充值订单 referenceNo={} userId={}",
                 merchantOrderNo, userId);
-        requirePaymentEnabled();
         if (merchantOrderNo == null || merchantOrderNo.isBlank()) {
             throw new BusinessException(RechargeMessage.MERCHANT_ORDER_NO_REQUIRED_MESSAGE);
         }
         String normalizedOrderNo = merchantOrderNo.strip();
         RechargeOrderEntity order = findUserOrder(userId, normalizedOrderNo);
+        if (RechargeOrderStatusDict.REFUNDED.getCode().equals(order.getStatus())) {
+            // 已退款是稳定终态，重放查询直接返回，不再请求微信或尝试充值结算。
+            return completeSync(order, userId, null, true);
+        }
         if (RechargeOrderStatusDict.PAID.getCode().equals(order.getStatus())) {
             PointAccountEntity account = pointService.ensureAccount(userId);
             return completeSync(order, userId, account.getBalance(), true);
@@ -222,8 +235,18 @@ public class RechargeService {
         }
         validateAuthorityIdentity(order, openId, transaction);
         if ("SUCCESS".equals(transaction.orderStatus()) || "PAID".equals(transaction.orderStatus())) {
+            WechatVirtualPaymentResult balance = wechatVirtualPaymentClient.queryUserBalance(
+                    new WechatBalanceQueryRequest(userId, order.getMerchantOrderNo(), openId,
+                            session.sessionKey(), session.clientIp(), Instant.now().getEpochSecond()));
+            if (balance.errorType() != WechatVirtualPaymentErrorType.SUCCESS) {
+                if (balance.errorType() == WechatVirtualPaymentErrorType.SESSION_INVALID) {
+                    maintainerWechatSessionService.invalidateVersion(
+                            userId, session.sessionVersion(), balance.errorMessage());
+                }
+                throw new BusinessException(RechargeMessage.ORDER_QUERY_FAILED_MESSAGE);
+            }
             RechargeSettlementResult result = transactionService.settleVirtual(
-                    order.getMerchantOrderNo(), transaction);
+                    order.getMerchantOrderNo(), transaction, balance);
             return completeSync(result.order(), userId, result.balance(), true);
         }
         if ("CLOSED".equals(transaction.orderStatus())) {
@@ -473,6 +496,9 @@ public class RechargeService {
      * 获取充值状态展示文案。
      */
     private String statusText(String status) {
+        if (RechargeOrderStatusDict.REFUNDED.getCode().equals(status)) {
+            return RechargeMessage.STATUS_REFUNDED_TEXT;
+        }
         if (RechargeOrderStatusDict.PAID.getCode().equals(status)) {
             return RechargeMessage.STATUS_PAID_TEXT;
         }

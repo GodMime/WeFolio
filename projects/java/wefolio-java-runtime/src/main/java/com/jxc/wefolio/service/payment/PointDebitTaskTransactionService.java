@@ -10,11 +10,13 @@ import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import com.jxc.wefolio.mapper.PointDebitTaskEntityMapper;
 import com.jxc.wefolio.mapper.PointPendingDebitEntityMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -22,7 +24,18 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PointDebitTaskTransactionService {
+
+    /** 已确认远端成功后的补查至少间隔一分钟，不消耗普通失败预算。 */
+    private static final Duration BALANCE_CONFIRMATION_MIN_DELAY = Duration.ofMinutes(1L);
+
+    /** 补查退避上限，长期异常由既有任务记录供人工核查。 */
+    private static final Duration BALANCE_CONFIRMATION_MAX_DELAY = Duration.ofHours(1L);
+
+    /** 已成功支付但补查存在永久错误时的人工核查事件。 */
+    private static final String BALANCE_CONFIRMATION_MANUAL_REQUIRED_EVENT =
+            "WECHAT_BALANCE_CONFIRMATION_MANUAL_REQUIRED";
 
     private final PointDebitTaskEntityMapper pointDebitTaskEntityMapper;
     private final PointAccountEntityMapper pointAccountEntityMapper;
@@ -140,17 +153,48 @@ public class PointDebitTaskTransactionService {
     /** 无有效维护者会话时保留活动槽位等待刷新。 */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void markWaitingSession(Long taskId, String executionLeaseToken, String reason) {
+        PointDebitTaskEntity task = pointDebitTaskEntityMapper.selectById(taskId);
+        if (task == null || !ownsLease(task, executionLeaseToken)) {
+            return;
+        }
         pointDebitTaskEntityMapper.update(null,
                 Wrappers.lambdaUpdate(PointDebitTaskEntity.class)
                         .set(PointDebitTaskEntity::getStatus, PointDebitTaskStatusDict.WAITING_SESSION.getCode())
                         .set(PointDebitTaskEntity::getExecutionLeaseToken, null)
                         .set(PointDebitTaskEntity::getLeaseUntil, null)
-                        .set(PointDebitTaskEntity::getLastErrorCode,
+                        .set(!hasRecordedSuccess(task), PointDebitTaskEntity::getLastErrorCode,
                                 WechatVirtualPaymentErrorType.SESSION_INVALID.name())
                         .set(PointDebitTaskEntity::getLastErrorMessage, safeMessage(reason))
-                        .set(PointDebitTaskEntity::getLastFailedAt, LocalDateTime.now())
+                        .set(PointDebitTaskEntity::getLastFailedAt,
+                                pointDebitTaskEntityMapper.selectCurrentTimestamp())
                         .eq(PointDebitTaskEntity::getId, taskId)
                         .eq(PointDebitTaskEntity::getExecutionLeaseToken, executionLeaseToken));
+    }
+
+    /** 先独立提交微信扣币成功事实；余额补查或后续落库中断时只恢复本次结算。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public void recordRemoteSuccess(Long taskId, String executionLeaseToken, WechatVirtualPaymentResult result) {
+        if (!result.isSuccessful()) {
+            throw new IllegalArgumentException("只能记录明确的微信成功结果");
+        }
+        renewLeaseInCurrentTransaction(taskId, executionLeaseToken);
+        PointDebitTaskEntity task = pointDebitTaskEntityMapper.selectById(taskId);
+        if (hasRecordedSuccess(task)) {
+            return;
+        }
+        int updated = pointDebitTaskEntityMapper.update(null,
+                Wrappers.lambdaUpdate(PointDebitTaskEntity.class)
+                        .set(PointDebitTaskEntity::getLastErrorCode, result.errorType().name())
+                        .set(PointDebitTaskEntity::getLastFailedAt, null)
+                        .set(result.errorType() == WechatVirtualPaymentErrorType.SUCCESS,
+                                PointDebitTaskEntity::getUsedPresentAmount, result.usedPresentAmount())
+                        .set(result.errorType() == WechatVirtualPaymentErrorType.SUCCESS,
+                                PointDebitTaskEntity::getWechatBalanceAfter, result.balance())
+                        .eq(PointDebitTaskEntity::getId, taskId)
+                        .eq(PointDebitTaskEntity::getExecutionLeaseToken, executionLeaseToken));
+        if (updated != 1) {
+            throw new ExecutionLeaseLostException("扣币成功事实未能保存");
+        }
     }
 
     /**
@@ -206,6 +250,10 @@ public class PointDebitTaskTransactionService {
         if (task == null || !ownsLease(task, executionLeaseToken)) {
             return;
         }
+        if (hasRecordedSuccess(task)) {
+            recordBalanceConfirmationFailure(task, executionLeaseToken, result);
+            return;
+        }
         int nextRetry = value(task.getRetryCount()) + 1;
         boolean retryable = isRetryable(result.errorType())
                 && nextRetry <= properties.getSettlement().getMaxRetries();
@@ -224,6 +272,52 @@ public class PointDebitTaskTransactionService {
                         .set(PointDebitTaskEntity::getLastFailedAt, LocalDateTime.now())
                         .eq(PointDebitTaskEntity::getId, taskId)
                         .eq(PointDebitTaskEntity::getExecutionLeaseToken, executionLeaseToken));
+    }
+
+    /** 读取持久成功事实；领取和租约接管都保留该字段。 */
+    public static boolean hasRecordedSuccess(PointDebitTaskEntity entity) {
+        return entity != null && (WechatVirtualPaymentErrorType.SUCCESS.name().equals(entity.getLastErrorCode())
+                || WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS.name().equals(entity.getLastErrorCode()));
+    }
+
+    /** 成功后的暂时失败退避补查，永久错误停止自动执行；均保留成功事实和普通重试次数。 */
+    private void recordBalanceConfirmationFailure(
+            PointDebitTaskEntity task, String executionLeaseToken, WechatVirtualPaymentResult result
+    ) {
+        LocalDateTime now = pointDebitTaskEntityMapper.selectCurrentTimestamp();
+        boolean blocked = result.errorType() == WechatVirtualPaymentErrorType.PERMANENT
+                || result.errorType() == WechatVirtualPaymentErrorType.CONFIGURATION;
+        Duration delay = balanceConfirmationDelay(task.getLastFailedAt(), task.getNextExecuteAt());
+        int updated = pointDebitTaskEntityMapper.update(null,
+                Wrappers.lambdaUpdate(PointDebitTaskEntity.class)
+                        .set(PointDebitTaskEntity::getStatus, blocked
+                                ? PointDebitTaskStatusDict.FAILED.getCode()
+                                : PointDebitTaskStatusDict.RETRY_WAIT.getCode())
+                        .set(!blocked, PointDebitTaskEntity::getNextExecuteAt, now.plus(delay))
+                        .set(PointDebitTaskEntity::getExecutionLeaseToken, null)
+                        .set(PointDebitTaskEntity::getLeaseUntil, null)
+                        .set(PointDebitTaskEntity::getLastErrorMessage, safeMessage(result.errorMessage()))
+                        .set(PointDebitTaskEntity::getLastFailedAt, now)
+                        .eq(PointDebitTaskEntity::getId, task.getId())
+                        .eq(PointDebitTaskEntity::getExecutionLeaseToken, executionLeaseToken));
+        if (blocked && updated == 1) {
+            log.error("event={} taskId={} remoteSuccess={} errorType={}",
+                    BALANCE_CONFIRMATION_MANUAL_REQUIRED_EVENT, task.getId(),
+                    task.getLastErrorCode(), result.errorType());
+        }
+    }
+
+    /** 两个持久时间字段的差值保存上次退避间隔，避免占用普通失败计数。 */
+    private Duration balanceConfirmationDelay(LocalDateTime lastFailedAt, LocalDateTime nextExecuteAt) {
+        if (lastFailedAt == null || nextExecuteAt == null) {
+            return BALANCE_CONFIRMATION_MIN_DELAY;
+        }
+        Duration previous = Duration.between(lastFailedAt, nextExecuteAt);
+        if (previous.compareTo(BALANCE_CONFIRMATION_MIN_DELAY) < 0) {
+            return BALANCE_CONFIRMATION_MIN_DELAY;
+        }
+        return previous.compareTo(BALANCE_CONFIRMATION_MAX_DELAY.dividedBy(2L)) >= 0
+                ? BALANCE_CONFIRMATION_MAX_DELAY : previous.multipliedBy(2L);
     }
 
     /** 后台人工重试失败任务。 */

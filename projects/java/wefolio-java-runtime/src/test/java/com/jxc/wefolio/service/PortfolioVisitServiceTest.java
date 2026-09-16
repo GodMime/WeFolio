@@ -27,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -67,9 +68,76 @@ class PortfolioVisitServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(publishedWorkReference()));
         lenient().when(visitRecordEntityMapper.incrementCounters(
                 any(VisitRecordEntity.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt()))
                 .thenReturn(1);
+    }
+
+    /** 旧页面持有已移除作品时静默丢弃事件，不能产生计数和扣费，也不阻断展示。 */
+    @Test
+    void recordEventWithoutComponentKeyShouldIgnoreUnpublishedWork() {
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("unpublished-work");
+
+        assertThatCode(() -> service().recordEvent(portfolio(), 1024L, request)).doesNotThrowAnyException();
+
+        verifyNoInteractions(visitRecordEntityMapper, visitEventEntityMapper, pointBillingWindowService);
+    }
+
+    /** 省略组件键不能借用草稿引用、其它作品集或失效引用。 */
+    @Test
+    void recordEventWithoutComponentKeyShouldIgnoreUnrelatedReferences() {
+        PortfolioReferenceEntity draftReference = publishedWorkReference();
+        draftReference.setConfigScope(PortfolioConfigScopeDict.DRAFT.getCode());
+        PortfolioReferenceEntity otherPortfolio = publishedWorkReference();
+        otherPortfolio.setPortfolioId(99L);
+        PortfolioReferenceEntity invalidReference = publishedWorkReference();
+        invalidReference.setIsValid(0);
+        when(portfolioReferenceEntityMapper.selectList(any()))
+                .thenReturn(List.of(draftReference, otherPortfolio, invalidReference));
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setEventType(VisitEventTypeDict.VIDEO_PLAYED.getCode());
+        request.setWorkId(11L);
+
+        assertThatCode(() -> service().recordEvent(portfolio(), 1024L, request)).doesNotThrowAnyException();
+
+        verifyNoInteractions(visitRecordEntityMapper, visitEventEntityMapper, pointBillingWindowService);
+    }
+
+    /** 合法旧版事件不需要组件键和媒体字段，发布配置缺少媒体字段也不影响入账。 */
+    @Test
+    void recordLegacyEventShouldAcceptPublishedWorkWithoutOptionalFields() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setPortfolioId(88L);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setVisitorKey("legacy-visitor");
+        request.setIdempotencyKey("legacy-published-work");
+
+        service().recordEvent(portfolio(), 1024L, request);
+
+        verify(visitEventEntityMapper).insert(any(VisitEventEntity.class));
+        assertThat(record.getViewWorkCount()).isEqualTo(1);
+    }
+
+    /** 已发布作品引用测试夹具。 */
+    private PortfolioReferenceEntity publishedWorkReference() {
+        PortfolioReferenceEntity reference = new PortfolioReferenceEntity();
+        reference.setPortfolioId(88L);
+        reference.setConfigScope(PortfolioConfigScopeDict.PUBLISHED.getCode());
+        reference.setReferenceType(ReferenceTypeDict.WORK.getCode());
+        reference.setReferenceId(11L);
+        reference.setComponentKey("c_work");
+        reference.setIsValid(1);
+        reference.setDeleted(0L);
+        return reference;
     }
 
     @Test

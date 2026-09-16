@@ -12,7 +12,7 @@ import java.util.function.Supplier;
 @ConditionalOnProperty(prefix = "redis", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class RedissonPortfolioReferenceMutex implements PortfolioReferenceMutex {
 
-    /** 个人删除与团队引用写入共用的全局逻辑锁 key。 */
+    /** 个人删除、成员授权变更与团队引用写入共用的全局逻辑锁 key。 */
     private static final String PORTFOLIO_REFERENCE_LOCK_KEY = "lock:portfolio-reference";
 
     /** 分布式锁执行器。 */

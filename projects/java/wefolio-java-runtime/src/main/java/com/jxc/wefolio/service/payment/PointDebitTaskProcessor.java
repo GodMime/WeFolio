@@ -8,6 +8,7 @@ import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.dict.PointGiftOrderStatusDict;
 import com.jxc.wefolio.mapper.PointGiftOrderEntityMapper;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
+import com.jxc.wefolio.message.WechatVirtualPaymentMessage;
 import com.jxc.wefolio.service.point.UserPointMutex;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,9 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 @Service
 @RequiredArgsConstructor
 public class PointDebitTaskProcessor {
+
+    /** 扣币应答与随后完整余额快照有差异时的可检索事件。 */
+    private static final String BALANCE_SNAPSHOT_CHANGED_EVENT = "WECHAT_DEBIT_BALANCE_SNAPSHOT_CHANGED";
 
     private final PointDebitTaskTransactionService transactionService;
     private final WechatVirtualPaymentClient wechatVirtualPaymentClient;
@@ -44,6 +48,8 @@ public class PointDebitTaskProcessor {
         log.info("微信虚拟支付业务开始 operation=处理扣币任务 referenceNo={} userId={} accountId={}",
                 task.getTaskNo(), task.getUserId(), task.getAccountId());
         try {
+            // 赠送处理器自行取得用户锁，在扣币锁外先执行，避免嵌套获取同一把锁。
+            processDueGiftFirst(task.getUserId());
             userPointMutex.execute(task.getUserId(), () -> {
                 processClaimed(task, executionLeaseToken);
                 return null;
@@ -56,13 +62,13 @@ public class PointDebitTaskProcessor {
 
     /** 在用户锁内执行权威余额查询与扣币。 */
     private void processClaimed(PointDebitTaskEntity task, String executionLeaseToken) {
-        processDueGiftFirst(task.getUserId());
         MaintainerWechatSession session = maintainerWechatSessionService.findAvailableSession(task.getUserId());
         if (session == null || blank(session.sessionKey()) || blank(session.clientIp())) {
             transactionService.markWaitingSession(task.getId(), executionLeaseToken, "缺少有效维护者微信会话");
             log.info("微信虚拟支付业务完成 operation=处理扣币任务 referenceNo={} userId={} "
-                            + "localStatus=WAITING_SESSION",
-                    task.getTaskNo(), task.getUserId());
+                            + "localStatus={}",
+                    task.getTaskNo(), task.getUserId(),
+                    PointDebitTaskStatusDict.WAITING_SESSION.getCode());
             return;
         }
         UserAuthEntity auth = userAuthEntityMapper.selectById(session.authId());
@@ -70,14 +76,19 @@ public class PointDebitTaskProcessor {
             transactionService.markFailure(task.getId(), executionLeaseToken,
                     failure(WechatVirtualPaymentErrorType.PERMANENT, "维护者微信身份不存在"));
             log.info("微信虚拟支付业务完成 operation=处理扣币任务 referenceNo={} userId={} "
-                            + "localStatus=FAILED reason=MISSING_WECHAT_IDENTITY",
-                    task.getTaskNo(), task.getUserId());
+                            + "localStatus={} reason=MISSING_WECHAT_IDENTITY",
+                    task.getTaskNo(), task.getUserId(),
+                    PointDebitTaskStatusDict.FAILED.getCode());
+            return;
+        }
+        if (PointDebitTaskTransactionService.hasRecordedSuccess(task)) {
+            confirmPaidBalance(task, executionLeaseToken, session, auth.getOpenId());
             return;
         }
         long timestamp = Instant.now().getEpochSecond();
         transactionService.renewLease(task.getId(), executionLeaseToken);
         WechatVirtualPaymentResult balanceResult = queryUserBalance(task, session, auth.getOpenId(), timestamp);
-        if (!balanceResult.isSuccessful()) {
+        if (balanceResult.errorType() != WechatVirtualPaymentErrorType.SUCCESS) {
             handleRemoteFailure(task, executionLeaseToken, session, balanceResult);
             log.info("微信虚拟支付业务完成 operation=处理扣币任务 referenceNo={} userId={} "
                             + "localStatus=REMOTE_BALANCE_FAILED errorType={}",
@@ -123,18 +134,66 @@ public class PointDebitTaskProcessor {
                         + "errcode={} errorType={} balance={} presentBalance={} usedPresentAmount={}",
                 task.getTaskNo(), task.getUserId(), payResult.errorCode(), payResult.errorType(),
                 payResult.balance(), payResult.presentBalance(), payResult.usedPresentAmount());
-        if (payResult.errorType() == WechatVirtualPaymentErrorType.SUCCESS
-                || payResult.errorType() == WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS) {
-            transactionService.completeSuccess(task.getId(), executionLeaseToken, payResult);
-            log.info("微信虚拟支付业务完成 operation=处理扣币任务 referenceNo={} userId={} "
-                            + "localStatus=SUCCESS balance={} presentBalance={}",
-                    task.getTaskNo(), task.getUserId(), payResult.balance(), payResult.presentBalance());
+        if (payResult.isSuccessful()) {
+            transactionService.recordRemoteSuccess(task.getId(), executionLeaseToken, payResult);
+            prepared.setLastErrorCode(payResult.errorType().name());
+            if (payResult.errorType() == WechatVirtualPaymentErrorType.SUCCESS) {
+                prepared.setUsedPresentAmount(payResult.usedPresentAmount());
+                prepared.setWechatBalanceAfter(payResult.balance());
+            }
+            confirmPaidBalance(prepared, executionLeaseToken, session, auth.getOpenId());
             return;
         }
         handleRemoteFailure(prepared, executionLeaseToken, session, payResult);
         log.info("微信虚拟支付业务完成 operation=处理扣币任务 referenceNo={} userId={} "
                         + "localStatus=FAILED errorType={}",
                 task.getTaskNo(), task.getUserId(), payResult.errorType());
+    }
+
+    /** 已持久确认扣币成功后只补查完整余额，不再请求扣币。 */
+    private void confirmPaidBalance(PointDebitTaskEntity task, String executionLeaseToken,
+                                    MaintainerWechatSession session, String openid) {
+        WechatVirtualPaymentErrorType successType;
+        if (WechatVirtualPaymentErrorType.SUCCESS.name().equals(task.getLastErrorCode())) {
+            successType = WechatVirtualPaymentErrorType.SUCCESS;
+        } else if (WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS.name().equals(task.getLastErrorCode())) {
+            successType = WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS;
+        } else {
+            // 此列也保存数字错误码；没有明确成功事实时禁止进入核销分支。
+            transactionService.markFailure(task.getId(), executionLeaseToken,
+                    failure(WechatVirtualPaymentErrorType.PERMANENT,
+                            WechatVirtualPaymentMessage.DEBIT_SUCCESS_PROOF_MISSING_MESSAGE));
+            return;
+        }
+        transactionService.renewLease(task.getId(), executionLeaseToken);
+        WechatVirtualPaymentResult balance = queryUserBalance(
+                task, session, openid, Instant.now().getEpochSecond());
+        if (balance.errorType() != WechatVirtualPaymentErrorType.SUCCESS) {
+            if (balance.errorType() == WechatVirtualPaymentErrorType.SESSION_INVALID) {
+                maintainerWechatSessionService.invalidateVersion(
+                        task.getUserId(), session.sessionVersion(), balance.errorMessage());
+                transactionService.markWaitingSession(task.getId(), executionLeaseToken, balance.errorMessage());
+            } else {
+                transactionService.markFailure(task.getId(), executionLeaseToken, balance);
+            }
+            log.warn("微信扣币成功后等待余额确认 taskId={} remoteSuccess={} errorType={}",
+                    task.getId(), task.getLastErrorCode(), balance.errorType());
+            return;
+        }
+        if (successType == WechatVirtualPaymentErrorType.SUCCESS && task.getWechatBalanceAfter() != null
+                && task.getWechatBalanceAfter() != balance.balance()) {
+            // 微信侧可能同时发生充值或退款，不能取较小值拼接成不存在的余额快照。
+            log.warn("event={} taskId={} payBalance={} queriedBalance={} queriedPresentBalance={}",
+                    BALANCE_SNAPSHOT_CHANGED_EVENT, task.getId(), task.getWechatBalanceAfter(),
+                    balance.balance(), balance.presentBalance());
+        }
+        // 重复应答没有赠送消耗数；既有 NOT NULL 字段保留占位值，成功分类明确其未知语义。
+        WechatVirtualPaymentResult confirmed = new WechatVirtualPaymentResult(
+                null, null, successType, balance.balance(), balance.presentBalance(),
+                value(task.getUsedPresentAmount()), null, 0L, 0L, balance.httpStatus());
+        transactionService.completeSuccess(task.getId(), executionLeaseToken, confirmed);
+        log.info("微信扣币余额确认完成 taskId={} remoteSuccess={} balance={} presentBalance={}",
+                task.getId(), task.getLastErrorCode(), balance.balance(), balance.presentBalance());
     }
 
     /** 待扣结算前优先尝试同一用户的一笔到期赠送，赠送失败不阻断扣币。 */
