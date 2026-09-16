@@ -24,6 +24,18 @@
   white-space: nowrap;
 }
 
+.meta-viewport.is-title {
+  height: 40rpx;
+  margin-top: 0;
+}
+
+.is-title .meta-text {
+  color: #17202a;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.32;
+}
+
 .meta-text.is-auto-scrolling {
   animation-name: work-meta-auto-scroll;
   animation-duration: var(--meta-duration);

@@ -528,16 +528,6 @@
   min-width: 0;
 }
 
-.work-title {
-  overflow: hidden;
-  color: #17202a;
-  font-size: 30rpx;
-  font-weight: 900;
-  line-height: 1.32;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .work-status-row {
   display: flex;
   align-items: center;

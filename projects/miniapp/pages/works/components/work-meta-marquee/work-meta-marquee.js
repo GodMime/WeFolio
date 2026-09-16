@@ -9,6 +9,8 @@ const TEXT_SELECTOR = '.meta-text'
 Component({
   properties: {
     text: { type: String, value: '' },
+    // 标题与灰色信息共用滚动逻辑，分别保留原有字号和行间距。
+    titleStyle: { type: Boolean, value: false },
     // 批量选择框会改变信息可用宽度，需要重新测量。
     compact: { type: Boolean, value: false }
   },
@@ -21,7 +23,7 @@ Component({
   },
 
   observers: {
-    'text, compact'() {
+    'text, compact, titleStyle'() {
       if (this.marqueeReady) this.refreshMarquee()
     }
   },

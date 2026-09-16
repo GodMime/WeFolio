@@ -149,7 +149,11 @@
                     ></view>
                   </view>
                   <view class="work-copy">
-                    <view class="work-title">{{item.title}}</view>
+                    <work-meta-marquee
+                      text="{{item.title}}"
+                      title-style="{{true}}"
+                      compact="{{batchMode}}"
+                    ></work-meta-marquee>
                     <work-meta-marquee
                       text="{{item.typeText}}{{item.durationText ? ' · ' + item.durationText : ''}} / {{item.tagText}} / {{item.mediaType === 'AUDIO' ? item.fileSizeText : '长宽比 ' + item.aspectRatioText}}"
                       compact="{{batchMode}}"
