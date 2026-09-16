@@ -144,6 +144,57 @@ test('visit page loads statistics and first record page from split endpoints', a
   assert.equal(page.data.loading, false)
 })
 
+test('visit page starts both requests together and waits for statistics when records finish first', async () => {
+  const requests = []
+  let resolveStatistics
+  let resolveRecords
+  const statisticsResponse = new Promise((resolve) => {
+    resolveStatistics = resolve
+  })
+  const recordsResponse = new Promise((resolve) => {
+    resolveRecords = resolve
+  })
+  const page = loadVisitsPage((options) => {
+    requests.push(options)
+    return options.url === '/api/mine/visits/statistics'
+      ? statisticsResponse
+      : recordsResponse
+  })
+
+  const loading = page.loadVisits()
+
+  assert.deepEqual(requests.map((item) => item.url), [
+    '/api/mine/visits/statistics',
+    '/api/mine/visits/records'
+  ])
+  assert.deepEqual(requests[1].data, { pageNo: 1, pageSize: 20 })
+
+  resolveRecords({
+    pageNo: 1,
+    pageSize: 20,
+    hasMore: true,
+    records: [{ id: 102, visitorLabel: '微信访客 C19F' }]
+  })
+  await flushPromises()
+
+  assert.equal(page.data.loading, true)
+  assert.deepEqual(page.data.visitData.records, [])
+
+  resolveStatistics({
+    summary: { totalVisitCount: 8, todayVisitCount: 2 },
+    trend: { changeText: '持平', points: [{ label: '周日', value: 2 }] }
+  })
+  await loading
+
+  assert.equal(page.data.loading, false)
+  assert.equal(page.data.visitData.metrics[0].value, '8')
+  assert.equal(page.data.visitData.metrics[1].value, '2')
+  assert.equal(page.data.visitData.trend.changeText, '持平')
+  assert.deepEqual(page.data.visitData.records.map((item) => item.id), [102])
+  assert.equal(page.data.visitRecordPageNo, 1)
+  assert.equal(page.data.visitRecordHasMore, true)
+})
+
 test('visit page keeps returned personal data and shows prioritized warning when initial scope is degraded', async () => {
   const scenarios = [
     {
