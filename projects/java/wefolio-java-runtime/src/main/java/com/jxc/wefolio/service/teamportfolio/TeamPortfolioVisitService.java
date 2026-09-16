@@ -123,6 +123,9 @@ public class TeamPortfolioVisitService {
     /** metadata 媒体类型键。 */
     private static final String METADATA_MEDIA_TYPE = "mediaType";
 
+    /** 服务端写入的作品名称快照键，不属于客户端幂等业务载荷。 */
+    private static final String METADATA_WORK_TITLE = "workTitle";
+
     /** metadata 二维码动作键。 */
     private static final String METADATA_ACTION = "action";
 
@@ -191,7 +194,7 @@ public class TeamPortfolioVisitService {
             validateOwnedRecord(record, portfolio, visitorId, visitorKey);
             refreshSnapshot(record, portfolio, event.getSourceType());
         }
-        return persistEventIfAbsent(portfolio, record, visitorKey, event).visitRecord();
+        return persistEventIfAbsent(portfolio, record, visitorKey, event, null).visitRecord();
     }
 
     /**
@@ -218,8 +221,9 @@ public class TeamPortfolioVisitService {
         }
         VisitRecordEntity record = findVisitRecord(portfolio, visitorId, visitorKey);
         validateOwnedRecord(record, portfolio, visitorId, visitorKey);
-        validatePublishedReference(portfolio, request, type);
-        return persistEventIfAbsent(portfolio, record, visitorKey, request);
+        WorkEntity trustedWork = validatePublishedReference(portfolio, request, type);
+        return persistEventIfAbsent(portfolio, record, visitorKey, request,
+                trustedWork == null ? null : trustedWork.getTitle());
     }
 
     /**
@@ -250,7 +254,7 @@ public class TeamPortfolioVisitService {
         validateOwnedRecord(record, portfolio, visitorId, visitorKey);
         validatePublishedComponent(
                 portfolio, event.getComponentKey(), COMPONENT_TYPE_SCHEDULE_QUERY);
-        return persistEventIfAbsent(portfolio, record, visitorKey, event);
+        return persistEventIfAbsent(portfolio, record, visitorKey, event, null);
     }
 
     /**
@@ -280,7 +284,7 @@ public class TeamPortfolioVisitService {
         validateExactEventRequest(event);
         VisitRecordEntity record = findVisitRecord(portfolio, visitorId, visitorKey);
         validateOwnedRecord(record, portfolio, visitorId, visitorKey);
-        return persistEventIfAbsent(portfolio, record, visitorKey, event);
+        return persistEventIfAbsent(portfolio, record, visitorKey, event, null);
     }
 
     /** 创建初始团队访问汇总，并处理唯一键并发竞争。 */
@@ -333,15 +337,17 @@ public class TeamPortfolioVisitService {
         record.setLastVisitedAt(LocalDateTime.now());
     }
 
-    /** 插入事件成功后更新汇总计数。 */
+    /** 将可信作品名称写入新事件快照，插入成功后更新汇总计数。 */
     private EventRecordResult persistEventIfAbsent(
             PortfolioEntity portfolio,
             VisitRecordEntity record,
             String visitorKey,
-            VisitorTeamPortfolioEventRequest request
+            VisitorTeamPortfolioEventRequest request,
+            String workTitleSnapshot
     ) {
         VisitEventTypeDict type = validateExactEventRequest(request);
-        VisitEventEntity candidate = buildEvent(portfolio, record, visitorKey, request, LocalDateTime.now(), type);
+        VisitEventEntity candidate = buildEvent(
+                portfolio, record, visitorKey, request, LocalDateTime.now(), type, workTitleSnapshot);
         VisitEventEntity existing = findEvent(candidate.getIdempotencyKey());
         if (existing != null) {
             validateExistingEvent(existing, candidate, type);
@@ -385,7 +391,8 @@ public class TeamPortfolioVisitService {
             String visitorKey,
             VisitorTeamPortfolioEventRequest request,
             LocalDateTime occurredAt,
-            VisitEventTypeDict type
+            VisitEventTypeDict type,
+            String workTitleSnapshot
     ) {
         VisitEventEntity event = new VisitEventEntity();
         event.setVisitRecordId(record.getId());
@@ -399,7 +406,7 @@ public class TeamPortfolioVisitService {
         event.setQueriedDate(request.getQueriedDate());
         event.setDurationSeconds(request.getDurationSeconds());
         event.setIdempotencyKey(requireIdempotencyKey(request.getIdempotencyKey()));
-        event.setMetadata(buildCanonicalMetadata(request, type));
+        event.setMetadata(buildCanonicalMetadata(request, type, workTitleSnapshot));
         event.setOccurredAt(occurredAt);
         return event;
     }
@@ -423,8 +430,8 @@ public class TeamPortfolioVisitService {
         }
     }
 
-    /** 校验客户端事件关联资源属于当前作品集发布引用。 */
-    private void validatePublishedReference(
+    /** 校验客户端事件的发布引用，并返回作品事件已校验的可信主数据。 */
+    private WorkEntity validatePublishedReference(
             PortfolioEntity portfolio,
             VisitorTeamPortfolioEventRequest request,
             VisitEventTypeDict type
@@ -443,9 +450,9 @@ public class TeamPortfolioVisitService {
         } else if (type == VisitEventTypeDict.CONTACT_FORM_EXPOSED) {
             validatePublishedComponent(
                     portfolio, request.getComponentKey(), COMPONENT_TYPE_CONTACT_FORM);
-            return;
+            return null;
         } else {
-            return;
+            return null;
         }
         String componentKey = normalizeRequiredText(request.getComponentKey(), COMPONENT_KEY_MAX_BYTES);
         List<PortfolioReferenceEntity> references = portfolioReferenceEntityMapper.selectList(
@@ -470,8 +477,9 @@ public class TeamPortfolioVisitService {
             throw new BusinessException(EVENT_INVALID_MESSAGE);
         }
         if (type == VisitEventTypeDict.WORK_VIEWED || type == VisitEventTypeDict.VIDEO_PLAYED) {
-            validateTrustedWork(request, type);
+            return validateTrustedWork(request, type);
         }
+        return null;
     }
 
     /**
@@ -499,8 +507,8 @@ public class TeamPortfolioVisitService {
         }
     }
 
-    /** 发布引用命中后复验可信作品主数据和媒体类型。 */
-    private void validateTrustedWork(
+    /** 发布引用命中后复验作品主数据和媒体类型，并复用该查询结果保存快照。 */
+    private WorkEntity validateTrustedWork(
             VisitorTeamPortfolioEventRequest request,
             VisitEventTypeDict type
     ) {
@@ -511,6 +519,7 @@ public class TeamPortfolioVisitService {
                 || !isMediaTypeAllowedForEvent(type, work.getMediaType())) {
             throw new BusinessException(EVENT_INVALID_MESSAGE);
         }
+        return work;
     }
 
     /** 查询当前访客在当前团队作品集的访问汇总。 */
@@ -576,7 +585,7 @@ public class TeamPortfolioVisitService {
                 || !Objects.equals(existing.getDurationSeconds(), candidate.getDurationSeconds())
                 || !Objects.equals(existing.getIdempotencyKey(), candidate.getIdempotencyKey())
                 || !Objects.equals(canonicalizeStoredMetadata(existing.getMetadata(), type),
-                        candidate.getMetadata())) {
+                        canonicalizeStoredMetadata(candidate.getMetadata(), type))) {
             throw new BusinessException(IDEMPOTENCY_CONFLICT_MESSAGE);
         }
     }
@@ -739,10 +748,11 @@ public class TeamPortfolioVisitService {
         }
     }
 
-    /** 从 typed 字段构建确定顺序的 metadata。 */
+    /** 从 typed 字段和服务端作品名称快照构建确定顺序的 metadata。 */
     private String buildCanonicalMetadata(
             VisitorTeamPortfolioEventRequest request,
-            VisitEventTypeDict type
+            VisitEventTypeDict type,
+            String workTitleSnapshot
     ) {
         Map<String, Object> canonical = new TreeMap<>();
         switch (type) {
@@ -755,6 +765,9 @@ public class TeamPortfolioVisitService {
                         request.getMediaType(), type == VisitEventTypeDict.VIDEO_PLAYED);
                 if (mediaType != null) {
                     canonical.put(METADATA_MEDIA_TYPE, mediaType);
+                }
+                if (hasText(workTitleSnapshot)) {
+                    canonical.put(METADATA_WORK_TITLE, workTitleSnapshot);
                 }
             }
             case QR_CODE_INTERACTED -> {
@@ -775,7 +788,7 @@ public class TeamPortfolioVisitService {
         return serializeCanonicalMetadata(canonical, EVENT_INVALID_MESSAGE);
     }
 
-    /** 将已落库 metadata 重新清洗为同一 canonical 表示。 */
+    /** 规范化幂等业务载荷，忽略服务端名称快照以兼容旧事件和作品改名后的重试。 */
     private String canonicalizeStoredMetadata(String metadata, VisitEventTypeDict type) {
         try {
             JSONObject parsed = hasText(metadata) ? JSON.parseObject(metadata) : new JSONObject();
@@ -790,7 +803,9 @@ public class TeamPortfolioVisitService {
                         || utf8Length(String.valueOf(value)) > METADATA_VALUE_MAX_BYTES) {
                     throw new BusinessException(IDEMPOTENCY_CONFLICT_MESSAGE);
                 }
-                canonical.put(key, value);
+                if (!METADATA_WORK_TITLE.equals(key)) {
+                    canonical.put(key, value);
+                }
             });
             return serializeCanonicalMetadata(canonical, IDEMPOTENCY_CONFLICT_MESSAGE);
         } catch (BusinessException exception) {
@@ -804,7 +819,8 @@ public class TeamPortfolioVisitService {
     private Set<String> canonicalMetadataKeys(VisitEventTypeDict type) {
         return switch (type) {
             case PORTFOLIO_OPENED -> Set.of(METADATA_SOURCE_TYPE);
-            case WORK_VIEWED, VIDEO_PLAYED -> Set.of(METADATA_COMPONENT_KEY, METADATA_MEDIA_TYPE);
+            case WORK_VIEWED, VIDEO_PLAYED -> Set.of(
+                    METADATA_COMPONENT_KEY, METADATA_MEDIA_TYPE, METADATA_WORK_TITLE);
             case QR_CODE_INTERACTED -> Set.of(METADATA_ACTION, METADATA_COMPONENT_KEY);
             case MEMBER_PORTFOLIO_OPENED -> Set.of(METADATA_COMPONENT_KEY, METADATA_MEMBER_PORTFOLIO_ID);
             case CONTACT_FORM_EXPOSED, SCHEDULE_QUERIED -> Set.of(METADATA_COMPONENT_KEY);

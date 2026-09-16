@@ -17,10 +17,12 @@ import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
+import com.jxc.wefolio.mapper.WorkEntityMapper;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
@@ -31,6 +33,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -89,6 +92,9 @@ public class PortfolioVisitService {
     /** 分享编码快照兜底 */
     private static final String DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT = "";
 
+    /** 访问事件中的作品名称快照键。 */
+    private static final String METADATA_KEY_WORK_TITLE = "workTitle";
+
     /** 访问汇总 Mapper */
     private final VisitRecordEntityMapper visitRecordEntityMapper;
 
@@ -100,6 +106,9 @@ public class PortfolioVisitService {
 
     /** 作品集引用 Mapper */
     private final PortfolioReferenceEntityMapper portfolioReferenceEntityMapper;
+
+    /** 作品主数据 Mapper，用于写入可信作品名称快照。 */
+    private final WorkEntityMapper workEntityMapper;
 
     /**
      * 记录作品集打开。
@@ -247,7 +256,7 @@ public class PortfolioVisitService {
         String eventType = request.getEventType();
         LocalDateTime now = LocalDateTime.now();
         boolean inserted = insertEventIfAbsent(record, portfolio, eventType, request.getWorkId(), request.getQueriedDate(),
-                request.getDurationSeconds(), request.getIdempotencyKey(), request.getMetadata(), now);
+                request.getDurationSeconds(), request.getIdempotencyKey(), buildEventMetadata(request), now);
         if (!inserted) {
             return;
         }
@@ -283,6 +292,30 @@ public class PortfolioVisitService {
             record.setLastVisitedAt(now);
         }
         persistEventCounterDelta(record, eventType, request.getDurationSeconds());
+    }
+
+    /**
+     * 为新作品事件补充服务端名称快照，兼容未上报名称的客户端和组件。
+     *
+     * @param request 已通过发布引用与幂等校验的事件请求
+     * @return 保留原有扩展字段并补充作品名称的元数据
+     */
+    private Map<String, Object> buildEventMetadata(VisitorPortfolioEventRequest request) {
+        if (!VisitEventTypeDict.WORK_VIEWED.getCode().equals(request.getEventType())
+                && !VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(request.getEventType())) {
+            return request.getMetadata();
+        }
+        WorkEntity work = workEntityMapper.selectById(request.getWorkId());
+        // 已删除作品的延迟事件保留原处理语义，不能因补充名称而影响原有计数和扣费。
+        if (work == null || work.getTitle() == null || work.getTitle().isBlank()) {
+            return request.getMetadata();
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (request.getMetadata() != null) {
+            metadata.putAll(request.getMetadata());
+        }
+        metadata.put(METADATA_KEY_WORK_TITLE, work.getTitle().strip());
+        return metadata;
     }
 
     /**

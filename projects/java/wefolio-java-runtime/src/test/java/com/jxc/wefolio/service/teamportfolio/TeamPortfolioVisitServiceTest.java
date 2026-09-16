@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
@@ -29,6 +30,9 @@ import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -344,6 +348,51 @@ class TeamPortfolioVisitServiceTest {
         assertTrustedMediaAccepted(VisitEventTypeDict.VIDEO_PLAYED, MediaTypeDict.VIDEO.getCode());
     }
 
+    /** 图片、动图和视频事件均保存作品主数据中的名称快照。 */
+    @ParameterizedTest
+    @CsvSource({
+            "WORK_VIEWED, IMAGE, 婚礼照片",
+            "WORK_VIEWED, ANIMATION, 婚礼动图",
+            "VIDEO_PLAYED, VIDEO, 婚礼视频"
+    })
+    void workEventsPersistTrustedTitleSnapshot(
+            VisitEventTypeDict type,
+            MediaTypeDict mediaType,
+            String title
+    ) {
+        Context context = successfulEventContext();
+        VisitorTeamPortfolioEventRequest request = clientEvent(type, "title-" + mediaType.getCode());
+        request.setMediaType(mediaType.getCode());
+        WorkEntity trustedWork = work(request.getWorkId(), mediaType.getCode());
+        trustedWork.setTitle(title);
+        when(context.referenceMapper.selectList(any())).thenReturn(
+                List.of(reference(ReferenceTypeDict.WORK.getCode())));
+        when(context.workMapper.selectById(request.getWorkId())).thenReturn(trustedWork);
+
+        TeamPortfolioVisitService.EventRecordResult result = context.service.recordEvent(
+                portfolio(), VISITOR_ID, VISITOR_KEY, request);
+
+        ArgumentCaptor<VisitEventEntity> event = ArgumentCaptor.forClass(VisitEventEntity.class);
+        verify(context.eventMapper).insert(event.capture());
+        assertThat(result.recorded()).isTrue();
+        assertThat(JSON.parseObject(event.getValue().getMetadata())).containsExactlyInAnyOrderEntriesOf(
+                Map.of("componentKey", "carousel-1", "mediaType", mediaType.getCode(), "workTitle", title));
+        verify(context.workMapper, times(1)).selectById(request.getWorkId());
+    }
+
+    /** 客户端不能通过兼容 metadata 伪造服务端作品名称快照。 */
+    @Test
+    void workTitleFromClientIsRejectedBeforeMapperAccess() {
+        Context context = context();
+        VisitorTeamPortfolioEventRequest request = clientEvent(VisitEventTypeDict.VIDEO_PLAYED, "forged-title");
+        request.setMetadata(Map.of("workTitle", "伪造作品名称"));
+
+        assertThatThrownBy(() -> context.service.recordEvent(
+                portfolio(), VISITOR_ID, VISITOR_KEY, request)).isInstanceOf(BusinessException.class);
+
+        verifyNoInteractions(context.recordMapper, context.eventMapper, context.referenceMapper, context.workMapper);
+    }
+
     @Test
     void videoPlayedShouldRejectAnimationMediaTypeBeforeMapperAccess() {
         Context context = context();
@@ -379,6 +428,57 @@ class TeamPortfolioVisitServiceTest {
         assertThat(result.visitRecord()).isSameAs(record);
         verify(context.eventMapper, never()).insert(any(VisitEventEntity.class));
         verify(context.recordMapper, never()).updateById(any(VisitRecordEntity.class));
+    }
+
+    /** 普通重试和唯一键竞争都保留已有快照，兼容无快照旧事件及作品改名。 */
+    @ParameterizedTest
+    @CsvSource({"false, false", "false, true", "true, false", "true, true"})
+    void workTitleSnapshotDoesNotChangeIdempotencyOrRewriteExistingEvent(boolean hasSnapshot, boolean raced) {
+        Context context = context();
+        VisitRecordEntity record = ownedRecord();
+        VisitorTeamPortfolioEventRequest request = clientEvent(VisitEventTypeDict.VIDEO_PLAYED, "title-retry");
+        String storedMetadata = hasSnapshot
+                ? "{\"componentKey\":\"carousel-1\",\"mediaType\":\"VIDEO\",\"workTitle\":\"原作品名称\"}"
+                : "{\"componentKey\":\"carousel-1\",\"mediaType\":\"VIDEO\"}";
+        VisitEventEntity existing = persistedEvent(record, request, storedMetadata);
+        WorkEntity renamedWork = work(request.getWorkId(), MediaTypeDict.VIDEO.getCode());
+        renamedWork.setTitle("修改后的作品名称");
+        when(context.recordMapper.selectOne(any())).thenReturn(record);
+        when(context.referenceMapper.selectList(any())).thenReturn(
+                List.of(reference(ReferenceTypeDict.WORK.getCode())));
+        when(context.workMapper.selectById(request.getWorkId())).thenReturn(renamedWork);
+        if (raced) {
+            when(context.eventMapper.selectOne(any())).thenReturn(null, existing);
+            when(context.eventMapper.insert(any(VisitEventEntity.class)))
+                    .thenThrow(new DuplicateKeyException("event race"));
+        } else {
+            when(context.eventMapper.selectOne(any())).thenReturn(existing);
+        }
+
+        TeamPortfolioVisitService.EventRecordResult result = context.service.recordEvent(
+                portfolio(), VISITOR_ID, VISITOR_KEY, request);
+
+        assertThat(result.recorded()).isFalse();
+        assertThat(result.occurredAt()).isEqualTo(existing.getOccurredAt());
+        assertThat(existing.getMetadata()).isEqualTo(storedMetadata);
+        assertThat(record.getPlayVideoCount()).isZero();
+        assertThat(record.getTotalDurationSeconds()).isZero();
+        verify(context.eventMapper, times(raced ? 1 : 0)).insert(any(VisitEventEntity.class));
+        verify(context.eventMapper, never()).updateById(any(VisitEventEntity.class));
+        verify(context.recordMapper, never()).incrementCounters(
+                any(VisitRecordEntity.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
+    }
+
+    /** 排除名称快照后，组件及媒体类型变化仍然触发完整业务载荷冲突。 */
+    @Test
+    void workSnapshotDoesNotHideBusinessMetadataConflicts() {
+        VisitorTeamPortfolioEventRequest request = clientEvent(VisitEventTypeDict.WORK_VIEWED, "title-conflict");
+        assertClientPayloadConflict(request,
+                "{\"componentKey\":\"other-component\",\"mediaType\":\"IMAGE\",\"workTitle\":\"原作品名称\"}",
+                ReferenceTypeDict.WORK, event -> { });
+        assertClientPayloadConflict(request,
+                "{\"componentKey\":\"carousel-1\",\"mediaType\":\"ANIMATION\",\"workTitle\":\"原作品名称\"}",
+                ReferenceTypeDict.WORK, event -> { });
     }
 
     /**
@@ -981,6 +1081,7 @@ class TeamPortfolioVisitServiceTest {
     private static WorkEntity work(Long workId, String mediaType) {
         WorkEntity work = new WorkEntity();
         work.setId(workId);
+        work.setTitle("团队作品名称");
         work.setMediaType(mediaType);
         work.setDeleted(0L);
         return work;
