@@ -150,22 +150,10 @@
                   </view>
                   <view class="work-copy">
                     <view class="work-title">{{item.title}}</view>
-                    <!-- 信息区独立横向滚动，触摸时清除卡片左滑删除的起点。 -->
-                    <scroll-view
-                      class="work-meta-scroll"
-                      scroll-x
-                      type="list"
-                      show-scrollbar="{{false}}"
-                      catchtouchstart="handleWorkTouchCancel"
-                    >
-                      <view class="work-meta">
-                        <text class="work-meta-item">{{item.typeText}}</text>
-                        <text class="work-meta-item" wx:if="{{item.durationText}}"> · {{item.durationText}}</text>
-                        <text class="work-meta-item"> / {{item.tagText}}</text>
-                        <text class="work-meta-item" wx:if="{{item.mediaType === 'AUDIO'}}"> / {{item.fileSizeText}}</text>
-                        <text class="work-meta-item" wx:else> / 长宽比 {{item.aspectRatioText}}</text>
-                      </view>
-                    </scroll-view>
+                    <work-meta-marquee
+                      text="{{item.typeText}}{{item.durationText ? ' · ' + item.durationText : ''}} / {{item.tagText}} / {{item.mediaType === 'AUDIO' ? item.fileSizeText : '长宽比 ' + item.aspectRatioText}}"
+                      compact="{{batchMode}}"
+                    ></work-meta-marquee>
                     <view class="work-status-row">
                       <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
                       <view class="status-badge {{item.auditStatusTone}}">

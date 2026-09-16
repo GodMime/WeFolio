@@ -538,31 +538,6 @@
   white-space: nowrap;
 }
 
-.work-meta-scroll {
-  width: 100%;
-  height: 36rpx;
-  margin-top: 8rpx;
-  white-space: nowrap;
-}
-
-.work-meta {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 8rpx;
-  height: 36rpx;
-  color: #66727f;
-  font-size: 25rpx;
-  font-weight: 600;
-  line-height: 1.35;
-  white-space: nowrap;
-}
-
-.work-meta-item {
-  flex: none;
-  white-space: nowrap;
-}
-
 .work-status-row {
   display: flex;
   align-items: center;
