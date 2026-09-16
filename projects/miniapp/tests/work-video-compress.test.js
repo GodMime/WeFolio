@@ -280,6 +280,57 @@ test('源时长或宽高无效时在编码前失败', async (t) => {
   }
 })
 
+test('源视频信息缺失时使用同一选择文件的完整宽高和时长', async (t) => {
+  for (const sourceInfo of [
+    { width: undefined, height: undefined, duration: undefined },
+    { width: 0, height: 0, duration: 0 },
+    { width: 1080, height: 0, duration: 60 },
+    { width: NaN, height: Infinity, duration: NaN }
+  ]) {
+    await t.test(JSON.stringify(sourceInfo), async () => {
+      const harness = createVideoHarness({
+        sourceInfo,
+        outputInfos: [{ width: 1920, height: 1080, duration: 60, fps: 30, type: 'mp4' }]
+      })
+      const result = await runCompression(harness, videoFile({ width: 1920, height: 1080, durationMs: 60000 }))
+      assert.equal(result.compressed, true)
+      assert.equal(result.durationMs, 60000)
+      assert.equal(result.width, 1920)
+      assert.equal(result.height, 1080)
+      assert.equal(harness.calls.length, 1)
+    })
+  }
+})
+
+test('有效原生源视频信息优先于选择器的旧信息', async () => {
+  const harness = createVideoHarness()
+  const result = await runCompression(harness, videoFile({ width: 100, height: 100, durationMs: 601000 }))
+  assert.equal(result.durationMs, 60000)
+  assert.equal(result.width, 1920)
+  assert.equal(result.height, 1080)
+})
+
+test('原生读取失败、超时和取消不能被选择器信息掩盖', async (t) => {
+  for (const code of ['NATIVE_FAILED', 'MEDIA_COMPRESSION_TIMEOUT', 'MEDIA_COMPRESSION_CANCELLED']) {
+    await t.test(code, async () => {
+      const harness = createVideoHarness()
+      harness.wxApi.getVideoInfo = args => args.fail({ code, errMsg: 'getVideoInfo:fail' })
+      await assert.rejects(runCompression(harness, videoFile({ width: 1920, height: 1080, durationMs: 60000 })), { code })
+      assert.equal(harness.calls.length, 0)
+    })
+  }
+})
+
+test('压缩成品缺少时长不能使用原片或选择器时长通过验收', async () => {
+  const harness = createVideoHarness({
+    outputInfos: [{ width: 1920, height: 1080, duration: 0, fps: 30, type: 'mp4' }]
+  })
+  await assert.rejects(runCompression(harness, videoFile({ width: 1920, height: 1080, durationMs: 60000 })), {
+    message: '无法读取压缩后的视频信息，请重新选择'
+  })
+  assert.ok(harness.removed.includes(harness.outputPaths[0]))
+})
+
 test('4K短片预算充足时保留原分辨率比例', async () => {
   const harness = createVideoHarness({
     sourceInfo: { width: 3840, height: 2160, duration: 5, bitrate: 120000 },

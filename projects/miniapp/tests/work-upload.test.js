@@ -1418,3 +1418,48 @@ test('未超限视频保留picker元数据且不新增getVideoInfo或压缩能�
     session.dispose()
   }
 })
+
+test('大视频预检接受数字字符串且复用已读取的源信息完成压缩', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  const infoPaths = []
+  const wxApi = {
+    getVideoInfo(args) {
+      infoPaths.push(args.src)
+      args.success({ width: '1920', height: '1080', duration: '60', fps: 30, bitrate: 18000, type: 'mp4' })
+    },
+    compressVideo(args) { args.success({ tempFilePath: 'wxfile://result' }) },
+    getFileSystemManager() { return {
+      statSync(path) { return { size: path === 'wxfile://source' ? VIDEO_MAX_BYTES + 1 : 97 * 1024 * 1024 } },
+      unlinkSync() {}
+    } }
+  }
+  const session = createCompressionSession({ wxApi, protectedPaths: ['wxfile://source'] })
+  let result
+  try {
+    result = await prepareWorkMainFiles([{ clientId: 'video', mediaType: 'VIDEO',
+      tempFilePath: 'wxfile://source', fileName: '演出.mov', size: VIDEO_MAX_BYTES + 1 }], { wxApi, session })
+    assert.equal(result.files[0].compressed, true)
+    assert.equal(result.files[0].durationMs, 60000)
+    assert.deepEqual(infoPaths, ['wxfile://source', 'wxfile://result'])
+    assert.equal(buildUploadTicketPayload(result.files).files[0].fileSize, 97 * 1024 * 1024)
+  } finally {
+    if (result) releasePreparedWorkFiles({ wxApi, ownedPathsByClientId: result.ownedPathsByClientId })
+    session.dispose()
+  }
+})
+
+test('原生时长缺失时仍拒绝选择器返回的任何真实超十分钟视频', async (t) => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  for (const duration of [600.0001, 600.001, 601]) {
+    await t.test(String(duration), async () => {
+      const files = normalizeChosenMediaFiles([{ tempFilePath: 'wxfile://source', fileType: 'video',
+        size: VIDEO_MAX_BYTES + 1, width: 1920, height: 1080, duration }])
+      const wxApi = {
+        getVideoInfo(args) { args.success({ width: 1920, height: 1080, duration: 0 }) },
+        compressVideo() { assert.fail('超时长视频不得编码') }
+      }
+      const session = createCompressionSession({ wxApi })
+      await assert.rejects(prepareWorkMainFiles(files, { wxApi, session }), /视频作品不能超过 10 分钟/)
+    })
+  }
+})

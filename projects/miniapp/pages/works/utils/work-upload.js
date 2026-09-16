@@ -7,7 +7,7 @@ const { calculateFileSha256 } = require('./sha256')
 const { DEFAULT_AUDIO_COVER_URL, formatFileSize } = require('./works')
 const { COMPRESSION_CANCELLED, COMPRESSION_TIMEOUT, METADATA_TIMEOUT_MS, releasePreparedWorkFiles } = require('./work-compression-runtime')
 const { compressImageToLimit } = require('./work-image-compress')
-const { compressVideoToLimit } = require('./work-video-compress')
+const { compressVideoToLimit, readSourceVideoInfo } = require('./work-video-compress')
 
 const MAX_BATCH_COUNT = 9
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024
@@ -68,7 +68,6 @@ const VIDEO_COMPRESSION_UNSUPPORTED_MESSAGE = '当前微信版本不支持视频
 const IMAGE_PROCESSING_FAILED_MESSAGE = '图片处理失败，请选择较小文件后重试'
 const MEDIA_EMPTY_MESSAGE = '作品文件不能为空，请重新选择'
 const MEDIA_TYPE_UNSUPPORTED_MESSAGE = '作品文件格式不支持'
-const VIDEO_INFO_FAILED_MESSAGE = '无法读取视频信息，请重新选择'
 const VIDEO_DURATION_LIMIT_MESSAGE = '视频作品不能超过 10 分钟'
 const MEDIA_STAT_FAILED_MESSAGE = '无法读取作品文件大小，请重新选择'
 const WEBP_UNKNOWN = Object.freeze({ staticImageVerified: false, animated: false, webpAlpha: 'unknown', webpAlphaHint: null })
@@ -291,6 +290,8 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     size: normalizeSize(raw.size),
     sha256: trimText(raw.sha256),
     durationMs,
+    // 视频保留选择器的原始秒精度，源信息兜底时不能因毫秒舍入放过超时长文件。
+    ...(mediaType === 'VIDEO' ? { durationSeconds: normalizeSize(raw.duration) || normalizeSize(raw.durationMs) / 1000 } : {}),
     width,
     height,
     aspectRatio: buildAspectRatio(width, height),
@@ -634,6 +635,7 @@ function validMediaDimension(value) {
 // 全批轻量校验先行，避免后面的已知错误浪费前面文件的编码时间。
 async function preflightWorkMainFiles(files, { wxApi, session, getCanvas }) {
   const runtimeWx = getRuntimeWx(wxApi)
+  const sourceVideoInfos = new Map()
   if (!files.length || files.length > MAX_BATCH_COUNT) {
     throw new Error(validateChosenMediaFiles(files).message)
   }
@@ -664,16 +666,14 @@ async function preflightWorkMainFiles(files, { wxApi, session, getCanvas }) {
       if (typeof runtimeWx.getVideoInfo !== 'function' || typeof runtimeWx.compressVideo !== 'function') {
         throw new Error(VIDEO_COMPRESSION_UNSUPPORTED_MESSAGE)
       }
-      const info = await session.call('getVideoInfo', { src: file.tempFilePath }, { timeoutMs: METADATA_TIMEOUT_MS })
-      session.assertActive()
-      if (!info || !validMediaDimension(info.width) || !validMediaDimension(info.height) || !validMediaDimension(info.duration)) {
-        throw new Error(VIDEO_INFO_FAILED_MESSAGE)
-      }
+      const info = await readSourceVideoInfo(file, { session })
       if (info.duration * 1000 > VIDEO_MAX_DURATION_SECONDS * 1000) throw new Error(VIDEO_DURATION_LIMIT_MESSAGE)
+      sourceVideoInfos.set(file, info)
     } else if (file.mediaType === 'VIDEO' && file.durationMs > VIDEO_MAX_DURATION_SECONDS * 1000) {
       throw new Error(VIDEO_DURATION_LIMIT_MESSAGE)
     }
   }
+  return sourceVideoInfos
 }
 
 async function prepareWorkMainFiles(files = [], options = {}) {
@@ -682,7 +682,7 @@ async function prepareWorkMainFiles(files = [], options = {}) {
   const ownedPathsByClientId = {}
   try {
     session.assertActive()
-    await preflightWorkMainFiles(files, { wxApi, session, getCanvas })
+    const sourceVideoInfos = await preflightWorkMainFiles(files, { wxApi, session, getCanvas })
     session.assertActive()
     for (let index = 0; index < files.length; index += 1) {
       session.assertActive()
@@ -695,7 +695,8 @@ async function prepareWorkMainFiles(files = [], options = {}) {
       const next = file.mediaType === 'IMAGE'
         ? await compressImageToLimit(file, { session, wxApi, getCanvas, onCompress, maxBytes: IMAGE_MAX_BYTES })
         : file.mediaType === 'VIDEO'
-          ? await compressVideoToLimit(file, { session, wxApi, onCompress, maxBytes: VIDEO_MAX_BYTES,
+          ? await compressVideoToLimit(file, { session, wxApi, onCompress,
+            sourceInfo: sourceVideoInfos.get(file), maxBytes: VIDEO_MAX_BYTES,
             maxDurationMs: VIDEO_MAX_DURATION_SECONDS * 1000 })
           : file
       session.assertActive()

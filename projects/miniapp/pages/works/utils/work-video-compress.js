@@ -109,6 +109,27 @@ async function readVideoInfo(src, options = {}) {
   })
 }
 
+async function readSourceVideoInfo(file, options = {}) {
+  const info = await readVideoInfo(file.tempFilePath, options) || {}
+  options.session.assertActive()
+  // 原生读取成功也可能缺字段；只允许用同一原片的选择器信息补齐。
+  // 宽高成对取值，避免不同接口的旋转方向不同而拼出错误比例。
+  const dimensions = isPositiveFinite(info.width) && isPositiveFinite(info.height) ? info : file
+  const pickerDuration = isPositiveFinite(file.durationSeconds)
+    ? Number(file.durationSeconds) : Number(file.durationMs) / 1000
+  const sourceInfo = {
+    ...info,
+    width: Number(dimensions.width),
+    height: Number(dimensions.height),
+    duration: isPositiveFinite(info.duration) ? Number(info.duration) : pickerDuration
+  }
+  if (!isPositiveFinite(sourceInfo.width) || !isPositiveFinite(sourceInfo.height)
+      || !isPositiveFinite(sourceInfo.duration)) {
+    throw createMetadataError(VIDEO_INFO_FAILED_MESSAGE)
+  }
+  return sourceInfo
+}
+
 function buildVideoBudget(info, maxBytes) {
   const targetBytes = Math.floor(maxBytes * VIDEO_TARGET_RATIO)
   const containerBytes = Math.ceil(targetBytes * CONTAINER_BUDGET_RATIO)
@@ -221,6 +242,7 @@ function validateVideoCandidate(file, candidate, sourceInfo, options = {}) {
       width,
       height,
       durationMs,
+      durationSeconds: duration,
       fps: outputFps,
       bitrate: Number(candidate.requestedBitrate),
       aspectRatio: buildAspectRatio(width, height),
@@ -274,7 +296,7 @@ async function compressVideoToLimit(file, options = {}) {
       sha256: sourceSize === Number(file.size) ? file.sha256 : ''
     }
   }
-  const sourceInfo = await readVideoInfo(file.tempFilePath, {
+  const sourceInfo = options.sourceInfo || await readSourceVideoInfo(file, {
     session,
     timeoutMs: remainingTimeout(startedAt, METADATA_TIMEOUT_MS)
   })
@@ -455,6 +477,7 @@ module.exports = {
   chooseVideoGeometry,
   compressVideoToLimit,
   nextVideoBitrate,
+  readSourceVideoInfo,
   readVideoInfo,
   validateVideoCandidate
 }

@@ -188,6 +188,55 @@ test('内部非取消code即使message包含cancel仍展示错误', async () => 
   assert.deepEqual(modals, [{ title: '作品处理失败', content: 'native cancel encoder failure', showCancel: false }])
 })
 
+test('真实页面在原片视频信息缺失时使用picker元数据完成压缩并入列', async () => {
+  const sourcePath = '/iphone-original.mov'
+  const outputPath = '/iphone-compressed.mp4'
+  const events = [], deleted = []
+  const { page, toasts, modals } = loadPage({
+    chooseMedia(options) {
+      options.success({ tempFiles: [{ tempFilePath: sourcePath, fileType: 'video',
+        size: 120 * MB, width: 1920, height: 1080, duration: 60 }] })
+    },
+    getVideoInfo(options) {
+      events.push(['info', options.src])
+      // 复现原片信息字段不完整；压缩成品必须独立读取并使用自己的尺寸。
+      options.success(options.src === sourcePath
+        ? { fps: 30, bitrate: 18000, type: 'mov' }
+        : { width: 1280, height: 720, duration: 60, fps: 30, type: 'mp4' })
+    },
+    compressVideo(options) {
+      events.push(['compress', options.src])
+      options.success({ tempFilePath: outputPath })
+    },
+    getFileSystemManager: () => ({
+      statSync: filePath => ({ size: filePath === sourcePath ? 120 * MB : 97 * MB }),
+      unlinkSync: filePath => deleted.push(filePath)
+    })
+  })
+  page.calculateFileSha256 = () => assert.fail('选择阶段不读取SHA')
+  try {
+    await page.handleChooseMedia()
+    assert.equal(page.data.errorMessage, '')
+    assert.deepEqual(toasts, [])
+    assert.deepEqual(modals, [])
+    assert.equal(page.data.files.length, 1)
+    const selected = page.data.files[0]
+    assert.equal(selected.tempFilePath, outputPath)
+    assert.equal(selected.size, 97 * MB)
+    assert.equal(selected.width, 1280)
+    assert.equal(selected.height, 720)
+    assert.equal(selected.durationMs, 60000)
+    assert.equal(selected.mimeType, 'video/mp4')
+    assert.equal(selected.compressionText, '已压缩：120.0MB → 97.0MB')
+    assert.ok(page.patches.some(patch => patch.choosingTitle === '正在压缩视频'))
+    assert.equal(page.data.choosing, false)
+    assert.deepEqual(events, [['info', sourcePath], ['compress', sourcePath], ['info', outputPath]])
+    assert.deepEqual(deleted, [])
+  } finally {
+    page.onUnload()
+  }
+})
+
 for (const stage of ['chooseMedia', 'getVideoInfo', 'compressVideo']) {
   test(`真实视频流程${stage}原生失败保留具体原因和错误码并允许重新选择`, async () => {
     let failing = true
