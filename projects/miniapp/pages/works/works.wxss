@@ -50,7 +50,6 @@
 .work-delete-pane,
 .work-delete-button,
 .work-card,
-.work-meta,
 .work-status-row,
 .reference-pill,
 .status-badge,
@@ -539,14 +538,28 @@
   white-space: nowrap;
 }
 
-.work-meta {
+.work-meta-scroll {
+  width: 100%;
+  height: 36rpx;
   margin-top: 8rpx;
-  overflow: hidden;
+  white-space: nowrap;
+}
+
+.work-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8rpx;
+  height: 36rpx;
   color: #66727f;
   font-size: 25rpx;
   font-weight: 600;
   line-height: 1.35;
-  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-meta-item {
+  flex: none;
   white-space: nowrap;
 }
 
