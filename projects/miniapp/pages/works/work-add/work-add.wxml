@@ -39,7 +39,7 @@
           <view wx:if="{{choosing || (preparationCancelled && !saving)}}" class="compression-state">
             <view class="compression-state-main">
               <view wx:if="{{choosing}}" class="compression-icon" aria-hidden="true">
-                <view class="compression-spinner"></view>
+                <view class="loading-spinner"></view>
               </view>
               <view class="compression-state-copy">
                 <view class="compression-state-title">{{choosing ? choosingTitle : '已取消处理'}}</view>
@@ -75,7 +75,9 @@
                   <image wx:elif="{{item.mediaType === 'AUDIO'}}" src="{{item.audioCoverUrl}}" mode="aspectFill"></image>
                   <image wx:elif="{{item.coverPath}}" src="{{item.coverPath}}" mode="aspectFill"></image>
                   <view wx:else class="video-thumb">视频</view>
-                  <view wx:if="{{item.isVideo}}" class="play-badge">▶</view>
+                  <view wx:if="{{item.isVideo}}" class="play-badge" aria-hidden="true">
+                    <view class="play-icon"></view>
+                  </view>
                   <view wx:if="{{item.isAnimation}}" class="animation-badge">动图</view>
                 </view>
                 <view class="selected-work-copy">
@@ -144,7 +146,10 @@
         <view class="tag-picker-count">{{selectedUnifiedTagCount}} 个已选</view>
       </view>
 
-      <view wx:if="{{tagLoading}}" class="tag-picker-state">加载中...</view>
+      <view wx:if="{{tagLoading}}" class="tag-picker-state">
+        <view class="loading-spinner" aria-hidden="true"></view>
+        <view>加载中</view>
+      </view>
       <view wx:elif="{{tagErrorText}}" class="tag-picker-state error">
         <view>{{tagErrorText}}</view>
         <view class="tag-picker-retry" catchtap="handleRetryLoadTags" aria-role="button" aria-label="重新加载作品标签">重试</view>

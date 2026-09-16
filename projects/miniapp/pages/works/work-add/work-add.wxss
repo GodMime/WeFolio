@@ -282,12 +282,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #111827;
-  font-size: 18rpx;
-  font-weight: 900;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.18);
+  border-radius: 999rpx;
+  background: #ffffff;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.26);
+}
+
+/* 沿用作品集背景音频的黑色三角，避免播放字符被手机渲染为彩色表情。 */
+.play-icon {
+  width: 0;
+  height: 0;
+  flex-shrink: 0;
+  border-top: 11rpx solid transparent;
+  border-bottom: 11rpx solid transparent;
+  border-left: 17rpx solid #111111;
+  transform: translateX(2rpx);
 }
 
 .animation-badge {
@@ -1082,7 +1090,8 @@
   justify-content: center;
 }
 
-.compression-spinner {
+/* 页面加载提示共用圆环，固定圆角避免 Skyline 百分比圆角差异。 */
+.loading-spinner {
   flex: none;
   width: 30rpx;
   height: 30rpx;
@@ -1090,10 +1099,11 @@
   border-top-color: #536b82;
   border-radius: 999rpx;
   box-sizing: border-box;
-  animation: compression-spin 1s linear infinite;
+  animation: loading-spin 1s linear infinite;
 }
 
-@keyframes compression-spin {
+@keyframes loading-spin {
+  from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
