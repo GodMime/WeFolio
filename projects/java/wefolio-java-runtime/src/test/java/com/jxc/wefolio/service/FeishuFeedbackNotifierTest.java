@@ -152,6 +152,13 @@ class FeishuFeedbackNotifierTest {
                         containsString("问题已修复，请更新小程序（重新进入小程序后会自动更新）"))))
                 .andExpect(request -> {
                     String requestBody = ((MockClientHttpRequest) request).getBodyAsString();
+                    JSONArray elements = JSONObject.parseObject(requestBody)
+                            .getJSONObject("card")
+                            .getJSONArray("elements");
+                    assertTextElement(
+                            elements,
+                            "plain_text",
+                            "本轮前端版本：1.2.5");
                     assertThat(requestBody)
                             .doesNotContain("\"tag\":\"button\"");
                     assertThat(StringUtils.countOccurrencesOf(
@@ -161,7 +168,7 @@ class FeishuFeedbackNotifierTest {
                 })
                 .andRespond(withSuccess("{\"code\":0}", MediaType.APPLICATION_JSON));
 
-        notifier.notifyCreated(mutationResult("用户描述-private"));
+        notifier.notifyCreated(mutationResult("用户描述-private", "1.2.5"));
 
         verify(userEntityMapper).selectById(7L);
         server.verify();
@@ -189,9 +196,10 @@ class FeishuFeedbackNotifierTest {
                 .andExpect(request -> {
                     JSONObject payload = JSONObject.parseObject(
                             ((MockClientHttpRequest) request).getBodyAsString());
-                    String commands = payload.getJSONObject("card")
-                            .getJSONArray("elements")
-                            .getJSONObject(4)
+                    JSONObject note = findElementByTag(
+                            payload.getJSONObject("card").getJSONArray("elements"),
+                            "note");
+                    String commands = note
                             .getJSONArray("elements")
                             .getJSONObject(0)
                             .getString("content");
@@ -220,10 +228,15 @@ class FeishuFeedbackNotifierTest {
                     JSONObject payload = JSONObject.parseObject(requestBody);
                     JSONArray elements = payload.getJSONObject("card").getJSONArray("elements");
                     assertThat(payload.getString("msg_type")).isEqualTo("interactive");
-                    assertThat(elements.getJSONObject(1).getJSONObject("text").getString("content"))
-                            .isEqualTo("本轮描述\n飞书通知测试消息");
-                    assertThat(elements.getJSONObject(2).getJSONObject("text").getString("content"))
-                            .isEqualTo("**附件**\n无");
+                    assertTextElement(
+                            elements,
+                            "plain_text",
+                            "本轮前端版本：未上报");
+                    assertTextElement(
+                            elements,
+                            "plain_text",
+                            "本轮描述\n飞书通知测试消息");
+                    assertTextElement(elements, "lark_md", "**附件**\n无");
                 })
                 .andRespond(withSuccess("{\"code\":0}", MediaType.APPLICATION_JSON));
 
@@ -240,10 +253,22 @@ class FeishuFeedbackNotifierTest {
     void appendedNotificationUsesSupplementTitle() {
         stubNotificationContext();
         server.expect(once(), requestTo(WEBHOOK_URL))
-                .andExpect(content().string(containsString("问题反馈有补充")))
+                .andExpect(request -> {
+                    String requestBody = ((MockClientHttpRequest) request).getBodyAsString();
+                    JSONObject payload = JSONObject.parseObject(requestBody);
+                    assertThat(payload.getJSONObject("card")
+                            .getJSONObject("header")
+                            .getJSONObject("title")
+                            .getString("content"))
+                            .isEqualTo("问题反馈有补充");
+                    assertTextElement(
+                            payload.getJSONObject("card").getJSONArray("elements"),
+                            "plain_text",
+                            "本轮前端版本：1.2.6");
+                })
                 .andRespond(withSuccess("ignored", MediaType.TEXT_PLAIN));
 
-        notifier.notifyAppended(mutationResult("补充信息"));
+        notifier.notifyAppended(mutationResult("补充信息", "1.2.6"));
 
         server.verify();
     }
@@ -257,12 +282,15 @@ class FeishuFeedbackNotifierTest {
                     String requestBody = ((MockClientHttpRequest) request).getBodyAsString();
                     JSONObject payload = JSONObject.parseObject(requestBody);
                     JSONArray elements = payload.getJSONObject("card").getJSONArray("elements");
-                    JSONObject descriptionText = elements.getJSONObject(1).getJSONObject("text");
-                    JSONObject attachmentText = elements.getJSONObject(2).getJSONObject("text");
-                    assertThat(descriptionText.getString("tag")).isEqualTo("plain_text");
-                    assertThat(descriptionText.getString("content"))
-                            .isEqualTo("本轮描述\n" + MALICIOUS_DESCRIPTION);
-                    assertThat(attachmentText.getString("tag")).isEqualTo("lark_md");
+                    assertTextElement(
+                            elements,
+                            "plain_text",
+                            "本轮描述\n" + MALICIOUS_DESCRIPTION);
+                    assertTextElement(
+                            elements,
+                            "lark_md",
+                            "**附件**\n[图片 1](https://cdn.example.com/image.jpg)\n"
+                                    + "[视频 2](https://cdn.example.com/video.mp4)");
                 })
                 .andRespond(withSuccess());
 
@@ -302,6 +330,14 @@ class FeishuFeedbackNotifierTest {
 
     /** 构造一次新写入的反馈事务结果。 */
     private FeedbackTransactionService.MutationResult mutationResult(String description) {
+        return mutationResult(description, null);
+    }
+
+    /** 构造一次带本轮前端版本的新写入反馈事务结果。 */
+    private FeedbackTransactionService.MutationResult mutationResult(
+            String description,
+            String frontendVersion
+    ) {
         FeedbackEntity feedback = new FeedbackEntity();
         feedback.setId(91L);
         feedback.setFeedbackNo("FB0123456789abcdef0123456789abcdef");
@@ -311,11 +347,37 @@ class FeishuFeedbackNotifierTest {
         FeedbackRoundSnapshot round = new FeedbackRoundSnapshot();
         round.setRoundNo(1);
         round.setDescription(description);
+        round.setFrontendVersion(frontendVersion);
         round.setSubmittedAt(LocalDateTime.of(2026, 8, 25, 10, 42, 0, 123_000_000));
         round.setAttachments(List.of(
                 attachment("WFA3B1E7A2/others/image.jpg", FeedbackMediaTypeDict.IMAGE.getCode()),
                 attachment("WFA3B1E7A2/others/video.mp4", FeedbackMediaTypeDict.VIDEO.getCode())));
         return new FeedbackTransactionService.MutationResult(feedback, round, true);
+    }
+
+    /** 按卡片元素标签查找唯一节点，避免测试依赖元素顺序。 */
+    private JSONObject findElementByTag(JSONArray elements, String tag) {
+        List<JSONObject> matches = elements.stream()
+                .map(JSONObject.class::cast)
+                .filter(element -> tag.equals(element.getString("tag")))
+                .toList();
+        assertThat(matches).hasSize(1);
+        return matches.getFirst();
+    }
+
+    /** 按文本标签和内容断言唯一卡片文本节点。 */
+    private void assertTextElement(JSONArray elements, String textTag, String content) {
+        List<JSONObject> matches = elements.stream()
+                .map(JSONObject.class::cast)
+                .filter(element -> "div".equals(element.getString("tag")))
+                .filter(element -> {
+                    JSONObject text = element.getJSONObject("text");
+                    return text != null
+                            && textTag.equals(text.getString("tag"))
+                            && content.equals(text.getString("content"));
+                })
+                .toList();
+        assertThat(matches).hasSize(1);
     }
 
     /** 构造单个通知附件。 */

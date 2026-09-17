@@ -8,6 +8,11 @@ const {
 } = require('../../utils/feedback')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 
+const { FRONTEND_VERSION } = require('../../utils/app-version')
+
+const VERSION_MODAL_TITLE = '版本信息'
+const VERSION_MODAL_CONTENT_PREFIX = '当前前端版本：'
+const VERSION_MODAL_CONFIRM_TEXT = '知道了'
 const FEEDBACK_HISTORY_PAGE_URL = '/pages/feedback-history/feedback-history'
 const LOGIN_PAGE_URL = '/pages/login/login'
 
@@ -146,6 +151,16 @@ Page({
 
   handleHistoryTap() {
     wx.navigateTo({ url: FEEDBACK_HISTORY_PAGE_URL })
+  },
+
+  // 版本来自本地常量，离线也可查看且不改变反馈草稿。
+  handleVersionTap() {
+    wx.showModal({
+      title: VERSION_MODAL_TITLE,
+      content: `${VERSION_MODAL_CONTENT_PREFIX}${FRONTEND_VERSION}`,
+      showCancel: false,
+      confirmText: VERSION_MODAL_CONFIRM_TEXT
+    })
   },
 
   handleDescriptionInput(event) {

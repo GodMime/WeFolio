@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 问题反馈事务服务，负责创建、追加轮次和内部状态流转。
@@ -41,6 +42,10 @@ public class FeedbackTransactionService {
 
     /** 描述与团队反馈结果最大 Unicode 代码点数量。 */
     private static final int MAX_TEXT_CODE_POINT_COUNT = 200;
+
+    /** 版本诊断字段允许的字符与长度。 */
+    private static final Pattern FRONTEND_VERSION_PATTERN =
+            Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}");
 
     /** 对外反馈编号前缀。 */
     private static final String FEEDBACK_NO_PREFIX = "FB";
@@ -157,7 +162,10 @@ public class FeedbackTransactionService {
         List<Long> uploadTaskIds = normalizeUploadTaskIds(request == null ? null : request.getUploadTaskIds());
         List<FeedbackRoundSnapshot.Attachment> attachments =
                 feedbackUploadService.validateAndBuildAttachments(userId, uploadTaskIds);
-        FeedbackRoundSnapshot round = buildRound(1, idempotencyKey, description, attachments);
+        String frontendVersion = normalizeFrontendVersion(
+                request == null ? null : request.getFrontendVersion());
+        FeedbackRoundSnapshot round = buildRound(
+                1, idempotencyKey, description, attachments, frontendVersion);
         FeedbackEntity feedback = buildInitialFeedback(userId, idempotencyKey, round);
         if (feedbackEntityMapper.insert(feedback) != 1 || feedback.getId() == null) {
             throw new BusinessException(MineFeedbackMessage.FEEDBACK_SAVE_FAILED_MESSAGE);
@@ -199,9 +207,12 @@ public class FeedbackTransactionService {
         List<Long> uploadTaskIds = normalizeUploadTaskIds(request == null ? null : request.getUploadTaskIds());
         List<FeedbackRoundSnapshot.Attachment> attachments =
                 feedbackUploadService.validateAndBuildAttachments(userId, uploadTaskIds);
+        String frontendVersion = normalizeFrontendVersion(
+                request == null ? null : request.getFrontendVersion());
         int nextRoundNo = rounds.size() + 1;
         int existingAttachmentCount = validated.attachmentCount();
-        FeedbackRoundSnapshot nextRound = buildRound(nextRoundNo, idempotencyKey, description, attachments);
+        FeedbackRoundSnapshot nextRound = buildRound(
+                nextRoundNo, idempotencyKey, description, attachments, frontendVersion);
         archiveCurrentTeamResult(rounds, feedback);
         rounds.add(nextRound);
         feedback.setRoundsJson(feedbackRoundCodec.serialize(rounds));
@@ -296,12 +307,14 @@ public class FeedbackTransactionService {
             int roundNo,
             String idempotencyKey,
             String description,
-            List<FeedbackRoundSnapshot.Attachment> attachments
+            List<FeedbackRoundSnapshot.Attachment> attachments,
+            String frontendVersion
     ) {
         FeedbackRoundSnapshot round = new FeedbackRoundSnapshot();
         round.setRoundNo(roundNo);
         round.setIdempotencyKey(idempotencyKey);
         round.setDescription(description);
+        round.setFrontendVersion(frontendVersion);
         round.setSubmittedAt(LocalDateTime.now(clock));
         round.setTeamResult(null);
         round.setTeamResultAt(null);
@@ -336,6 +349,15 @@ public class FeedbackTransactionService {
             throw new BusinessException(MineFeedbackMessage.DESCRIPTION_TOO_LONG_MESSAGE);
         }
         return normalized;
+    }
+
+    /** 非法版本诊断信息降级为空，不阻断反馈主流程。 */
+    private String normalizeFrontendVersion(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return FRONTEND_VERSION_PATTERN.matcher(normalized).matches() ? normalized : null;
     }
 
     /** 复制并校验本轮上传任务 ID。 */

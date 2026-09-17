@@ -184,6 +184,7 @@ public class MineFeedbackService {
         MineFeedbackDetailResponse.RoundItem item = new MineFeedbackDetailResponse.RoundItem();
         item.setRoundNo(source.getRoundNo());
         item.setDescription(source.getDescription());
+        item.setFrontendVersion(source.getFrontendVersion());
         item.setSubmittedAt(source.getSubmittedAt());
         item.setTeamResult(source.getTeamResult());
         item.setTeamResultAt(source.getTeamResultAt());

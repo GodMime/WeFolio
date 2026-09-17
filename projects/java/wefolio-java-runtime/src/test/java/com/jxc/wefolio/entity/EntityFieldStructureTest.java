@@ -407,6 +407,7 @@ class EntityFieldStructureTest {
                 Map.entry("roundNo", Integer.class),
                 Map.entry("idempotencyKey", String.class),
                 Map.entry("description", String.class),
+                Map.entry("frontendVersion", String.class),
                 Map.entry("submittedAt", LocalDateTime.class),
                 Map.entry("teamResult", String.class),
                 Map.entry("teamResultAt", LocalDateTime.class),

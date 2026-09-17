@@ -129,6 +129,7 @@ class MineFeedbackServiceTest {
     @Test
     void detailShouldReturnParsedTimelineAndPublicAttachmentUrls() {
         FeedbackRoundSnapshot first = round(1, "原始问题");
+        first.setFrontendVersion("1.2.5");
         first.setTeamResult("请补充录屏");
         first.setTeamResultAt(LocalDateTime.of(2026, 8, 25, 11, 0));
         FeedbackRoundSnapshot second = round(2, "补充说明");
@@ -153,6 +154,8 @@ class MineFeedbackServiceTest {
         assertThat(response.getFeedbackResult()).isEqualTo("请再补充网络环境");
         assertThat(response.isCanAppendRound()).isTrue();
         assertThat(response.getRounds()).hasSize(2);
+        assertThat(response.getRounds().get(0).getFrontendVersion()).isEqualTo("1.2.5");
+        assertThat(response.getRounds().get(1).getFrontendVersion()).isNull();
         assertThat(response.getRounds().get(0).getTeamResult()).isEqualTo("请补充录屏");
         assertThat(response.getRounds().get(1).getAttachments()).singleElement().satisfies(item -> {
             assertThat(item.getUrl()).isEqualTo("https://cdn.example/demo.mp4");

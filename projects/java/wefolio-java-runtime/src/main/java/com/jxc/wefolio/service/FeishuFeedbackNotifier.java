@@ -94,6 +94,12 @@ public class FeishuFeedbackNotifier {
     /** 用户描述块纯文本标题。 */
     private static final String DESCRIPTION_SECTION_TITLE = "本轮描述";
 
+    /** 本轮前端版本标签。 */
+    private static final String FRONTEND_VERSION_LABEL = "本轮前端版本：";
+
+    /** 旧客户端未上报版本时的提示。 */
+    private static final String FRONTEND_VERSION_NOT_REPORTED = "未上报";
+
     /** 事务结果缺失异常文案。 */
     private static final String NULL_MUTATION_RESULT_MESSAGE = "事务结果不能为空";
 
@@ -249,6 +255,7 @@ public class FeishuFeedbackNotifier {
                 round.getRoundNo(),
                 round.getSubmittedAt(),
                 round.getDescription(),
+                round.getFrontendVersion(),
                 attachments);
     }
 
@@ -288,6 +295,14 @@ public class FeishuFeedbackNotifier {
                         shortField("当前状态", context.statusText()),
                         shortField("反馈轮次", "第 " + context.roundNo() + " 轮"),
                         shortField("提交时间", formatSubmittedAt(context.submittedAt())))));
+        String frontendVersion = context.frontendVersion();
+        String frontendVersionText = frontendVersion == null || frontendVersion.isBlank()
+                ? FRONTEND_VERSION_NOT_REPORTED : frontendVersion;
+        elements.add(Map.of(
+                "tag", DIV_TAG,
+                "text", text(
+                        PLAIN_TEXT_TAG,
+                        FRONTEND_VERSION_LABEL + frontendVersionText)));
         elements.add(Map.of(
                 "tag", DIV_TAG,
                 "text", text(PLAIN_TEXT_TAG,
@@ -402,6 +417,7 @@ public class FeishuFeedbackNotifier {
             Integer roundNo,
             LocalDateTime submittedAt,
             String description,
+            String frontendVersion,
             List<NotificationAttachment> attachments
     ) {
     }
