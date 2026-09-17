@@ -1,0 +1,15 @@
+<view class="section align-{{viewModel.verticalAlignment}} {{viewModel.simpleText ? 'simple-text' : ''}} {{viewModel.background ? 'with-background' : ''}}" style="{{viewModel.frameStyle}}">
+  <block wx:if="{{viewModel.background}}">
+    <block wx:if="{{viewModel.background.isVideo}}">
+      <video wx:if="{{!mediaFailed}}" id="mockStructuredTextBackgroundVideo" class="background" src="{{viewModel.background.mediaUrl}}" poster="{{videoPosterUrl}}" data-attempt="{{mediaAttempt}}" autoplay="{{active}}" loop muted controls="{{false}}" show-center-play-btn="{{false}}" show-play-btn="{{false}}" enable-progress-gesture="{{false}}" object-fit="cover" bindplay="handleVideoPlay" bindtimeupdate="handleVideoTimeUpdate" binderror="handleMediaError"/>
+      <image wx:if="{{videoPosterUrl && (!mediaReady || mediaFailed)}}" class="background-poster" src="{{videoPosterUrl}}" mode="aspectFill" aria-hidden="true"/>
+    </block>
+    <image wx:elif="{{!mediaFailed}}" class="background" src="{{viewModel.background.mediaUrl}}" data-attempt="{{mediaAttempt}}" mode="aspectFill" binderror="handleMediaError"/>
+    <view class="background treatment-{{viewModel.treatment}}"/>
+  </block>
+  <view class="content"><text wx:if="{{viewModel.title}}" class="legacy-title">{{viewModel.title}}</text><view wx:for="{{viewModel.blocks}}" wx:key="blockKey" class="text-block {{item.fontClass}}" style="{{item.style}}"><block wx:if="{{item.type === 'LIST'}}"><view wx:for="{{item.items}}" wx:key="index" wx:for-item="listItem">• {{listItem}}</view></block><text wx:elif="{{item.type !== 'SPACER'}}">{{item.content}}</text></view></view>
+  <view wx:if="{{viewModel.background && mediaFailed && active}}" class="background-error">
+    <text>{{backgroundErrorMessage}}</text>
+    <button class="background-retry" size="mini" bindtap="handleRetryBackground" aria-label="{{backgroundRetryLabel}}">{{backgroundRetryLabel}}</button>
+  </view>
+</view>

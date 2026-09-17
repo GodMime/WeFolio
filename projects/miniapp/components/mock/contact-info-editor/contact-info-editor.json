@@ -1,0 +1,7 @@
+{
+  "component": true,
+  "usingComponents": {
+    "mock-contact-info": "/components/mock/contact-info/contact-info",
+    "mock-text-color-editor": "../text-color-editor/text-color-editor"
+  }
+}

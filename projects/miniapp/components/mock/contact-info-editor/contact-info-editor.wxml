@@ -1,0 +1,22 @@
+<view class="contact-editor">
+  <view class="editor-heading"><text>联系信息</text><button class="small-button" bindtap="handleFillProfile">从我的资料重新填入</button></view>
+  <text class="editor-hint">只填充本地演示资料，不会读取真实手机号。</text>
+  <text class="field-label">联系手机</text>
+  <input class="field-input" value="{{config.contactPhone}}" data-field="contactPhone" maxlength="32" placeholder="填写联系手机" bindinput="handleInput" />
+  <text class="field-label">联系微信</text>
+  <input class="field-input" value="{{config.contactWechat}}" data-field="contactWechat" maxlength="64" placeholder="填写联系微信" bindinput="handleInput" />
+  <view class="field-row"><text>边框</text><switch checked="{{config.contactBorder}}" bindchange="handleBorder" color="#212529" aria-label="显示边框" /></view>
+  <view class="contact-border-settings" wx:if="{{config.contactBorder}}">
+    <text class="field-label">上下留白 {{config.verticalMarginRpx || 0}} rpx</text>
+    <slider value="{{config.verticalMarginRpx || 0}}" min="0" max="96" step="1" data-field="verticalMarginRpx" bindchange="handleNumber" activeColor="#212529" />
+    <text class="field-label">左右留白 {{config.horizontalMarginRpx || 0}} rpx</text>
+    <slider value="{{config.horizontalMarginRpx || 0}}" min="0" max="96" step="1" data-field="horizontalMarginRpx" bindchange="handleNumber" activeColor="#212529" />
+    <text class="field-label">线框粗细 {{config.contactBorderWidthRpx || 1}} rpx</text>
+    <slider value="{{config.contactBorderWidthRpx || 1}}" min="1" max="12" step="1" data-field="contactBorderWidthRpx" bindchange="handleNumber" activeColor="#212529" />
+    <text class="field-label">边框颜色</text>
+    <mock-text-color-editor label="边框颜色" inline="{{true}}" color="{{config.contactBorderColor}}" active="{{config.contactBorder}}" bindchange="handleBorderColor" />
+  </view>
+  <text class="editor-hint">至少填写一项。关闭边框后仍保留颜色和留白设置。</text>
+  <text class="field-label">效果预览</text>
+  <view class="contact-preview"><mock-contact-info config="{{config}}" theme-mode="light" /></view>
+</view>

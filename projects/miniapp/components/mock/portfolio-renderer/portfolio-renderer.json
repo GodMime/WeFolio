@@ -1,5 +1,11 @@
 {
   "component": true,
   "styleIsolation": "isolated",
-  "usingComponents": {}
+  "usingComponents": {
+    "mock-structured-text-section": "/components/mock/structured-text-section/structured-text-section",
+    "mock-text-grid": "/components/mock/text-grid/text-grid",
+    "mock-contact-info": "/components/mock/contact-info/contact-info",
+    "mock-hyperlink": "/components/mock/hyperlink/hyperlink",
+    "mock-video-carousel": "/components/mock/video-carousel/video-carousel"
+  }
 }

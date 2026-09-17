@@ -1,11 +1,17 @@
 const {
   MOCK_SCHEDULE_DATA,
+  MOCK_WORK_LIBRARY,
+  buildMockPortfolioRenderData,
   buildMockCalendarMonth,
   getMockPortfolioDraft,
   switchMockPortfolioMenu,
   showMockLoginRequiredToast
 } = require('../utils/mock-experience')
 
+const { createMockAudioController, resolveMockBackgroundAudio } = require('../utils/mock-portfolio-audio')
+const { createMockCopyController, resolveMockHyperlinkTarget, getMockHyperlinkTargetUrl } = require('../utils/mock-portfolio-hyperlink')
+const { registerMockTextFont } = require('../utils/mock-portfolio-text')
+const { buildMockGridViewModel } = require('../utils/mock-portfolio-text-grid')
 const CONTACT_FORM_COMPONENT_TYPE = 'CONTACT_FORM'
 const CALENDAR_DAY_FILLED_CLASS = 'filled'
 
@@ -97,6 +103,12 @@ function collectImageUrls(portfolio) {
 
 Page({
   data: {
+    mediaActive: true,
+    audioPlaying: false,
+    audioResource: null,
+    copiedComponentKey: '',
+    copiedField: '',
+    hyperlinkPrompt: '',
     loading: false,
     errorMessage: '',
     portfolio: getMockPortfolioDraft().renderData,
@@ -122,28 +134,63 @@ Page({
     portfolioScrollTop: 0
   },
 
+  onLoad(options = {}) {
+    registerMockTextFont(wx)
+    this.demoTarget = options.demoTarget || ''
+    this.copyController = createMockCopyController({wxApi:wx,
+      onContactState:field=>this.setData({copiedField:field}),
+      onPrompt:prompt=>this.setData({hyperlinkPrompt:prompt}),
+      onError:title=>wx.showToast({title,icon:'none'})})
+    this.mockAudio = createMockAudioController({wxApi:wx,
+      beforePlay:()=>{this.stopActiveSingleWorkVideo();this.handleCloseVideoPreview()},
+      onPlaying:playing=>this.setData({audioPlaying:playing}),
+      onError:()=>wx.showToast({title:'音频播放失败，请点击重试',icon:'none'})})
+  },
+
   onShow() {
+    this.setData({mediaActive:true})
+    if(this.copyController) this.copyController.show()
+    if(this.mockAudio) this.mockAudio.show()
     this.stopActiveSingleWorkVideo()
-    this.refreshPreview()
+    if (!this.previewLoaded) this.refreshPreview()
   },
 
   onHide() {
+    this.setData({mediaActive:false})
+    if(this.mockAudio) this.mockAudio.hide()
+    if(this.copyController) this.copyController.hide()
+    this.handleCloseVideoPreview()
     this.stopActiveSingleWorkVideo()
     this.clearPortfolioMenuTransition()
   },
 
   onUnload() {
+    if(this.mockAudio) this.mockAudio.destroy()
+    if(this.copyController) this.copyController.destroy()
+    this.handleCloseVideoPreview()
     this.stopActiveSingleWorkVideo()
     this.clearPortfolioMenuTransition()
   },
 
   refreshPreview() {
     try {
-      this.setData({
-        loading: false,
-        errorMessage: '',
-        portfolio: getMockPortfolioDraft().renderData
-      })
+      let portfolio
+      if (this.demoTarget) {
+        const target = resolveMockHyperlinkTarget(this.demoTarget)
+        if (!target) throw new Error('演示作品集暂不可用')
+        portfolio = buildMockPortfolioRenderData(target.config)
+      } else {
+        const draft = getMockPortfolioDraft()
+        portfolio = draft.renderData
+        if(draft.draftWarning) wx.showToast({title:draft.draftWarning,icon:'none'})
+      }
+      this.previewLoaded = true
+      const resource = resolveMockBackgroundAudio(portfolio.backgroundAudio,MOCK_WORK_LIBRARY.works)
+      this.setData({loading:false,errorMessage:'',portfolio,audioResource:resource})
+      if(this.mockAudio) {
+        this.mockAudio.setResource(resource)
+        if(!this.audioAttempted && resource) {this.audioAttempted=true;this.mockAudio.play()}
+      }
     } catch (error) {
       this.setData({
         loading: false,
@@ -159,48 +206,30 @@ Page({
   },
 
   handleWorkTap(event) {
-    const eventData = readMockComponentEventData(event)
-    const mediaType = eventData.mediaType
-    const mediaUrl = eventData.mediaUrl
-    const coverUrl = eventData.coverUrl
-    const title = eventData.title || ''
-    if (!mediaUrl) {
+    const data = readMockComponentEventData(event)
+    const work = this.findEventWork(data)
+    if (!work) return
+    if (this.mockAudio) this.mockAudio.pause()
+    this.stopActiveSingleWorkVideo()
+    if (work.mediaType === 'VIDEO') {
+      this.setData({videoPreviewVisible:true,videoPreview:{title:work.title,src:work.mediaUrl,poster:work.coverUrl || ''}})
       return
     }
-    if (mediaType === 'VIDEO') {
-      this.setData({
-        videoPreviewVisible: true,
-        videoPreview: {
-          title,
-          src: mediaUrl,
-          poster: coverUrl
-        }
-      })
-      return
-    }
-    wx.previewImage({
-      current: mediaUrl,
-      urls: collectImageUrls(this.data.portfolio)
-    })
+    if(['IMAGE','ANIMATION'].includes(work.mediaType)) wx.previewImage({current:work.mediaUrl,urls:[work.mediaUrl]})
   },
 
   handleSingleWorkTap(event) {
-    const eventData = readMockComponentEventData(event)
-    const componentKey = eventData.componentKey || ''
-    const mediaType = eventData.mediaType
-    const mediaUrl = eventData.mediaUrl
-    if (!mediaUrl) {
-      return false
-    }
-    if (mediaType === 'VIDEO') {
+    const data = readMockComponentEventData(event)
+    const work = this.findEventWork(data)
+    if (!work) return false
+    if (work.mediaType === 'VIDEO') {
+      if(this.mockAudio) this.mockAudio.pause()
+      this.handleCloseVideoPreview()
       this.stopActiveSingleWorkVideo()
-      this.setData({ activeSingleWorkVideoKey: componentKey })
+      this.setData({activeSingleWorkVideoKey:data.componentKey})
       return true
     }
-    wx.previewImage({
-      current: mediaUrl,
-      urls: [mediaUrl]
-    })
+    if(['IMAGE','ANIMATION'].includes(work.mediaType)) wx.previewImage({current:work.mediaUrl,urls:[work.mediaUrl]})
     return true
   },
 
@@ -267,6 +296,8 @@ Page({
       return
     }
     this.stopActiveSingleWorkVideo()
+    if(this.mockAudio) this.mockAudio.pause()
+    if(this.copyController) {this.copyController.destroy();this.copyController=null}
     this.clearPortfolioMenuTransition()
     const items = this.data.portfolio.bottomNav && this.data.portfolio.bottomNav.items
       ? this.data.portfolio.bottomNav.items
@@ -361,6 +392,63 @@ Page({
       current: url,
       urls: [url]
     })
+  },
+
+  findEventWork(data) {
+    const components=this.data.portfolio.activeComponents || []
+    const component=components.find(item=>item.componentKey === data.componentKey)
+    if(!component) return null
+    const works=component.work ? [component.work] : component.works || (component.groups || []).flatMap(group=>group.works || [])
+    const work=works.find(item=>Number(item.workId) === Number(data.workId))
+    return work || null
+  },
+
+  handleToggleAudio() { if(this.mockAudio) this.mockAudio.toggle() },
+
+  handleVideoError() {
+    this.handleCloseVideoPreview()
+    wx.showToast({title:'视频播放失败，请稍后重试',icon:'none'})
+  },
+
+  ensureCopyController() {
+    if(!this.copyController) this.copyController=createMockCopyController({wxApi:wx,
+      onContactState:field=>this.setData({copiedField:field}),onPrompt:prompt=>this.setData({hyperlinkPrompt:prompt}),onError:title=>wx.showToast({title,icon:'none'})})
+    return this.copyController
+  },
+
+  handleCopyContact(event) {
+    const {componentKey,field}=event.detail
+    const component=this.data.portfolio.activeComponents.find(item=>item.componentKey === componentKey && item.componentType === 'CONTACT_INFO')
+    if(!component || !['contactPhone','contactWechat'].includes(field)) return
+    this.setData({copiedComponentKey:componentKey})
+    this.ensureCopyController().copyContact(field,component.config[field])
+  },
+
+  handleHyperlink(event) {
+    const component=this.data.portfolio.activeComponents.find(item=>item.componentKey === event.detail.componentKey && item.componentType === 'HYPERLINK')
+    if(!component) return
+    if(component.config.actionType === 'EXTERNAL_LINK') {this.ensureCopyController().copyHyperlink(component.config);return}
+    const url=getMockHyperlinkTargetUrl(component.config.targetPortfolioId)
+    if(!url) {wx.showToast({title:'演示作品集暂不可用',icon:'none'});return}
+    if(this.mockAudio) this.mockAudio.pause()
+    this.stopActiveSingleWorkVideo()
+    this.handleCloseVideoPreview()
+    wx.navigateTo({url})
+  },
+
+  handleGridMeasure(event) {
+    const {componentKey,widthPx,heightsPx}=event.detail
+    const component=this.data.portfolio.activeComponents.find(item=>item.componentKey === componentKey && item.componentType === 'TEXT_GRID')
+    if(!component || !widthPx) return
+    const info=wx.getWindowInfo ? wx.getWindowInfo() : {windowWidth:375}
+    const scale=750/info.windowWidth
+    const heights={}
+    Object.keys(heightsPx || {}).forEach(key=>{heights[key]=heightsPx[key]*scale})
+    try {
+      const viewModel=buildMockGridViewModel(component.config,this.data.portfolio.themeMode,widthPx*scale+2*(component.config.horizontalMarginRpx || 0),heights)
+      const activeComponents=this.data.portfolio.activeComponents.map(item=>item.componentKey === componentKey ? Object.assign({},item,{viewModel}) : item)
+      this.setData({portfolio:Object.assign({},this.data.portfolio,{activeComponents})})
+    } catch(error) { /* 保留可用的初始布局，编辑时显示具体校验提示。 */ }
   },
 
   noop() {}

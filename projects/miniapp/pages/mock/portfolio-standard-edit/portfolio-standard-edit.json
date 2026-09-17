@@ -1,6 +1,13 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
-    "navigation-bar": "/components/navigation-bar/navigation-bar"
+    "navigation-bar": "/components/navigation-bar/navigation-bar",
+    "mock-text-color-editor": "/components/mock/text-color-editor/text-color-editor",
+    "mock-structured-text-editor": "/components/mock/structured-text-editor/structured-text-editor",
+    "mock-text-grid-editor": "/components/mock/text-grid-editor/text-grid-editor",
+    "mock-text-background-editor": "/components/mock/text-background-editor/text-background-editor",
+    "mock-contact-info-editor": "/components/mock/contact-info-editor/contact-info-editor",
+    "mock-hyperlink-editor": "/components/mock/hyperlink-editor/hyperlink-editor",
+    "mock-background-audio-control": "/components/mock/background-audio-control/background-audio-control"
   }
 }

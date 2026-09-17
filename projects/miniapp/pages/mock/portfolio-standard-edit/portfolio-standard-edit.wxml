@@ -42,6 +42,18 @@
 
         <view class="form-row">
           <view class="field-heading">
+            <view class="field-label">组件间距</view>
+            <view class="field-limit">{{draft.config.style.componentSpacingRpx}} rpx</view>
+          </view>
+          <slider class="component-spacing-slider" min="{{componentSpacingMinRpx}}" max="{{componentSpacingMaxRpx}}" step="1" value="{{draft.config.style.componentSpacingRpx}}" activeColor="#212529" block-size="22" bindchanging="handleSpacingChange" bindchange="handleSpacingChange" aria-label="组件间距" />
+          <view class="component-spacing-range">
+            <text>{{componentSpacingMinRpx}} rpx</text>
+            <text>{{componentSpacingMaxRpx}} rpx</text>
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
             <view class="field-label">背景色</view>
             <view class="field-limit">{{draft.config.style.backgroundColor}}</view>
           </view>
@@ -59,6 +71,32 @@
             ></view>
             <button class="background-custom-button" bindtap="handleOpenBackgroundColorSheet">自定义</button>
           </view>
+        </view>
+
+        <view class="form-row">
+          <view class="field-heading">
+            <view class="field-label">背景音频</view>
+            <switch checked="{{draft.config.backgroundAudio.enabled}}" data-field="enabled" bindchange="handleAudioSetting" aria-label="开启背景音频" color="#212529" />
+          </view>
+          <block wx:if="{{draft.config.backgroundAudio.enabled}}">
+            <view class="section-desc pe-page-card-description">全局配置；关闭后保留选择，移除后取消引用</view>
+            <view wx:if="{{draft.config.backgroundAudio.workId}}" class="section-desc pe-page-card-description">{{audioSelectedWork.title || '已选择音频'}}</view>
+            <button wx:if="{{draft.config.backgroundAudio.workId}}" class="background-audio-action pe-page-action-secondary" disabled="{{!audioSelectedWork.mediaUrl}}" bindtap="handleAudioAudition">{{audioPlaying ? '暂停试听' : '试听音频'}}</button>
+            <view class="background-audio-styles">
+              <view wx:for="{{backgroundAudioStyles}}" wx:key="value" class="background-audio-style {{draft.config.backgroundAudio.displayStyle === item.value ? 'audio-style-selected' : ''}}" data-field="displayStyle" data-value="{{item.value}}" bindtap="handleAudioSetting" aria-role="radio" aria-checked="{{draft.config.backgroundAudio.displayStyle === item.value}}" aria-label="{{item.label}}">
+                <view class="background-audio-sample"><mock-background-audio-control floating="{{false}}" display-style="{{item.value}}" cover-url="{{audioSelectedWork.coverUrl}}" title="{{audioSelectedWork.title}}" playing="{{audioPlaying}}" sample="{{true}}" /></view>
+                <view class="background-audio-style-label">{{item.label}}{{draft.config.backgroundAudio.displayStyle === item.value ? ' · 已选' : ''}}</view>
+              </view>
+            </view>
+            <button class="background-audio-action pe-page-action-secondary" bindtap="handleChooseBackgroundAudio">从音频作品中选择</button>
+            <button wx:if="{{draft.config.backgroundAudio.workId}}" class="background-audio-action pe-page-action-secondary" data-field="remove" bindtap="handleAudioSetting">移除音频</button>
+            <view wx:if="{{backgroundAudioPickerVisible}}" class="background-audio-options">
+              <button wx:for="{{audioWorks}}" wx:key="id" class="background-audio-option" data-field="workId" data-value="{{item.id}}" bindtap="handleAudioSetting">
+                <text>{{item.title || '未命名音频'}}</text>
+              </button>
+              <button class="background-audio-action pe-page-action-secondary" bindtap="handleCloseBackgroundAudioPicker">收起选择</button>
+            </view>
+          </block>
         </view>
 
         <view class="form-row">
@@ -226,17 +264,18 @@
           <view
             wx:for="{{componentOptions}}"
             wx:key="componentType"
-            class="component-option pe-sheet-choice"
+            class="component-option pe-sheet-choice {{item.disabled ? 'component-option-disabled' : ''}}"
             data-type="{{item.componentType}}"
             catchtap="handleSelectComponent"
             aria-role="button"
+            aria-disabled="{{item.disabled}}"
             aria-label="添加{{item.name}}组件"
           >
             <view class="component-option-copy">
               <view class="component-option-name">{{item.name}}</view>
               <view class="component-option-desc">{{item.description}}</view>
             </view>
-            <view class="component-option-plus">+</view>
+            <view class="component-option-plus">{{item.disabled ? '已添加' : '+'}}</view>
           </view>
         </view>
       </scroll-view>
@@ -252,12 +291,60 @@
       <view class="component-picker-grabber pe-sheet-grabber"></view>
       <view class="component-picker-heading pe-sheet-heading">
         <view class="component-picker-title pe-sheet-title">{{selectedComponentName || '编辑组件'}}</view>
-        <view wx:if="{{selectedComponentType !== 'TEXT_SECTION'}}" class="component-picker-count pe-sheet-meta">可编辑</view>
+        <view wx:if="{{selectedComponentType === 'CAROUSEL' || selectedComponentType === 'VIDEO_CAROUSEL'}}" class="component-picker-count pe-sheet-meta">{{selectedWorkIds.length}} / {{selectedComponentType === 'CAROUSEL' ? 9 : 8}} 已选</view>
       </view>
 
       <scroll-view class="mock-component-edit-scroll profile-form-scroll pe-sheet-scroll" scroll-y type="list">
         <view class="profile-form-list-content mock-component-edit-content">
-          <view wx:if="{{selectedComponentType === 'CAROUSEL' || selectedComponentType === 'WORK_GRID' || selectedComponentType === 'WORK_LIST' || selectedComponentType === 'SINGLE_WORK'}}" class="work-filter-tools">
+      <view wx:if="{{selectedComponentType === 'VIDEO_CAROUSEL'}}" class="video-carousel-editor-settings">
+        <view class="display-style-options">
+          <view class="display-style-choice {{complexConfig.displayStyle !== 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-field="displayStyle" data-value="STACKED" bindtap="handleConfigChoice" aria-role="radio" aria-checked="{{complexConfig.displayStyle !== 'PORTRAIT_CARDS'}}"><view class="style-thumbnail stacked"><view></view><view></view><view></view></view><text>堆叠轮播</text></view>
+          <view class="display-style-choice {{complexConfig.displayStyle === 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-field="displayStyle" data-value="PORTRAIT_CARDS" bindtap="handleConfigChoice" aria-role="radio" aria-checked="{{complexConfig.displayStyle === 'PORTRAIT_CARDS'}}"><view class="style-thumbnail portrait"><view></view><view></view></view><text>竖向横滑</text></view>
+        </view>
+        <view class="video-carousel-title-setting">
+          <view class="video-carousel-setting-label">组件标题</view>
+          <view wx:if="{{complexConfig.showComponentTitle}}" class="video-carousel-title-field">
+            <input class="video-carousel-title-input pe-sheet-field" value="{{complexConfig.title}}" maxlength="-1" placeholder="视频作品" bindinput="handleConfigInput" data-field="title" aria-label="组件标题内容" />
+            <view class="video-carousel-title-count">{{videoTitleCount}}/10</view>
+          </view>
+          <view wx:else class="video-carousel-title-hidden">不展示</view>
+          <view class="video-carousel-toggle"><switch checked="{{complexConfig.showComponentTitle}}" color="#212529" bindchange="handleConfigInput" data-field="showComponentTitle" aria-label="展示组件标题" /></view>
+        </view>
+        <view class="video-carousel-switch-setting">
+          <view class="video-carousel-switch-copy"><view class="video-carousel-switch-title">作品标题</view>
+            <view class="video-carousel-setting-help" data-option="showTitle" catchtap="handleVideoCarouselSettingHelp" aria-role="button" aria-label="查看作品标题说明"><text>?</text></view>
+          </view>
+          <view class="video-carousel-toggle"><switch checked="{{complexConfig.showTitle}}" color="#212529" bindchange="handleConfigInput" data-field="showTitle" aria-label="展示作品标题" /></view>
+        </view>
+        <view class="video-carousel-switch-setting">
+          <view class="video-carousel-switch-copy"><view class="video-carousel-switch-title">作品描述</view>
+            <view class="video-carousel-setting-help" data-option="showDescription" catchtap="handleVideoCarouselSettingHelp" aria-role="button" aria-label="查看作品描述说明"><text>?</text></view>
+          </view>
+          <view class="video-carousel-toggle"><switch checked="{{complexConfig.showDescription}}" color="#212529" bindchange="handleConfigInput" data-field="showDescription" aria-label="展示作品描述" /></view>
+        </view>
+        <view class="video-carousel-switch-setting">
+          <view class="video-carousel-switch-copy"><view class="video-carousel-switch-title">滑动提示</view>
+            <view class="video-carousel-setting-help" data-option="showSwipeHint" catchtap="handleVideoCarouselSettingHelp" aria-role="button" aria-label="查看滑动提示说明"><text>?</text></view>
+          </view>
+          <view class="video-carousel-toggle"><switch checked="{{complexConfig.showSwipeHint}}" color="#212529" bindchange="handleConfigInput" data-field="showSwipeHint" aria-label="展示滑动提示" /></view>
+        </view>
+      </view>
+          <view wx:if="{{selectedComponentType === 'SINGLE_WORK'}}" class="single-work-picker-current {{selectedWork ? '' : 'empty'}}">
+            <view class="single-work-picker-current-label">当前已选</view>
+            <view wx:if="{{selectedWork}}" class="single-work-picker-current-content"><view class="single-work-picker-current-thumb"><image wx:if="{{selectedWork.coverUrl}}" src="{{selectedWork.coverUrl}}" mode="aspectFill"/><view wx:else class="single-work-picker-current-placeholder">作品图</view></view><view class="single-work-picker-current-copy"><view class="single-work-picker-current-title">{{selectedWork.title}}</view><view class="single-work-picker-current-meta">{{selectedWork.mediaTypeLabel}}</view></view></view>
+            <view wx:else class="single-work-picker-current-empty-text">请从下方选择一个作品</view>
+          </view>
+          <view wx:if="{{selectedComponentType === 'WORK_GRID' || selectedComponentType === 'WORK_LIST'}}">
+            <view class="field-label">作品集展示标签</view>
+            <scroll-view class="display-group-scroll" scroll-x><view class="display-group-list-content">
+              <view wx:for="{{displayGroupOptions}}" wx:key="groupKey" class="display-group-pill pe-sheet-choice {{item.active ? 'pe-sheet-choice-selected-filled' : ''}}" data-key="{{item.groupKey}}" catchtap="handleDisplayGroupSelect" aria-role="button" aria-current="{{item.active}}">
+                <view class="display-group-main"><view class="display-group-dot" style="background:{{item.color}};"/><view class="display-group-name">{{item.name}}</view></view>
+                <view class="display-group-order" data-key="{{item.groupKey}}" catchtap="handleDisplayGroupToggle" aria-role="checkbox" aria-checked="{{item.selected}}">{{item.selectionOrder || ''}}</view>
+              </view>
+            </view></scroll-view>
+            <view class="field-label">当前作品标签作品</view>
+          </view>
+          <view wx:if="{{selectedComponentType === 'VIDEO_CAROUSEL' || selectedComponentType === 'CAROUSEL' || selectedComponentType === 'SINGLE_WORK'}}" class="work-filter-tools">
             <input
               class="work-filter-input"
               value="{{workFilterKeyword}}"
@@ -285,163 +372,146 @@
             <view class="component-work-list-content mock-work-list">
               <view wx:for="{{workOptions}}" wx:key="id" class="component-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}" data-id="{{item.id}}" bindtap="handleWorkToggle" aria-role="checkbox" aria-checked="{{item.selected}}">
                 <view class="component-work-thumb">
-                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <view wx:else class="component-work-no-cover">暂无视频封面</view>
+                  <view wx:if="{{item.showPlayIndicator}}" class="component-work-video-indicator" aria-label="视频作品">▶</view>
                 </view>
                 <view class="component-work-copy">
                   <view class="component-work-title">{{item.title}}</view>
-                  <view class="component-work-meta">图片 / 风景作品</view>
+                  <view class="component-work-meta">{{item.mediaTypeLabel}}<text wx:if="{{item.tagText}}"> / {{item.tagText}}</text></view>
                 </view>
-                <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+                <view class="component-work-check">{{item.selectionOrder || ''}}</view>
               </view>
             </view>
           </block>
 
           <block wx:elif="{{selectedComponentType === 'WORK_GRID'}}">
-            <view class="section-desc mock-editor-desc">双列作品列表支持图片和视频作品。</view>
+            <view class="section-desc mock-editor-desc">按选择顺序展示当前标签中的作品。</view>
             <view class="component-work-list-content mock-work-list">
               <view wx:for="{{workOptions}}" wx:key="id" class="component-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}" data-id="{{item.id}}" bindtap="handleWorkToggle" aria-role="checkbox" aria-checked="{{item.selected}}">
                 <view class="component-work-thumb">
-                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <view wx:else class="component-work-no-cover">暂无视频封面</view>
+                  <view wx:if="{{item.showPlayIndicator}}" class="component-work-video-indicator" aria-label="视频作品">▶</view>
                 </view>
                 <view class="component-work-copy">
                   <view class="component-work-title">{{item.title}}</view>
-                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 风景作品</view>
+                  <view class="component-work-meta">{{item.mediaTypeLabel}}<text wx:if="{{item.tagText}}"> / {{item.tagText}}</text></view>
                 </view>
-                <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+                <view class="component-work-check">{{item.selectionOrder || ''}}</view>
               </view>
             </view>
           </block>
 
           <block wx:elif="{{selectedComponentType === 'WORK_LIST'}}">
-            <view class="section-desc mock-editor-desc">单列作品列表支持图片和视频作品。</view>
+            <view class="section-desc mock-editor-desc">按选择顺序展示当前标签中的作品。</view>
             <view class="component-work-list-content mock-work-list">
               <view wx:for="{{workOptions}}" wx:key="id" class="component-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}" data-id="{{item.id}}" bindtap="handleWorkToggle" aria-role="checkbox" aria-checked="{{item.selected}}">
                 <view class="component-work-thumb">
-                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <view wx:else class="component-work-no-cover">暂无视频封面</view>
+                  <view wx:if="{{item.showPlayIndicator}}" class="component-work-video-indicator" aria-label="视频作品">▶</view>
                 </view>
                 <view class="component-work-copy">
                   <view class="component-work-title">{{item.title}}</view>
-                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 风景作品</view>
+                  <view class="component-work-meta">{{item.mediaTypeLabel}}<text wx:if="{{item.tagText}}"> / {{item.tagText}}</text></view>
                 </view>
-                <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+                <view class="component-work-check">{{item.selectionOrder || ''}}</view>
               </view>
             </view>
           </block>
 
           <block wx:elif="{{selectedComponentType === 'SINGLE_WORK'}}">
-            <view class="section-desc mock-editor-desc">单个作品支持一张图片或一个视频，点击当前作品不会取消选择。</view>
-            <view class="component-work-list-content mock-work-list">
-              <view
-                wx:for="{{workOptions}}"
-                wx:key="id"
-                class="component-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}"
-                data-id="{{item.id}}"
-                bindtap="handleWorkToggle"
-                aria-role="radio"
-                aria-checked="{{item.selected}}"
-              >
-                <view class="component-work-thumb">
-                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
-                </view>
-                <view class="component-work-copy">
-                  <view class="component-work-title">{{item.title}}</view>
-                  <view class="component-work-meta">{{item.mediaType === 'VIDEO' ? '视频' : '图片'}} / 风景作品</view>
-                </view>
-                <view class="component-work-check">{{item.selected ? '✓' : ''}}</view>
+            <scroll-view class="single-work-picker-candidate-scroll" scroll-x type="list"><view class="single-work-picker-candidate-row">
+              <view wx:for="{{workOptions}}" wx:key="id" class="single-work-picker-candidate {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="handleWorkToggle" aria-role="radio" aria-checked="{{item.selected}}">
+                <view class="single-work-picker-candidate-thumb"><image wx:if="{{item.hasCover}}" src="{{item.coverUrl}}" mode="aspectFill"/><view wx:else class="single-work-picker-candidate-placeholder">暂无视频封面</view><view wx:if="{{item.showPlayIndicator}}" class="component-work-video-indicator">▶</view><view class="single-work-picker-radio {{item.selected ? 'selected' : ''}}"><view wx:if="{{item.selected}}" class="single-work-picker-radio-dot"/></view></view>
+                <view class="single-work-picker-candidate-title">{{item.title}}</view><view class="single-work-picker-candidate-meta">{{item.mediaTypeLabel}}<text wx:if="{{item.tagText}}"> / {{item.tagText}}</text></view>
               </view>
-            </view>
-            <view class="mock-single-work-title-row">
-              <view class="mock-single-work-title-copy">
-                <view class="field-label">展示作品名</view>
-                <view class="section-desc">关闭后预览不显示标题及占位。</view>
-              </view>
-              <switch checked="{{singleWorkShowTitle}}" bindchange="handleSingleWorkShowTitleChange" color="#212529"></switch>
+            </view></scroll-view>
+            <view class="single-work-picker-switches">
+            <view class="single-work-picker-switch-row"><view class="single-work-picker-switch-copy"><view class="single-work-picker-switch-label">展示作品名</view><view class="single-work-picker-switch-note">关闭后隐藏作品标题</view></view><switch checked="{{singleWorkShowTitle}}" bindchange="handleSingleWorkShowTitleChange" color="#212529"/></view>
+            <view class="single-work-picker-switch-row"><view class="single-work-picker-switch-copy"><view class="single-work-picker-switch-label">展示作品说明</view><view class="single-work-picker-switch-note">关闭后隐藏作品说明</view></view><switch checked="{{singleWorkShowDescription}}" bindchange="handleSingleDescription" color="#212529"/></view>
             </view>
           </block>
 
           <block wx:elif="{{selectedComponentType === 'PROFILE'}}">
-            <view class="profile-avatar-editor mock-profile-editor">
-              <view class="profile-avatar-preview" catchtap="handleLockedAction" aria-role="button" aria-label="上传头像">
-                <image src="{{profileForm.avatarUrl}}" mode="aspectFill"></image>
+            <view class="profile-form-section">
+              <view class="profile-form-section-title">资料布局</view>
+              <view class="profile-layout-options">
+                <view class="profile-layout-option pe-sheet-choice {{componentConfig.layout !== 'HORIZONTAL' ? 'pe-sheet-choice-selected' : ''}}" data-field="layout" data-value="VERTICAL" catchtap="handleConfigChoice">纵向居中</view>
+                <view class="profile-layout-option pe-sheet-choice {{componentConfig.layout === 'HORIZONTAL' ? 'pe-sheet-choice-selected' : ''}}" data-field="layout" data-value="HORIZONTAL" catchtap="handleConfigChoice">横向排列</view>
               </view>
-              <view class="profile-avatar-copy">
-                <view class="field-label">{{profileForm.displayName}}</view>
-                <view class="profile-avatar-state">{{profileForm.profession}} · {{profileForm.city}}</view>
-              </view>
-              <button class="profile-avatar-button" catchtap="handleLockedAction">上传头像</button>
             </view>
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">昵称</view>
+
+            <view class="profile-sheet-fields-panel">
+              <view class="profile-visibility-option pe-sheet-choice">
+                <view class="profile-visibility-label">卡片边框</view>
+                <switch checked="{{componentConfig.profileBorder}}" color="#212529" data-field="profileBorder" bindchange="handleConfigInput" />
               </view>
-              <input class="profile-sheet-input pe-sheet-field" value="{{profileForm.displayName}}" data-field="displayName" bindinput="handleProfileInput" />
+              <view wx:if="{{componentConfig.profileBorder}}" class="profile-border-settings is-expanded">
+                <view class="field-heading"><view class="field-label">线框粗细</view><view class="profile-field-limit">{{componentConfig.profileBorderWidthRpx || 1}}</view></view>
+                <slider min="1" max="12" step="1" value="{{componentConfig.profileBorderWidthRpx || 1}}" data-field="profileBorderWidthRpx" data-numeric="{{true}}" bindchange="handleConfigInput" activeColor="#212529" />
+                <view class="field-heading"><view class="field-label">左右留白</view><view class="profile-field-limit">{{componentConfig.profileHorizontalMarginRpx}}</view></view>
+                <slider min="0" max="96" step="1" value="{{componentConfig.profileHorizontalMarginRpx}}" data-field="profileHorizontalMarginRpx" data-numeric="{{true}}" bindchange="handleConfigInput" activeColor="#212529" />
+                <view class="field-heading"><view class="field-label">上下留白</view><view class="profile-field-limit">{{componentConfig.profileVerticalMarginRpx || 0}}</view></view>
+                <slider min="0" max="96" step="1" value="{{componentConfig.profileVerticalMarginRpx || 0}}" data-field="profileVerticalMarginRpx" data-numeric="{{true}}" bindchange="handleConfigInput" activeColor="#212529" />
+                <view class="field-heading"><view class="field-label">边框颜色</view><view class="profile-border-auto pe-sheet-choice {{componentConfig.profileBorderColor === 'AUTO' || !componentConfig.profileBorderColor ? 'pe-sheet-choice-selected' : ''}}" data-field="profileBorderColor" data-value="AUTO" catchtap="handleConfigChoice" aria-role="button" aria-label="边框颜色跟随主题">跟随主题</view></view>
+                <mock-text-color-editor label="边框颜色" inline="{{true}}" color="{{componentConfig.profileBorderColor}}" active="{{componentEditSheetVisible && componentConfig.profileBorder}}" data-field="profileBorderColor" bindchange="handleColorChange" />
+              </view>
+
+              <view class="form-row profile-avatar-editor mock-profile-editor">
+                <view class="profile-avatar-preview"><image src="{{profileForm.avatarUrl}}" mode="aspectFill" /></view>
+                <view class="profile-avatar-copy"><view class="field-label">头像</view><view class="profile-avatar-state">已选择演示头像</view></view>
+                <button class="profile-avatar-button" catchtap="handleLockedAction">更换头像</button>
+              </view>
+              <view class="form-row"><view class="field-heading"><view class="field-label">姓名 / 艺名</view><view class="profile-field-limit">{{profileForm.displayName.length}} / 50</view></view><input class="pe-sheet-field" value="{{profileForm.displayName}}" maxlength="50" data-field="displayName" bindinput="handleProfileInput" /></view>
+              <view class="form-row"><view class="field-heading"><view class="field-label">职业身份</view><view class="profile-field-limit">{{profileForm.profession.length}} / 50</view></view><input class="pe-sheet-field" value="{{profileForm.profession}}" maxlength="50" data-field="profession" bindinput="handleProfileInput" /></view>
+              <view class="form-row"><view class="field-heading"><view class="field-label">服务城市</view><view class="profile-field-limit">{{profileForm.city.length}} / 50</view></view><input class="pe-sheet-field" value="{{profileForm.city}}" maxlength="50" data-field="city" bindinput="handleProfileInput" /></view>
+              <view class="form-row"><view class="field-heading"><view class="field-label">个人简介</view><view class="profile-field-limit">{{profileForm.bio.length}} / 500</view></view><textarea class="pe-sheet-field pe-sheet-field-textarea" value="{{profileForm.bio}}" maxlength="500" data-field="bio" bindinput="handleProfileInput" /></view>
+              <view class="form-row profile-tag-form-row"><view class="field-heading"><view class="field-label">个人标签</view><view class="profile-field-limit">{{profileForm.tags.length}} / 10</view></view>
+                <view class="profile-tag-pill-row"><view wx:for="{{profileForm.tags}}" wx:key="name" class="profile-tag-pill" style="color:{{item.color}};border-color:{{item.color}};"><view class="profile-tag-dot" style="background:{{item.color}};"/><text>{{item.name}}</text><view class="profile-tag-remove" data-index="{{index}}" catchtap="handleRemoveProfileTag" aria-role="button" aria-label="删除标签{{item.name}}"><text class="profile-tag-remove-mark">×</text></view></view><button class="profile-tag-add-trigger" catchtap="handleOpenProfileTagDialog">+ 添加标签</button></view>
+                <view class="profile-tag-note">标签副本独立于基础资料，单个不超过 10 个字，最多保留 10 个。</view>
+              </view>
+              <view class="form-row"><view class="field-label">微信二维码</view><view class="qr-contact-image-preview profile"><image wx:if="{{profileForm.wechatQrUrl}}" src="{{profileForm.wechatQrUrl}}" mode="aspectFit" /><view wx:else class="qr-contact-image-placeholder">二维码</view></view><button class="profile-avatar-button" catchtap="handleLockedAction">选择图片</button></view>
             </view>
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">职业</view>
-              </view>
-              <input class="profile-sheet-input pe-sheet-field" value="{{profileForm.profession}}" data-field="profession" bindinput="handleProfileInput" />
-            </view>
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">城市</view>
-              </view>
-              <input class="profile-sheet-input pe-sheet-field" value="{{profileForm.city}}" data-field="city" bindinput="handleProfileInput" />
-            </view>
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">简介</view>
-              </view>
-              <textarea class="profile-sheet-textarea pe-sheet-field pe-sheet-field-textarea" value="{{profileForm.bio}}" data-field="bio" bindinput="handleProfileInput"></textarea>
+
+            <view class="profile-form-section">
+              <view class="profile-form-section-title">展示字段</view>
+              <view wx:for="{{profileFields}}" wx:key="key" class="profile-visibility-option pe-sheet-choice"><view class="profile-visibility-label">{{item.label}}</view><switch checked="{{item.visible}}" color="#212529" data-field="{{item.key}}" bindchange="handleProfileVisibility" /></view>
             </view>
           </block>
 
           <block wx:elif="{{selectedComponentType === 'SCHEDULE_QUERY'}}">
             <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">标题</view>
+              <view class="field-heading"><view class="field-label">展示方式</view></view>
+              <view class="schedule-query-mode-list">
+                <view wx:for="{{scheduleQueryDisplayModeOptions}}" wx:key="value" class="schedule-query-mode-option pe-sheet-choice {{componentConfig.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}" data-field="displayMode" data-value="{{item.value}}" catchtap="handleConfigChoice" aria-role="radio" aria-checked="{{componentConfig.displayMode === item.value}}"><view class="schedule-query-mode-radio"></view><view class="schedule-query-mode-label">{{item.label}}</view></view>
               </view>
-              <input class="pe-sheet-field" value="{{scheduleQueryForm.title}}" data-field="title" bindinput="handleScheduleInput" />
-            </view>
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">说明</view>
-              </view>
-              <textarea class="pe-sheet-field pe-sheet-field-textarea" value="{{scheduleQueryForm.description}}" data-field="description" bindinput="handleScheduleInput"></textarea>
             </view>
           </block>
 
           <block wx:elif="{{selectedComponentType === 'CONTACT_FORM'}}">
             <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">标题</view>
+              <view class="field-heading"><view class="field-label">展示方式</view></view>
+              <view class="schedule-query-mode-list">
+                <view wx:for="{{contactFormDisplayModeOptions}}" wx:key="value" class="schedule-query-mode-option pe-sheet-choice {{componentConfig.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}" data-field="displayMode" data-value="{{item.value}}" catchtap="handleConfigChoice" aria-role="radio" aria-checked="{{componentConfig.displayMode === item.value}}"><view class="schedule-query-mode-radio"></view><view class="schedule-query-mode-label">{{item.label}}</view></view>
               </view>
-              <input class="pe-sheet-field" value="{{contactFormConfig.title}}" data-field="title" bindinput="handleContactInput" />
-            </view>
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">说明</view>
-              </view>
-              <textarea class="pe-sheet-field pe-sheet-field-textarea" value="{{contactFormConfig.description}}" data-field="description" bindinput="handleContactInput"></textarea>
             </view>
           </block>
 
           <block wx:elif="{{selectedComponentType === 'QR_CONTACT'}}">
-            <view class="section-desc mock-editor-desc">二维码联系组件已加入作品集。体验版不上传二维码图片，注册登录后可在正式页面配置。</view>
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">二维码来源</view>
-              </view>
+            <view class="form-row qr-source-row">
+              <view class="field-heading"><view class="field-label">二维码来源</view></view>
               <view class="qr-source-tabs" aria-role="tablist">
-                <button class="qr-source-tab pe-sheet-choice pe-sheet-choice-selected-filled" aria-role="tab" aria-selected="{{true}}" catchtap="handleLockedAction">个人资料</button>
-                <button class="qr-source-tab pe-sheet-choice" aria-role="tab" aria-selected="{{false}}" catchtap="handleLockedAction">自定义图片</button>
+                <button class="qr-source-tab pe-sheet-choice {{componentConfig.qrUrlSource !== 'CUSTOM' ? 'pe-sheet-choice-selected-filled' : ''}}" data-field="qrUrlSource" data-value="PROFILE" catchtap="handleConfigChoice" aria-role="tab" aria-selected="{{componentConfig.qrUrlSource !== 'CUSTOM'}}">个人资料</button>
+                <button class="qr-source-tab pe-sheet-choice {{componentConfig.qrUrlSource === 'CUSTOM' ? 'pe-sheet-choice-selected-filled' : ''}}" data-field="qrUrlSource" data-value="CUSTOM" catchtap="handleConfigChoice" aria-role="tab" aria-selected="{{componentConfig.qrUrlSource === 'CUSTOM'}}">自定义图片</button>
               </view>
-            </view>
-            <view class="qr-contact-image-editor">
-              <view class="qr-contact-image-preview profile" catchtap="handleLockedAction" aria-role="button" aria-label="上传二维码">
-                <view class="qr-contact-image-placeholder">二维码</view>
+              <view class="qr-source-tab-panel" aria-role="tabpanel">
+                <view wx:if="{{componentConfig.qrUrlSource !== 'CUSTOM'}}" class="qr-contact-image-editor"><view class="qr-contact-image-preview profile"><image wx:if="{{profileQrUrl}}" src="{{profileQrUrl}}" mode="aspectFit" /><view wx:else class="qr-contact-image-placeholder">资料</view></view></view>
+                <view wx:else class="qr-contact-local-options">
+                  <view wx:for="{{qrWorks}}" wx:key="id" class="component-work-option pe-sheet-choice {{componentConfig.qrUrl === item.mediaUrl ? 'pe-sheet-choice-selected' : ''}}" data-id="{{item.id}}" bindtap="handleQrWork"><image class="mock-small-thumb" src="{{item.coverUrl}}" mode="aspectFill" /><text>{{item.title}}</text></view>
+                </view>
               </view>
-              <button class="profile-avatar-button" catchtap="handleLockedAction">上传二维码</button>
             </view>
           </block>
 
@@ -449,99 +519,153 @@
             <view class="form-row">
               <view class="field-heading">
                 <view class="field-label">说明</view>
+                <view class="field-limit">{{textSectionContentCount}} / 200</view>
               </view>
-              <textarea class="profile-sheet-textarea text-section-sheet-textarea pe-sheet-field pe-sheet-field-textarea {{textSectionTypography.fontClass}}" style="{{textSectionTypography.fontSizeStyle}}" value="{{textSectionForm.content}}" placeholder="请输入给访客看的说明文字" maxlength="200" bindinput="handleTextSectionInput"></textarea>
+              <textarea
+                class="profile-sheet-textarea text-section-sheet-textarea pe-sheet-field pe-sheet-field-textarea {{textSectionTypography.fontClass}}"
+                style="{{textSectionTypography.fontSizeStyle}}{{textSectionTypography.lineHeightStyle}}"
+                value="{{textSectionForm.content}}"
+                placeholder="请输入给访客看的说明文字"
+                maxlength="200"
+                bindinput="handleTextSectionInput"
+              ></textarea>
             </view>
+
             <view class="form-row">
               <view class="field-heading"><view class="field-label">字体</view></view>
               <view class="text-section-font-list">
-                <view
-                  wx:for="{{textSectionFontOptions}}"
-                  wx:key="value"
-                  class="text-section-font-option pe-sheet-choice {{textSectionForm.fontFamily === item.value ? 'pe-sheet-choice-selected' : ''}}"
-                  data-value="{{item.value}}"
-                  catchtap="handleTextSectionFontTap"
-                  aria-role="radio"
-                  aria-checked="{{textSectionForm.fontFamily === item.value}}"
-                >
+                <view wx:for="{{textSectionFontOptions}}" wx:key="value"
+                  class="text-section-font-option pe-sheet-choice {{textSectionForm.fontFamily === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
+                  data-value="{{item.value}}" catchtap="handleTextSectionFontTap"
+                  aria-role="radio" aria-checked="{{textSectionForm.fontFamily === item.value}}" aria-disabled="{{!item.available}}">
                   <view class="text-section-font-copy">
                     <view class="text-section-font-label">{{item.label}}</view>
                     <view class="text-section-font-sample {{item.fontClass}}">{{item.sample}}</view>
+                    <view wx:if="{{!item.available}}" class="text-section-font-hint">当前设备不可用</view>
+                    <view wx:if="{{textSectionForm.fontFamily === item.value && !item.available}}" class="text-section-font-hint current">当前设备以系统字体预览</view>
                   </view>
                   <view class="schedule-query-mode-radio"></view>
                 </view>
               </view>
             </view>
+
             <view class="form-row">
               <view class="field-heading"><view class="field-label">字号</view></view>
               <view class="text-section-size-list">
-                <view
-                  wx:for="{{textSectionSizeOptions}}"
-                  wx:key="value"
-                  class="text-section-size-option pe-sheet-choice {{textSectionForm.fontSizeRpx === item.value ? 'pe-sheet-choice-selected-filled' : ''}}"
-                  data-value="{{item.value}}"
-                  catchtap="handleTextSectionFontSizeTap"
-                  aria-role="radio"
-                  aria-checked="{{textSectionForm.fontSizeRpx === item.value}}"
-                >{{item.label}}</view>
+                <view wx:for="{{textSectionSizeOptions}}" wx:key="value"
+                  class="text-section-size-option pe-sheet-choice {{textSectionForm.fontSizeRpx === item.value ? 'pe-sheet-choice-selected-filled' : ''}} {{item.custom ? 'custom' : ''}}"
+                  data-value="{{item.value}}" catchtap="handleTextSectionFontSizeTap"
+                  aria-role="radio" aria-checked="{{textSectionForm.fontSizeRpx === item.value}}">{{item.label}}</view>
               </view>
             </view>
+
             <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">对齐方式</view>
+              <view class="field-heading"><view class="field-label">行间距（0.5–3.0 倍）</view></view>
+              <view class="text-section-line-height-stepper">
+                <button data-delta="-0.1" catchtap="handleTextSectionLineHeightStep" disabled="{{textSectionLineHeightEditor.decreaseDisabled}}">−</button>
+                <input type="digit" value="{{textSectionLineHeightEditor.value}}" placeholder="{{textSectionLineHeightEditor.placeholder}}" bindinput="handleTextSectionLineHeightInput" />
+                <text>倍</text>
+                <button data-delta="0.1" catchtap="handleTextSectionLineHeightStep" disabled="{{textSectionLineHeightEditor.increaseDisabled}}">＋</button>
               </view>
-              <view class="schedule-query-mode-list" data-text-align="{{textSectionForm.textAlign}}">
-                <view
-                  wx:for="{{textSectionAlignmentOptions}}"
-                  wx:key="value"
+              <view wx:if="{{textSectionLineHeightEditor.error}}" class="text-section-line-height-error">{{textSectionLineHeightEditor.error}}</view>
+            </view>
+
+            <view class="form-row">
+              <view class="field-heading"><view class="field-label">左右对齐方式</view></view>
+              <view class="schedule-query-mode-list">
+                <view wx:for="{{textSectionAlignmentOptions}}" wx:key="value"
                   class="schedule-query-mode-option pe-sheet-choice {{textSectionForm.alignment === item.value ? 'pe-sheet-choice-selected' : ''}}"
-                  data-value="{{item.value}}"
-                  catchtap="handleTextSectionAlignmentTap"
-                  aria-role="radio"
-                  aria-checked="{{textSectionForm.alignment === item.value}}"
-                >
-                  <view class="schedule-query-mode-radio"></view>
-                  <view class="schedule-query-mode-label">{{item.label}}</view>
+                  data-value="{{item.value}}" catchtap="handleTextSectionAlignmentTap"
+                  aria-role="radio" aria-checked="{{textSectionForm.alignment === item.value}}">
+                  <view class="schedule-query-mode-radio"></view><view class="schedule-query-mode-label">{{item.label}}</view>
                 </view>
               </view>
+            </view>
+
+            <view class="form-row">
+              <view class="field-heading"><view class="field-label">颜色</view></view>
+              <mock-text-color-editor label="文字颜色" color="{{componentConfig.color}}" active="{{componentEditSheetVisible}}" data-field="color" bindchange="handleColorChange" />
             </view>
           </block>
 
           <block wx:elif="{{selectedComponentType === 'DIVIDER'}}">
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">颜色</view>
-              </view>
-              <view class="divider-color-list">
-                <view
-                  wx:for="{{dividerColorOptions}}"
-                  wx:key="value"
-                  class="divider-color-option pe-sheet-choice {{dividerForm.color === item.value ? 'pe-sheet-choice-selected' : ''}}"
-                  data-value="{{item.value}}"
-                  catchtap="handleDividerColorTap"
-                  aria-role="radio"
-                  aria-checked="{{dividerForm.color === item.value}}"
-                >
-                  <view class="divider-color-swatch" style="background-color: {{item.colorValue}};"></view>
-                  <view class="divider-color-label">{{item.label}}</view>
-                </view>
-              </view>
-            </view>
-            <view class="form-row">
-              <view class="field-heading">
-                <view class="field-label">高度(px)</view>
-              </view>
-              <input class="divider-height-input pe-sheet-field" type="number" value="{{dividerForm.heightPx}}" placeholder="16" bindinput="handleDividerHeightInput" />
-            </view>
+            <view class="form-row"><view class="field-label">颜色</view><mock-text-color-editor label="分割线颜色" color="{{dividerColorValue}}" active="{{componentEditSheetVisible}}" data-field="color" bindchange="handleColorChange" /></view>
+            <view class="form-row"><view class="field-label">高度（px）</view><input class="divider-height-input pe-sheet-field" type="number" value="{{dividerForm.heightPx}}" placeholder="16" bindinput="handleDividerHeightInput" /></view>
           </block>
 
+          <block wx:elif="{{selectedComponentType === 'VIDEO_CAROUSEL'}}">
+            <view class="section-desc">选择 3–8 个视频，按选择顺序展示。</view>
+            <view wx:for="{{workOptions}}" wx:key="id" class="component-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}" data-id="{{item.id}}" bindtap="handleWorkToggle" aria-role="checkbox" aria-checked="{{item.selected}}">
+              <view class="component-work-thumb"><image wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill"/><view wx:else class="component-work-no-cover">暂无视频封面</view></view>
+              <view class="component-work-copy">{{item.title}}</view><view class="component-work-check carousel-order">{{item.selectionOrder || ''}}</view>
+            </view>
+          </block>
+          <mock-structured-text-editor font-availability="{{mockFontAvailability}}" wx:elif="{{selectedComponentType === 'STRUCTURED_TEXT_SECTION' && componentEditSheetVisible}}" config="{{complexConfig}}" error="{{complexError}}" bindconfigchange="handleComplexChange" bindoperation="handleStructuredOperation" bindtabchange="handleStructuredTextTabChange" />
+          <mock-text-grid-editor font-availability="{{mockFontAvailability}}" wx:elif="{{selectedComponentType === 'TEXT_GRID' && componentEditSheetVisible}}" config="{{complexConfig}}" error="{{complexError}}" undo-count="{{gridUndoCount}}" preview-view-model="{{gridPreviewViewModel}}" bindpreviewmeasure="handleGridPreviewMeasure" bindconfigchange="handleGridChange" bindoperation="handleGridOperation" />
+          <mock-contact-info-editor wx:elif="{{selectedComponentType === 'CONTACT_INFO' && componentEditSheetVisible}}" config="{{complexConfig}}" bindconfigchange="handleComplexChange" bindfillprofile="handleFillContact" />
+          <block wx:elif="{{selectedComponentType === 'HYPERLINK' && componentEditSheetVisible}}">
+            <mock-hyperlink-editor config="{{complexConfig}}" work="{{hyperlinkSelectedWork}}" bindconfigchange="handleComplexChange" bindselectwork="handleToggleHyperlinkPicker" />
+            <view wx:if="{{hyperlinkPickerVisible}}"><view class="field-label">选择展示图片 / 动图</view>
+            <view wx:for="{{hyperlinkWorks}}" wx:key="id" class="component-work-option" data-id="{{item.id}}" bindtap="handleHyperlinkWork"><image class="mock-small-thumb" src="{{item.coverUrl}}" mode="aspectFill"/><text>{{item.title}} {{complexConfig.workId === item.id ? '✓' : ''}}</text></view></view>
+          </block>
           <view wx:else class="component-work-state">请先选择组件</view>
+          <view wx:if="{{selectedComponentType === 'WORK_GRID' || selectedComponentType === 'WORK_LIST'}}">
+            <view class="mock-single-work-title-row"><view><view class="field-label">展示作品标题</view><view class="section-desc">关闭后隐藏作品标题</view></view><switch checked="{{componentConfig.showTitle !== false}}" data-field="showTitle" bindchange="handleConfigInput" color="#212529"/></view>
+            <view class="mock-single-work-title-row"><view><view class="field-label">展示作品说明</view><view class="section-desc">关闭后隐藏作品说明</view></view><switch checked="{{componentConfig.showDescription === true}}" data-field="showDescription" bindchange="handleConfigInput" color="#212529"/></view>
+          </view>
+          <mock-text-background-editor wx:if="{{componentEditSheetVisible && (selectedComponentType === 'TEXT_SECTION' || (selectedComponentType === 'STRUCTURED_TEXT_SECTION' && structuredTextTab === 'background'))}}" config="{{selectedComponentType === 'TEXT_SECTION' ? componentConfig : complexConfig}}" structured="{{selectedComponentType === 'STRUCTURED_TEXT_SECTION'}}" works="{{localMediaOptions}}" bindconfigchange="handleTextBackgroundChange" />
+          <view wx:if="{{complexError}}" class="mock-validation-error">{{complexError}}</view>
+
         </view>
       </scroll-view>
 
       <view class="component-work-actions pe-sheet-actions">
         <button class="component-work-cancel pe-sheet-action-cancel" catchtap="handleCloseComponentEditSheet">取消</button>
         <button class="component-work-confirm pe-sheet-action-confirm" catchtap="handleConfirmComponentEditSheet">完成</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="profile-tag-dialog pe-sheet-mask {{profileTagDialogVisible ? 'pe-sheet-mask-visible' : ''}}">
+    <view class="profile-tag-dialog-backdrop" catchtap="handleCloseProfileTagDialog"></view>
+    <view class="profile-tag-dialog-panel pe-sheet-panel pe-sheet-size-compact {{profileTagDialogVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+      <view class="pe-sheet-grabber"></view>
+      <view class="pe-sheet-heading">
+        <view class="pe-sheet-title">新增标签</view>
+        <view class="pe-sheet-meta">{{profileForm.tags.length}} / 10</view>
+      </view>
+      <view class="form-row">
+        <view class="field-label">标签文字</view>
+        <input
+          class="profile-sheet-input pe-sheet-field"
+          value="{{profileNewTag}}"
+          bindinput="handleProfileNewTagInput"
+          maxlength="10"
+          placeholder="10 个字以内"
+        />
+      </view>
+      <view class="form-row">
+        <view class="field-label">标签颜色</view>
+        <view class="profile-tag-color-grid">
+          <view
+            class="profile-tag-color-choice pe-sheet-choice {{profileSelectedTagColor === item.color ? 'pe-sheet-choice-selected' : ''}}"
+            wx:for="{{profileTagColorOptions}}"
+            wx:key="color"
+            data-color="{{item.color}}"
+            catchtap="handleSelectProfileTagColor"
+            aria-role="radio"
+            aria-checked="{{profileSelectedTagColor === item.color}}"
+            aria-label="选择{{item.name}}标签颜色"
+          >
+            <view class="profile-tag-color-swatch" style="{{item.swatchStyle}}"></view>
+            <text class="profile-tag-color-name">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+      <view wx:if="{{profileTagErrorText}}" class="profile-tag-error">{{profileTagErrorText}}</view>
+      <view class="component-work-actions profile-tag-dialog-actions pe-sheet-actions">
+        <button class="pe-sheet-action-cancel" catchtap="handleCloseProfileTagDialog">取消</button>
+        <button class="pe-sheet-action-confirm" catchtap="handleAddProfileTag">添加</button>
       </view>
     </view>
   </view>

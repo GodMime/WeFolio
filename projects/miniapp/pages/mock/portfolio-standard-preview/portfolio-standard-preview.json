@@ -6,6 +6,7 @@
     "portfolio-bottom-nav": "/components/portfolio-bottom-nav/portfolio-bottom-nav",
     "mock-portfolio-renderer": "/components/mock/portfolio-renderer/portfolio-renderer",
     "mock-portfolio-schedule-query": "/components/mock/portfolio-schedule-query/portfolio-schedule-query",
-    "mock-portfolio-contact-form": "/components/mock/portfolio-contact-form/portfolio-contact-form"
+    "mock-portfolio-contact-form": "/components/mock/portfolio-contact-form/portfolio-contact-form",
+    "mock-background-audio-control": "/components/mock/background-audio-control/background-audio-control"
   }
 }

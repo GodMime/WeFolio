@@ -28,6 +28,37 @@ function loadMockExperience() {
   return require(modulePath)
 }
 
+test('mock page settings match formal field order and audio visibility', () => {
+  const formal = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
+  const mock = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  const settings = source => source.split('class="panel page-setting-panel pe-page-card"')[1].split('class="panel component-panel')[0]
+  const fields = source => Array.from(settings(source).matchAll(/class="field-label">([^<]+)</g), match => match[1])
+  assert.deepEqual(fields(mock), fields(formal))
+  const audio = settings(mock).split('>背景音频<')[1].split('>底部导航<')[0]
+  assert.match(audio, /<block wx:if="\{\{draft\.config\.backgroundAudio\.enabled\}\}">/)
+  assert.match(audio, /<button wx:if="\{\{draft\.config\.backgroundAudio\.workId\}\}"[^>]+bindtap="handleAudioAudition"/)
+  assert.match(audio, /<button wx:if="\{\{draft\.config\.backgroundAudio\.workId\}\}"[^>]+data-field="remove"/)
+  assert.match(audio, /wx:if="\{\{backgroundAudioPickerVisible\}\}"/)
+  assert.match(audio, /wx:for="\{\{backgroundAudioStyles\}\}"/)
+  assert.match(audio, /<mock-background-audio-control[^>]+sample="\{\{true\}\}"/)
+})
+
+test('mock component forms keep field groups together and hide dependent controls', () => {
+  const markup = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  const video = markup.indexOf('class="video-carousel-editor-settings')
+  assert.ok(video >= 0 && video < markup.indexOf('class="work-filter-tools"'))
+  assert.match(markup, /wx:if="\{\{complexConfig\.showComponentTitle\}\}" class="video-carousel-title-field"/)
+  const profile = markup.split("<block wx:elif=\"{{selectedComponentType === 'PROFILE'}}\">")[1].split("<block wx:elif=\"{{selectedComponentType === 'SCHEDULE_QUERY'}}\">")[0]
+  assert.ok(profile.indexOf('>资料布局<') < profile.indexOf('>姓名 / 艺名<'))
+  assert.ok(profile.indexOf('>姓名 / 艺名<') < profile.indexOf('>展示字段<'))
+  assert.match(profile, /wx:if="\{\{componentConfig\.profileBorder\}\}"/)
+  const simple = markup.split("<block wx:elif=\"{{selectedComponentType === 'TEXT_SECTION'}}\">")[1].split("<block wx:elif=\"{{selectedComponentType === 'DIVIDER'}}\">")[0]
+  assert.ok(simple.indexOf('>字号<') < simple.indexOf('>行间距'))
+  assert.ok(simple.indexOf('>行间距') < simple.indexOf('>左右对齐方式<'))
+  assert.equal((markup.match(/>字号 10–96 rpx</g) || []).length, 0)
+  assert.doesNotMatch(markup, />二维码尺寸<|>展示标签</)
+})
+
 test('mock works keeps production media preview geometry and local filtering', () => {
   const wxml = read('pages/mock/works/works.wxml')
   const wxss = read('pages/mock/works/works.wxss')
@@ -56,7 +87,10 @@ test('mock works keeps production media preview geometry and local filtering', (
   assert.equal(Object.prototype.hasOwnProperty.call(mock.MOCK_WORK_LIBRARY, 'summary'), false)
   assert.equal(typeof mock.filterMockWorks, 'function')
   assert.equal(mock.filterMockWorks(mock.MOCK_WORK_LIBRARY.works, '视频', 0).length, 1)
-  assert.equal(mock.filterMockWorks(mock.MOCK_WORK_LIBRARY.works, '', 201).length, 7)
+  assert.equal(mock.filterMockWorks(mock.MOCK_WORK_LIBRARY.works, '', 201).length, 9)
+  assert.deepEqual(mock.filterMockWorks(mock.MOCK_WORK_LIBRARY.works, '蓝天', 201).map(work => work.id), [110])
+  assert.deepEqual(mock.filterMockWorks(mock.MOCK_WORK_LIBRARY.works, '海浪', 201).map(work => work.id), [111])
+  assert.equal(mock.filterMockWorks(mock.MOCK_WORK_LIBRARY.works, 'IF YOU', 201).length, 0)
   assert.equal(mock.filterMockWorks(mock.MOCK_WORK_LIBRARY.works, '', 999).length, 0)
 })
 
@@ -165,7 +199,7 @@ test('mock portfolio editor filters local works and exposes typography controls'
   assert.match(js, /handleWorkFilterInput/)
   assert.match(wxml, /fontFamily/)
   assert.match(wxml, /fontSize/)
-  assert.match(wxml, /textAlign/)
+  assert.match(wxml, /textSectionForm\.alignment/)
 })
 
 test('mock portfolio preview keeps production stable states and local modal entry points', () => {
