@@ -319,6 +319,70 @@ test('result page generates onLoad only, retains its image after preview/setting
   } finally { global.Page = previousPage; global.wx = previousWx }
 })
 
+test('page keeps action buttons unchanged while either avatar switch direction replaces the image', async () => {
+  const pageFile = path.join(__dirname, '../pages/portfolios/share-code/portfolio-share-code.js')
+  const previousPage = global.Page; const previousWx = global.wx
+  const { canvasRuntime } = require('./helpers/miniapp-code-canvas')
+  let definition; let exportImage; let holdExport = false; let saved = 0; let previews = 0
+  const patches = []
+  const runtime = canvasRuntime({ canvasToTempFilePath(o) { if (holdExport) exportImage = o; else o.success({ tempFilePath: '/tmp/plain.png' }) } })
+  global.wx = Object.assign(runtime.wxApi, {
+    getFileSystemManager() { return { access(o) { o.success({}) } } },
+    getStorageSync() { return 'maintainer-token' },
+    request(o) { o.success({ statusCode: 200, data: { success: true, data: resources() } }) },
+    downloadFile(o) { o.success({ statusCode: 200, tempFilePath: '/tmp/code.png' }) },
+    previewImage() { previews++ },
+    getSetting(o) { o.success({ authSetting: {} }) },
+    saveImageToPhotosAlbum(o) { saved++; o.success({}) },
+    showToast() {}
+  })
+  global.Page = value => { definition = value }
+  let page
+  try {
+    delete require.cache[require.resolve(pageFile)]; require(pageFile)
+    page = Object.assign({}, definition, {
+      data: structuredClone(definition.data),
+      setData(patch) { patches.push({ ...patch }); Object.assign(this.data, patch) }
+    })
+    assert.equal(page.data.actionsDisabled, true)
+    const loading = page.onLoad({ ownerType: 'USER', portfolioId: '42' })
+    page.onReady(); await loading
+    assert.equal(page.data.actionsDisabled, false)
+    for (const useAvatar of [true, false]) {
+      holdExport = true; exportImage = null; patches.length = 0
+      const switching = page.handleUseAvatarChange({ detail: { value: useAvatar } })
+      await tick()
+      assert.ok(exportImage, '切换必须在图片区域完成绘制再解除处理中状态')
+      assert.equal(page.data.status, 'rendering')
+      assert.equal(page.data.actionsDisabled, false)
+      await page.handlePreview(); await page.handleSave()
+      assert.equal(previews, 0); assert.equal(saved, 0)
+      exportImage.success({ tempFilePath: useAvatar ? '/tmp/avatar.png' : '/tmp/plain.png' })
+      await switching
+      assert.equal(page.data.status, 'ready')
+      assert.equal(page.data.actionsDisabled, false)
+      assert.equal(patches.some(p => Object.hasOwn(p, 'saving') || Object.hasOwn(p, 'actionsDisabled')), false,
+        '图片切换不应向视图重复发送按钮禁用、loading 或文案绑定数据')
+    }
+    await page.handlePreview(); await page.handleSave()
+    assert.equal(previews, 1); assert.equal(saved, 1)
+    assert.ok(patches.some(p => p.actionsDisabled === true && p.saving === true), '真正保存时仍禁用按钮')
+    const failedSwitch = page.handleUseAvatarChange({ detail: { value: true } })
+    await tick()
+    exportImage.fail({ errMsg: 'canvasToTempFilePath:fail' }); await failedSwitch
+    assert.equal(page.data.status, 'render-error')
+    assert.equal(page.data.actionsDisabled, true, '图片失败后明确禁用操作，不能让按钮看似可用却无响应')
+    await page.handlePreview(); await page.handleSave()
+    assert.equal(previews, 1); assert.equal(saved, 1)
+    holdExport = false
+    await page.handleUseAvatarChange({ detail: { value: false } })
+    assert.equal(page.data.status, 'ready'); assert.equal(page.data.actionsDisabled, false)
+  } finally {
+    if (page) page.onUnload()
+    global.Page = previousPage; global.wx = previousWx
+  }
+})
+
 test('permission denied by the first native save opens guidance, and a later click can save', async () => {
   let attempts = 0
   const h = harness({ wxApi: { saveImageToPhotosAlbum(o) { if (++attempts === 1) o.fail({ errMsg: 'saveImageToPhotosAlbum:fail auth deny' }); else o.success({}) } } })

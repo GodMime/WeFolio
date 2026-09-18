@@ -9,9 +9,9 @@ import lombok.Getter;
 public class PortfolioMiniappCodeResponse {
     /** 官方原码持久地址。 */
     private final String codeUrl;
-    /** 受控静态头像地址；空字符串时客户端按所属类型使用本地默认头像。 */
+    /** 所属个人或团队资料头像地址；空字符串时客户端按所属类型使用本地默认头像。 */
     private final String avatarUrl;
-    /** 发布资料、头像和布局的内容版本，用于设备端缓存。 */
+    /** 发布资料、头像地址和布局的内容版本，用于设备端缓存。 */
     private final String contentVersion;
     /** 所属类型，参见 PortfolioOwnerTypeDict。 */
     private final String ownerType;

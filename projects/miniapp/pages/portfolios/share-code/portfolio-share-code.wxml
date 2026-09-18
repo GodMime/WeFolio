@@ -21,9 +21,9 @@
         <view class="share-code-option-label">logo 使用头像</view>
         <switch checked="{{useAvatar}}" disabled="{{!canToggleAvatar}}" color="#212529" bindchange="handleUseAvatarChange" aria-label="logo 使用头像"></switch>
       </view>
-      <view class="share-code-actions {{displayFilePath && !saving && (status === 'checking' || status === 'downloading' || status === 'rendering' || status === 'generating') ? 'share-code-actions-stable' : ''}}">
-        <button class="primary-button" disabled="{{status !== 'ready' || saving}}" loading="{{saving}}" bindtap="handleSave">{{saving ? '正在保存…' : '保存到相册'}}</button>
-        <button class="secondary-button" disabled="{{status !== 'ready' || saving}}" bindtap="handlePreview">查看大图</button>
+      <view class="share-code-actions">
+        <button class="primary-button" disabled="{{actionsDisabled}}" loading="{{saving}}" bindtap="handleSave">{{saving ? '正在保存…' : '保存到相册'}}</button>
+        <button class="secondary-button" disabled="{{actionsDisabled}}" bindtap="handlePreview">查看大图</button>
         <view class="share-code-hint">保存后，可在微信中发送这张图片</view>
       </view>
     </view>

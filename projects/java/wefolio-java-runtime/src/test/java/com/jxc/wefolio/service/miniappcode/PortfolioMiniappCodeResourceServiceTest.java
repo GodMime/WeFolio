@@ -12,6 +12,8 @@ import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.service.CosService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
@@ -79,19 +81,47 @@ class PortfolioMiniappCodeResourceServiceTest {
         assertThat(objects).hasSize(1);
         verify(cos, never()).download(anyString());
         verify(cos, never()).uploadToObjectKey(any(), anyString());
-        verify(cos).headObjectVersion("WF1/others/avatar.png");
+        verify(cos, never()).headObjectVersion(contains("/others/"));
         verifyNoInteractions(client);
     }
 
-    /** 头像原址覆盖改变资源版本及下载 URL，但不重新生成官方原码。 */
-    @Test void avatarOverwriteInvalidatesContentWithoutRegeneratingRawCode() {
+    /** 头像上传新地址改变资源版本及下载 URL，但不重新生成官方原码。 */
+    @Test void avatarUrlChangeInvalidatesContentWithoutRegeneratingRawCode() {
         var first = service.generate(snapshot("r1"), 1L);
-        when(cos.headObjectVersion("WF1/others/avatar.png")).thenReturn(new CosService.VersionedObjectHead("image/png", 201, "etag-2", 0));
-        var next = service.generate(snapshot("r1"), 1L);
+        var original = snapshot("r1");
+        var changed = new PortfolioMiniappCodeSnapshot(original.ownerType(), original.ownerId(), original.portfolioId(),
+                original.publishedRevision(), original.shareCode(), original.uniqueCode(), original.displayName(),
+                original.subtitle(), original.shareTitle(), "https://cdn.test/WF1/others/new-avatar.png");
+        var next = service.generate(changed, 1L);
         assertThat(next.getContentVersion()).isNotEqualTo(first.getContentVersion());
         assertThat(next.getAvatarUrl()).isNotEqualTo(first.getAvatarUrl());
         assertThat(next.getCodeUrl()).isEqualTo(first.getCodeUrl());
         verify(client, times(1)).generate(anyString(), anyString());
+        verify(cos, never()).download(anyString());
+        assertThat(objects).hasSize(1);
+    }
+
+    /** 头像旧地址或存储故障不会阻断原码，不读取头像头也不下载头像。 */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "https://cdn.test/WF1/others/avatar.png",
+            "https://legacy.example/WF1/others/avatar.png",
+            "https://thirdwx.qlogo.cn/mmopen/example/132",
+            "https://cdn.test/WF1/others/avatar.png?v=old",
+            "https://cdn.test/new-team.png"
+    })
+    void avatarAvailabilityCannotBlockOfficialCode(String avatarUrl) {
+        doThrow(new IllegalStateException("头像存储暂不可用"))
+                .when(cos).headObjectVersion(contains("/others/"));
+        var s = snapshot("r");
+        var input = new PortfolioMiniappCodeSnapshot(s.ownerType(), s.ownerId(), s.portfolioId(), s.publishedRevision(),
+                s.shareCode(), s.uniqueCode(), s.displayName(), s.subtitle(), s.shareTitle(), avatarUrl);
+        assertThatCode(() -> {
+            var result = service.generate(input, 1L);
+            assertThat(result.getCodeUrl()).isNotBlank();
+            assertThat(result.getAvatarUrl()).startsWith(avatarUrl);
+        }).doesNotThrowAnyException();
+        verify(cos, never()).headObjectVersion(contains("/others/"));
         verify(cos, never()).download(anyString());
         assertThat(objects).hasSize(1);
     }

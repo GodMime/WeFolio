@@ -6,9 +6,6 @@ import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.message.PortfolioMiniappCodeImageMessage;
 import com.jxc.wefolio.service.CosService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
-import com.qcloud.cos.exception.CosServiceException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.ByteArrayInputStream;
@@ -19,12 +16,11 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
-import java.util.Set;
 
-/** 将可信头像 URL 映射为 COS 对象，始终禁止任意 HTTP 地址读取。 */
+/** 管理官方原码对象，并仅根据所属资料地址构造客户端头像元数据。 */
 @Service
-@Slf4j
 @RequiredArgsConstructor
 public class MiniappCodeObjectStore {
     /** 项目现有系统默认个人头像。 */
@@ -35,25 +31,7 @@ public class MiniappCodeObjectStore {
     private static final String TEAM_DEFAULT_VERSION = "team-default-v1";
     /** 固定首帧缩略 PNG 规则，编码后的大于号避免客户端 URL 解析差异。 */
     private static final String AVATAR_RULE = "?imageMogr2/frame/1/thumbnail/512x512%3E/strip/format/png&v=";
-    /** 已有头像上传支持的 MIME 类型。 */
-    private static final Set<String> AVATAR_TYPES = Set.of("image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp");
-    /** 地址未通过服务端归属校验。 */
-    private static final String STAGE_URL = "URL_INVALID";
-    /** 对象头读取发生远端异常。 */
-    private static final String STAGE_HEAD = "HEAD_FAILED";
-    /** 对象头明确返回不存在。 */
-    private static final String STAGE_MISSING = "HEAD_MISSING";
-    /** MIME 不属于已有头像支持类型。 */
-    private static final String STAGE_MIME = "MIME_INVALID";
-    /** 头像长度不满足限制。 */
-    private static final String STAGE_SIZE = "SIZE_INVALID";
-    /** 对象缺失用于内容缓存的版本信息。 */
-    private static final String STAGE_ETAG = "ETAG_MISSING";
-    /** 不记录原始 MIME 和参数，未知值仅记录固定分类。 */
-    private static final String MIME_UNKNOWN = "unknown";
-    /** 已读取但不支持的 MIME 日志分类。 */
-    private static final String MIME_UNSUPPORTED = "unsupported";
-    /** 版本摘要算法，不将原始 ETag 拼接进 URL。 */
+    /** 对头像地址及原码对象版本生成稳定摘要。 */
     private static final String HASH_ALGORITHM = "SHA-256";
     /** PNG MIME。 */
     private static final String PNG_CONTENT_TYPE = "image/png";
@@ -73,74 +51,56 @@ public class MiniappCodeObjectStore {
     private static final String AVATAR_FOLDER = "/others/";
     /** 对象存储操作。 */
     private final CosService cos;
-    /** 可接受的公开域名来自服务端 COS 配置。 */
+    /** 当前公开域名仅用于识别可附加固定图片处理参数的自有地址。 */
     private final CosProperties properties;
 
-    /** 仅读取对象头以识别原址覆盖；默认头像完全由设备端加载。 */
+    /** 头像只使用所属资料元数据，不探测远端可用性，也不因历史地址阻断原码。 */
     public AvatarResource avatarResource(PortfolioMiniappCodeSnapshot snapshot) {
-        String stage = STAGE_URL;
-        String safeMime = MIME_UNKNOWN;
-        long contentLength = -1;
+        String avatarUrl = snapshot.avatarUrl();
+        if (avatarUrl == null || avatarUrl.isBlank() || PERSONAL_DEFAULT_URL.equals(avatarUrl)) {
+            return new AvatarResource("", PortfolioOwnerTypeDict.TEAM.getCode().equals(snapshot.ownerType())
+                    ? TEAM_DEFAULT_VERSION : PERSONAL_DEFAULT_VERSION);
+        }
+        String version = avatarVersion(avatarUrl);
+        String url = supportsAvatarTransformation(avatarUrl, snapshot.uniqueCode())
+                ? avatarUrl + AVATAR_RULE + version : avatarUrl;
+        return new AvatarResource(url, version);
+    }
+
+    /** 头像地址版本参与名片缓存，正常上传以新对象地址触发更新，不探测同址覆盖。 */
+    private String avatarVersion(String avatarUrl) {
         try {
-            String avatarUrl = snapshot.avatarUrl();
-            if (avatarUrl == null || avatarUrl.isBlank() || PERSONAL_DEFAULT_URL.equals(avatarUrl)) {
-                return new AvatarResource("", PortfolioOwnerTypeDict.TEAM.getCode().equals(snapshot.ownerType())
-                        ? TEAM_DEFAULT_VERSION : PERSONAL_DEFAULT_VERSION);
-            }
-            String key = avatarKey(avatarUrl, snapshot.uniqueCode());
-            stage = STAGE_HEAD;
-            CosService.VersionedObjectHead head = cos.headObjectVersion(key);
-            if (head == null) {
-                stage = STAGE_MISSING;
-                throw new BusinessException(PortfolioMiniappCodeImageMessage.AVATAR_FAILED);
-            }
-            contentLength = head.contentLength();
-            stage = STAGE_MIME;
-            safeMime = MIME_UNSUPPORTED;
-            // 历史上传可能保留 MIME 参数或 JPEG 别名，与既有资料接口的支持范围一致。
-            MediaType mediaType = MediaType.parseMediaType(head.contentType() == null ? "" : head.contentType().strip());
-            String normalizedMime = mediaType.getType() + "/" + mediaType.getSubtype();
-            if (!AVATAR_TYPES.contains(normalizedMime)) {
-                throw new BusinessException(PortfolioMiniappCodeImageMessage.AVATAR_FAILED);
-            }
-            safeMime = normalizedMime;
-            stage = STAGE_SIZE;
-            if (contentLength <= 0 || contentLength > MiniappCodeImages.MAX_BYTES) {
-                throw new BusinessException(PortfolioMiniappCodeImageMessage.AVATAR_FAILED);
-            }
-            stage = STAGE_ETAG;
-            if (head.eTag() == null || head.eTag().isBlank()) {
-                throw new BusinessException(PortfolioMiniappCodeImageMessage.AVATAR_FAILED);
-            }
-            String version = HexFormat.of().formatHex(MessageDigest.getInstance(HASH_ALGORITHM)
-                    .digest(head.eTag().getBytes(StandardCharsets.UTF_8)));
-            return new AvatarResource(avatarUrl + AVATAR_RULE + version, version);
-        } catch (Exception exception) {
-            int status = exception instanceof CosServiceException cosException ? cosException.getStatusCode() : 0;
-            // 不记录地址、对象键、用户标识、ETag、异常消息及堆栈，避免泄露身份与凭证。
-            log.warn("小程序码头像资源失败 stage={} mime={} bytes={} status={} exception={}",
-                    stage, safeMime, contentLength, status, exception.getClass().getSimpleName());
-            throw new BusinessException(PortfolioMiniappCodeImageMessage.AVATAR_FAILED);
+            return HexFormat.of().formatHex(MessageDigest.getInstance(HASH_ALGORITHM)
+                    .digest(avatarUrl.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            // SHA-256 是 Java 必需算法，缺失表示运行环境异常，与用户头像无关。
+            throw new IllegalStateException(exception);
         }
     }
 
-    /** 头像元数据，版本参与整张名片缓存，不携带任何图片二进制。 */
+    /** 头像元数据仅包含地址和稳定版本，不携带图片二进制。 */
     public record AvatarResource(String url, String version) { }
 
-    /** 精确校验域名、端口和路径，拒绝编码分隔符、跳转参数与跨所属方对象。 */
-    private String avatarKey(String url, String uniqueCode) {
-        URI uri = URI.create(url);
-        URI base = URI.create(properties.getPublicBaseUrl());
-        if (!"https".equals(uri.getScheme()) || uri.getHost() == null || !uri.getHost().equalsIgnoreCase(base.getHost())
-                || uri.getPort() != base.getPort() || uri.getUserInfo() != null || uri.getQuery() != null
-                || uri.getFragment() != null || uri.getRawPath().contains("%") || uri.getPath().contains("..")
-                || !uri.normalize().equals(uri)) throw new BusinessException(PortfolioMiniappCodeImageMessage.AVATAR_FAILED);
-        String basePath = base.getPath() == null ? "" : base.getPath().replaceAll("/+$", "");
-        String prefix = basePath + "/" + uniqueCode + AVATAR_FOLDER;
-        if (!uri.getPath().startsWith(prefix)) throw new BusinessException(PortfolioMiniappCodeImageMessage.AVATAR_FAILED);
-        String tail = uri.getPath().substring(prefix.length());
-        if (!tail.matches("[a-zA-Z0-9._/-]+") || tail.isBlank() || tail.contains("//")) throw new BusinessException(PortfolioMiniappCodeImageMessage.AVATAR_FAILED);
-        return uri.getPath().substring(basePath.length() + 1);
+    /** 只给当前自有无参数地址附加转换；其余历史资料地址保持原样，不作为校验门槛。 */
+    private boolean supportsAvatarTransformation(String url, String uniqueCode) {
+        String publicBaseUrl = properties.getPublicBaseUrl();
+        if (publicBaseUrl == null || publicBaseUrl.isBlank() || uniqueCode == null || uniqueCode.isBlank()) return false;
+        try {
+            URI uri = URI.create(url);
+            URI base = URI.create(publicBaseUrl);
+            if (!"https".equals(uri.getScheme()) || uri.getHost() == null || !uri.getHost().equalsIgnoreCase(base.getHost())
+                    || uri.getPort() != base.getPort() || uri.getUserInfo() != null || uri.getQuery() != null
+                    || uri.getFragment() != null || uri.getRawPath().contains("%") || uri.getPath().contains("..")
+                    || !uri.normalize().equals(uri)) return false;
+            String basePath = base.getPath() == null ? "" : base.getPath().replaceAll("/+$", "");
+            String prefix = basePath + "/" + uniqueCode + AVATAR_FOLDER;
+            if (!uri.getPath().startsWith(prefix)) return false;
+            String tail = uri.getPath().substring(prefix.length());
+            return tail.matches("[a-zA-Z0-9._/-]+") && !tail.isBlank() && !tail.contains("//");
+        } catch (IllegalArgumentException exception) {
+            // 历史资料可能不符合当前 URI 规范，仍交由客户端按现有图片加载方式处理。
+            return false;
+        }
     }
 
     /** 仅 HEAD 检查原码；只将确认不存在或格式不匹配视为可重建。 */
