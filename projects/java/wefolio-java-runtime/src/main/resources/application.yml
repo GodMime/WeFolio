@@ -117,3 +117,9 @@ registration:
   point:
     new-user-gift-points: ${REGISTRATION_NEW_USER_GIFT_POINTS:1000}
     referral-gift-points: ${REGISTRATION_REFERRAL_GIFT_POINTS:500}
+
+# 官方原码环境；名片在手机端合成。
+portfolio:
+  miniapp-code:
+    env-version: ${PORTFOLIO_MINIAPP_CODE_ENV_VERSION:release}
+    check-path: ${PORTFOLIO_MINIAPP_CODE_CHECK_PATH:true}

@@ -7,11 +7,19 @@ const { visitActivityLifecycle } = require('../../../utils/visit-activity-lifecy
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'
 const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'
+const SOURCE_TYPE_QR_CODE = 'QR_CODE'
 const SOURCE_TYPE_PERSONAL_PORTFOLIO = 'PERSONAL_PORTFOLIO'
 const WX_LOGIN_EMPTY_MESSAGE = '微信登录凭证为空'
 const WX_LOGIN_FAILED_MESSAGE = '微信登录失败'
 const WX_LOGIN_TIMEOUT_MESSAGE = '微信登录超时，请重试'
 const WX_LOGIN_TIMEOUT_MS = 5000
+
+// scene 只解码一次；显式旧链接的 shareCode 保持原样。
+function resolvePersonalShareCode(options = {}) {
+  if (options.shareCode) return options.shareCode
+  if (!options.scene) return ''
+  try { return decodeURIComponent(options.scene) } catch (error) { return '' }
+}
 
 function getRuntimeWx(wxApi) {
   if (wxApi) {
@@ -159,6 +167,8 @@ async function requestWithVisitorSessionRefresh(requestOptions = {}, options = {
 }
 
 module.exports = {
+  SOURCE_TYPE_QR_CODE,
+  resolvePersonalShareCode,
   SOURCE_TYPE_PERSONAL_PORTFOLIO,
   SOURCE_TYPE_WECHAT_SHARE_CARD,
   openVisitorSession,

@@ -171,6 +171,31 @@ ORDER BY updated_at ASC;
 
 问题反馈附件依赖 COS `POST Object` 的禁止覆盖能力。生产 Bucket 必须保持版本控制为 `Off`；如果未来需要启用版本控制，必须先改造反馈附件快照，使其固定引用对象版本，再调整此约束。
 
+### 6.1 作品集小程序码资源
+
+本功能使用现有 COS Bucket，官方原码对象键固定为 `{uniqueCode}/protfolio/miniapp-code/{portfolioId}/{envVersion}/{codeHash}.{ext}`。个人使用作品集所属用户唯一码，团队使用所属团队唯一码；团队成员分享不写入成员个人目录。保留既有 `protfolio` 拼写，环境分为 `release`、`trial`、`develop`。原码参数摘要不包含头像或标题，扩展名及 Content-Type 与实际 PNG/JPEG 格式一致。
+
+Redis 只保存原码索引、生成锁和限流信息；索引到期后优先从确定性 COS 对象恢复。Redis TTL 不删除 COS 图片，不能为此更改整个 `protfolio/` 的存储生命周期。头像继续使用原 `others/` 对象；最终分享图由手机 Canvas 合成，不上传 COS，也不依赖后端中文字体。
+
+分享页的“logo 使用头像”开关默认关闭，直接保留原码中心标志；开启后个人使用资料头像、团队使用团队头像覆盖中心。切换仅在本机重新合成并复用已下载原码，不新增后端配置或请求字段；保存和预览使用当前开关对应的成图。关闭时前端不下载或解码头像，现有资源接口的后端头像 HEAD 校验保持不变。
+
+发布前检查（当前未执行线上配置变更）：
+
+- 原码及头像的 HTTPS 图片域名须配置为微信小程序 `downloadFile` 合法域名，真机关闭开发工具的域名校验豁免后验证。
+- COS 数据万象须支持固定首帧、缩略 PNG 处理规则；GIF/WebP 头像处理结果由手机直接下载。
+- CDN 缓存键须区分图片处理参数和 `v` 版本参数，头像原址覆盖、原码修复后才能避开旧缓存。
+- Runtime 双节点使用一致的 AppID、环境、落地页校验配置及共享 Redis；正式环境保持 `release` 和 `check_path=true`。
+- 个人/团队访客落地页必须已发布。中心头像覆盖须通过 iOS/Android 的扫一扫、相册及聊天压缩图片识别验收；自动化绘图测试不替代真机识别。
+
+相册保存的平台配置（2026-09-18 已在开发者工具复现拦截，尚未修改后台声明）：
+
+- 原生错误 `saveImageToPhotosAlbum:fail api scope is not declared in the privacy agreement` 表示平台缺少对应隐私类型声明，官方错误码字段为 `errno=112`；不属于用户拒绝授权或图片文件失效。
+- 管理员在“小程序管理后台 → 设置 → 服务内容声明 → 用户隐私保护指引”补充“使用你的相册（仅写入）权限”。用途建议填写：`用于将用户主动生成的作品集小程序码分享图片保存到手机相册，便于分享作品集。` 请由管理员核对后提交平台声明；官方文档说明补充声明约 5 分钟后生效。
+- 生效后重新进入分享码页，点击保存并完成微信官方隐私弹窗和相册授权，分别验收模拟器、安卓及 iOS。声明缺失不能通过修改 `app.json`、反复打开设置或新增 `wx.authorize` 解决。
+- 小程序失败日志标签为 `portfolio-miniapp-code-save-failed`，记录 `getSetting` / `saveImageToPhotosAlbum` / `openSetting` 阶段、脱敏错误及数字错误码。失败不写分享记录，仍可预览本地图片。
+- 头像生成错误发生于后端 `MiniappCodeObjectStore`；历史 `image/jpg`、合法 MIME 参数与大小写兼容已补齐。若仍失败，按“`小程序码头像资源失败`”日志的 `stage` 区分 `URL_INVALID`、`HEAD_FAILED`、`HEAD_MISSING`、`MIME_INVALID`、`SIZE_INVALID`、`ETAG_MISSING`，不可仅凭终端类型判断原因。此修复需发布 Runtime，接口和环境变量不变。
+- 官方依据：[隐私授权开发指引](https://developers.weixin.qq.com/miniprogram/dev/framework/user-privacy/PrivacyAuthorize.html)、[隐私类型与接口对应关系](https://developers.weixin.qq.com/miniprogram/dev/framework/user-privacy/miniprogram-intro.html)。
+
 ## 7. 大模型服务
 
 | 环境 | 服务商 | 用途 | 模型/能力 | Base URL | API Key 标识 | Secret 存放位置 | 额度/计费 | 备注 |
@@ -198,6 +223,8 @@ ORDER BY updated_at ASC;
 | `OBJECT_STORAGE_ACCESS_KEY_SECRET` | 待补充 | 对象存储 AccessKey Secret | 待补充 | 待补充 | 是 | 只记录存放位置 |
 | `LLM_API_KEY` | 待补充 | 大模型服务调用密钥 | 待补充 | 待补充 | 是 | 只记录存放位置 |
 | `WEFOLIO_LOGIN_DEFAULT_TAB` | Runtime 双节点 | 小程序登录页普通入口默认标签 | `experience` / `maintainer` | `application.yml` 默认值或 `wefolio.service` 环境配置 | 否 | 默认 `experience`（体验）；`maintainer` 表示登录 / 注册；双节点应一致，修改后重启 Runtime 生效 |
+| `PORTFOLIO_MINIAPP_CODE_ENV_VERSION` | Runtime 双节点 | 官方小程序码打开的微信版本 | `release` / `trial` / `develop` | `application.yml` 默认值或服务环境配置 | 否 | 默认 `release`；不同环境使用独立 COS 目录与缓存身份 |
+| `PORTFOLIO_MINIAPP_CODE_CHECK_PATH` | Runtime 双节点 | 微信是否检查落地页存在 | `true` | `application.yml` 默认值或服务环境配置 | 否 | 默认 `true`；正式环境保持开启，双节点一致 |
 | `FEISHU_FEEDBACK_WEBHOOK_URL` | 生产 Runtime 双节点 | 问题反馈飞书机器人 Webhook | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | URL 含访问令牌，禁止进入日志、数据库和命令历史 |
 | `FEISHU_FEEDBACK_WEBHOOK_SECRET` | 生产 Runtime 双节点 | 飞书机器人签名密钥 | 不记录值 | `wefolio.service` 现有 `EnvironmentFile` 或 root-only drop-in | 是 | 两台 Runtime 必须使用同一有效配置 |
 | `ADMIN_POINT_SECRET` | Runtime 双节点及内部调用方 | 积分、反馈状态和作品人工审核回传的共享内部密钥 | 不记录值 | root-only 服务环境配置 | 是 | 两台 Runtime 与所有调用方必须一致；反馈和审核飞书卡片会包含完整值 |
@@ -261,5 +288,6 @@ ORDER BY updated_at ASC;
 | 2026-08-26 | dingchenyong | 增加问题反馈单次飞书卡片通知、无认证状态更新 curl、COS 禁止覆盖前置条件和过期附件清理说明 | Runtime 双节点、COS Bucket、Job 单节点与团队操作流程 | 仅文档更新；生产配置尚未执行，可恢复本文档上一版本 |
 | 2026-08-26 | dingchenyong | 增加作品最终轮人工审核飞书配置、回传安全说明、积压盘点 SQL 与非生产并发验收步骤 | Runtime 双节点、Job 单节点与审核团队操作流程 | 仅文档更新；生产配置尚未执行，可恢复本文档上一版本 |
 | 2026-08-27 | Codex | 为问题反馈和作品人工审核回传复用 `ADMIN_POINT_SECRET`，飞书 curl 携带完整认证头 | Runtime 双节点、内部调用方与飞书审核流程 | 回滚应用版本；如已轮换密钥，需同步恢复所有调用方配置 |
+| 2026-09-18 | Codex | 增加作品集小程序码 COS 目录、手机合成、环境变量及 CDN/真机验收要求 | Runtime 双节点、COS/CDN、微信小程序 | 尚未执行线上配置变更；应用回滚不应删除既有作品集素材 |
 | 2026-06-19 | 待补充 | 服务器1 启用 SSH 密钥登录并关闭密码登录 | SSH 登录方式 | 服务器备份文件：`/etc/ssh/sshd_config.bak-20260619-before-disable-passwordauth`；恢复后执行 `sshd -t` 并重载 `sshd` |
 | 2026-06-19 | 待补充 | 初始化技术信息与服务配置台账 | 文档模板 | 不涉及 |

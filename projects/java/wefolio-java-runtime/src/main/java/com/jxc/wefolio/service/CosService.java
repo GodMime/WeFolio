@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.common.upload.AvatarImageFormat;
 import com.jxc.wefolio.config.CosProperties;
 import com.jxc.wefolio.message.CosMessage;
+import com.qcloud.cos.exception.CosServiceException;
 import com.qcloud.cos.auth.COSSigner;
 import com.qcloud.cos.model.CannedAccessControlList;
 import com.qcloud.cos.model.BucketVersioningConfiguration;
@@ -523,6 +524,23 @@ public class CosService {
             log.error("COS head failed: key={}", key, e);
             throw new RuntimeException("File metadata read failed: " + e.getMessage(), e);
         }
+    }
+
+    /** 仅读取版本头，404 表示对象不存在；其它存储故障必须向上抛出。 */
+    public VersionedObjectHead headObjectVersion(String key) {
+        try {
+            ObjectMetadata metadata = transferManager.getCOSClient().getObjectMetadata(cosProperties.getBucketName(), key);
+            log.info("COS version head success: key={}, contentType={}, contentLength={}", key, metadata.getContentType(), metadata.getContentLength());
+            return new VersionedObjectHead(metadata.getContentType(), metadata.getContentLength(), metadata.getETag(),
+                    metadata.getLastModified() == null ? 0 : metadata.getLastModified().getTime());
+        } catch (CosServiceException exception) {
+            if (exception.getStatusCode() == 404) return null;
+            throw exception;
+        }
+    }
+
+    /** 不改变既有 ObjectHead 构造器，独立承载版本与更新时间。 */
+    public record VersionedObjectHead(String contentType, long contentLength, String eTag, long lastModified) {
     }
 
     /**

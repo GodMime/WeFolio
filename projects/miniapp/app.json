@@ -49,6 +49,7 @@
         "portfolios",
         "standard-edit/portfolio-standard-edit",
         "standard-preview/portfolio-standard-preview",
+        "share-code/portfolio-share-code",
         "visitor-portfolio/visitor-portfolio",
         "visitor-schedule/visitor-schedule",
         "unavailable/portfolio-unavailable",

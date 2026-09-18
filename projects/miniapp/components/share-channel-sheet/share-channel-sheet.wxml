@@ -18,6 +18,13 @@
             <view class="share-sheet-action-desc">进入作品集后分享</view>
           </view>
         </button>
+        <button class="share-sheet-action" disabled="{{disabled}}" bindtap="handleQrCode" aria-label="生成小程序码">
+          <image class="share-sheet-icon" src="/assets/system/share-miniapp-code-gold.svg" mode="aspectFit" aria-hidden="true"></image>
+          <view class="share-sheet-action-copy">
+            <view class="share-sheet-action-title">生成小程序码</view>
+            <view class="share-sheet-action-desc">带头像的作品集分享码</view>
+          </view>
+        </button>
       </view>
       <button class="share-sheet-cancel" disabled="{{disabled}}" bindtap="handleClose">取消</button>
     </view>

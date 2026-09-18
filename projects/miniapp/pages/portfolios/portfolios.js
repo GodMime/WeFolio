@@ -1,3 +1,4 @@
+const { buildPortfolioMiniappCodePath } = require('./utils/portfolio-miniapp-code')
 const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
@@ -738,6 +739,24 @@ Page({
       return
     }
     this.resetShareSheetState()
+  },
+
+  handleQrCodeShare() {
+    if (this.data.shareActionPending) return
+    const resolved = this.resolveShareTarget()
+    if (!resolved) {
+      const hadTarget = Boolean(this.data.shareTarget)
+      this.resetShareSheetState()
+      if (hadTarget) wx.showToast({ title: SHARE_UNAVAILABLE_MESSAGE, icon: 'none' })
+      return
+    }
+    const url = buildPortfolioMiniappCodePath(resolved.ownerType, resolved.portfolio.portfolioId)
+    this.setData({ shareSheetVisible: false, shareActionPending: true, shareTarget: null })
+    wx.navigateTo({
+      url,
+      fail: () => wx.showToast({ title: '页面打开失败，请重试', icon: 'none' }),
+      complete: () => this.setData({ shareActionPending: false })
+    })
   },
 
   handleTimelineShare() {

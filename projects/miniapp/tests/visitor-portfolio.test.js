@@ -2955,3 +2955,20 @@ test('team member portfolio preview loads options without submitting a real quer
   assert.equal(component.data.submitting, false)
   assert.equal(component.data.result, null)
 })
+
+test('personal visitor decodes scene once, records QR_CODE, and preserves explicit old links', async () => {
+  for (const [input, expectedCode, expectedSource] of [
+    [{ scene: 'PF%2B001' }, 'PF+001', 'QR_CODE'],
+    [{ scene: 'PF%252B001' }, 'PF%2B001', 'QR_CODE'],
+    [{ scene: '%E0%A4%A' }, '', 'QR_CODE'],
+    [{ shareCode: 'PF%2Bexplicit', scene: 'ignored' }, 'PF%2Bexplicit', 'WECHAT_SHARE_CARD'],
+    [{ shareCode: 'PF-old', sourceType: 'PERSONAL_PORTFOLIO' }, 'PF-old', 'PERSONAL_PORTFOLIO']
+  ]) {
+    const page = loadVisitorPage(() => Promise.resolve({}))
+    page.bootstrap = async () => {}
+    page.positionBackgroundAudio = () => {}
+    await page.onLoad(input)
+    assert.equal(page.data.shareCode, expectedCode)
+    assert.equal(page.visitorSourceType, expectedSource)
+  }
+})
