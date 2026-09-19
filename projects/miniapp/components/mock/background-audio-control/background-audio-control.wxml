@@ -1,0 +1,34 @@
+<view
+  class="audio-control {{floating ? 'mock-audio-floating' : 'mock-audio-inline'}} style-{{resolvedStyle}} {{playing ? 'is-playing' : ''}} {{dragging ? 'is-dragging' : ''}}"
+  style="{{positionStyle}}"
+  bindtouchstart="handleTouchStart"
+  catchtouchmove="{{floating && draggable && !sample ? 'handleTouchMove' : ''}}"
+  bindtouchend="handleTouchEnd"
+  bindtouchcancel="handleTouchCancel"
+  bindtap="handleToggle"
+  aria-role="button"
+  aria-label="{{sample ? title : playing ? '暂停背景音频' : '播放背景音频'}}"
+>
+  <view wx:if="{{resolvedStyle === 'DISC'}}" class="audio-disc">
+    <image wx:if="{{!coverFailed}}" class="audio-disc-art audio-spin" src="{{coverSource}}" mode="aspectFill" binderror="handleCoverError" />
+    <view class="audio-disc-hole"></view>
+  </view>
+  <view wx:elif="{{resolvedStyle === 'SLEEVE'}}" class="audio-sleeve">
+    <view class="audio-sleeve-disc audio-spin">
+      <image wx:if="{{!coverFailed}}" class="audio-disc-art" src="{{coverSource}}" mode="aspectFill" binderror="handleCoverError" />
+      <view class="audio-disc-hole"></view>
+    </view>
+    <view class="audio-sleeve-cover">
+      <image wx:if="{{!coverFailed}}" class="audio-square-art" src="{{coverSource}}" mode="aspectFill" binderror="handleCoverError" />
+    </view>
+  </view>
+  <view wx:else class="audio-mini">
+    <view class="audio-mini-cover"><image wx:if="{{!coverFailed}}" class="audio-square-art" src="{{coverSource}}" mode="aspectFill" binderror="handleCoverError" /></view>
+    <view class="audio-mini-copy"><text class="audio-title">{{title || '背景音频'}}</text><text class="audio-subtitle">{{playing ? '正在播放' : '背景音频'}}</text></view>
+    <view class="audio-bars"><view></view><view></view><view></view></view>
+  </view>
+  <view class="audio-play-badge" aria-hidden="true">
+    <view wx:if="{{!playing}}" class="audio-play-icon"></view>
+    <text wx:else>Ⅱ</text>
+  </view>
+</view>

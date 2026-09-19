@@ -34,7 +34,7 @@ public class PointDebitTaskEntity extends BaseEntity {
     /** 本任务成功核销金额 */
     private Long settledAmount;
 
-    /** 微信返回的赠送余额消耗 */
+    /** 微信普通成功返回的赠送余额消耗；重复成功缺失时保留 0，占位未知由成功分类区分。 */
     private Long usedPresentAmount;
 
     /** 处理前待扣金额 */
@@ -64,10 +64,10 @@ public class PointDebitTaskEntity extends BaseEntity {
     /** 调用前微信余额 */
     private Long wechatBalanceBefore;
 
-    /** 调用后微信余额 */
+    /** 普通扣币成功后暂存应答余额以对照补查；完成后保存最终确认的微信余额。 */
     private Long wechatBalanceAfter;
 
-    /** 最后失败码 */
+    /** 最后失败码；SUCCESS/DUPLICATE_SUCCESS 表示远端已成功，后续只补查余额。 */
     private String lastErrorCode;
 
     /** 最后脱敏失败原因 */

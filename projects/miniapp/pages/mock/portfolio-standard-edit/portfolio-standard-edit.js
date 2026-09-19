@@ -1,5 +1,7 @@
 const {
   MOCK_COMPONENT_OPTIONS,
+  applyMockComponentConfig,
+  buildMockPortfolioRenderData,
   MOCK_WORK_LIBRARY,
   addMockComponent,
   getMockPortfolioDraft,
@@ -20,14 +22,93 @@ const {
 } = require('../utils/mock-experience')
 const {
   PORTFOLIO_TEXT_FONT_OPTIONS,
+  LEGACY_TEXT_SECTION_LINE_HEIGHT,
+  buildPortfolioTextLineHeightEditor,
+  parsePortfolioTextLineHeightInput,
+  stepPortfolioTextLineHeight,
   buildPortfolioTextFontSizeOptions,
   buildPortfolioTextTypography
 } = require('../../../utils/portfolio-text-typography')
 const {
   hexToHsv,
   hsvToHex
-} = require('../../../utils/portfolio-color')
+} = require('../utils/portfolio-color')
 
+const { selectMockWorksFor } = require('../utils/mock-work-media')
+const { createMockAudioController } = require('../utils/mock-portfolio-audio')
+const textTools = require('../utils/mock-portfolio-text')
+const gridTools = require('../utils/mock-portfolio-text-grid')
+const { MOCK_CONTACT_PROFILE } = require('../utils/mock-portfolio-hyperlink')
+const COMPLEX_TYPES = ['VIDEO_CAROUSEL','STRUCTURED_TEXT_SECTION','TEXT_GRID','CONTACT_INFO','HYPERLINK']
+const PROFILE_TAG_COLOR_OPTIONS = [
+  {
+    name: '青绿',
+    color: '#0f766e',
+    background: '#dcf7f1',
+    border: '#a7eadc',
+    removeBackground: 'rgba(15, 118, 110, 0.12)'
+  },
+  {
+    name: '湖蓝',
+    color: '#2d5f9a',
+    background: '#e5effb',
+    border: '#bfd7f4',
+    removeBackground: 'rgba(45, 95, 154, 0.12)'
+  },
+  {
+    name: '琥珀',
+    color: '#8a4b09',
+    background: '#fff0d7',
+    border: '#f5d29b',
+    removeBackground: 'rgba(138, 75, 9, 0.12)'
+  },
+  {
+    name: '玫红',
+    color: '#a9354f',
+    background: '#fde7ed',
+    border: '#f5bfcc',
+    removeBackground: 'rgba(169, 53, 79, 0.12)'
+  },
+  {
+    name: '紫藤',
+    color: '#6d5bd0',
+    background: '#eeeafd',
+    border: '#d2c9fa',
+    removeBackground: 'rgba(109, 91, 208, 0.12)'
+  },
+  {
+    name: '森绿',
+    color: '#3f6f45',
+    background: '#e6f3e8',
+    border: '#bfdcc4',
+    removeBackground: 'rgba(63, 111, 69, 0.12)'
+  },
+  {
+    name: '墨蓝',
+    color: '#36516e',
+    background: '#e7edf4',
+    border: '#c6d3e2',
+    removeBackground: 'rgba(54, 81, 110, 0.12)'
+  },
+  {
+    name: '砖红',
+    color: '#9a4a35',
+    background: '#f8e8e2',
+    border: '#e9c2b5',
+    removeBackground: 'rgba(154, 74, 53, 0.12)'
+  },
+  {
+    name: '石墨',
+    color: '#4b5563',
+    background: '#eef2f6',
+    border: '#d5dce5',
+    removeBackground: 'rgba(75, 85, 99, 0.12)'
+  }
+].map((item) => Object.assign({}, item, {
+  swatchStyle: `background: ${item.color};`,
+  choiceStyle: `color: ${item.color}; background: ${item.background}; border-color: ${item.border};`
+}))
+const PROFILE_FIELDS = [{key:'avatar',label:'头像'},{key:'displayName',label:'姓名 / 艺名'},{key:'profession',label:'职业身份'},{key:'city',label:'服务城市'},{key:'bio',label:'简介'},{key:'tags',label:'标签'},{key:'wechatQr',label:'微信二维码'}]
 const PREVIEW_URL = '/pages/mock/portfolio-standard-preview/portfolio-standard-preview'
 const DEFAULT_SELECTED_COMPONENT_KEY = 'mock_carousel'
 const SWIPE_REVEAL_THRESHOLD = -48
@@ -35,6 +116,26 @@ const SWIPE_CLOSE_THRESHOLD = 28
 const SWIPE_VERTICAL_TOLERANCE = 26
 const BACKGROUND_COLOR_OPTIONS = ['#151515', '#FFFFFF', '#F5F6F8']
 const BOTTOM_NAV_COUNT_OPTIONS = [1, 2, 3, 4]
+const COMPONENT_SPACING_MIN_RPX = 0
+const COMPONENT_SPACING_MAX_RPX = 96
+const AUDIO_STYLE_OPTIONS = [
+  { value: 'DISC', label: '轻量唱片' },
+  { value: 'SLEEVE', label: '封套抽盘' },
+  { value: 'MINI_PLAYER', label: '迷你播放器' }
+]
+const SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS = [
+  {value:'MODAL_CALENDAR',label:'弹层显示月历'},
+  {value:'INLINE_CALENDAR',label:'直接显示月历'}
+]
+const CONTACT_FORM_DISPLAY_MODE_OPTIONS = [
+  {value:'MODAL_FORM',label:'弹层显示表单'},
+  {value:'INLINE_FORM',label:'直接显示表单'}
+]
+const VIDEO_CAROUSEL_SETTING_HELP = {
+  showTitle:{title:'作品标题',content:'在每张视频卡片中展示作品名称。'},
+  showDescription:{title:'作品描述',content:'展示视频作品附带的描述文字。'},
+  showSwipeHint:{title:'滑动提示',content:'提示访客左右滑动浏览视频。'}
+}
 const TEXT_SECTION_ALIGNMENT_OPTIONS = [
   { value: 'LEFT', label: '左对齐' },
   { value: 'CENTER', label: '居中' },
@@ -86,7 +187,7 @@ function buildBackgroundColorPickerState(backgroundColorHsv = {}) {
 }
 
 function isWorkSelectionComponent(componentType) {
-  return componentType === 'CAROUSEL' || componentType === 'WORK_GRID' || componentType === 'WORK_LIST' || componentType === 'SINGLE_WORK'
+  return componentType === 'VIDEO_CAROUSEL' || componentType === 'CAROUSEL' || componentType === 'WORK_GRID' || componentType === 'WORK_LIST' || componentType === 'SINGLE_WORK'
 }
 
 function findComponent(draft, componentKey, menuKey) {
@@ -140,19 +241,20 @@ function buildComponentRows(draft, selectedComponentKey, menuKey) {
   })
 }
 
-function buildWorkOptions(workIds, carouselOnly) {
-  const selectedIds = new Set((workIds || []).map(Number))
-  return MOCK_WORK_LIBRARY.works
-    .filter((work) => !carouselOnly || work.mediaType === 'IMAGE')
+function buildWorkOptions(workIds, context) {
+  const orderedIds = (workIds || []).map(Number)
+  const selectedIds = new Set(orderedIds)
+  return selectMockWorksFor(context === true ? 'CAROUSEL' : context === false ? 'SINGLE_WORK' : context, MOCK_WORK_LIBRARY.works)
     .map((work) => Object.assign({}, work, {
-      selected: selectedIds.has(work.id)
+      selected: selectedIds.has(work.id),
+      selectionOrder: selectedIds.has(work.id) ? orderedIds.indexOf(work.id) + 1 : 0
     }))
 }
 
-function buildFilteredWorkOptions(workIds, carouselOnly, keyword = '', selectedTagId = 0) {
+function buildFilteredWorkOptions(workIds, context, keyword = '', selectedTagId = 0) {
   const normalizedKeyword = trimText(keyword).toLowerCase()
   const normalizedTagId = Number(selectedTagId) || 0
-  return buildWorkOptions(workIds, carouselOnly).filter((work) => {
+  return buildWorkOptions(workIds, context).filter((work) => {
     const tags = Array.isArray(work.tags) ? work.tags : []
     const keywordText = `${trimText(work.title)} ${tags.map((tag) => trimText(tag.name)).join(' ')}`.toLowerCase()
     const keywordMatched = !normalizedKeyword || keywordText.includes(normalizedKeyword)
@@ -171,12 +273,38 @@ function resolveActiveMenuKey(draft, activeMenuKey) {
     : (items[0] && items[0].key) || ''
 }
 
-function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY, activeMenuKey) {
+function buildDisplayGroupState(config, requestedKey) {
+  const groups = config.groups || []
+  const options = [{ groupKey: 'g_all', name: '全部作品', color: '#212529', tagId: 0 }]
+    .concat(MOCK_WORK_LIBRARY.tags.map(tag => ({ groupKey: `tag_${tag.id}`, name: tag.name, color: tag.color, tagId: tag.id })))
+  for (const group of groups) {
+    if (!options.some(option => option.groupKey === group.groupKey)) options.push(Object.assign({ tagId: 0, color: '#212529' }, group))
+  }
+  const activeDisplayGroupKey = options.some(option => option.groupKey === requestedKey) ? requestedKey : (groups[0] || options[0]).groupKey
+  return {
+    activeDisplayGroupKey,
+    displayGroupOptions: options.map(option => {
+      const index = groups.findIndex(group => group.groupKey === option.groupKey)
+      return Object.assign({}, option, { active: option.groupKey === activeDisplayGroupKey, selected: index >= 0, selectionOrder: index + 1 })
+    })
+  }
+}
+
+function buildGridPreview(config, draft, metrics) {
+  try { return gridTools.buildMockGridViewModel(config, draft.renderData.themeMode, metrics ? metrics.widthRpx + 2 * (config.horizontalMarginRpx || 0) : undefined, metrics ? metrics.heights : {}) }
+  catch (_) { return {cells:[]} }
+}
+
+function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY, activeMenuKey, requestedGroupKey) {
   const safeActiveMenuKey = resolveActiveMenuKey(draft, activeMenuKey)
   const activeComponents = getMockMenuComponents(draft.config, safeActiveMenuKey)
   const safeSelectedKey = findComponent(draft, selectedComponentKey, safeActiveMenuKey).componentKey || ''
   const selectedComponent = findComponent(draft, safeSelectedKey, safeActiveMenuKey)
-  const selectedWorkIds = getWorkIdsFromComponent(selectedComponent)
+  const isGroup = ['WORK_GRID', 'WORK_LIST'].includes(selectedComponent.componentType)
+  const groupState = buildDisplayGroupState(findConfig(selectedComponent), requestedGroupKey)
+  const selectedGroup = (findConfig(selectedComponent).groups || []).find(group => group.groupKey === groupState.activeDisplayGroupKey)
+  const groupOption = groupState.displayGroupOptions.find(option => option.active)
+  const selectedWorkIds = isGroup ? (selectedGroup ? selectedGroup.workIds : []) : getWorkIdsFromComponent(selectedComponent)
   const bottomNavItems = draft.config.bottomNav && draft.config.bottomNav.enabled
     ? draft.config.bottomNav.items
     : []
@@ -188,6 +316,31 @@ function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY
   const textSectionTypography = buildPortfolioTextTypography(textSectionConfig)
   return {
     draft,
+    componentConfig: Object.assign({}, selectedComponent.componentType === 'PROFILE' ? {profileHorizontalMarginRpx:32} : {}, JSON.parse(JSON.stringify(findConfig(selectedComponent)))),
+    complexConfig: JSON.parse(JSON.stringify(findConfig(selectedComponent))),
+    structuredTextTab: 'content',
+    mockFontAvailability: {SYSTEM:true,WECHAT_SANS_SS:textTools.isMockTextFontAvailable('WECHAT_SANS_SS')},
+    gridPreviewViewModel: selectedComponent.componentType === 'TEXT_GRID' ? buildGridPreview(findConfig(selectedComponent),draft) : {cells:[]},
+    videoTitleCount: Array.from(findConfig(selectedComponent).title || '').length,
+    complexError: '',
+    gridSelectedKeys: [],
+    gridUndoCount: 0,
+    profileTagColorOptions: PROFILE_TAG_COLOR_OPTIONS,
+    profileFields: PROFILE_FIELDS.map(field=>Object.assign({},field,{visible:(findConfig(selectedComponent).visibleFields || {})[field.key] !== false})),
+    localMediaOptions: selectMockWorksFor('TEXT_BACKGROUND', MOCK_WORK_LIBRARY.works),
+    hyperlinkWorks: selectMockWorksFor('HYPERLINK', MOCK_WORK_LIBRARY.works),
+    hyperlinkSelectedWork: MOCK_WORK_LIBRARY.works.find(work=>work.id === Number(findConfig(selectedComponent).workId)) || null,
+    hyperlinkPickerVisible: false,
+    audioSelectedWork: MOCK_WORK_LIBRARY.works.find(work=>work.id === draft.config.backgroundAudio.workId) || null,
+    qrWorks: selectMockWorksFor('QR_CONTACT', MOCK_WORK_LIBRARY.works),
+    audioWorks: selectMockWorksFor('BACKGROUND_AUDIO', MOCK_WORK_LIBRARY.works),
+    selectedGroupIndex: 0,
+    activeDisplayGroupKey: groupState.activeDisplayGroupKey,
+    displayGroupOptions: groupState.displayGroupOptions,
+    selectedWork: MOCK_WORK_LIBRARY.works.find(work => work.id === selectedWorkIds[0]) || null,
+    singleWorkShowDescription: findConfig(selectedComponent).showDescription === true,
+    scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS,
+    contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS,
     backgroundColorOptions: BACKGROUND_COLOR_OPTIONS,
     customBackgroundColor: backgroundColorPickerState.customBackgroundColor,
     backgroundColorHsv: backgroundColorPickerState.backgroundColorHsv,
@@ -204,6 +357,8 @@ function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY
     selectedComponentType: selectedComponent.componentType || '',
     selectedComponentName: selectedComponent.name || '',
     profileForm: Object.assign({}, findProfileConfig(selectedComponent)),
+    profileQrUrl: [draft.config.components || []].concat(bottomNavItems.map(item=>item.components || [])).flat()
+      .filter(component=>component.componentType === 'PROFILE').map(component=>findProfileConfig(component).wechatQrUrl || '')[0] || '',
     scheduleQueryForm: Object.assign({}, findConfig(selectedComponent)),
     contactFormConfig: Object.assign({}, findConfig(selectedComponent)),
     qrContactForm: Object.assign({}, findConfig(selectedComponent)),
@@ -211,11 +366,14 @@ function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY
       textAlign: textSectionConfig.alignment || 'LEFT'
     }),
     textSectionTypography,
+    textSectionContentCount: Array.from(textSectionConfig.content || '').length,
+    textSectionLineHeightEditor: buildPortfolioTextLineHeightEditor(textSectionConfig.lineHeight, LEGACY_TEXT_SECTION_LINE_HEIGHT),
     textSectionFontOptions: PORTFOLIO_TEXT_FONT_OPTIONS.map((item) => Object.assign({}, item, {
-      available: true
+      available: textTools.isMockTextFontAvailable(item.value)
     })),
     textSectionSizeOptions: buildPortfolioTextFontSizeOptions(textSectionTypography.fontSizeRpx),
     dividerForm: Object.assign({}, findConfig(selectedComponent)),
+    dividerColorValue: (DIVIDER_COLOR_OPTIONS.find(option=>option.value === findConfig(selectedComponent).color) || {}).colorValue || findConfig(selectedComponent).color,
     textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS,
     dividerColorOptions: DIVIDER_COLOR_OPTIONS,
     selectedWorkIds,
@@ -225,10 +383,14 @@ function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY
     singleWorkShowTitle: selectedComponent.componentType === 'SINGLE_WORK'
       ? typeof selectedComponent.config.showTitle === 'boolean' ? selectedComponent.config.showTitle : true
       : true,
-    componentOptions: MOCK_COMPONENT_OPTIONS,
+    componentOptions: MOCK_COMPONENT_OPTIONS.map(option => Object.assign({}, option, {
+      disabled: option.componentType === 'PROFILE' && [draft.config.components || []]
+        .concat(bottomNavItems.map(item => item.components || []))
+        .some(components => components.some(component => component.componentType === 'PROFILE'))
+    })),
     workOptions: buildFilteredWorkOptions(
       isWorkSelectionComponent(selectedComponent.componentType) ? selectedWorkIds : [],
-      selectedComponent.componentType === 'CAROUSEL'
+        selectedComponent.componentType, '', isGroup ? groupOption.tagId : 0
     )
   }
 }
@@ -247,14 +409,33 @@ Page({
     componentDragStartY: null,
     componentDragStyle: '',
     revealedComponentKey: '',
-    backgroundColorSheetVisible: false
+    backgroundColorSheetVisible: false,
+    backgroundAudioStyles: AUDIO_STYLE_OPTIONS,
+    backgroundAudioPickerVisible: false,
+    componentSpacingMinRpx: COMPONENT_SPACING_MIN_RPX,
+    componentSpacingMaxRpx: COMPONENT_SPACING_MAX_RPX,
+    profileTagDialogVisible: false,
+    profileNewTag: '',
+    profileSelectedTagColor: PROFILE_TAG_COLOR_OPTIONS[0].color,
+    profileTagErrorText: '',
+    audioPlaying: false
   }, buildState(getMockPortfolioDraft())),
 
   onLoad() {
+    textTools.registerMockTextFont(wx, capability => this.setData({
+      mockFontAvailability: {SYSTEM:true,WECHAT_SANS_SS:textTools.isMockTextFontAvailable('WECHAT_SANS_SS',capability)},
+      textSectionFontOptions: PORTFOLIO_TEXT_FONT_OPTIONS.map(item => Object.assign({}, item, {available:textTools.isMockTextFontAvailable(item.value,capability)}))
+    }))
     this.loadDraft()
+    if(this.data.draft.draftWarning) wx.showToast({title:this.data.draft.draftWarning,icon:'none'})
   },
 
+  onHide() { if (this.mockAudio) this.mockAudio.hide() },
+
+  onUnload() { if (this.mockAudio) this.mockAudio.destroy() },
+
   onShow() {
+    if (this.mockAudio) this.mockAudio.show()
     if (!this.data.previewReturnPending) {
       return
     }
@@ -296,7 +477,10 @@ Page({
         selectedComponentKey || this.data.selectedComponentKey,
         Object.prototype.hasOwnProperty.call(nextExtraData, 'activeMenuKey')
           ? nextExtraData.activeMenuKey
-          : this.data.activeMenuKey
+          : this.data.activeMenuKey,
+        Object.prototype.hasOwnProperty.call(nextExtraData, 'activeDisplayGroupKey')
+          ? nextExtraData.activeDisplayGroupKey
+          : (!selectedComponentKey || selectedComponentKey === this.data.selectedComponentKey) ? this.data.activeDisplayGroupKey : null
       ),
       nextExtraData
     ))
@@ -489,6 +673,9 @@ Page({
   },
 
   handleComponentTap(event) {
+    this.gridPreviewMetrics = null
+    this.gridHistory = null
+    this.gridHasInvalidDraft = false
     const componentKey = event.currentTarget.dataset.key || event.currentTarget.dataset.componentKey
     if (!componentKey) {
       return
@@ -497,6 +684,7 @@ Page({
       this.setData({ revealedComponentKey: '' })
       return
     }
+    this.componentEditSnapshot = JSON.parse(JSON.stringify(this.data.draft))
     this.setDraftState(this.data.draft, componentKey, {
       componentEditSheetVisible: true
     })
@@ -516,6 +704,7 @@ Page({
   },
 
   handleProfileInput(event) {
+    if (!this.data.componentEditSheetVisible) return
     const field = event.currentTarget.dataset.field
     const value = event.detail.value || ''
     if (!field) {
@@ -533,7 +722,33 @@ Page({
     this.setDraftState(draft, componentKey)
   },
 
+  handleOpenProfileTagDialog() {
+    this.setData({profileTagDialogVisible:true,profileNewTag:'',profileSelectedTagColor:PROFILE_TAG_COLOR_OPTIONS[0].color,profileTagErrorText:''})
+  },
+
+  handleCloseProfileTagDialog() { this.setData({profileTagDialogVisible:false,profileTagErrorText:''}) },
+  handleProfileNewTagInput(event) { this.setData({profileNewTag:event.detail.value,profileTagErrorText:''}) },
+  handleSelectProfileTagColor(event) {
+    const color = event.currentTarget.dataset.color
+    if(PROFILE_TAG_COLOR_OPTIONS.some(item=>item.color===color)) this.setData({profileSelectedTagColor:color})
+  },
+
+  handleAddProfileTag() {
+    const tags = this.data.profileForm.tags || []
+    const name = trimText(this.data.profileNewTag)
+    const error = !name ? '请输入标签文字' : Array.from(name).length > 10 ? '单个标签最多 10 个字' : tags.length >= 10 ? '最多保留 10 个标签' : tags.some(tag=>tag.name===name) ? '标签不能重复' : ''
+    if(error) {this.setData({profileTagErrorText:error});return}
+    this.handleProfileInput({currentTarget:{dataset:{field:'tags'}},detail:{value:tags.concat({name,color:this.data.profileSelectedTagColor})}})
+    this.handleCloseProfileTagDialog()
+  },
+
+  handleRemoveProfileTag(event) {
+    const index = Number(event.currentTarget.dataset.index)
+    this.handleProfileInput({currentTarget:{dataset:{field:'tags'}},detail:{value:(this.data.profileForm.tags || []).filter((tag,i)=>i!==index)}})
+  },
+
   handleScheduleInput(event) {
+    if (!this.data.componentEditSheetVisible) return
     const field = event.currentTarget.dataset.field
     const value = event.detail.value || ''
     if (!field) {
@@ -552,6 +767,7 @@ Page({
   },
 
   handleContactInput(event) {
+    if (!this.data.componentEditSheetVisible) return
     const field = event.currentTarget.dataset.field
     const value = event.detail.value || ''
     if (!field) {
@@ -570,6 +786,7 @@ Page({
   },
 
   handleTextSectionInput(event) {
+    if (!this.data.componentEditSheetVisible) return
     const value = event.detail.value || ''
     const componentKey = this.data.selectedComponentKey
     if (this.data.selectedComponentType !== 'TEXT_SECTION') {
@@ -584,6 +801,7 @@ Page({
   },
 
   handleTextSectionAlignmentTap(event) {
+    if (!this.data.componentEditSheetVisible) return
     const value = event.currentTarget.dataset.value || 'LEFT'
     const componentKey = this.data.selectedComponentKey
     if (this.data.selectedComponentType !== 'TEXT_SECTION') {
@@ -598,7 +816,9 @@ Page({
   },
 
   handleTextSectionFontTap(event) {
+    if (!this.data.componentEditSheetVisible) return
     const fontFamily = event.currentTarget.dataset.value || 'SYSTEM'
+    if (!textTools.isMockTextFontAvailable(fontFamily)) return
     const componentKey = this.data.selectedComponentKey
     if (this.data.selectedComponentType !== 'TEXT_SECTION') {
       return
@@ -610,6 +830,7 @@ Page({
   },
 
   handleTextSectionFontSizeTap(event) {
+    if (!this.data.componentEditSheetVisible) return
     const fontSizeRpx = Number(event.currentTarget.dataset.value)
     const componentKey = this.data.selectedComponentKey
     if (this.data.selectedComponentType !== 'TEXT_SECTION' || !fontSizeRpx) {
@@ -621,7 +842,32 @@ Page({
     this.setDraftState(draft, componentKey)
   },
 
+  handleTextSectionLineHeightInput(event) {
+    const value = event.detail.value === '' ? '' : parsePortfolioTextLineHeightInput(event.detail.value)
+    this.handleConfigInput({currentTarget:{dataset:{field:'lineHeight'}},detail:{value}})
+    this.setData({textSectionLineHeightEditor:buildPortfolioTextLineHeightEditor(this.data.componentConfig.lineHeight,LEGACY_TEXT_SECTION_LINE_HEIGHT)})
+  },
+
+  handleTextSectionLineHeightStep(event) {
+    const value = stepPortfolioTextLineHeight(this.data.componentConfig.lineHeight,Number(event.currentTarget.dataset.delta),LEGACY_TEXT_SECTION_LINE_HEIGHT)
+    if (value !== undefined) this.handleTextSectionLineHeightInput({detail:{value:String(value)}})
+  },
+
+  handleTextSectionColorPreset(event) {
+    this.handleConfigInput({currentTarget:{dataset:{field:'color'}},detail:{value:event.currentTarget.dataset.color}})
+  },
+
+  handleTextSectionColorInput(event) {
+    this.handleConfigInput({currentTarget:{dataset:{field:'color'}},detail:{value:String(event.detail.value || '').toUpperCase()}})
+  },
+
+  handleVideoCarouselSettingHelp(event) {
+    const help = VIDEO_CAROUSEL_SETTING_HELP[event.currentTarget.dataset.option]
+    if (help) wx.showModal(Object.assign({},help,{showCancel:false}))
+  },
+
   handleDividerColorTap(event) {
+    if (!this.data.componentEditSheetVisible) return
     const value = event.currentTarget.dataset.value || 'GRAY'
     const componentKey = this.data.selectedComponentKey
     if (this.data.selectedComponentType !== 'DIVIDER') {
@@ -636,6 +882,7 @@ Page({
   },
 
   handleDividerHeightInput(event) {
+    if (!this.data.componentEditSheetVisible) return
     const value = event.detail.value || ''
     const componentKey = this.data.selectedComponentKey
     if (this.data.selectedComponentType !== 'DIVIDER') {
@@ -650,58 +897,54 @@ Page({
   },
 
   handleWorkToggle(event) {
-    const workId = Number(event.currentTarget.dataset.id || 0)
-    if (!workId || !isWorkSelectionComponent(this.data.selectedComponentType)) {
+    if (!this.data.componentEditSheetVisible) return
+    const workId = Number(event.currentTarget.dataset.id)
+    const type = this.data.selectedComponentType
+    if (!selectMockWorksFor(type, MOCK_WORK_LIBRARY.works).some(work=>work.id === workId)) return
+    const ids = this.data.selectedWorkIds || []
+    if (type === 'SINGLE_WORK') {
+      this.setData({selectedWorkIds:[workId],selectedWork:MOCK_WORK_LIBRARY.works.find(work=>work.id===workId),workOptions:buildFilteredWorkOptions([workId],type,this.data.workFilterKeyword,this.data.selectedWorkFilterTagId)})
       return
     }
-    const componentKey = this.data.selectedComponentKey
-    const currentIds = this.data.selectedWorkIds || []
-    if (this.data.selectedComponentType === 'SINGLE_WORK') {
-      if (currentIds[0] === workId) {
-        return
-      }
-      const selectedWorkIds = [workId]
-      this.setData({
-        selectedWorkIds,
-        workOptions: buildFilteredWorkOptions(
-          selectedWorkIds,
-          false,
-          this.data.workFilterKeyword,
-          this.data.selectedWorkFilterTagId
-        )
-      })
+    const next = ids.includes(workId) ? ids.filter(id=>id !== workId) : ids.concat(workId)
+    const limit = type === 'CAROUSEL' ? 9 : type === 'VIDEO_CAROUSEL' ? 8 : Infinity
+    if (next.length > limit) { wx.showToast({title:`最多选择 ${limit} 个作品`,icon:'none'}); return }
+    this.applySelectedWorks(next)
+  },
+
+  applySelectedWorks(ids) {
+    const type = this.data.selectedComponentType
+    if (type === 'VIDEO_CAROUSEL') {
+      this.setData({complexConfig:Object.assign({},this.data.complexConfig,{workIds:ids}),selectedWorkIds:ids,workOptions:buildFilteredWorkOptions(ids,type,this.data.workFilterKeyword,this.data.selectedWorkFilterTagId)})
       return
     }
-    const selected = currentIds.includes(workId)
-    const nextIds = selected
-      ? currentIds.filter((id) => id !== workId)
-      : currentIds.concat(workId)
-    const draft = updateComponentConfig(this.data.draft, componentKey, (config) => {
-      if (this.data.selectedComponentType === 'WORK_GRID' || this.data.selectedComponentType === 'WORK_LIST') {
-        return Object.assign({}, config, {
-          workIds: nextIds,
-          groups: [{
-            groupKey: 'g_all',
-            name: '全部作品',
-            sortOrder: 1000,
-            workIds: nextIds
-          }]
-        })
+    if (type === 'WORK_GRID' || type === 'WORK_LIST') {
+      const option = this.data.displayGroupOptions.find(item => item.active)
+      const groups = (this.data.componentConfig.groups || []).map(group => Object.assign({}, group))
+      let group = groups.find(item => item.groupKey === option.groupKey)
+      if (!group) { group = {groupKey:option.groupKey,name:option.name,sortOrder:(groups.length+1)*1000,workIds:[]}; groups.push(group) }
+      group.workIds = ids
+      const draft = updateComponentConfig(this.data.draft,this.data.selectedComponentKey,config=>Object.assign({},config,{groups,workIds:[...new Set(groups.flatMap(item=>item.workIds))]}),this.data.activeMenuKey)
+      this.setDraftState(draft)
+      return
+    }
+    const groupIndex = this.data.selectedGroupIndex || 0
+    const draft = updateComponentConfig(this.data.draft,this.data.selectedComponentKey,config=> {
+      if (type === 'WORK_GRID' || type === 'WORK_LIST') {
+        const groups = (config.groups || [{groupKey:'g_all',name:'全部作品',sortOrder:1000,workIds:[]}]).map((g,i)=>i === groupIndex ? Object.assign({},g,{workIds:ids}) : g)
+        return Object.assign({},config,{groups,workIds:[...new Set(groups.flatMap(g=>g.workIds))]})
       }
-      return Object.assign({}, config, {
-        workIds: nextIds
-      })
-    }, this.data.activeMenuKey)
-    this.setDraftState(draft, componentKey, {
-      workFilterKeyword: this.data.workFilterKeyword,
-      selectedWorkFilterTagId: this.data.selectedWorkFilterTagId,
-      workOptions: buildFilteredWorkOptions(
-        nextIds,
-        this.data.selectedComponentType === 'CAROUSEL',
-        this.data.workFilterKeyword,
-        this.data.selectedWorkFilterTagId
-      )
-    })
+      return Object.assign({},config,{workIds:ids})
+    },this.data.activeMenuKey)
+    this.setDraftState(draft,this.data.selectedComponentKey,{selectedGroupIndex:groupIndex,selectedWorkIds:ids,workFilterKeyword:this.data.workFilterKeyword,selectedWorkFilterTagId:this.data.selectedWorkFilterTagId,workOptions:buildFilteredWorkOptions(ids,type,this.data.workFilterKeyword,this.data.selectedWorkFilterTagId)})
+  },
+
+  handleWorkOrder(event) {
+    const index = Number(event.currentTarget.dataset.index), offset = Number(event.currentTarget.dataset.offset)
+    const ids = this.data.selectedWorkIds.slice(), target = index + offset
+    if (target < 0 || target >= ids.length) return
+    ;[ids[index],ids[target]] = [ids[target],ids[index]]
+    this.applySelectedWorks(ids)
   },
 
   handleWorkFilterInput(event) {
@@ -710,7 +953,7 @@ Page({
       workFilterKeyword,
       workOptions: buildFilteredWorkOptions(
         this.data.selectedWorkIds,
-        this.data.selectedComponentType === 'CAROUSEL',
+        this.data.selectedComponentType,
         workFilterKeyword,
         this.data.selectedWorkFilterTagId
       )
@@ -723,7 +966,7 @@ Page({
       selectedWorkFilterTagId,
       workOptions: buildFilteredWorkOptions(
         this.data.selectedWorkIds,
-        this.data.selectedComponentType === 'CAROUSEL',
+        this.data.selectedComponentType,
         this.data.workFilterKeyword,
         selectedWorkFilterTagId
       )
@@ -748,10 +991,16 @@ Page({
   noop() {},
 
   handleSelectComponent(event) {
+    this.gridPreviewMetrics = null
+    this.gridHistory = null
+    this.gridHasInvalidDraft = false
     const componentType = event.currentTarget.dataset.type
     if (!componentType) {
       return
     }
+    const option = this.data.componentOptions.find(item => item.componentType === componentType)
+    if (!option || option.disabled) return
+    this.componentEditSnapshot = JSON.parse(JSON.stringify(this.data.draft))
     const currentComponents = getMockMenuComponents(this.data.draft.config, this.data.activeMenuKey)
     const currentKeys = new Set(currentComponents.map((component) => component.componentKey))
     const draft = addMockComponent(this.data.draft, componentType, this.data.activeMenuKey)
@@ -905,10 +1154,27 @@ Page({
   },
 
   handleCloseComponentEditSheet() {
-    this.setData({ componentEditSheetVisible: false })
+    this.handleCloseProfileTagDialog()
+    this.gridHistory = null
+    this.gridHasInvalidDraft = false
+    const snapshot = this.componentEditSnapshot
+    this.componentEditSnapshot = null
+    if (snapshot) this.setDraftState(snapshot, null, { componentEditSheetVisible: false })
+    else this.setData({ componentEditSheetVisible: false })
   },
 
-  handleConfirmComponentEditSheet() {
+  handleConfirmComponentEditSheet(event) {
+    if (!this.data.componentEditSheetVisible) return
+    if (event && event.detail && event.detail.config && COMPLEX_TYPES.includes(this.data.selectedComponentType)) this.setData({complexConfig:event.detail.config})
+    if (COMPLEX_TYPES.includes(this.data.selectedComponentType)) {
+      const result = applyMockComponentConfig(this.data.draft,this.data.selectedComponentKey,this.data.complexConfig,this.data.activeMenuKey)
+      if (!result.valid) { this.setData({complexError:result.message}); return }
+      this.gridHistory = null
+      this.gridHasInvalidDraft = false
+      this.componentEditSnapshot = null
+      this.setDraftState(result.draft,this.data.selectedComponentKey,{componentEditSheetVisible:false})
+      return
+    }
     if (this.data.selectedComponentType === 'SINGLE_WORK') {
       const workId = Number((this.data.selectedWorkIds || [])[0]) || 0
       if (!workId) {
@@ -917,17 +1183,23 @@ Page({
       }
       const draft = updateMockSingleWorkConfig(this.data.draft, this.data.selectedComponentKey, {
         workId,
-        showTitle: this.data.singleWorkShowTitle
+        showTitle: this.data.singleWorkShowTitle,
+        showDescription: this.data.singleWorkShowDescription
       }, this.data.activeMenuKey)
+      this.componentEditSnapshot = null
       this.setDraftState(draft, this.data.selectedComponentKey, {
         componentEditSheetVisible: false
       })
       return
     }
-    this.setData({ componentEditSheetVisible: false })
+    const result = applyMockComponentConfig(this.data.draft,this.data.selectedComponentKey,this.data.componentConfig,this.data.activeMenuKey)
+    if (!result.valid) { this.setData({complexError:result.message}); return }
+    this.componentEditSnapshot = null
+    this.setDraftState(result.draft,this.data.selectedComponentKey,{componentEditSheetVisible:false})
   },
 
   handlePreview() {
+    if (this.data.componentEditSheetVisible) this.handleCloseComponentEditSheet()
     saveMockPortfolioDraft(this.data.draft)
     this.setData({
       previewReturnPending: true,
@@ -942,6 +1214,9 @@ Page({
   },
 
   handleResetDraft() {
+    this.componentEditSnapshot = null
+    if(this.mockAudio) this.mockAudio.setResource(null)
+    this.setData({audioPlaying:false})
     this.setDraftState(resetMockPortfolioDraft(), DEFAULT_SELECTED_COMPONENT_KEY)
   },
 
@@ -951,6 +1226,232 @@ Page({
 
   handlePublish() {
     showMockLoginRequiredToast()
+  },
+
+  handleComplexChange(event) {
+    if (!this.data.componentEditSheetVisible) return
+    this.setData({complexConfig:event.detail.config,complexError:'',hyperlinkSelectedWork:MOCK_WORK_LIBRARY.works.find(work=>work.id === Number(event.detail.config.workId)) || null})
+  },
+
+  handleConfigInput(event) {
+    if (!this.data.componentEditSheetVisible) return
+    const {field,numeric} = event.currentTarget.dataset
+    if (this.data.selectedComponentType === 'PROFILE' && ['profileBorderColor','profileBorderWidthRpx','profileHorizontalMarginRpx','profileVerticalMarginRpx'].includes(field) && !this.data.componentConfig.profileBorder) return
+    const value = this.data.selectedComponentType === 'VIDEO_CAROUSEL' && field === 'title'
+      ? Array.from(String(event.detail.value || '')).slice(0,10).join('')
+      : numeric ? Number(event.detail.value) : event.detail.value
+    if (COMPLEX_TYPES.includes(this.data.selectedComponentType)) {
+      const complexConfig=Object.assign({},this.data.complexConfig,{[field]:value})
+      if(field === 'lineHeight' && event.detail.value === '') delete complexConfig.lineHeight
+      this.setData({complexConfig,complexError:'',videoTitleCount:Array.from(complexConfig.title || '').length})
+      return
+    }
+    const componentConfig=Object.assign({},this.data.componentConfig,{[field]:value})
+    if(field === 'lineHeight' && event.detail.value === '') delete componentConfig.lineHeight
+    if (this.data.selectedComponentType === 'QR_CONTACT' && field === 'qrUrlSource') {
+      if (this.data.componentConfig.qrUrlSource !== value) componentConfig.qrUrl = ''
+      this.setData({componentConfig,complexError:''})
+      return
+    }
+    const result=applyMockComponentConfig(this.data.draft,this.data.selectedComponentKey,componentConfig,this.data.activeMenuKey)
+    if(!result.valid) {this.setData({componentConfig,complexError:result.message});return}
+    this.setDraftState(result.draft,this.data.selectedComponentKey)
+  },
+
+  handleConfigChoice(event) {
+    this.handleConfigInput({currentTarget:event.currentTarget,detail:{value:event.currentTarget.dataset.value}})
+  },
+
+  handleColorChange(event) {
+    this.handleConfigInput({currentTarget:event.currentTarget,detail:{value:event.detail.color}})
+  },
+
+  handleSingleDescription(event) { this.setData({singleWorkShowDescription:Boolean(event.detail.value)}) },
+
+  handleProfileVisibility(event) {
+    if (!this.data.componentEditSheetVisible) return
+    const key = event.currentTarget.dataset.field
+    this.setDraftState(updateComponentConfig(this.data.draft,this.data.selectedComponentKey,config=>Object.assign({},config,{visibleFields:Object.assign({},config.visibleFields,{[key]:event.detail.value})}),this.data.activeMenuKey))
+  },
+
+  handleGroupSelect(event) {
+    const index = Number(event.currentTarget.dataset.index)
+    const group = (this.data.componentConfig.groups || [])[index]
+    if (!group) return
+    this.setData({selectedGroupIndex:index,selectedWorkIds:group.workIds,workOptions:buildFilteredWorkOptions(group.workIds,this.data.selectedComponentType,this.data.workFilterKeyword,this.data.selectedWorkFilterTagId)})
+  },
+
+  handleDisplayGroupSelect(event) {
+    this.setDraftState(this.data.draft, null, { activeDisplayGroupKey: event.currentTarget.dataset.key })
+  },
+
+  handleDisplayGroupToggle(event) {
+    if (!this.data.componentEditSheetVisible) return
+    const key = event.currentTarget.dataset.key
+    const option = this.data.displayGroupOptions.find(item => item.groupKey === key)
+    if (!option) return
+    let groups = this.data.componentConfig.groups || []
+    if (groups.some(group => group.groupKey === key)) groups = groups.filter(group => group.groupKey !== key)
+    else groups = groups.concat({ groupKey:key, name:option.name, sortOrder:(groups.length+1)*1000,
+      workIds:buildFilteredWorkOptions([],this.data.selectedComponentType,'',option.tagId).map(work=>work.id) })
+    groups = groups.map((group,index)=>Object.assign({},group,{sortOrder:(index+1)*1000}))
+    const draft = updateComponentConfig(this.data.draft,this.data.selectedComponentKey,config=>Object.assign({},config,{groups,workIds:[...new Set(groups.flatMap(group=>group.workIds))]}),this.data.activeMenuKey)
+    this.setDraftState(draft, null, { activeDisplayGroupKey: key })
+  },
+
+  handleGroupOperation(event) {
+    if (!this.data.componentEditSheetVisible) return
+    const {action,index,offset} = event.currentTarget.dataset
+    const config = JSON.parse(JSON.stringify(this.data.componentConfig))
+    const groups = config.groups || []
+    const i = Number(index)
+    if (action === 'add') groups.push({groupKey:`mock_group_${Date.now()}`,name:'新分组',sortOrder:(groups.length+1)*1000,workIds:[]})
+    if (action === 'delete') { if(groups.length <= 1) {wx.showToast({title:'至少保留一个分组',icon:'none'});return} groups.splice(i,1) }
+    if (action === 'move') { const target=i+Number(offset); if(target<0 || target>=groups.length)return; [groups[i],groups[target]]=[groups[target],groups[i]] }
+    if (action === 'rename') groups[i].name = event.detail.value
+    config.groups=groups.map((g,n)=>Object.assign({},g,{sortOrder:(n+1)*1000}))
+    config.workIds=[...new Set(groups.flatMap(g=>g.workIds))]
+    this.setDraftState(updateComponentConfig(this.data.draft,this.data.selectedComponentKey,()=>config,this.data.activeMenuKey))
+  },
+
+  handleQrWork(event) {
+    if (!this.data.componentEditSheetVisible) return
+    const work=MOCK_WORK_LIBRARY.works.find(w=>w.id === Number(event.currentTarget.dataset.id) && w.mediaType === 'IMAGE')
+    if (!work) return
+    this.setDraftState(updateComponentConfig(this.data.draft,this.data.selectedComponentKey,c=>Object.assign({},c,{qrUrlSource:'CUSTOM',qrUrl:work.mediaUrl}),this.data.activeMenuKey))
+  },
+
+  handleToggleHyperlinkPicker() { this.setData({hyperlinkPickerVisible:!this.data.hyperlinkPickerVisible}) },
+
+  handleHyperlinkWork(event) {
+    if (!this.data.componentEditSheetVisible) return
+    const workId=Number(event.currentTarget.dataset.id)
+    const work=selectMockWorksFor('HYPERLINK',MOCK_WORK_LIBRARY.works).find(item=>item.id === workId)
+    if(!work) return
+    this.setData({complexConfig:Object.assign({},this.data.complexConfig,{workId}),hyperlinkSelectedWork:work,hyperlinkPickerVisible:false})
+  },
+
+  handleFillContact() { this.setData({complexConfig:Object.assign({},this.data.complexConfig,MOCK_CONTACT_PROFILE)}) },
+
+  handleTextBackgroundChange(event) {
+    if (!this.data.componentEditSheetVisible) return
+    if(this.data.selectedComponentType === 'STRUCTURED_TEXT_SECTION') this.handleComplexChange(event)
+    else {
+      const componentConfig=event.detail.config
+      const result=applyMockComponentConfig(this.data.draft,this.data.selectedComponentKey,componentConfig,this.data.activeMenuKey)
+      if(!result.valid) {this.setData({componentConfig,complexError:result.message});return}
+      this.setDraftState(result.draft,this.data.selectedComponentKey)
+    }
+  },
+
+  handleStructuredOperation(event) {
+    if (!this.data.componentEditSheetVisible) return
+    const op=event.detail, config=JSON.parse(JSON.stringify(op.config || this.data.complexConfig)), blocks=config.blocks || []
+    if(op.type === 'addBlock' && blocks.length < 20) blocks.push(textTools.createMockStructuredBlock(op.blockType,`block_${Date.now()}`))
+    if(op.type === 'removeBlock') blocks.splice(op.index,1)
+    if(op.type === 'moveBlock') {const next=Number(op.index)+Number(op.offset);if(next>=0&&next<blocks.length) [blocks[op.index],blocks[next]]=[blocks[next],blocks[op.index]]}
+    if(op.type === 'addListItem' && blocks[op.index].items.length<10) blocks[op.index].items.push('')
+    if(op.type === 'removeListItem' && blocks[op.index].items.length>1) blocks[op.index].items.splice(op.item,1)
+    this.setData({complexConfig:Object.assign(config,{blocks}),complexError:''})
+  },
+
+  handleGridChange(event) {
+    if (!this.data.componentEditSheetVisible) return
+    try {
+      if(!this.gridHistory) this.gridHistory=gridTools.createMockGridHistory(this.data.complexConfig)
+      this.gridHistory.apply(event.detail.config)
+      this.gridHasInvalidDraft=false
+      this.setData({complexConfig:event.detail.config,gridPreviewViewModel:buildGridPreview(event.detail.config,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''})
+    } catch(error) {
+      this.gridHasInvalidDraft=true
+      this.setData({complexConfig:event.detail.config,complexError:error.message})
+    }
+  },
+
+  handleStructuredTextTabChange(event) {
+    if (['content','background'].includes(event.detail.tab)) this.setData({structuredTextTab:event.detail.tab})
+  },
+
+  handleGridPreviewMeasure(event) {
+    if (!this.data.componentEditSheetVisible || this.data.selectedComponentType !== 'TEXT_GRID') return
+    const {widthPx,heightsPx} = event.detail
+    if (!(widthPx > 0)) return
+    const info = wx.getWindowInfo ? wx.getWindowInfo() : {windowWidth:375}
+    const scale = 750 / (info.windowWidth || 375)
+    this.gridPreviewMetrics = {widthRpx:widthPx*scale,heights:Object.fromEntries(Object.entries(heightsPx || {}).map(([key,height])=>[key,height*scale]))}
+    this.setData({gridPreviewViewModel:buildGridPreview(this.data.complexConfig,this.data.draft,this.gridPreviewMetrics)})
+  },
+
+  handleGridOperation(event) {
+    if (!this.data.componentEditSheetVisible) return
+    const op=event.detail
+    try {
+      if(!this.gridHistory) this.gridHistory=gridTools.createMockGridHistory(this.data.complexConfig)
+      let config=JSON.parse(JSON.stringify(op.config || this.data.complexConfig))
+      if(op.type === 'undo' && this.gridHasInvalidDraft) {
+        this.gridHasInvalidDraft=false
+        const restored = this.gridHistory.get()
+        this.setData({complexConfig:restored,gridPreviewViewModel:buildGridPreview(restored,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''})
+        return
+      }
+      if(op.type === 'undo') {
+        const restored = this.gridHistory.undo()
+        this.setData({complexConfig:restored,gridPreviewViewModel:buildGridPreview(restored,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''});return
+      }
+      if(op.type === 'merge') config=gridTools.mergeMockGridCells(config,op.selectedKeys)
+      if(op.type === 'split') config=gridTools.splitMockGridCell(config,op.cellKey || op.selectedKeys[0])
+      if(op.type === 'resize') config=gridTools.resizeMockGrid(config,Number(op.rows),Number(op.columns))
+      const cell=config.cells[op.cellIndex]
+      if(op.type === 'addParagraph') {if(cell.blocks.length>=8)throw new Error('每格最多 8 段');cell.blocks.push(gridTools.createMockGridBlock())}
+      if(op.type === 'removeParagraph') cell.blocks.splice(op.blockIndex,1)
+      if(op.type === 'addRun') {if(cell.blocks[op.blockIndex].runs.length>=8)throw new Error('每段最多 8 个片段');cell.blocks[op.blockIndex].runs.push(gridTools.createMockGridRun())}
+      if(op.type === 'removeRun') cell.blocks[op.blockIndex].runs.splice(op.runIndex,1)
+      this.gridHistory.apply(config)
+      this.gridHasInvalidDraft=false
+      this.setData({complexConfig:config,gridPreviewViewModel:buildGridPreview(config,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''})
+    } catch(error) {this.setData({complexError:error.message})}
+  },
+
+  handleSpacingChange(event) {
+    const value = Number(event.detail.value)
+    if (!Number.isInteger(value) || value < COMPONENT_SPACING_MIN_RPX || value > COMPONENT_SPACING_MAX_RPX) return
+    const draft=JSON.parse(JSON.stringify(this.data.draft))
+    draft.config.style.componentSpacingRpx=value
+    draft.renderData=buildMockPortfolioRenderData(draft.config)
+    this.setDraftState(draft)
+  },
+
+  handleAudioSetting(event) {
+    const {field,value} = event.currentTarget.dataset
+    const next=event.detail && event.detail.value !== undefined ? event.detail.value : value
+    if (field === 'displayStyle' && !AUDIO_STYLE_OPTIONS.some(item => item.value === next)) return
+    if (field === 'workId' && !this.data.audioWorks.some(item => item.id === Number(next))) return
+    if (!['enabled', 'workId', 'displayStyle', 'remove'].includes(field)) return
+    const draft=JSON.parse(JSON.stringify(this.data.draft))
+    draft.config.backgroundAudio=Object.assign({},draft.config.backgroundAudio,{[field]:next})
+    if(field === 'enabled') draft.config.backgroundAudio.enabled=next === true
+    if(field === 'workId') draft.config.backgroundAudio.workId=Number(next) || null
+    if(field === 'remove') { delete draft.config.backgroundAudio.remove; draft.config.backgroundAudio.enabled=false; draft.config.backgroundAudio.workId=null }
+    const closePicker = field === 'workId' || field === 'remove' || (field === 'enabled' && next !== true)
+    if(closePicker && this.mockAudio) this.mockAudio.pause()
+    draft.renderData=buildMockPortfolioRenderData(draft.config)
+    this.setDraftState(draft, null, closePicker ? { backgroundAudioPickerVisible: false } : {})
+  },
+
+  handleChooseBackgroundAudio() {
+    if (this.data.draft.config.backgroundAudio.enabled) this.setData({ backgroundAudioPickerVisible: true })
+  },
+
+  handleCloseBackgroundAudioPicker() {
+    this.setData({ backgroundAudioPickerVisible: false })
+  },
+
+  handleAudioAudition() {
+    const work=MOCK_WORK_LIBRARY.works.find(w=>w.id === this.data.draft.config.backgroundAudio.workId && w.mediaType === 'AUDIO')
+    if(!work) {wx.showToast({title:'请先选择音频',icon:'none'});return}
+    if(!this.mockAudio) this.mockAudio=createMockAudioController({wxApi:wx,onPlaying:playing=>this.setData({audioPlaying:playing}),onError:()=>wx.showToast({title:'音频播放失败，请点击重试',icon:'none'})})
+    this.mockAudio.setResource({workId:work.id,mediaUrl:work.mediaUrl,enabled:true})
+    this.mockAudio.toggle()
   },
 
   handleLockedAction() {

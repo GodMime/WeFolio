@@ -1,0 +1,38 @@
+<view wx:if="{{items.length}}" class="video-carousel theme-{{themeMode}}">
+  <view wx:if="{{showComponentTitle && title}}" class="video-carousel-title">{{title}}</view>
+  <view wx:if="{{displayStyle !== 'PORTRAIT_CARDS'}}" class="video-carousel-stage" bindtouchstart="handleTouchStart" bindtouchmove="handleTouchMove" bindtouchend="handleTouchEnd" bindtouchcancel="handleTouchCancel">
+    <block wx:for="{{cards}}" wx:key="index">
+      <view wx:if="{{!item.hidden}}" class="video-carousel-card {{item.isCenter ? 'is-center' : ''}} {{snapping ? 'is-snapping' : ''}}" style="{{item.transformStyle}}" data-index="{{item.index}}" bindtap="handleCardTap" aria-role="button" aria-label="{{item.isCenter ? '播放' : '切换至'}}视频{{item.work.title}}">
+        <image wx:if="{{item.work.coverUrl}}" class="video-carousel-cover" src="{{item.work.coverUrl}}" mode="aspectFill" data-work-id="{{item.work.workId}}" binderror="handleCoverError" />
+        <view wx:else class="video-carousel-placeholder"><text>暂无封面</text><view wx:if="{{item.work.coverFailed}}" class="video-carousel-retry" data-work-id="{{item.work.workId}}" catchtap="handleRetryCover">重试封面</view></view>
+        <view class="video-carousel-shade {{showTitle || (showDescription && item.work.description) ? 'has-caption' : ''}}"></view>
+        <view wx:if="{{showTitle || (showDescription && item.work.description)}}" class="video-carousel-caption">
+          <view class="video-carousel-caption-rule" aria-hidden="true"></view>
+          <view wx:if="{{showTitle}}" class="video-carousel-caption-title">{{item.work.title || '未命名视频'}}</view>
+          <view wx:if="{{showDescription && item.work.description}}" class="video-carousel-caption-description {{showTitle ? 'with-title' : ''}}">{{item.work.description}}</view>
+        </view>
+        <view wx:if="{{showTitle || (showDescription && item.work.description)}}" class="video-carousel-entry" aria-hidden="true"><text>{{item.isCenter ? '观看视频' : '切换视频'}}</text><text class="video-carousel-entry-arrow">→</text></view>
+        <view wx:else class="video-carousel-play" aria-hidden="true"><view class="video-carousel-play-mark"></view></view>
+      </view>
+    </block>
+  </view>
+  <swiper wx:if="{{displayStyle === 'PORTRAIT_CARDS'}}" class="video-carousel-portrait-track" style="height:{{portraitHeight}}px" current="{{currentIndex}}" next-margin="{{portraitNextMargin}}px" circular="{{false}}" bindchange="handlePortraitChange">
+    <swiper-item wx:for="{{items}}" wx:key="workId">
+      <view class="video-carousel-portrait-card" data-index="{{index}}" bindtap="handlePortraitTap" aria-role="button" aria-label="{{index === currentIndex ? '播放' : '切换至'}}视频{{item.title}}">
+        <image wx:if="{{item.coverUrl}}" class="video-carousel-cover" src="{{item.coverUrl}}" mode="aspectFill" data-work-id="{{item.workId}}" binderror="handleCoverError" />
+        <view wx:else class="video-carousel-placeholder"><text>暂无封面</text><view wx:if="{{item.coverFailed}}" class="video-carousel-retry" data-work-id="{{item.workId}}" catchtap="handleRetryCover">重试封面</view></view>
+        <view class="video-carousel-shade {{showTitle || (showDescription && item.description) ? 'has-caption' : ''}}"></view>
+        <view class="video-carousel-frame" aria-hidden="true"></view>
+        <view wx:if="{{showTitle || (showDescription && item.description)}}" class="video-carousel-caption">
+          <view class="video-carousel-caption-rule" aria-hidden="true"></view>
+          <view wx:if="{{showTitle}}" class="video-carousel-caption-title">{{item.title || '未命名视频'}}</view>
+          <view wx:if="{{showDescription && item.description}}" class="video-carousel-caption-description {{showTitle ? 'with-title' : ''}}">{{item.description}}</view>
+        </view>
+        <view wx:if="{{showTitle || (showDescription && item.description)}}" class="video-carousel-entry" aria-hidden="true"><text>{{index === currentIndex ? '观看视频' : '切换视频'}}</text><text class="video-carousel-entry-arrow">→</text></view>
+        <view wx:else class="video-carousel-play" aria-hidden="true"><view class="video-carousel-play-mark"></view></view>
+      </view>
+    </swiper-item>
+  </swiper>
+  <view wx:if="{{displayStyle === 'PORTRAIT_CARDS' && items.length > 1}}" class="video-carousel-indicators"><view wx:for="{{items}}" wx:key="workId" class="video-carousel-dot {{index === currentIndex ? 'active' : ''}}"></view></view>
+  <view wx:if="{{showSwipeHint && items.length > 1}}" class="video-carousel-hint">左右滑动，点击观看视频</view>
+</view>

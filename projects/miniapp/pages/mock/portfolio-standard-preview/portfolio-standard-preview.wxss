@@ -21,3 +21,5 @@
 .portfolio-theme-dark .folio-brand-name {
   color: var(--portfolio-text-muted);
 }
+
+.mock-copy-prompt { position:fixed; left:48rpx; right:48rpx; bottom:200rpx; padding:24rpx; border-radius:16rpx; background:rgba(0,0,0,.8); color:white; text-align:center; z-index:100; }

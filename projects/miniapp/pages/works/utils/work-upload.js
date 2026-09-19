@@ -4,7 +4,10 @@ const {
   normalizeDimension
 } = require('./media')
 const { calculateFileSha256 } = require('./sha256')
-const { DEFAULT_AUDIO_COVER_URL } = require('./works')
+const { DEFAULT_AUDIO_COVER_URL, formatFileSize } = require('./works')
+const { COMPRESSION_CANCELLED, COMPRESSION_TIMEOUT, METADATA_TIMEOUT_MS, releasePreparedWorkFiles } = require('./work-compression-runtime')
+const { compressImageToLimit } = require('./work-image-compress')
+const { compressVideoToLimit, readSourceVideoInfo } = require('./work-video-compress')
 
 const MAX_BATCH_COUNT = 9
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024
@@ -29,6 +32,7 @@ const ANIMATION_UPLOAD_CONCURRENCY = 2
 const VIDEO_UPLOAD_CONCURRENCY = 1
 const COS_UPLOAD_TIMEOUT = 10 * 60 * 1000
 const TITLE_MAX_LENGTH = 30
+const DEFAULT_TITLE_MEDIA_NAMES = { IMAGE: '图片', VIDEO: '视频', AUDIO: '音频' }
 const UPLOAD_COMPLETE_FAILURE_FALLBACK = '部分作品确认失败'
 const CHOOSE_MEDIA_TYPE_MIX = 'mix'
 const CHOOSE_MEDIA_TYPE_IMAGE = 'image'
@@ -45,12 +49,6 @@ const THUMB_COMPRESS_ATTEMPTS = [
   { quality: 45, compressedSize: 240 }
 ]
 const THUMB_TOO_LARGE_MESSAGE = '缩略图或封面图不能超过 100KB'
-const STATIC_IMAGE_MAIN_COMPRESS_ATTEMPTS = [
-  { quality: 90, compressedSize: 2048 },
-  { quality: 82, compressedSize: 1600 },
-  { quality: 74, compressedSize: 1280 },
-  { quality: 66, compressedSize: 960 }
-]
 const IMAGE_TOO_LARGE_MESSAGE = '图片作品不能超过 10MB'
 const ANIMATION_TOO_LARGE_MESSAGE = '动图作品必须小于 32MB'
 // 开发者工具整文件读取超过 10MB 时可能解码失败，识别类型只读取必要头部。
@@ -58,6 +56,23 @@ const MEDIA_SIGNATURE_READ_BYTES = 21
 const WEBP_RIFF_HEADER_BYTES = 12
 const WEBP_CHUNK_HEADER_BYTES = 8
 const WEBP_ANIMATION_CHUNK_TYPES = ['ANIM', 'ANMF']
+const WEBP_MAX_SCAN_CHUNKS = 1024
+const WEBP_MAX_SCAN_HEADER_BYTES = 64 * 1024
+const WEBP_ANIMATION_FLAG = 0x02
+const WEBP_ALPHA_FLAG = 0x10
+const WEBP_VP8L_SIGNATURE = 0x2f
+const WEBP_EXTENDED_HEADER_SIZE = 10
+const WEBP_LOSSLESS_HEADER_SIZE = 5
+const COMPRESSION_SUMMARY_PREFIX = '已压缩：'
+const IMAGE_COMPRESSION_UNSUPPORTED_MESSAGE = '当前微信版本不支持图片压缩，请升级微信'
+const VIDEO_COMPRESSION_UNSUPPORTED_MESSAGE = '当前微信版本不支持视频压缩，请升级微信'
+const IMAGE_PROCESSING_FAILED_MESSAGE = '图片处理失败，请选择较小文件后重试'
+const WEBP_CLASSIFICATION_INCOMPLETE_MESSAGE = '无法确认此 WebP 是否为动图，请将静态图片转换为 JPEG 或 PNG，动图转换为 GIF 后重试'
+const MEDIA_EMPTY_MESSAGE = '作品文件不能为空，请重新选择'
+const MEDIA_TYPE_UNSUPPORTED_MESSAGE = '作品文件格式不支持'
+const VIDEO_DURATION_LIMIT_MESSAGE = '视频作品不能超过 10 分钟'
+const MEDIA_STAT_FAILED_MESSAGE = '无法读取作品文件大小，请重新选择'
+const WEBP_UNKNOWN = Object.freeze({ staticImageVerified: false, animated: false, webpAlpha: 'unknown', webpAlphaHint: null })
 
 function getRuntimeWx(wxApi) {
   if (wxApi) {
@@ -158,6 +173,13 @@ function titleFromFileName(fileName) {
   return stem.length > TITLE_MAX_LENGTH ? stem.slice(0, TITLE_MAX_LENGTH) : stem
 }
 
+// 相册只返回临时路径时无法获知原名，使用本地日期时间与本次上传序号生成可读标题。
+function buildDefaultWorkTitle(mediaType, index, now) {
+  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const time = [now.getHours(), now.getMinutes(), now.getSeconds()].map(value => String(value).padStart(2, '0')).join(':')
+  return `${DEFAULT_TITLE_MEDIA_NAMES[mediaType]} ${date} ${time} ${String(index + 1).padStart(2, '0')}`
+}
+
 function buildThumbFileName(fileName) {
   const stem = fileStemFromFileName(fileName) || 'work'
   return `${stem}${THUMB_FILE_SUFFIX}.${THUMB_FILE_EXTENSION}`
@@ -251,7 +273,7 @@ function mimeTypeFromFile(file) {
   return file.fileType === 'video' ? 'video/mp4' : 'image/jpeg'
 }
 
-function normalizeChosenMediaFile(raw = {}, index = 0) {
+function normalizeChosenMediaFile(raw = {}, index = 0, now = new Date()) {
   const filePath = trimText(raw.tempFilePath || raw.path)
   const fileName = trimText(raw.name) || fileNameFromPath(filePath)
   const mediaType = raw.fileType === 'audio' ? 'AUDIO' : raw.fileType === 'video' ? 'VIDEO' : 'IMAGE'
@@ -265,7 +287,7 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     coverPath: trimText(raw.thumbTempFilePath),
     audioCoverUrl: mediaType === 'AUDIO' ? DEFAULT_AUDIO_COVER_URL : '',
     fileName,
-    title: titleFromFileName(fileName),
+    title: titleFromFileName(raw.name) || buildDefaultWorkTitle(mediaType, index, now),
     description: '',
     tags: [],
     isVideo: mediaType === 'VIDEO',
@@ -277,6 +299,8 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
     size: normalizeSize(raw.size),
     sha256: trimText(raw.sha256),
     durationMs,
+    // 视频保留选择器的原始秒精度，源信息兜底时不能因毫秒舍入放过超时长文件。
+    ...(mediaType === 'VIDEO' ? { durationSeconds: normalizeSize(raw.duration) || normalizeSize(raw.durationMs) / 1000 } : {}),
     width,
     height,
     aspectRatio: buildAspectRatio(width, height),
@@ -291,8 +315,8 @@ function normalizeChosenMediaFile(raw = {}, index = 0) {
   }
 }
 
-function normalizeChosenMediaFiles(files = []) {
-  return Array.isArray(files) ? files.map(normalizeChosenMediaFile) : []
+function normalizeChosenMediaFiles(files = [], { now = new Date(), startIndex = 0 } = {}) {
+  return Array.isArray(files) ? files.map((file, index) => normalizeChosenMediaFile(file, startIndex + index, now)) : []
 }
 
 function ascii(bytes, offset, length) {
@@ -323,119 +347,159 @@ function readUint32LittleEndian(bytes, offset) {
   ) >>> 0
 }
 
-async function hasAnimatedWebpChunk(file, bytes, wxApi) {
-  const fileSize = normalizeSize(file.size)
-  let offset = WEBP_RIFF_HEADER_BYTES
-  while (offset + WEBP_CHUNK_HEADER_BYTES <= fileSize) {
-    // WebP 动画段前可能存在较大的元数据，按段长度跳过内容，只读取段头。
-    const chunkHeader = offset + WEBP_CHUNK_HEADER_BYTES <= bytes.length
-      ? bytes.subarray(offset, offset + WEBP_CHUNK_HEADER_BYTES)
-      : await readLocalMediaBytes(file.tempFilePath, wxApi, offset, WEBP_CHUNK_HEADER_BYTES)
-    if (chunkHeader.length < WEBP_CHUNK_HEADER_BYTES) {
-      return false
-    }
-    const chunkType = ascii(chunkHeader, 0, 4)
-    const chunkSize = readUint32LittleEndian(chunkHeader, 4)
-    if (WEBP_ANIMATION_CHUNK_TYPES.includes(chunkType)) {
-      return true
-    }
-    if (chunkSize < 0) {
-      return false
-    }
-    offset += WEBP_CHUNK_HEADER_BYTES + chunkSize + (chunkSize % 2)
-  }
-  return false
-}
-
 function isWebp(bytes) {
   return ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP'
 }
 
-async function isAnimatedWebp(file, bytes, wxApi) {
-  if (!isWebp(bytes)) {
-    return false
-  }
-  if (ascii(bytes, 12, 4) === 'VP8X' && bytes.length > 20 && (bytes[20] & 0x02) !== 0) {
-    return true
-  }
-  return hasAnimatedWebpChunk(file, bytes, wxApi)
+function readLocalMediaBytes(filePath, wxApi, position, length, session, timeoutMs = METADATA_TIMEOUT_MS) {
+  const fileSystem = getRuntimeWx(wxApi).getFileSystemManager()
+  const args = { filePath, position, length }
+  const pending = session
+    ? session.call(callbacks => fileSystem.readFile(callbacks), args, { timeoutMs })
+    : new Promise((resolve, reject) => fileSystem.readFile(Object.assign({}, args, {
+      success: resolve,
+      fail(error) { reject(new Error(error && error.errMsg ? error.errMsg : '读取作品文件失败')) }
+    })))
+  return pending.then(response => new Uint8Array(response.data))
 }
 
-function readLocalMediaBytes(filePath, wxApi, position, length) {
-  const runtimeWx = getRuntimeWx(wxApi)
-  return new Promise((resolve, reject) => {
-    runtimeWx.getFileSystemManager().readFile({
-      filePath,
-      position,
-      length,
-      success(response) {
-        resolve(new Uint8Array(response.data))
-      },
-      fail(error) {
-        reject(new Error(error && error.errMsg ? error.errMsg : '读取作品文件失败'))
-      }
-    })
+function measureChosenMediaFiles(files = [], options = {}) {
+  return files.map(file => {
+    if (!file || file.mediaType === 'AUDIO') return file
+    let size
+    try {
+      size = getRuntimeWx(options.wxApi).getFileSystemManager().statSync(file.tempFilePath).size
+      if (!Number.isSafeInteger(size) || size < 0) throw new Error(MEDIA_STAT_FAILED_MESSAGE)
+    } catch (error) {
+      throw new Error(MEDIA_STAT_FAILED_MESSAGE)
+    }
+    return Object.assign({}, file, { size, sha256: size === file.size ? file.sha256 : '' })
   })
 }
 
-function isGifOrWebpCandidate(file = {}) {
-  const fileName = trimText(file.fileName).toLowerCase()
-  const mimeType = trimText(file.mimeType).toLowerCase()
-  return fileName.endsWith('.gif')
-    || fileName.endsWith('.webp')
-    || mimeType === 'image/gif'
-    || mimeType === 'image/webp'
+function isNamedFormat(file, extension) {
+  return trimText(file.fileName).toLowerCase().endsWith(`.${extension}`)
+    || trimText(file.mimeType).toLowerCase() === `image/${extension}`
+}
+
+function isCompressionInterrupted(error) {
+  return error && (error.code === COMPRESSION_CANCELLED || error.code === COMPRESSION_TIMEOUT)
+}
+
+// 只扫描段结构；大图像载荷按长度跳过，静态身份和透明信息分别返回。
+async function inspectWebp(file, bytes, read) {
+  const fileSize = file.size
+  if (!isWebp(bytes)) return WEBP_UNKNOWN
+  // 动画提示即按动图保护，损坏头部不能借此进入静态压缩。
+  if (ascii(bytes, 12, 4) === 'VP8X' && bytes.length > 20 && (bytes[20] & WEBP_ANIMATION_FLAG)) {
+    return Object.assign({}, WEBP_UNKNOWN, { animated: true })
+  }
+  if (readUint32LittleEndian(bytes, 4) + 8 !== fileSize) return WEBP_UNKNOWN
+  let offset = WEBP_RIFF_HEADER_BYTES
+  let chunkCount = 0
+  let imageType = ''
+  let extendedFlags = null
+  let hasAlpha = false
+  let alphaHint = null
+  let conflicting = false
+  while (offset < fileSize) {
+    if (chunkCount >= WEBP_MAX_SCAN_CHUNKS || offset + WEBP_CHUNK_HEADER_BYTES > fileSize) return WEBP_UNKNOWN
+    const header = offset + WEBP_CHUNK_HEADER_BYTES <= bytes.length
+      ? bytes.subarray(offset, offset + WEBP_CHUNK_HEADER_BYTES)
+      : await read(offset, WEBP_CHUNK_HEADER_BYTES)
+    if (header.length !== WEBP_CHUNK_HEADER_BYTES) return WEBP_UNKNOWN
+    chunkCount += 1
+    const type = ascii(header, 0, 4)
+    const size = readUint32LittleEndian(header, 4)
+    const payloadStart = offset + WEBP_CHUNK_HEADER_BYTES
+    const next = payloadStart + size + size % 2
+    if (size < 0 || next > fileSize) return WEBP_UNKNOWN
+    if (WEBP_ANIMATION_CHUNK_TYPES.includes(type)) return Object.assign({}, WEBP_UNKNOWN, { animated: true })
+    if (type === 'VP8X') {
+      if (size !== WEBP_EXTENDED_HEADER_SIZE || extendedFlags !== null || offset !== WEBP_RIFF_HEADER_BYTES) return WEBP_UNKNOWN
+      const flag = payloadStart < bytes.length ? bytes.subarray(payloadStart, payloadStart + 1) : await read(payloadStart, 1)
+      if (flag.length !== 1) return WEBP_UNKNOWN
+      extendedFlags = flag[0]
+      if (extendedFlags & WEBP_ANIMATION_FLAG) return Object.assign({}, WEBP_UNKNOWN, { animated: true })
+    } else if (type === 'VP8 ' || type === 'VP8L') {
+      if (imageType || size === 0) return WEBP_UNKNOWN
+      imageType = type
+      if (type === 'VP8L') {
+        if (size < WEBP_LOSSLESS_HEADER_SIZE) return WEBP_UNKNOWN
+        const header = payloadStart + WEBP_LOSSLESS_HEADER_SIZE <= bytes.length
+          ? bytes.subarray(payloadStart, payloadStart + WEBP_LOSSLESS_HEADER_SIZE)
+          : await read(payloadStart, WEBP_LOSSLESS_HEADER_SIZE)
+        if (header.length !== WEBP_LOSSLESS_HEADER_SIZE || header[0] !== WEBP_VP8L_SIGNATURE || (header[4] & 0xe0)) return WEBP_UNKNOWN
+        alphaHint = Boolean(header[4] & WEBP_ALPHA_FLAG)
+      }
+    } else if (type === 'ALPH') {
+      if (!size || hasAlpha || imageType) conflicting = true
+      hasAlpha = true
+    }
+    offset = next
+  }
+  if (!imageType || offset !== fileSize) return WEBP_UNKNOWN
+  const extendedAlpha = extendedFlags !== null && Boolean(extendedFlags & WEBP_ALPHA_FLAG)
+  if ((hasAlpha && (extendedFlags === null || imageType !== 'VP8 '))
+      || (extendedFlags !== null && imageType === 'VP8 ' && extendedAlpha !== hasAlpha)
+      || (extendedFlags !== null && imageType === 'VP8L' && extendedAlpha !== alphaHint)) conflicting = true
+  let webpAlpha = 'unknown'
+  if (!conflicting) {
+    webpAlpha = imageType === 'VP8L' ? (alphaHint ? 'present' : 'unknown')
+      : (hasAlpha || extendedAlpha ? 'present' : 'opaque')
+  }
+  return { staticImageVerified: true, animated: false, webpAlpha, webpAlphaHint: alphaHint }
 }
 
 async function classifyChosenMediaFiles(files = [], options = {}) {
   const classified = []
+  const { session } = options
   for (const file of Array.isArray(files) ? files : []) {
-    if (!file || file.mediaType !== 'IMAGE') {
-      classified.push(file)
-      continue
-    }
-    if (normalizeSize(file.size) > ANIMATION_MAX_BYTES && isGifOrWebpCandidate(file)) {
-      throw new Error(ANIMATION_TOO_LARGE_MESSAGE)
-    }
-    if (normalizeSize(file.size) > ANIMATION_MAX_BYTES) {
-      classified.push(file)
-      continue
+    if (session) session.assertActive()
+    if (!file || file.mediaType !== 'IMAGE') { classified.push(file); continue }
+    const large = normalizeSize(file.size) > ANIMATION_MAX_BYTES
+    if (large && isNamedFormat(file, 'gif')) throw new Error(ANIMATION_TOO_LARGE_MESSAGE)
+    if (large && !isNamedFormat(file, 'webp')) { classified.push(file); continue }
+    const deadline = Date.now() + METADATA_TIMEOUT_MS
+    let readBytes = 0
+    const read = async (position, length) => {
+      if (session) session.assertActive()
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) throw Object.assign(new Error('读取作品信息超时，请重试'), { code: COMPRESSION_TIMEOUT })
+      if (length <= 0 || length > MEDIA_SIGNATURE_READ_BYTES || readBytes + length > WEBP_MAX_SCAN_HEADER_BYTES) {
+        throw new Error('WebP头部读取超出限制')
+      }
+      readBytes += length
+      const result = await readLocalMediaBytes(file.tempFilePath, options.wxApi, position, length, session, remaining)
+      if (session) session.assertActive()
+      return result
     }
     let bytes
-    let animatedWebp = false
+    let webp = WEBP_UNKNOWN
     try {
-      const headerLength = Math.min(normalizeSize(file.size) || MEDIA_SIGNATURE_READ_BYTES, MEDIA_SIGNATURE_READ_BYTES)
-      bytes = await readLocalMediaBytes(file.tempFilePath, options.wxApi, 0, headerLength)
-      if (isWebp(bytes)) {
-        animatedWebp = await isAnimatedWebp(file, bytes, options.wxApi)
-      }
+      bytes = await read(0, Math.min(normalizeSize(file.size) || MEDIA_SIGNATURE_READ_BYTES, MEDIA_SIGNATURE_READ_BYTES))
+      if (isWebp(bytes)) webp = await inspectWebp(file, bytes, read)
     } catch (error) {
+      if (isCompressionInterrupted(error)) throw error
+      if (large) throw new Error(WEBP_CLASSIFICATION_INCOMPLETE_MESSAGE)
       classified.push(file)
       continue
     }
-    if (isGif(bytes)) {
-      classified.push(Object.assign({}, file, {
-        mediaType: 'ANIMATION',
-        mimeType: 'image/gif',
-        fileType: 'image',
-        isVideo: false,
-        isAnimation: true,
-        metaText: buildMediaMetaText('ANIMATION')
-      }))
-      continue
+    const gif = isGif(bytes)
+    if (large && !webp.staticImageVerified) {
+      throw new Error(gif || webp.animated ? ANIMATION_TOO_LARGE_MESSAGE : WEBP_CLASSIFICATION_INCOMPLETE_MESSAGE)
     }
-    if (isWebp(bytes)) {
+    if (gif || isWebp(bytes)) {
+      const animated = gif || webp.animated
       classified.push(Object.assign({}, file, {
-        mediaType: animatedWebp ? 'ANIMATION' : 'IMAGE',
-        mimeType: 'image/webp',
-        fileType: 'image',
-        isVideo: false,
-        isAnimation: animatedWebp,
-        metaText: buildMediaMetaText(animatedWebp ? 'ANIMATION' : 'IMAGE')
+        mediaType: animated ? 'ANIMATION' : 'IMAGE',
+        mimeType: gif ? 'image/gif' : 'image/webp', fileType: 'image',
+        isVideo: false, isAnimation: animated,
+        staticImageVerified: !gif && webp.staticImageVerified,
+        webpAlpha: webp.webpAlpha, webpAlphaHint: webp.webpAlphaHint,
+        metaText: buildMediaMetaText(animated ? 'ANIMATION' : 'IMAGE')
       }))
-      continue
-    }
-    classified.push(file)
+    } else classified.push(file)
   }
   return classified
 }
@@ -575,40 +639,93 @@ async function enrichVideoFileMetadata(files = [], options = {}) {
   }))
 }
 
-async function prepareStaticImageMainFile(file, options = {}) {
-  if (!file || file.mediaType !== 'IMAGE' || normalizeSize(file.size) <= IMAGE_MAX_BYTES) {
-    return file
-  }
-  for (const attempt of STATIC_IMAGE_MAIN_COMPRESS_ATTEMPTS) {
-    const tempFilePath = await compressImageFile(file.tempFilePath, attempt, options)
-    const fileSize = getLocalFileSize(tempFilePath, options.wxApi)
-    if (fileSize <= 0 || fileSize > IMAGE_MAX_BYTES) {
-      continue
-    }
-    const imageInfo = await getImageInfo(tempFilePath, options.wxApi)
-    const calculateSha256 = options.calculateSha256
-      || ((path) => calculateFileSha256(path, { wxApi: options.wxApi }))
-    const nextFile = Object.assign({}, file, {
-      tempFilePath,
-      size: fileSize,
-      sha256: await calculateSha256(tempFilePath)
-    })
-    if (imageInfo) {
-      nextFile.width = normalizeDimension(imageInfo.width)
-      nextFile.height = normalizeDimension(imageInfo.height)
-      nextFile.aspectRatio = buildAspectRatio(nextFile.width, nextFile.height)
-    }
-    return nextFile
-  }
-  throw new Error(IMAGE_TOO_LARGE_MESSAGE)
+function validMediaDimension(value) {
+  return Number.isFinite(value) && value > 0
 }
 
-async function prepareStaticImageMainFiles(files = [], options = {}) {
-  const prepared = []
-  for (const file of Array.isArray(files) ? files : []) {
-    prepared.push(await prepareStaticImageMainFile(file, options))
+// 全批轻量校验先行，避免后面的已知错误浪费前面文件的编码时间。
+async function preflightWorkMainFiles(files, { wxApi, session, getCanvas }) {
+  const runtimeWx = getRuntimeWx(wxApi)
+  const sourceVideoInfos = new Map()
+  if (!files.length || files.length > MAX_BATCH_COUNT) {
+    throw new Error(validateChosenMediaFiles(files).message)
   }
-  return prepared
+  for (const file of files) {
+    session.assertActive()
+    if (!file || !['IMAGE', 'VIDEO', 'ANIMATION', 'AUDIO'].includes(file.mediaType)) throw new Error(MEDIA_TYPE_UNSUPPORTED_MESSAGE)
+    if (file.mediaType === 'AUDIO' || file.mediaType === 'ANIMATION') {
+      const validation = validateChosenMediaFiles([file])
+      if (!validation.valid) throw new Error(validation.message)
+    }
+    if (!Number.isSafeInteger(file.size) || file.size <= 0) throw new Error(MEDIA_EMPTY_MESSAGE)
+    if (file.mediaType === 'IMAGE' && file.size > IMAGE_MAX_BYTES) {
+      if (typeof runtimeWx.getImageInfo !== 'function') throw new Error(IMAGE_PROCESSING_FAILED_MESSAGE)
+      const info = await session.call('getImageInfo', { src: file.tempFilePath }, { timeoutMs: METADATA_TIMEOUT_MS })
+      session.assertActive()
+      const type = trimText(info && info.type).toLowerCase()
+      if (type === 'webp' && (!file.staticImageVerified || file.isAnimation)) {
+        throw new Error(WEBP_CLASSIFICATION_INCOMPLETE_MESSAGE)
+      }
+      if (!info || !validMediaDimension(info.width) || !validMediaDimension(info.height)
+          || !['jpg', 'jpeg', 'png', 'webp'].includes(type)) {
+        throw new Error(IMAGE_PROCESSING_FAILED_MESSAGE)
+      }
+      if (type === 'jpg' || type === 'jpeg') {
+        if (typeof runtimeWx.compressImage !== 'function') throw new Error(IMAGE_COMPRESSION_UNSUPPORTED_MESSAGE)
+      } else if (typeof getCanvas !== 'function' || typeof runtimeWx.canvasToTempFilePath !== 'function') {
+        throw new Error(IMAGE_PROCESSING_FAILED_MESSAGE)
+      }
+    } else if (file.mediaType === 'VIDEO' && file.size > VIDEO_MAX_BYTES) {
+      if (typeof runtimeWx.getVideoInfo !== 'function' || typeof runtimeWx.compressVideo !== 'function') {
+        throw new Error(VIDEO_COMPRESSION_UNSUPPORTED_MESSAGE)
+      }
+      const info = await readSourceVideoInfo(file, { session })
+      if (info.duration * 1000 > VIDEO_MAX_DURATION_SECONDS * 1000) throw new Error(VIDEO_DURATION_LIMIT_MESSAGE)
+      sourceVideoInfos.set(file, info)
+    } else if (file.mediaType === 'VIDEO' && file.durationMs > VIDEO_MAX_DURATION_SECONDS * 1000) {
+      throw new Error(VIDEO_DURATION_LIMIT_MESSAGE)
+    }
+  }
+  return sourceVideoInfos
+}
+
+async function prepareWorkMainFiles(files = [], options = {}) {
+  const { session, wxApi, getCanvas, onProgress } = options
+  const prepared = []
+  const ownedPathsByClientId = {}
+  try {
+    session.assertActive()
+    const sourceVideoInfos = await preflightWorkMainFiles(files, { wxApi, session, getCanvas })
+    session.assertActive()
+    for (let index = 0; index < files.length; index += 1) {
+      session.assertActive()
+      const file = files[index]
+      const progress = stage => {
+        if (onProgress) onProgress({ mediaType: file.mediaType, index: index + 1, total: files.length, stage })
+      }
+      progress('reading')
+      const onCompress = () => progress('compressing')
+      const onEncodingWait = waiting => progress(waiting ? 'waiting' : 'compressing')
+      const next = file.mediaType === 'IMAGE'
+        ? await compressImageToLimit(file, { session, wxApi, getCanvas, onCompress, onEncodingWait, maxBytes: IMAGE_MAX_BYTES })
+        : file.mediaType === 'VIDEO'
+          ? await compressVideoToLimit(file, { session, wxApi, onCompress, onEncodingWait,
+            sourceInfo: sourceVideoInfos.get(file), maxBytes: VIDEO_MAX_BYTES,
+            maxDurationMs: VIDEO_MAX_DURATION_SECONDS * 1000 })
+          : file
+      session.assertActive()
+      prepared.push(Object.assign({}, next, {
+        compressionText: next.compressed
+          ? `${COMPRESSION_SUMMARY_PREFIX}${formatFileSize(next.originalSize)} → ${formatFileSize(next.size)}` : ''
+      }))
+    }
+    for (const file of prepared) ownedPathsByClientId[file.clientId] = session.transfer([file.tempFilePath])
+    return { files: prepared, ownedPathsByClientId }
+  } catch (error) {
+    releasePreparedWorkFiles({ wxApi, ownedPathsByClientId })
+    session.dispose()
+    throw error
+  }
 }
 
 function isConfirmedFile(file = {}) {
@@ -1059,11 +1176,13 @@ module.exports = {
   createChooseMediaOptions,
   chooseAudioFiles,
   classifyChosenMediaFiles,
+  measureChosenMediaFiles,
+  prepareWorkMainFiles,
+  releasePreparedWorkFiles,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
   prepareLocalCoverUploadFile,
   prepareCoverUploadFiles,
-  prepareStaticImageMainFiles,
   readLocalMediaBytes,
   uploadToCos,
   runWorkUploadQueue,

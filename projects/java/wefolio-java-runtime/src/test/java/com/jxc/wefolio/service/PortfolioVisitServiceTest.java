@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioTypeDict;
@@ -14,19 +15,26 @@ import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
+import com.jxc.wefolio.mapper.WorkEntityMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -46,7 +54,7 @@ import static org.mockito.Mockito.when;
 /**
  * 作品集访问服务测试 — 覆盖打开访问、事件计数和扣费场景。
  */
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class PortfolioVisitServiceTest {
 
     /** 访问汇总 Mapper 模拟 */
@@ -65,11 +73,172 @@ class PortfolioVisitServiceTest {
     @Mock
     private PortfolioReferenceEntityMapper portfolioReferenceEntityMapper;
 
+    /** 作品主数据 Mapper 模拟，用于验证事件名称快照。 */
+    @Mock
+    private WorkEntityMapper workEntityMapper;
+
     @BeforeEach
     void setUp() {
+        lenient().when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of(publishedWorkReference()));
         lenient().when(visitRecordEntityMapper.incrementCounters(
                 any(VisitRecordEntity.class), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt()))
                 .thenReturn(1);
+    }
+
+    /** 旧页面失效事件保留兼容返回和不扣费语义，同时输出不含访客凭据的观测日志。 */
+    @Test
+    void recordEventWithoutComponentKeyShouldIgnoreUnpublishedWork(CapturedOutput output) {
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("unpublished-work");
+        request.setVisitorKey("private-visitor-key");
+
+        assertThatCode(() -> service().recordEvent(portfolio(), 1024L, request)).doesNotThrowAnyException();
+
+        verifyNoInteractions(visitRecordEntityMapper, visitEventEntityMapper, pointBillingWindowService);
+        assertThat(output.getAll()).contains("PORTFOLIO_LEGACY_WORK_EVENT_IGNORED",
+                "portfolioId=88", "workId=11", "eventType=WORK_VIEWED")
+                .doesNotContain("private-visitor-key", "unpublished-work");
+    }
+
+    /** 省略组件键不能借用草稿引用、其它作品集或失效引用。 */
+    @Test
+    void recordEventWithoutComponentKeyShouldIgnoreUnrelatedReferences() {
+        PortfolioReferenceEntity draftReference = publishedWorkReference();
+        draftReference.setConfigScope(PortfolioConfigScopeDict.DRAFT.getCode());
+        PortfolioReferenceEntity otherPortfolio = publishedWorkReference();
+        otherPortfolio.setPortfolioId(99L);
+        PortfolioReferenceEntity invalidReference = publishedWorkReference();
+        invalidReference.setIsValid(0);
+        when(portfolioReferenceEntityMapper.selectList(any()))
+                .thenReturn(List.of(draftReference, otherPortfolio, invalidReference));
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setEventType(VisitEventTypeDict.VIDEO_PLAYED.getCode());
+        request.setWorkId(11L);
+
+        assertThatCode(() -> service().recordEvent(portfolio(), 1024L, request)).doesNotThrowAnyException();
+
+        verifyNoInteractions(visitRecordEntityMapper, visitEventEntityMapper, pointBillingWindowService);
+    }
+
+    /** 合法旧版事件不需要组件键和媒体字段，发布配置缺少媒体字段也不影响入账。 */
+    @Test
+    void recordLegacyEventShouldAcceptPublishedWorkWithoutOptionalFields() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        record.setPortfolioId(88L);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        WorkEntity work = new WorkEntity();
+        work.setId(11L);
+        work.setTitle("迎宾图");
+        when(workEntityMapper.selectById(11L)).thenReturn(work);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setVisitorKey("legacy-visitor");
+        request.setIdempotencyKey("legacy-published-work");
+
+        service().recordEvent(portfolio(), 1024L, request);
+
+        ArgumentCaptor<VisitEventEntity> eventCaptor = ArgumentCaptor.forClass(VisitEventEntity.class);
+        verify(visitEventEntityMapper).insert(eventCaptor.capture());
+        assertThat(JSON.parseObject(eventCaptor.getValue().getMetadata()).getString("workTitle"))
+                .isEqualTo("迎宾图");
+        assertThat(record.getViewWorkCount()).isEqualTo(1);
+    }
+
+    /** 客户端未传元数据时，图片、动图和视频事件仍应保存服务端作品名称。 */
+    @ParameterizedTest
+    @EnumSource(value = MediaTypeDict.class, names = {"IMAGE", "ANIMATION", "VIDEO"})
+    void recordWorkEventShouldSnapshotTitleWithoutClientMetadata(MediaTypeDict mediaType) {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        WorkEntity work = new WorkEntity();
+        work.setId(11L);
+        work.setUserId(7L);
+        work.setTitle("婚礼现场精选");
+        when(workEntityMapper.selectById(11L)).thenReturn(work);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(mediaType == MediaTypeDict.VIDEO
+                ? VisitEventTypeDict.VIDEO_PLAYED.getCode() : VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setMediaType(mediaType.getCode());
+        request.setIdempotencyKey("work-title-snapshot");
+
+        service().recordEvent(portfolio(), 1024L, request);
+
+        ArgumentCaptor<VisitEventEntity> eventCaptor = ArgumentCaptor.forClass(VisitEventEntity.class);
+        verify(visitEventEntityMapper).insert(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getMetadata()).isNotNull();
+        assertThat(JSON.parseObject(eventCaptor.getValue().getMetadata()).getString("workTitle"))
+                .isEqualTo("婚礼现场精选");
+    }
+
+    /** 服务端作品名称应覆盖客户端名称，同时保留其它元数据且不修改请求。 */
+    @Test
+    void recordWorkEventShouldUseTrustedTitleAndPreserveOtherMetadata() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        WorkEntity work = new WorkEntity();
+        work.setId(11L);
+        work.setUserId(7L);
+        work.setTitle("婚礼快剪");
+        when(workEntityMapper.selectById(11L)).thenReturn(work);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.VIDEO_PLAYED.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("trusted-work-title");
+        request.setMetadata(Map.of("workTitle", "客户端旧名称", "componentKey", "c_work"));
+
+        service().recordEvent(portfolio(), 1024L, request);
+
+        ArgumentCaptor<VisitEventEntity> eventCaptor = ArgumentCaptor.forClass(VisitEventEntity.class);
+        verify(visitEventEntityMapper).insert(eventCaptor.capture());
+        assertThat(JSON.parseObject(eventCaptor.getValue().getMetadata()))
+                .containsEntry("workTitle", "婚礼快剪")
+                .containsEntry("componentKey", "c_work");
+        assertThat(request.getMetadata()).containsEntry("workTitle", "客户端旧名称");
+    }
+
+    /** 作品删除后延迟到达的事件仍保留客户端快照，不增加新的拒绝条件。 */
+    @Test
+    void recordDelayedWorkEventShouldKeepClientSnapshotWhenWorkIsMissing() {
+        VisitRecordEntity record = new VisitRecordEntity();
+        record.setId(33L);
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(record);
+        VisitorPortfolioEventRequest request = new VisitorPortfolioEventRequest();
+        request.setVisitorKey("visitor-a");
+        request.setEventType(VisitEventTypeDict.WORK_VIEWED.getCode());
+        request.setWorkId(11L);
+        request.setIdempotencyKey("deleted-work-title");
+        request.setMetadata(Map.of("workTitle", "删除前的名称"));
+
+        service().recordEvent(portfolio(), 1024L, request);
+
+        ArgumentCaptor<VisitEventEntity> eventCaptor = ArgumentCaptor.forClass(VisitEventEntity.class);
+        verify(visitEventEntityMapper).insert(eventCaptor.capture());
+        assertThat(JSON.parseObject(eventCaptor.getValue().getMetadata()).getString("workTitle"))
+                .isEqualTo("删除前的名称");
+        assertThat(record.getViewWorkCount()).isEqualTo(1);
+    }
+
+    /** 已发布作品引用测试夹具。 */
+    private PortfolioReferenceEntity publishedWorkReference() {
+        PortfolioReferenceEntity reference = new PortfolioReferenceEntity();
+        reference.setPortfolioId(88L);
+        reference.setConfigScope(PortfolioConfigScopeDict.PUBLISHED.getCode());
+        reference.setReferenceType(ReferenceTypeDict.WORK.getCode());
+        reference.setReferenceId(11L);
+        reference.setComponentKey("c_work");
+        reference.setIsValid(1);
+        reference.setDeleted(0L);
+        return reference;
     }
 
     @Test
@@ -525,8 +694,9 @@ class PortfolioVisitServiceTest {
         verify(visitEventEntityMapper).selectOne(any());
         verify(visitRecordEntityMapper, never()).selectOne(any());
         verify(visitRecordEntityMapper, never()).updateById(any(VisitRecordEntity.class));
-        verifyNoInteractions(pointBillingWindowService);
+        verifyNoInteractions(pointBillingWindowService, workEntityMapper);
         verify(visitEventEntityMapper, never()).insert(any(VisitEventEntity.class));
+        assertThat(existingEvent.getMetadata()).isNull();
     }
 
     @Test
@@ -640,7 +810,8 @@ class PortfolioVisitServiceTest {
                 visitRecordEntityMapper,
                 visitEventEntityMapper,
                 pointBillingWindowService,
-                portfolioReferenceEntityMapper
+                portfolioReferenceEntityMapper,
+                workEntityMapper
         );
     }
 

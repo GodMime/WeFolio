@@ -4,6 +4,8 @@ const path = require('node:path')
 const test = require('node:test')
 
 const {
+  getCanvasNode,
+  loadCanvasImage,
   THUMB_MAX_BYTES,
   WORK_THUMBNAIL_COMPRESS_ATTEMPTS,
   buildWorkThumbnailCropFrame,
@@ -206,4 +208,21 @@ test('throws clear message when compressed thumbnail still exceeds 100KB', async
     () => prepareWorkThumbnailUploadFile('wxfile://tmp/source.jpg', { wxApi }),
     /缩略图不能超过 100KB/
   )
+})
+
+
+test('导出的画布查询及图片加载复用原helper和旧错误文案', async () => {
+  const page = {}
+  const canvas = { createImage() { return { set src(value) { this.path = value; this.onload() } } } }
+  const query = {
+    in(value) { assert.equal(value, page); return this },
+    select(value) { assert.equal(value, '#main-canvas'); return this },
+    fields(value) { assert.deepEqual(value, { node: true, size: true }); return this },
+    exec(callback) { callback([{ node: canvas }]) }
+  }
+  assert.equal(await getCanvasNode(page, 'main-canvas', { createSelectorQuery() { return query } }), canvas)
+  assert.equal((await loadCanvasImage(canvas, 'wxfile://original')).path, 'wxfile://original')
+  await assert.rejects(getCanvasNode(page, 'main-canvas', {}), /当前微信版本不支持图片裁剪/)
+  await assert.rejects(loadCanvasImage({}, 'wxfile://original'), /当前微信版本不支持图片裁剪/)
+  await assert.rejects(loadCanvasImage({ createImage() { return { set src(value) { this.onerror() } } } }, 'x'), /缩略图裁剪失败/)
 })

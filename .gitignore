@@ -1,16 +1,20 @@
 # macOS
 .DS_Store
 
+# 设计文档、方案和计划仅保留本地；技术配置台账继续跟踪
+/docs/*
+!/docs/TECHNICAL_RUNBOOK.md
+
+# 设计稿、原型及配套素材仅保留本地，不提交 Git
+/design/
+
+# 推广目录（素材、文案、成图及辅助脚本）全部仅保留本地
+/promote/
+
 # Superpowers skills - 本地开发辅助工具，无需提交到仓库
-/docs/superpowers/
-/docs/operations/
-/docs/audits/
-# 本地设计方案与视觉验收记录
-/docs/design/
 .codex/
 .superpowers/
 .claude/
-/design/tests/
 /codeReview/
 /test/
 /tmp/
@@ -18,15 +22,6 @@
 
 # 软件著作权申请材料（含企业及联系人信息，不提交仓库）
 /software-copyright/
-
-# 微信朋友圈广告生成项目（本地素材、文案、成图与构建辅助文件）
-/promote/assets/moments-ad*/
-/promote/image/moments-ad*
-/promote/moments-ad*.html
-/promote/*moments-ad*.md
-/promote/scripts/build_moments_ad*.py
-/promote/tests/
-/promote/tmp/
 
 # WeChat mini-program private config
 project.private.config.json

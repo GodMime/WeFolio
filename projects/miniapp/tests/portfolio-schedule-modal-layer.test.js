@@ -17,8 +17,8 @@ function readZIndex(wxss, selector) {
 }
 
 test('personal schedule modal mounts at root above the bottom navigation', () => {
-  const scheduleWxml = read('components/portfolio-schedule-query/portfolio-schedule-query.wxml')
-  const scheduleWxss = read('components/portfolio-schedule-query/portfolio-schedule-query.wxss')
+  const scheduleWxml = read('pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxml')
+  const scheduleWxss = read('pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxss')
   const bottomNavWxss = read('components/portfolio-bottom-nav/portfolio-bottom-nav.wxss')
   const modalStart = scheduleWxml.indexOf('<view class="schedule-query-modal-mask')
   const portalStart = scheduleWxml.lastIndexOf('<root-portal', modalStart)

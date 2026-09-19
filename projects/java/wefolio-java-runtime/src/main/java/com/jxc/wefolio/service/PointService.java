@@ -68,6 +68,9 @@ public class PointService {
     /** 低余额消息幂等键前缀 */
     private static final String LOW_BALANCE_MESSAGE_IDEMPOTENCY_PREFIX = "POINT_LOW_BALANCE:";
 
+    /** 虚拟充值到账金额与权威余额快照分别记账，不能从这类流水反推余额增量。 */
+    private static final String VIRTUAL_RECHARGE_BALANCE_REMARK = "（余额以微信同步结果为准）";
+
     /** 低余额消息标题 */
     private static final String LOW_BALANCE_MESSAGE_TITLE = "积分余额不足";
 
@@ -258,7 +261,7 @@ public class PointService {
     }
 
     /**
-     * 将微信支付充值积分原子计入账户并写入幂等流水。
+     * 按微信权威余额结算虚拟充值，只累计一次充值总额并写入幂等流水。
      *
      * @param userId 用户 ID
      * @param points 到账积分
@@ -266,16 +269,14 @@ public class PointService {
      * @param calculationSnapshot 套餐计算快照 JSON
      * @param idempotencyKey 积分流水幂等键
      * @param remark 套餐名称
+     * @param wechatBalance 微信总代币余额
+     * @param wechatPresentBalance 微信赠送代币余额
      * @return 积分变动结果
      */
     @Transactional(rollbackFor = Exception.class)
-    public PointMutationResponse recharge(
-            Long userId,
-            long points,
-            String businessId,
-            String calculationSnapshot,
-            String idempotencyKey,
-            String remark
+    public PointMutationResponse rechargeVirtual(
+            Long userId, long points, String businessId, String calculationSnapshot,
+            String idempotencyKey, String remark, long wechatBalance, long wechatPresentBalance
     ) {
         requireActiveUser(userId);
         if (points <= 0L) {
@@ -300,7 +301,8 @@ public class PointService {
         }
 
         PointAccountEntity account = requireAccount(userId);
-        int updated = pointAccountEntityMapper.addRechargedPoints(account.getId(), userId, points);
+        int updated = pointAccountEntityMapper.applyRechargeWechatBalance(
+                account.getId(), userId, points, wechatBalance, wechatPresentBalance);
         if (updated != 1) {
             throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
         }
@@ -309,7 +311,7 @@ public class PointService {
             throw new BusinessException(PointMessage.ACCOUNT_UPDATE_FAILED_MESSAGE);
         }
         long balanceAfter = safeLong(updatedAccount.getBalance());
-        long balanceBefore = Math.subtractExact(balanceAfter, points);
+        long balanceBefore = safeLong(account.getBalance());
 
         PointTransactionEntity transaction = new PointTransactionEntity();
         transaction.setAccountId(updatedAccount.getId());
@@ -324,7 +326,8 @@ public class PointService {
         transaction.setBusinessId(normalizedBusinessId);
         transaction.setCalculationSnapshot(normalizedSnapshot);
         transaction.setIdempotencyKey(normalizedIdempotencyKey);
-        transaction.setRemark(normalizeOptionalString(remark));
+        String normalizedRemark = normalizeOptionalString(remark);
+        transaction.setRemark(Objects.toString(normalizedRemark, "") + VIRTUAL_RECHARGE_BALANCE_REMARK);
         transaction.setOccurredAt(LocalDateTime.now());
         pointTransactionEntityMapper.insert(transaction);
         return buildMutationFromTransaction(transaction, false, true);

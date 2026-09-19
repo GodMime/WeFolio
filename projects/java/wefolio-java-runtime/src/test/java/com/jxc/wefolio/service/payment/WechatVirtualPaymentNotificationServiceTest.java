@@ -20,8 +20,9 @@ class WechatVirtualPaymentNotificationServiceTest {
     @Mock
     private RechargeOrderEntityMapper rechargeOrderEntityMapper;
 
+    /** 支付通知触发的充值写入服务模拟。 */
     @Mock
-    private RechargeService rechargeService;
+    private RechargeCommandService rechargeCommandService;
 
     @Mock
     private RechargeRefundTransactionService refundTransactionService;
@@ -37,7 +38,7 @@ class WechatVirtualPaymentNotificationServiceTest {
         String response = service().handle(new WechatVirtualPaymentNotification(
                 "xpay_coin_pay_notify", "WFR202607190001"));
 
-        verify(rechargeService).syncOrderFromNotification("WFR202607190001");
+        verify(rechargeCommandService).syncOrderFromNotification("WFR202607190001");
         assertThat(response).contains("SUCCESS");
     }
 
@@ -69,7 +70,7 @@ class WechatVirtualPaymentNotificationServiceTest {
     private WechatVirtualPaymentNotificationService service() {
         return new WechatVirtualPaymentNotificationService(
                 rechargeOrderEntityMapper,
-                rechargeService,
+                rechargeCommandService,
                 refundTransactionService,
                 balanceSyncService
         );

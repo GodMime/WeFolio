@@ -1582,3 +1582,34 @@ test('bubbled primary action tap does not open portfolio editor', async () => {
     page.cleanup()
   }
 })
+
+test('miniapp code entry revalidates the selected target and navigates once to its shared result page', () => {
+  for (const ownerType of ['USER', 'TEAM']) {
+    const navigations = []
+    const page = loadPortfolioListPage(() => Promise.resolve({}), { navigateTo(o) { navigations.push(o) } })
+    const portfolio = { portfolioId: 42, publicationStatus: 'PUBLISHED', canShare: true, shareCode: 'PF42' }
+    page.data[ownerType === 'USER' ? 'displayPortfolios' : 'teamDisplayPortfolios'] = [portfolio]
+    try {
+      page.handleShareTap({ currentTarget: { dataset: { id: 42, ownerType } } })
+      assert.equal(typeof page.handleQrCodeShare, 'function')
+      page.handleQrCodeShare(); page.handleQrCodeShare()
+      assert.equal(navigations.length, 1)
+      assert.equal(navigations[0].url, `/pages/portfolios/share-code/portfolio-share-code?ownerType=${ownerType}&portfolioId=42`)
+      assert.equal(page.data.shareTarget, null); assert.equal(page.data.shareSheetVisible, false)
+    } finally { page.cleanup() }
+  }
+})
+
+test('miniapp code entry blocks targets unpublished after the sheet opened', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(() => Promise.resolve({}), { navigateTo(o) { navigations.push(o) } })
+  const portfolio = { portfolioId: 42, publicationStatus: 'PUBLISHED', shareCode: 'PF42' }
+  page.data.displayPortfolios = [portfolio]
+  try {
+    page.handleShareTap({ currentTarget: { dataset: { id: 42, ownerType: 'USER' } } })
+    portfolio.publicationStatus = 'OFFLINE'
+    assert.equal(typeof page.handleQrCodeShare, 'function')
+    page.handleQrCodeShare()
+    assert.equal(navigations.length, 0); assert.equal(page.data.shareTarget, null)
+  } finally { page.cleanup() }
+})

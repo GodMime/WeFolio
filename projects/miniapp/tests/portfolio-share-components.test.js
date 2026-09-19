@@ -172,3 +172,14 @@ test('timeline share guide aligns overlay controls to the native menu in simulat
     else global.wx = previousWx
   }
 })
+
+test('miniapp code action emits only qrcode and respects the busy state', () => {
+  const component = loadComponent('share-channel-sheet/share-channel-sheet')
+  assert.equal(typeof component.handleQrCode, 'function')
+  component.handleQrCode()
+  assert.deepEqual(component.events, [['qrcode', {}]])
+  component.data.disabled = true
+  component.handleQrCode()
+  assert.equal(component.events.length, 1)
+  assert.match(read('components/share-channel-sheet/share-channel-sheet.wxml'), /bindtap="handleQrCode"/)
+})

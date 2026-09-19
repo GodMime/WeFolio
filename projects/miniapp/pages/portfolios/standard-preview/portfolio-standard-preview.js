@@ -23,7 +23,7 @@ const {
   normalizeVisitorPortfolio,
   switchDisplayGroup,
   switchPortfolioMenu
-} = require('../../../utils/visitor-portfolio')
+} = require('../utils/visitor-portfolio')
 
 const PORTFOLIO_API_PREFIX = '/api/mine/portfolios'
 const TEAM_PORTFOLIO_API_PREFIX = '/api/mine/team-portfolios'

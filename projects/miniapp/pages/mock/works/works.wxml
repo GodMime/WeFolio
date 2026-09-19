@@ -69,7 +69,10 @@
                   aria-role="button"
                   aria-label="{{item.mediaType === 'VIDEO' ? '播放原视频' : (item.mediaType === 'ANIMATION' ? '查看原动图' : '查看原图')}}"
                 >
-                  <image src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <image wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                  <view wx:else class="mock-media-placeholder">暂无视频封面</view>
+                  <view wx:if="{{item.isAudio}}" class="mock-media-type">{{audioWorkId === item.id && audioPlaying ? '暂停' : '试听'}}</view>
+                  <view wx:if="{{item.isAnimation}}" class="mock-media-type">GIF</view>
                   <view
                     wx:if="{{item.mediaType === 'VIDEO'}}"
                     class="play-badge"
@@ -82,8 +85,8 @@
                 <view class="work-copy">
                   <view class="work-title">{{item.title}}</view>
                   <view class="work-meta">
-                    <text>{{item.mediaType === 'VIDEO' ? '视频' : (item.mediaType === 'ANIMATION' ? '动图' : '图片')}}</text>
-                    <text> / 风景作品</text>
+                    <text>{{item.mediaType === 'VIDEO' ? '视频' : (item.mediaType === 'AUDIO' ? '音频' : (item.mediaType === 'ANIMATION' ? '动图' : '图片'))}}</text>
+                    <text wx:if="{{item.tags.length}}"> / {{item.tags[0].name}}</text>
                   </view>
                   <view class="work-status-row">
                     <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceCount > 0 ? '引用 ' + item.referenceCount + ' 次' : '未引用'}}</view>
@@ -126,6 +129,8 @@
         <view class="video-preview-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
       </view>
       <video
+        wx:if="{{videoPreviewVisible}}"
+        binderror="handleVideoError"
         id="mockWorkVideo"
         class="video-preview-player"
         src="{{videoPreview.src}}"

@@ -1,6 +1,11 @@
 @import "../../../styles/portfolio-theme.wxss";
 @import "../../../styles/portfolio-text-typography.wxss";
 
+
+.profile-spacing {
+  box-sizing: border-box;
+}
+
 .profile-section {
   padding: 12rpx 32rpx;
   text-align: center;
@@ -9,15 +14,15 @@
 
 .profile-avatar {
   display: block;
+  margin: 0 auto;
   width: 132rpx;
   height: 132rpx;
-  margin: 0 auto;
   border-radius: 50%;
 }
 
 .profile-name {
   margin-top: 18rpx;
-  color: #212529;
+  color: var(--portfolio-text-primary);
   font-size: 36rpx;
   font-weight: 900;
   line-height: 1.25;
@@ -25,7 +30,7 @@
 
 .profile-line,
 .profile-bio {
-  color: #868e96;
+  color: var(--portfolio-text-secondary);
   font-size: 26rpx;
   line-height: 1.75;
   white-space: pre-wrap;
@@ -35,10 +40,11 @@
   margin-top: 8rpx;
 }
 
+/* 简介的换行行为由上方与 .profile-line 的组合规则统一保证。 */
 .profile-bio {
   display: block;
-  max-width: 620rpx;
   margin: 22rpx auto 0;
+  max-width: 620rpx;
   overflow-wrap: break-word;
   word-break: break-word;
 }
@@ -57,9 +63,10 @@
   display: inline-flex;
   align-items: center;
   padding: 0 20rpx;
+  color: #0f766e;
   font-size: 24rpx;
   line-height: 1.4;
-  border: 1rpx solid;
+  border: 1rpx solid #0f766e;
   border-radius: 999rpx;
   background: #ffffff;
   box-sizing: border-box;
@@ -71,6 +78,72 @@
   flex: none;
   margin-right: 12rpx;
   border-radius: 50%;
+}
+
+.qr-image {
+  display: block;
+  width: 280rpx;
+  height: 280rpx;
+  margin: 24rpx auto 0;
+  border-radius: 32rpx;
+}
+.profile-section {
+  color: var(--portfolio-text-primary);
+}
+
+.profile-horizontal {
+  text-align: left;
+}
+
+.profile-bordered {
+  padding: 32rpx;
+  border-style: solid;
+  border-radius: 24rpx;
+}
+
+/* 加框后正文宽度收窄，纵向布局的长英文姓名和职业也需要自然换行。 */
+.profile-bordered .profile-identity {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.profile-horizontal .profile-heading {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+}
+
+.profile-horizontal .profile-avatar {
+  flex: none;
+  margin: 0;
+}
+
+/* 姓名与职业过长时自然换行，隐藏头像后文字区占满可用宽度。 */
+.profile-horizontal .profile-identity {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.profile-horizontal .profile-name {
+  margin-top: 0;
+}
+
+.profile-horizontal .profile-bio {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
+}
+
+.profile-horizontal .profile-tags {
+  justify-content: flex-start;
+}
+
+.profile-horizontal .qr-image {
+  margin-left: 0;
+  max-width: 100%;
 }
 
 .work-section-title {
@@ -261,7 +334,13 @@
   line-height: 1.35;
 }
 
-.qr-section,
+.qr-section {
+  padding: 12rpx 32rpx;
+  text-align: center;
+  box-sizing: border-box;
+  color: var(--portfolio-text-primary);
+}
+
 .text-section {
   padding: 8rpx 34rpx;
   text-align: center;

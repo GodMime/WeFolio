@@ -38,6 +38,27 @@ class FeedbackRoundCodecTest {
                 .containsExactly(firstRound);
     }
 
+    /** 版本必须在 JSON 往返及归档团队结果时保持不变。 */
+    @Test
+    void frontendVersionShouldSurviveSerializationAndArchiving() {
+        FeedbackRoundSnapshot source = completeRound();
+        source.setFrontendVersion("1.2.5");
+
+        FeedbackRoundSnapshot parsed = codec.parse(codec.serialize(List.of(source))).getFirst();
+        FeedbackRoundSnapshot archived = codec.copyWithTeamResult(
+                parsed, "请再次验证", LocalDateTime.of(2026, 9, 17, 10, 0));
+
+        assertThat(parsed.getFrontendVersion()).isEqualTo("1.2.5");
+        assertThat(archived.getFrontendVersion()).isEqualTo("1.2.5");
+        assertThat(source.getFrontendVersion()).isEqualTo("1.2.5");
+    }
+
+    /** 旧 JSON 缺少版本时仍可读取。 */
+    @Test
+    void oldJsonShouldHaveNullFrontendVersion() {
+        assertThat(codec.parse("[{\"roundNo\":1}]").getFirst().getFrontendVersion()).isNull();
+    }
+
     /** 新版本 JSON 的未知字段不应阻断旧服务读取既有业务字段。 */
     @Test
     void unknownJsonFieldsShouldBeIgnored() {

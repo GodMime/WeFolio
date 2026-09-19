@@ -2,6 +2,7 @@ package com.jxc.wefolio.job.service;
 
 import com.jxc.wefolio.job.config.VirtualPaymentDispatchProperties;
 import com.jxc.wefolio.job.repo.VirtualPaymentCandidateRepository;
+import com.jxc.wefolio.job.repo.VirtualPaymentCandidateRepository.RecoveryCandidate;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,7 +20,10 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * 微信虚拟支付候选任务有界并发分发服务。
@@ -34,11 +38,21 @@ public class VirtualPaymentDispatchService {
     /** 扣币任务恢复日志任务类型。 */
     private static final String DEBIT_TASK_RECOVERY_TASK_TYPE = "扣币任务恢复";
 
+    /** 退款余额恢复日志任务类型。 */
+    private static final String REFUND_BALANCE_RECOVERY_TASK_TYPE = "退款余额恢复";
+
+    /** 充值支付和退款核对日志任务类型。 */
+    private static final String RECHARGE_RECONCILIATION_TASK_TYPE = "充值订单核对";
+
     /** 扣币任务日志任务类型。 */
     private static final String DEBIT_TASK_TYPE = "扣币任务";
 
-    /** runtime 已领取并处理结果。 */
-    private static final String PROCESSED_OUTCOME = "PROCESSED";
+    /** runtime 已执行或已持久化下次核对时间的结果，处理完成不等于资金结算成功。 */
+    private static final Set<String> PROCESSED_OUTCOMES =
+            Set.of("PROCESSED", "SUCCEEDED", "RETRY_WAIT", "WAITING_SESSION");
+
+    /** 某类恢复查询异常时的可检索事件，原有活动扣币任务仍继续分发。 */
+    private static final String RECOVERY_SCAN_FAILURE_EVENT = "VIRTUAL_PAYMENT_RECOVERY_SCAN_FAILED";
 
     /** 候选任务只读仓储。 */
     private final VirtualPaymentCandidateRepository candidateRepository;
@@ -60,6 +74,15 @@ public class VirtualPaymentDispatchService {
 
     /** 接单与关闭操作的互斥监视器。 */
     private final Object lifecycleMonitor = new Object();
+
+    /** 两类恢复各自保存扫描位置，远端失败也不会把下一轮固定在最小账户 ID。 */
+    private final AtomicLong missingDebitAccountCursor = new AtomicLong();
+
+    /** 退款恢复扫描位置；到达尾部后回绕，进程重启可安全从头开始。 */
+    private final AtomicLong refundAccountCursor = new AtomicLong();
+
+    /** 充值核对独立订单游标，连接失败等未写回退避的订单也不会阻塞后续候选。 */
+    private final AtomicLong rechargeOrderCursor = new AtomicLong();
 
     /** 创建配置固定工作线程数的分发服务。 */
     @Autowired
@@ -95,24 +118,84 @@ public class VirtualPaymentDispatchService {
         return counters.toTaskSummary(orderIds.size());
     }
 
-    /** 先恢复缺失扣币任务，再发现并逐条分发到期任务。 */
+    /** 独立额度核对充值和退款、恢复账户，再分发现有扣币任务。 */
     public VirtualPaymentDebitDispatchSummary dispatchDebitTasks() {
-        List<Long> userIds = candidateRepository
-                .findUsersMissingActiveDebitTasks(properties.getBatchSize());
+        List<Long> rechargeOrderIds = scanRecoveryCandidates(
+                RECHARGE_RECONCILIATION_TASK_TYPE, this::rotatingRechargeCandidates);
+        DispatchCounters rechargeCounters = dispatch(rechargeOrderIds,
+                orderId -> runtimeTaskClient.reconcileRechargeOrder(orderId).getOutcome(),
+                RECHARGE_RECONCILIATION_TASK_TYPE);
+        logDispatchSummary(RECHARGE_RECONCILIATION_TASK_TYPE,
+                rechargeCounters.toTaskSummary(rechargeOrderIds.size()));
+        List<Long> userIds = scanRecoveryCandidates(DEBIT_TASK_RECOVERY_TASK_TYPE, () -> rotatingRecoveryCandidates(
+                candidateRepository::findAccountsMissingActiveDebitTasks, missingDebitAccountCursor));
         DispatchCounters recoveryCounters = dispatch(
                 userIds,
                 userId -> runtimeTaskClient.recoverDebitTask(userId).getOutcome(),
                 DEBIT_TASK_RECOVERY_TASK_TYPE);
+        Set<Long> recoveredUserIds = Set.copyOf(userIds);
+        List<Long> refundUserIds = scanRecoveryCandidates(REFUND_BALANCE_RECOVERY_TASK_TYPE,
+                () -> rotatingRecoveryCandidates(candidateRepository::findRefundStaleAccounts, refundAccountCursor)).stream()
+                .filter(userId -> !recoveredUserIds.contains(userId))
+                .toList();
+        DispatchCounters refundCounters = dispatch(
+                refundUserIds,
+                userId -> runtimeTaskClient.recoverDebitTask(userId).getOutcome(),
+                REFUND_BALANCE_RECOVERY_TASK_TYPE);
+        logDispatchSummary(DEBIT_TASK_RECOVERY_TASK_TYPE, recoveryCounters.toTaskSummary(userIds.size()));
+        logDispatchSummary(REFUND_BALANCE_RECOVERY_TASK_TYPE, refundCounters.toTaskSummary(refundUserIds.size()));
         List<Long> taskIds = candidateRepository.findDueDebitTaskIds(properties.getBatchSize());
         DispatchCounters taskCounters = dispatch(
                 taskIds,
                 taskId -> runtimeTaskClient.executeDebitTask(taskId).getOutcome(),
                 DEBIT_TASK_TYPE);
         return new VirtualPaymentDebitDispatchSummary(
-                userIds.size(),
-                recoveryCounters.requestCount.get(),
-                recoveryCounters.failedCount.get(),
+                userIds.size() + refundUserIds.size(),
+                recoveryCounters.requestCount.get() + refundCounters.requestCount.get(),
+                recoveryCounters.failedCount.get() + refundCounters.failedCount.get(),
                 taskCounters.toTaskSummary(taskIds.size()));
+    }
+
+    /** 隔离迁移缺列、数据库读取等候选查询异常，让其余恢复类别与活动任务仍能分发。 */
+    private List<Long> scanRecoveryCandidates(String taskType, Supplier<List<Long>> query) {
+        try {
+            return query.get();
+        } catch (RuntimeException exception) {
+            log.error("event={} taskType={} exceptionType={}",
+                    RECOVERY_SCAN_FAILURE_EVENT, taskType, exception.getClass().getSimpleName());
+            return List.of();
+        }
+    }
+
+    /** 充值核对独立轮转，持久退避由 runtime 的 next_query_at 字段控制。 */
+    private List<Long> rotatingRechargeCandidates() {
+        long afterOrderId = rechargeOrderCursor.get();
+        List<Long> candidates = candidateRepository.findDueRechargeOrderIds(afterOrderId, properties.getBatchSize());
+        if (candidates.isEmpty() && afterOrderId != 0L) {
+            candidates = candidateRepository.findDueRechargeOrderIds(0L, properties.getBatchSize());
+        }
+        rechargeOrderCursor.set(candidates.isEmpty() ? 0L : candidates.getLast());
+        return candidates;
+    }
+
+    /** 分别输出各类恢复结果，避免总计掩盖某一类候选持续失败。 */
+    private void logDispatchSummary(String taskType, VirtualPaymentTaskDispatchSummary summary) {
+        log.info("微信虚拟支付恢复分发 taskType={} candidateCount={} requestCount={} processedCount={} "
+                        + "skippedCount={} failedCount={}", taskType, summary.candidateCount(), summary.requestCount(),
+                summary.processedCount(), summary.skippedCount(), summary.failedCount());
+    }
+
+    /** 每类读取一批；扫描尾部为空时回绕一次，推进游标不依赖远端请求是否成功。 */
+    private List<Long> rotatingRecoveryCandidates(
+            BiFunction<Long, Integer, List<RecoveryCandidate>> query, AtomicLong cursor
+    ) {
+        long afterAccountId = cursor.get();
+        List<RecoveryCandidate> candidates = query.apply(afterAccountId, properties.getBatchSize());
+        if (candidates.isEmpty() && afterAccountId != 0L) {
+            candidates = query.apply(0L, properties.getBatchSize());
+        }
+        cursor.set(candidates.isEmpty() ? 0L : candidates.getLast().accountId());
+        return candidates.stream().map(RecoveryCandidate::userId).toList();
     }
 
     /** 并发执行一批 ID，单条失败只记录且不在同轮重试。 */
@@ -182,7 +265,7 @@ public class VirtualPaymentDispatchService {
         counters.requestCount.incrementAndGet();
         try {
             String outcome = action.apply(id);
-            if (PROCESSED_OUTCOME.equals(outcome)) {
+            if (PROCESSED_OUTCOMES.contains(outcome)) {
                 counters.processedCount.incrementAndGet();
             } else {
                 counters.skippedCount.incrementAndGet();

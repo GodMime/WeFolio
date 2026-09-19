@@ -122,6 +122,33 @@ test('creates order, invokes WeChat payment, syncs paid result and refreshes bal
   assert.ok(toasts.includes('充值成功，积分已到账'))
 })
 
+test('退款终态展示服务端文案或已退款兜底，结束同步且不继续查询', async () => {
+  for (const statusText of ['该订单已退款', undefined]) {
+    const requests = []
+    const toasts = []
+    const page = loadRechargePage((options) => {
+      requests.push(options)
+      return Promise.resolve(options.url.endsWith('/sync')
+        ? { status: 'REFUNDED', statusText }
+        : { merchantOrderNo: 'WFR-refunded' })
+    }, {
+      requestVirtualPayment: (options) => options.success(),
+      showToast: (options) => toasts.push(options.title)
+    })
+    page.data.rechargeData.selectedPackageId = 3
+
+    await page.handlePay()
+    await flushPromises()
+
+    assert.deepEqual(requests.map((item) => item.url), [
+      '/api/mine/recharges/orders', '/api/mine/recharges/orders/WFR-refunded/sync'
+    ])
+    assert.deepEqual(toasts, [statusText || '已退款'])
+    assert.equal(page.data.paying, false)
+    assert.equal(page.data.syncing, false)
+  }
+})
+
 test('keeps order pending and does not sync when user cancels payment', async () => {
   const requests = []
   const toasts = []

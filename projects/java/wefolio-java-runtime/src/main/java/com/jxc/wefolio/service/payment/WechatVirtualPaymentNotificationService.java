@@ -19,7 +19,8 @@ public class WechatVirtualPaymentNotificationService {
     private static final String IOS_REFUND_QUERY_NOTIFY = "xpay_subscribe_ios_refund_query_notify";
 
     private final RechargeOrderEntityMapper rechargeOrderEntityMapper;
-    private final RechargeService rechargeService;
+    /** 充值写入编排，负责支付通知触发的权威查单与状态同步。 */
+    private final RechargeCommandService rechargeCommandService;
     private final RechargeRefundTransactionService refundTransactionService;
     private final WechatAuthoritativeBalanceSyncService balanceSyncService;
 
@@ -33,7 +34,7 @@ public class WechatVirtualPaymentNotificationService {
             if (order == null) {
                 throw new IllegalArgumentException("微信虚拟支付通知对应订单不存在");
             }
-            rechargeService.syncOrderFromNotification(order.getMerchantOrderNo());
+            rechargeCommandService.syncOrderFromNotification(order.getMerchantOrderNo());
             log.info("微信虚拟支付业务完成 operation=分发虚拟支付通知 referenceNo={} userId={} "
                             + "localStatus=PAYMENT_SYNCHRONIZED",
                     order.getMerchantOrderNo(), order.getUserId());

@@ -1,12 +1,18 @@
 <view class="portfolio-theme-{{themeMode}}">
-<block wx:if="{{component.componentType === 'PROFILE'}}">
-  <view class="profile-section">
-    <image wx:if="{{component.profile.avatarUrl}}" class="profile-avatar" src="{{component.profile.avatarUrl}}" mode="aspectFill"></image>
-    <view wx:if="{{component.profile.displayName}}" class="profile-name">{{component.profile.displayName}}</view>
-    <view wx:if="{{component.profile.profession}}" class="profile-line">{{component.profile.profession}}</view>
-    <view wx:if="{{component.profile.city}}" class="profile-line">{{component.profile.city}}</view>
-    <text wx:if="{{component.profile.bio}}" class="profile-bio" space="nbsp">{{component.profile.bio}}</text>
-    <view wx:if="{{component.profile.tags.length}}" class="profile-tags">
+<view wx:if="{{component.unsupported}}" class="single-work-media-placeholder">{{component.errorMessage || '暂不支持的组件'}}</view>
+<block wx:elif="{{component.componentType === 'PROFILE'}}">
+<view class="profile-spacing" style="{{component.profile.spacingStyle}}">
+  <view class="profile-section portfolio-theme-{{themeMode}} {{component.profile.layout === 'HORIZONTAL' ? 'profile-horizontal' : ''}} {{component.profile.borderVisible ? 'profile-bordered' : ''}}" style="{{component.profile.style}}">
+    <view class="profile-heading">
+      <image wx:if="{{component.profile.visibleFields.avatar && component.profile.avatarUrl}}" class="profile-avatar" src="{{component.profile.avatarUrl}}" mode="aspectFill"></image>
+      <view class="profile-identity">
+        <view wx:if="{{component.profile.visibleFields.displayName && component.profile.displayName}}" class="profile-name">{{component.profile.displayName}}</view>
+        <view wx:if="{{component.profile.visibleFields.profession && component.profile.profession}}" class="profile-line">{{component.profile.profession}}</view>
+        <view wx:if="{{component.profile.visibleFields.city && component.profile.city}}" class="profile-line">{{component.profile.city}}</view>
+      </view>
+    </view>
+    <text wx:if="{{component.profile.visibleFields.bio && component.profile.bio}}" class="profile-bio" space="nbsp">{{component.profile.bio}}</text>
+    <view wx:if="{{component.profile.visibleFields.tags && component.profile.tags.length}}" class="profile-tags">
       <view
         wx:for="{{component.profile.tags}}"
         wx:key="name"
@@ -18,7 +24,15 @@
         <text>{{tag.name}}</text>
       </view>
     </view>
+    <image
+      wx:if="{{component.profile.visibleFields.wechatQr && component.profile.wechatQrUrl}}"
+      class="profile-qr-image qr-image"
+      src="{{component.profile.wechatQrUrl}}"
+      mode="aspectFit"
+      bindtap="handleProfileQr"
+    ></image>
   </view>
+</view>
 </block>
 
 <block wx:elif="{{component.componentType === 'WORK_GRID'}}">
@@ -48,11 +62,12 @@
         aria-role="button"
         aria-label="{{work.isVideo ? '播放视频' : '查看原图'}}{{work.title}}"
       >
-        <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+        <image wx:if="{{work.thumbnailUrl}}" class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image><view wx:else class="single-work-media-placeholder">暂无视频封面</view>
         <view wx:if="{{work.isVideo}}" class="work-play-badge" aria-hidden="true"><view class="work-play-icon"></view></view>
       </view>
       <view class="work-copy">
-        <view wx:if="{{work.title}}" class="work-title">{{work.title}}</view>
+        <view wx:if="{{component.showTitle && work.title}}" class="work-title">{{work.title}}</view>
+        <view wx:if="{{component.layout === 'grid' && component.showDescription && work.description}}" class="work-desc">{{work.description}}</view>
       </view>
     </view>
   </view>
@@ -85,18 +100,20 @@
         aria-role="button"
         aria-label="{{work.isVideo ? '播放视频' : '查看原图'}}{{work.title}}"
       >
-        <image class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image>
+        <image wx:if="{{work.thumbnailUrl}}" class="work-cover" src="{{work.thumbnailUrl}}" mode="aspectFill"></image><view wx:else class="single-work-media-placeholder">暂无视频封面</view>
         <view wx:if="{{work.isVideo}}" class="work-play-badge" aria-hidden="true"><view class="work-play-icon"></view></view>
       </view>
       <view class="work-copy">
-        <view wx:if="{{work.title}}" class="work-title">{{work.title}}</view>
-        <view wx:if="{{work.description}}" class="work-desc">{{work.description}}</view>
+        <view wx:if="{{component.showTitle && work.title}}" class="work-title">{{work.title}}</view>
+        <view wx:if="{{component.layout === 'grid' && component.showDescription && work.description}}" class="work-desc">{{work.description}}</view>
+        <view wx:if="{{component.showDescription && work.description}}" class="work-desc">{{work.description}}</view>
       </view>
     </view>
   </view>
 </block>
 
 <block wx:elif="{{component.componentType === 'SINGLE_WORK'}}">
+  <view wx:if="{{!component.work}}" class="single-work-media-placeholder">请选择可用的图片、视频或动图</view>
   <view wx:if="{{component.work}}" class="single-work">
     <video
       wx:if="{{component.work.isVideo && activeSingleWorkVideoKey === component.componentKey}}"
@@ -131,8 +148,39 @@
       <view class="single-work-play-badge" aria-hidden="true"><view class="work-play-icon"></view></view>
     </view>
     <image
-      wx:elif="{{component.work.previewUrl}}"
+      wx:elif="{{component.work.isAnimation && !singleWorkAnimationFailed}}"
       class="single-work-image"
+      binderror="handleSingleWorkAnimationError"
+      src="{{component.work.previewUrl}}"
+      mode="widthFix"
+      webp="{{true}}"
+      data-work-id="{{component.work.workId}}"
+      data-media-type="{{component.work.mediaType}}"
+      data-media-url="{{component.work.previewUrl}}"
+      data-cover-url="{{component.work.thumbnailUrl}}"
+      data-title="{{component.work.title}}"
+      bindtap="handleSingleWorkTap"
+      aria-role="button"
+      aria-label="查看原动图{{component.work.title}}"
+    ></image>
+    <image
+      wx:elif="{{component.work.isAnimation}}"
+      class="single-work-image"
+      src="{{component.work.thumbnailUrl}}"
+      mode="widthFix"
+      data-work-id="{{component.work.workId}}"
+      data-media-type="{{component.work.mediaType}}"
+      data-media-url="{{component.work.thumbnailUrl}}"
+      data-cover-url="{{component.work.thumbnailUrl}}"
+      data-title="{{component.work.title}}"
+      bindtap="handleSingleWorkTap"
+      aria-role="button"
+      aria-label="查看动图封面{{component.work.title}}"
+    ></image>
+    <image
+      wx:elif="{{component.work.previewUrl && !imageFailed}}"
+      class="single-work-image"
+      binderror="handleImageError"
       src="{{component.work.previewUrl}}"
       mode="widthFix"
       data-work-id="{{component.work.workId}}"
@@ -144,8 +192,10 @@
       aria-role="button"
       aria-label="查看原图{{component.work.title}}"
     ></image>
+    <view wx:if="{{imageFailed}}" class="single-work-media-placeholder" bindtap="handleImageRetry">图片加载失败，点击重试</view>
     <view class="single-work-copy">
       <view wx:if="{{component.showTitle && component.work.title}}" class="single-work-title">{{component.work.title}}</view>
+      <view wx:if="{{component.showDescription && component.work.description}}" class="work-desc">{{component.work.description}}</view>
     </view>
   </view>
 </block>
@@ -162,12 +212,11 @@
   </view>
 </block>
 
-<block wx:elif="{{component.componentType === 'TEXT_SECTION'}}">
-  <view class="text-section {{component.textSection.alignmentClass}}">
-    <view wx:if="{{component.textSection.title}}" class="component-title">{{component.textSection.title}}</view>
-    <text class="text-content {{component.textSection.fontClass}}" style="{{component.textSection.fontSizeStyle}}" space="nbsp">{{component.textSection.content}}</text>
-  </view>
-</block>
+<mock-structured-text-section wx:elif="{{component.componentType === 'TEXT_SECTION' || component.componentType === 'STRUCTURED_TEXT_SECTION'}}" view-model="{{component.viewModel}}" active="{{active}}" />
+<mock-text-grid wx:elif="{{component.componentType === 'TEXT_GRID'}}" view-model="{{component.viewModel}}" bindmeasure="handleGridMeasure" />
+<mock-contact-info wx:elif="{{component.componentType === 'CONTACT_INFO'}}" config="{{component.config}}" copied-field="{{copiedField}}" theme-mode="{{themeMode}}" bindcopy="handleCopy" />
+<mock-hyperlink wx:elif="{{component.componentType === 'HYPERLINK'}}" config="{{component.config}}" work="{{component.work}}" theme-mode="{{themeMode}}" bindhyperlink="handleHyperlink" />
+<mock-video-carousel wx:elif="{{component.componentType === 'VIDEO_CAROUSEL'}}" config="{{component.config}}" works="{{component.works}}" component-key="{{component.componentKey}}" theme-mode="{{themeMode}}" bindworktap="handleWorkTap" />
 
 <block wx:elif="{{component.componentType === 'DIVIDER'}}">
   <view class="divider-section" style="{{component.divider.style}}"></view>

@@ -31,10 +31,10 @@ public class PointTransactionEntity extends BaseEntity {
     /** 本次变动值，增加为正消耗为负，不得为 0 */
     private Long pointsChange;
 
-    /** 变动前余额 */
+    /** 记账前的本地可用余额；虚拟充值时可能已经包含该笔充值，不能再叠加 pointsChange 推算新余额。 */
     private Long balanceBefore;
 
-    /** 变动后余额 */
+    /** 记账后的本地可用余额；虚拟充值按微信权威余额减待扣额同步，不保证等于 balanceBefore + pointsChange。 */
     private Long balanceAfter;
 
     /** 关联业务类型 */

@@ -1,0 +1,11 @@
+<view class="hyperlink theme-{{themeMode}}">
+  <view wx:if="{{imageUrl && !imageFailed}}" class="hyperlink-tap" bindtap="handleTap" aria-role="button" aria-label="{{config.actionType === 'INTERNAL_PORTFOLIO' ? '打开演示作品集' : '复制链接或分享内容'}}">
+    <view class="media-wrap">
+      <image class="display-image" src="{{imageUrl}}" mode="widthFix" binderror="handleImageError" />
+      <view wx:if="{{config.showClickIcon && !iconLoadFailed && clickIconInside}}" class="click-icon overlay {{clickIconClass}}"><image class="click-icon-image" src="{{clickIconUrl}}" mode="aspectFit" binderror="handleIconError" /></view>
+    </view>
+    <view wx:if="{{config.showClickIcon && !iconLoadFailed && !clickIconInside}}" class="click-icon-row"><image class="click-icon below" src="{{clickIconUrl}}" mode="aspectFit" binderror="handleIconError" /></view>
+  </view>
+  <view wx:elif="{{imageFailed}}" class="empty"><text>图片加载失败</text><button bindtap="handleRetry">重试</button></view>
+  <view wx:else class="empty">请选择图片或动图作为展示作品</view>
+</view>

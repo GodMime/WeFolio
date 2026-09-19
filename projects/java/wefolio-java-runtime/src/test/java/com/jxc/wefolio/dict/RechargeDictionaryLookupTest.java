@@ -11,8 +11,8 @@ class RechargeDictionaryLookupTest {
 
     @Test
     void paymentChannelShouldResolveKnownCodeAndRejectUnknownCode() {
-        assertThat(PaymentChannelDict.fromCode("WECHAT_PAY"))
-                .isEqualTo(PaymentChannelDict.WECHAT_PAY);
+        assertThat(PaymentChannelDict.fromCode("WECHAT_VIRTUAL_PAYMENT"))
+                .isEqualTo(PaymentChannelDict.WECHAT_VIRTUAL_PAYMENT);
         assertThat(PaymentChannelDict.fromCode("UNKNOWN")).isNull();
         assertThat(PaymentChannelDict.fromCode(null)).isNull();
     }

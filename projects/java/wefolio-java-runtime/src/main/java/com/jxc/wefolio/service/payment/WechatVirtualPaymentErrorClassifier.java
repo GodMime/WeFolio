@@ -34,13 +34,13 @@ public class WechatVirtualPaymentErrorClassifier {
             return WechatVirtualPaymentErrorType.TRANSIENT;
         }
         if (errorCode == null) {
-            return httpStatus >= 400
-                    ? WechatVirtualPaymentErrorType.UNKNOWN
-                    : WechatVirtualPaymentErrorType.SUCCESS;
+            return WechatVirtualPaymentErrorType.UNKNOWN;
         }
         if (errorCode == 0) {
-            return WechatVirtualPaymentErrorType.SUCCESS;
+            return httpStatus >= 200 && httpStatus < 300
+                    ? WechatVirtualPaymentErrorType.SUCCESS : WechatVirtualPaymentErrorType.UNKNOWN;
         }
+        // 微信业务错误码在 4xx 中仍有确定含义；不能把余额不足、会话失效降级成未知重试。
         if (errorCode == 268490004) {
             return WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS;
         }

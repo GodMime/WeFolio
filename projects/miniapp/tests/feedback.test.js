@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 
 const feedback = require('../utils/feedback')
+const { FRONTEND_VERSION } = require('../utils/app-version')
 
 function exportedFunction(name) {
   assert.equal(typeof feedback[name], 'function', `${name} should be exported`)
@@ -195,6 +196,7 @@ test('builds upload ticket and create or append payloads matching backend DTOs',
   }), {
     idempotencyKey: 'feedback-submit-1',
     description: '页面卡住',
+    frontendVersion: FRONTEND_VERSION,
     uploadTaskIds: [101, 102]
   })
 })
@@ -494,6 +496,7 @@ test('partial upload failure never creates feedback and retry reuses a valid fai
   }, /附件上传失败/)
 
   assert.equal(requestCalls.some((call) => call.url === '/api/mine/feedbacks'), false)
+  assert.equal(failedDraft.frontendVersion, FRONTEND_VERSION)
   assert.equal(failedDraft.attachments[0].status, 'UPLOADED')
   assert.equal(failedDraft.attachments[1].status, 'FAILED')
   shouldFail = false
@@ -550,6 +553,7 @@ test('expired uploaded task gets a new clientId and ticket before append confirm
   assert.deepEqual(calls.at(-1).data, {
     idempotencyKey: 'append-2',
     description: '补充',
+    frontendVersion: FRONTEND_VERSION,
     uploadTaskIds: [8]
   })
   assert.equal(result.detail.id, 99)
@@ -588,6 +592,7 @@ test('valid uploaded tasks skip ticket and upload while create performs server c
     data: {
       idempotencyKey: 'create-confirm',
       description: '问题',
+      frontendVersion: FRONTEND_VERSION,
       uploadTaskIds: [77]
     }
   }])
@@ -624,4 +629,57 @@ test('forbid-overwrite conflict only counts as uploaded for COS FileAlreadyExist
     wxApi,
     nowMs: Date.parse('2026-08-25T04:00:00Z')
   }), /附件上传失败.*409/)
+})
+
+
+test('first and follow-up submissions capture the shared frontend version', async () => {
+  for (const feedbackId of [undefined, 31]) {
+    const requests = []
+    const result = await feedback.submitFeedbackDraft({
+      feedbackId,
+      draft: { idempotencyKey: 'version-submit', description: '作品上传异常', attachments: [] },
+      requestFn: async (options) => {
+        requests.push(options)
+        return { id: feedbackId || 32, rounds: [] }
+      }
+    })
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].url, feedbackId
+      ? '/api/mine/feedbacks/31/rounds' : '/api/mine/feedbacks')
+    assert.equal(requests[0].data.frontendVersion, FRONTEND_VERSION)
+    assert.equal(requests[0].data.description, '作品上传异常')
+    assert.equal(result.draft.frontendVersion, FRONTEND_VERSION)
+  }
+})
+
+test('request and ticket failures retain the version and idempotency key for retry', async () => {
+  for (const attachments of [[], [imageFile()]]) {
+    let failedDraft
+    await assert.rejects(feedback.submitFeedbackDraft({
+      draft: { idempotencyKey: 'version-retry', description: '预览失败', attachments },
+      requestFn: async () => { throw new Error('网络失败') }
+    }), (error) => {
+      failedDraft = error.draft
+      return error.message === '网络失败'
+    })
+    assert.equal(failedDraft.frontendVersion, FRONTEND_VERSION)
+    assert.equal(failedDraft.idempotencyKey, 'version-retry')
+  }
+})
+
+test('retry submits the originally captured version even when the current version differs', async () => {
+  const requests = []
+  const result = await feedback.submitFeedbackDraft({
+    draft: {
+      idempotencyKey: 'captured-retry', description: '预览失败', attachments: [],
+      frontendVersion: '1.2.4'
+    },
+    requestFn: async (options) => {
+      requests.push(options)
+      return { id: 32, rounds: [] }
+    }
+  })
+  assert.equal(requests[0].data.frontendVersion, '1.2.4')
+  assert.equal(requests[0].data.idempotencyKey, 'captured-retry')
+  assert.equal(result.draft.frontendVersion, '1.2.4')
 })

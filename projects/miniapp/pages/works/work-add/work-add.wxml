@@ -1,102 +1,142 @@
 <view class="page-shell work-add-page">
-  <navigation-bar title="添加作品" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
+  <view class="work-add-navigation">
+    <navigation-bar title="添加作品" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
+  </view>
 
-  <scroll-view class="work-add-scroll" scroll-y type="list">
-    <view class="work-add-content">
-      <button class="upload-box" bindtap="handleChooseMedia" disabled="{{saving || choosing}}">
-        <view class="upload-plus">+</view>
-        <view class="upload-title">选择图片、视频或动图</view>
-        <view class="upload-desc">一次最多勾选 9 个，标题默认使用文件名。</view>
-      </button>
-
-      <button class="upload-box" data-media-type="AUDIO" bindtap="handleChooseMedia" disabled="{{saving || choosing}}">
-        <view class="upload-plus">+</view>
-        <view class="upload-title">选择音频作品</view>
-        <view class="upload-desc">
-          <view>从聊天文件选择 MP3、M4A、AAC、WAV</view>
-          <view>不超过 50MB、10 分钟</view>
+  <view class="work-add-content">
+    <view class="upload-entry-list">
+      <view class="upload-box" bindtap="handleChooseMedia" aria-role="button" aria-disabled="{{saving || choosing}}" aria-label="选择图片、视频或动图">
+        <view class="upload-plus {{saving || choosing ? 'is-disabled' : ''}}">+</view>
+        <view class="upload-copy">
+          <view class="upload-title {{saving || choosing ? 'is-disabled' : ''}}">选择图片、视频或动图</view>
+          <view class="upload-desc">
+            <view>一次最多勾选 9 个</view>
+            <view>标题默认使用文件名</view>
+          </view>
         </view>
-      </button>
+      </view>
 
-      <view wx:if="{{files.length > 0}}" class="selected-panel">
-        <view class="panel-heading">
-          <view class="panel-title">已选作品</view>
-          <view class="selected-count">{{files.length}} / 9</view>
+      <view class="upload-box" data-media-type="AUDIO" bindtap="handleChooseMedia" aria-role="button" aria-disabled="{{saving || choosing}}" aria-label="选择音频作品">
+        <view class="upload-plus {{saving || choosing ? 'is-disabled' : ''}}">+</view>
+        <view class="upload-copy">
+          <view class="upload-title {{saving || choosing ? 'is-disabled' : ''}}">选择音频作品</view>
+          <view class="upload-desc">
+            <view>从聊天文件选择 MP3、M4A、AAC、WAV</view>
+            <view>不超过 50MB、10 分钟</view>
+          </view>
         </view>
-        <scroll-view class="selected-work-list count-{{files.length > 3 ? 'many' : files.length}}" scroll-y type="list">
-          <view class="selected-work-list-content">
-            <view
-              wx:for="{{files}}"
-              wx:key="id"
-              class="selected-work-swipe-row {{revealedFileId === item.id ? 'revealed' : ''}}"
-              data-id="{{item.id}}"
-              bindtouchstart="handleFileTouchStart"
-              bindtouchmove="handleFileTouchMove"
-              bindtouchend="handleFileTouchEnd"
-              bindtouchcancel="handleFileTouchCancel"
-            >
-              <view class="selected-work-remove-pane" catchtap="handleEditPanelTap">
-                <button class="selected-work-remove-button" data-index="{{index}}" catchtap="handleRemoveFile">移除</button>
+      </view>
+    </view>
+
+    <view class="selected-panel">
+      <view class="panel-heading">
+        <view class="panel-title">{{choosing && files.length === 0 ? '正在处理作品' : '已选作品'}}</view>
+        <view wx:if="{{choosing && files.length === 0}}" class="selected-count">{{choosingCountText}}</view>
+        <view wx:else class="selected-count">{{files.length}} / 9</view>
+      </view>
+      <scroll-view class="selected-work-list" scroll-y type="list" scroll-into-view="{{choosing || saving ? 'selected-work-list-start' : ''}}">
+        <view id="selected-work-list-start" class="selected-work-list-content">
+          <view wx:if="{{choosing || (preparationCancelled && !saving)}}" class="compression-state">
+            <view class="compression-state-main">
+              <view wx:if="{{choosing}}" class="compression-icon" aria-hidden="true">
+                <view class="loading-spinner"></view>
               </view>
-              <view class="selected-work-row" data-index="{{index}}" bindtap="handleOpenFileEditor">
+              <view class="compression-state-copy">
+                <view class="compression-state-title">{{choosing ? choosingTitle : '已取消处理'}}</view>
+                <view class="compression-state-meta">{{choosing ? (files.length > 0 ? choosingCountText + ' · 请稍候' : choosingHint) : (files.length > 0 ? '原已选作品已保留' : '可重新选择作品')}}</view>
+              </view>
+              <view wx:if="{{canCancelPreparation && !saving}}" class="compression-cancel" bindtap="handleCancelPreparation" aria-role="button" aria-label="取消处理">{{cancelPreparationText}}</view>
+            </view>
+            <view class="compression-state-note">{{choosing ? (files.length > 0 ? '处理完成后，新作品将加入下方列表。' : '处理完成后，作品将显示在这里。') : (files.length > 0 ? '可以继续添加，或保存已选作品。' : '点击上方入口，重新选择要添加的作品。')}}</view>
+          </view>
+          <view wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</view>
+          <view wx:if="{{files.length === 0 && !choosing && !preparationCancelled}}" class="empty-state">
+            <view class="empty-title">尚未选择作品</view>
+            <view class="empty-desc">图片、视频和动图从相册选择，音频从聊天文件选择。</view>
+          </view>
+          <view
+            wx:for="{{files}}"
+            wx:key="id"
+            class="selected-work-swipe-row {{revealedFileId === item.id ? 'revealed' : ''}}"
+            data-id="{{item.id}}"
+            bindtouchstart="handleFileTouchStart"
+            bindtouchmove="handleFileTouchMove"
+            bindtouchend="handleFileTouchEnd"
+            bindtouchcancel="handleFileTouchCancel"
+          >
+            <view class="selected-work-remove-pane" catchtap="handleEditPanelTap">
+              <button class="selected-work-remove-button" disabled="{{saving || choosing}}" data-index="{{index}}" catchtap="handleRemoveFile">移除</button>
+            </view>
+            <view class="selected-work-row" data-index="{{index}}" bindtap="handleOpenFileEditor">
+              <view class="selected-work-summary">
                 <view class="selected-work-thumb {{item.isVideo ? 'video' : ''}}">
                   <image wx:if="{{item.mediaType === 'IMAGE'}}" src="{{item.tempFilePath}}" mode="aspectFill"></image>
                   <image wx:elif="{{item.mediaType === 'ANIMATION'}}" src="{{item.tempFilePath}}" mode="aspectFill" webp="{{item.mimeType === 'image/webp'}}"></image>
                   <image wx:elif="{{item.mediaType === 'AUDIO'}}" src="{{item.audioCoverUrl}}" mode="aspectFill"></image>
                   <image wx:elif="{{item.coverPath}}" src="{{item.coverPath}}" mode="aspectFill"></image>
                   <view wx:else class="video-thumb">视频</view>
-                  <view wx:if="{{item.isVideo}}" class="play-badge">▶</view>
+                  <view wx:if="{{item.isVideo}}" class="play-badge" aria-hidden="true">
+                    <view class="play-icon"></view>
+                  </view>
                   <view wx:if="{{item.isAnimation}}" class="animation-badge">动图</view>
                 </view>
                 <view class="selected-work-copy">
                   <view class="selected-work-title">{{item.title || item.fileName}}</view>
                   <view class="selected-work-meta">{{item.metaText}}</view>
-                  <view
-                    wx:if="{{saving && (item.status === 'UPLOADING' || item.status === 'UPLOADED' || item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED')}}"
-                    class="selected-work-progress"
-                  >
-                    <view class="selected-work-progress-head">
-                      <view>{{item.customCoverStatus === 'UPLOADING' ? '处理封面' : item.customCoverStatus === 'UPLOADED' ? '封面已上传' : item.status === 'UPLOADED' ? '文件已上传' : '上传中'}}</view>
-                      <view>{{item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED' ? item.customCoverProgress : item.progress || 0}}%</view>
-                    </view>
-                    <view class="selected-work-progress-track">
-                      <view class="selected-work-progress-fill" style="width: {{item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED' ? item.customCoverProgress : item.progress || 0}}%;"></view>
-                    </view>
-                  </view>
+                  <view wx:if="{{item.compressed}}" class="selected-work-compression">{{item.compressionText}}</view>
                 </view>
                 <view class="selected-work-arrow">›</view>
               </view>
+              <view
+                wx:if="{{saving && (item.status === 'UPLOADING' || item.status === 'UPLOADED' || item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED')}}"
+                class="selected-work-progress"
+              >
+                <view class="selected-work-progress-head">
+                  <view>{{item.customCoverStatus === 'UPLOADING' ? '处理封面' : item.customCoverStatus === 'UPLOADED' ? '封面已上传' : item.status === 'UPLOADED' ? '文件已上传' : '上传中'}}</view>
+                  <view>{{item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED' ? item.customCoverProgress : item.progress || 0}}%</view>
+                </view>
+                <view class="selected-work-progress-track">
+                  <view class="selected-work-progress-fill" style="width: {{item.customCoverStatus === 'UPLOADING' || item.customCoverStatus === 'UPLOADED' ? item.customCoverProgress : item.progress || 0}}%;"></view>
+                </view>
+              </view>
+              <view wx:if="{{!saving}}" class="selected-work-ready">已准备好，可以保存</view>
             </view>
           </view>
-        </scroll-view>
-      </view>
-
-      <view wx:if="{{files.length === 0}}" class="empty-state">
-        <view class="empty-title">尚未选择作品</view>
-        <view class="empty-desc">图片、视频和动图从相册选择，音频从聊天文件选择。</view>
-      </view>
-
-      <view class="tag-panel">
-        <view class="tag-label">统一标签（可选）</view>
-        <view class="tag-row">
-          <view wx:for="{{unifiedTags}}" wx:key="id" class="tag-chip" style="{{item.style}}">{{item.name}}</view>
-          <view class="tag-add-trigger" catchtap="handleOpenTagPicker" aria-role="button" aria-label="添加统一作品标签">+添加</view>
         </view>
-        <view class="tag-note" wx:if="{{files.length > 0}}">选中的标签会同时应用到本次 {{files.length}} 个作品；作品说明可保存后补充。</view>
-        <view class="tag-note muted" wx:else>可先选择统一标签，添加作品后会自动应用；作品说明可保存后补充。</view>
-      </view>
-
-      <view wx:if="{{errorMessage}}" class="error-copy">{{errorMessage}}</view>
-      <button class="primary-button {{files.length === 0 ? 'empty-disabled' : ''}}" disabled="{{saving || choosing}}" bindtap="handleSubmit">
-        <view class="primary-button-content">
-          <view class="primary-button-label">{{saving ? uploadOverallText : '保存作品'}}</view>
-          <view wx:if="{{saving}}" class="primary-button-progress">
-            <view class="primary-button-progress-fill" style="width: {{uploadOverallProgress}}%;"></view>
-          </view>
-        </view>
-      </button>
+      </scroll-view>
     </view>
-  </scroll-view>
+  </view>
+
+  <view class="work-add-footer">
+    <view class="tag-panel">
+      <view class="tag-label">统一标签（可选）</view>
+      <view class="tag-row">
+        <scroll-view wx:if="{{unifiedTags.length > 0}}" class="tag-selected-scroll" scroll-x type="list">
+          <view class="tag-selected-list">
+            <view wx:for="{{unifiedTags}}" wx:key="id" class="tag-chip" style="{{item.style}}">{{item.name}}</view>
+          </view>
+        </scroll-view>
+        <view class="tag-add-trigger {{saving || choosing ? 'is-disabled' : ''}}" catchtap="handleOpenTagPicker" aria-role="button" aria-disabled="{{saving || choosing}}" aria-label="添加统一作品标签">+添加</view>
+      </view>
+      <view class="tag-note" wx:if="{{files.length > 0}}">
+        <view>选中的标签应用到本次 {{files.length}} 个作品</view>
+        <view>作品说明可保存后补充</view>
+      </view>
+      <view class="tag-note muted" wx:else>
+        <view>{{choosing ? '选中的标签将在处理完成后应用' : '可先选择统一标签，添加后自动应用'}}</view>
+        <view>作品说明可保存后补充</view>
+      </view>
+    </view>
+
+    <view class="primary-button {{files.length === 0 || choosing ? 'empty-disabled' : ''}} {{saving ? 'is-saving' : ''}}" aria-role="button" aria-disabled="{{saving || choosing}}" bindtap="handleSubmit">
+      <view class="primary-button-content">
+        <view class="primary-button-label">{{saving ? uploadOverallText : choosing ? '处理完成后可保存' : '保存作品'}}</view>
+        <view wx:if="{{saving}}" class="primary-button-progress">
+          <view class="primary-button-progress-fill" style="width: {{uploadOverallProgress}}%;"></view>
+        </view>
+      </view>
+    </view>
+  </view>
 
   <view class="tag-picker-mask {{tagPickerVisible ? 'visible' : ''}}" catchtap="handleCloseTagPicker">
     <view class="tag-picker-panel" catchtap="handleTagPickerPanelTap">
@@ -106,7 +146,10 @@
         <view class="tag-picker-count">{{selectedUnifiedTagCount}} 个已选</view>
       </view>
 
-      <view wx:if="{{tagLoading}}" class="tag-picker-state">加载中...</view>
+      <view wx:if="{{tagLoading}}" class="tag-picker-state">
+        <view class="loading-spinner" aria-hidden="true"></view>
+        <view>加载中</view>
+      </view>
       <view wx:elif="{{tagErrorText}}" class="tag-picker-state error">
         <view>{{tagErrorText}}</view>
         <view class="tag-picker-retry" catchtap="handleRetryLoadTags" aria-role="button" aria-label="重新加载作品标签">重试</view>
@@ -136,8 +179,8 @@
       </scroll-view>
 
       <view class="tag-picker-actions">
-        <button class="tag-picker-clear" catchtap="handleClearUnifiedTags" disabled="{{tagLoading}}">清空</button>
-        <button class="tag-picker-confirm" catchtap="handleConfirmTagPicker" disabled="{{tagLoading}}">完成</button>
+        <button class="tag-picker-clear" catchtap="handleClearUnifiedTags" disabled="{{tagLoading || saving || choosing}}">清空</button>
+        <button class="tag-picker-confirm" catchtap="handleConfirmTagPicker" disabled="{{tagLoading || saving || choosing}}">完成</button>
       </view>
     </view>
   </view>
@@ -168,6 +211,7 @@
               placeholder="填写作品标题"
               data-field="title"
               bindinput="handleEditInput"
+              disabled="{{saving || choosing}}"
             />
           </view>
 
@@ -180,6 +224,7 @@
               maxlength="1000"
               data-field="description"
               bindinput="handleEditInput"
+              disabled="{{saving || choosing}}"
               auto-height="{{false}}"
             ></textarea>
           </view>
@@ -190,9 +235,11 @@
 
       <view class="work-edit-actions">
         <button class="work-edit-cancel" catchtap="handleCloseFileEditor" disabled="{{editFrameExporting}}">取消</button>
-        <button class="work-edit-confirm" catchtap="handleConfirmFileEdit" disabled="{{editFrameExporting}}">完成</button>
+        <button class="work-edit-confirm" catchtap="handleConfirmFileEdit" disabled="{{editFrameExporting || saving || choosing}}">完成</button>
       </view>
     </view>
   </view>
 
+  <canvas id="workCompressionCanvas" type="2d" class="work-compression-canvas" style="width: {{compressionCanvasWidth}}px; height: {{compressionCanvasHeight}}px;"></canvas>
+  <canvas id="workCompressionRecoveryCanvas" type="2d" class="work-compression-canvas" style="width: {{compressionRecoveryCanvasWidth}}px; height: {{compressionRecoveryCanvasHeight}}px;"></canvas>
 </view>

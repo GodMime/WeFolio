@@ -149,14 +149,15 @@
                     ></view>
                   </view>
                   <view class="work-copy">
-                    <view class="work-title">{{item.title}}</view>
-                    <view class="work-meta">
-                      <text>{{item.typeText}}</text>
-                      <text wx:if="{{item.durationText}}"> · {{item.durationText}}</text>
-                      <text> / {{item.tagText}}</text>
-                      <text wx:if="{{item.mediaType === 'AUDIO'}}"> / {{item.fileSizeText}}</text>
-                      <text wx:else> / 长宽比 {{item.aspectRatioText}}</text>
-                    </view>
+                    <work-meta-marquee
+                      text="{{item.title}}"
+                      title-style="{{true}}"
+                      compact="{{batchMode}}"
+                    ></work-meta-marquee>
+                    <work-meta-marquee
+                      text="{{item.typeText}}{{item.durationText ? ' · ' + item.durationText : ''}} / {{item.tagText}} / {{item.mediaType === 'AUDIO' ? item.fileSizeText : '长宽比 ' + item.aspectRatioText}}"
+                      compact="{{batchMode}}"
+                    ></work-meta-marquee>
                     <view class="work-status-row">
                       <view class="reference-pill {{item.referenceCount > 0 ? 'used' : ''}}">{{item.referenceText}}</view>
                       <view class="status-badge {{item.auditStatusTone}}">

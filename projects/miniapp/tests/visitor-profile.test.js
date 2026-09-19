@@ -5,7 +5,7 @@ const test = require('node:test')
 function loadVisitorProfileUtils(fakeRequest) {
   const utilPath = path.join(__dirname, '../pages/portfolios/utils/visitor-profile.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
-  const visitorSessionPath = path.join(__dirname, '../utils/visitor-session.js')
+  const visitorSessionPath = path.join(__dirname, '../pages/portfolios/utils/visitor-session.js')
   const requestCacheKey = require.resolve(requestPath)
   const visitorSessionCacheKey = require.resolve(visitorSessionPath)
   const originalRequestCache = require.cache[requestCacheKey]

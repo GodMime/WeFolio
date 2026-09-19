@@ -1,5 +1,6 @@
 package com.jxc.wefolio.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.MineFeedbackCreateRequest;
@@ -112,6 +113,27 @@ class MineFeedbackControllerTest {
         assertThat(method.getParameters()[0].isAnnotationPresent(RequestBody.class)).isTrue();
         assertThat(response.getData()).isSameAs(serviceResponse);
         verify(applicationService).create(request);
+    }
+
+    /** 创建请求应兼容旧 JSON，并把新版本字段原样委派给应用服务。 */
+    @Test
+    void createShouldBindOptionalFrontendVersionAndDelegateIt() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        MineFeedbackCreateRequest oldRequest = objectMapper.readValue("""
+                {"idempotencyKey":"old-key","description":"旧客户端请求"}
+                """, MineFeedbackCreateRequest.class);
+        MineFeedbackCreateRequest newRequest = objectMapper.readValue("""
+                {"idempotencyKey":"new-key","description":"新客户端请求","frontendVersion":" 1.2.5 "}
+                """, MineFeedbackCreateRequest.class);
+        MineFeedbackDetailResponse serviceResponse = new MineFeedbackDetailResponse();
+        when(applicationService.create(newRequest)).thenReturn(serviceResponse);
+
+        Response<MineFeedbackDetailResponse> response = controller.create(newRequest);
+
+        assertThat(oldRequest.getFrontendVersion()).isNull();
+        assertThat(newRequest.getFrontendVersion()).isEqualTo(" 1.2.5 ");
+        assertThat(response.getData()).isSameAs(serviceResponse);
+        verify(applicationService).create(newRequest);
     }
 
     /** 历史分页接口必须原样委派两个可选分页参数。 */

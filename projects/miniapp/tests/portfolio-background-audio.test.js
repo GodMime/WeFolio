@@ -2,11 +2,11 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const { normalizePortfolioConfig, buildDraftPayload } = require('../utils/portfolios')
+const { normalizePortfolioConfig, buildDraftPayload } = require('../pages/portfolios/utils/portfolios')
 const { normalizeTeamPortfolioConfig } = require('../pages/team-portfolios/utils/team-portfolios')
 
 test('背景音频配置工具跨包副本保持一致', () => {
-  assert.equal(fs.readFileSync(path.join(__dirname, '../utils/portfolio-background-audio.js'), 'utf8'),
+  assert.equal(fs.readFileSync(path.join(__dirname, '../pages/portfolios/utils/portfolio-background-audio.js'), 'utf8'),
     fs.readFileSync(path.join(__dirname, '../pages/team-portfolios/utils/portfolio-background-audio.js'), 'utf8'))
 })
 

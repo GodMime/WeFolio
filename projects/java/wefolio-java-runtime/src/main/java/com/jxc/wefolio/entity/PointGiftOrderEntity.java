@@ -67,7 +67,7 @@ public class PointGiftOrderEntity extends BaseEntity {
     /** 微信返回赠送代币余额 */
     private Long wechatPresentBalanceAfter;
 
-    /** 最后失败码 */
+    /** 最后失败码；SUCCESS/DUPLICATE_SUCCESS 表示远端已成功，后续只补查余额。 */
     private String lastErrorCode;
 
     /** 最后脱敏失败原因 */

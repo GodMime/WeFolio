@@ -85,6 +85,7 @@ public class FeedbackRoundCodec {
         copy.setRoundNo(source.getRoundNo());
         copy.setIdempotencyKey(source.getIdempotencyKey());
         copy.setDescription(source.getDescription());
+        copy.setFrontendVersion(source.getFrontendVersion());
         copy.setSubmittedAt(source.getSubmittedAt());
         copy.setTeamResult(teamResult);
         copy.setTeamResultAt(teamResultAt);

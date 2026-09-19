@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -71,6 +72,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -234,6 +236,24 @@ public class MinePortfolioService {
 
     /** 发布历史动作 */
     private static final String HISTORY_ACTION_PUBLISH = "PUBLISH";
+
+    /** 历史快照中的操作类型字段。 */
+    private static final String HISTORY_KEY_ACTION = "actionType";
+
+    /** 历史快照中的配置字段。 */
+    private static final String HISTORY_KEY_CONFIG = "config";
+
+    /** 保存请求的可选幂等键字段。 */
+    private static final String HISTORY_KEY_IDEMPOTENCY = "idempotencyKey";
+
+    /** 原始保存请求的指纹字段，不依赖服务端规范化后的配置。 */
+    private static final String HISTORY_KEY_REQUEST_HASH = "requestHash";
+
+    /** 此次保存完成后的草稿版本字段。 */
+    private static final String HISTORY_KEY_DRAFT_REVISION = "draftRevision";
+
+    /** 历史重放使用当前读，避免等待作品集图锁前建立的可重复读快照遗漏刚提交的历史。 */
+    private static final String HISTORY_CURRENT_READ_CLAUSE = "FOR UPDATE";
 
     /** SHA-256 算法名 */
     private static final String SHA_256_ALGORITHM = "SHA-256";
@@ -458,6 +478,11 @@ public class MinePortfolioService {
         PortfolioHyperlinkGraphService.LockedGraph graph =
                 portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
         PortfolioEntity portfolio = graph.source();
+        String requestHash = hasDraftIdempotencyKey(request)
+                ? sha256(toJson(sortJsonKeys(JSON.parse(toJson(request))))) : null;
+        if (restoreSavedDraft(portfolio, request, requestHash)) {
+            return buildDetail(portfolio, parseConfig(portfolio.getDraftConfigJson()));
+        }
         if (request.getClientRevision() != null && !request.getClientRevision().equals(safeInt(portfolio.getDraftRevision()))) {
             throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
         }
@@ -511,7 +536,8 @@ public class MinePortfolioService {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_CONCURRENT_UPDATE_MESSAGE);
         }
         rebuildReferences(portfolio.getId(), PortfolioConfigScopeDict.DRAFT.getCode(), draftReferences);
-        insertHistory(portfolio, nextHistoryRevision, normalized, hash, userId, now, HISTORY_ACTION_DRAFT_SAVE);
+        insertHistory(portfolio, nextHistoryRevision, normalized, hash, userId, now, HISTORY_ACTION_DRAFT_SAVE,
+                hasDraftIdempotencyKey(request) ? request.getIdempotencyKey() : null, requestHash);
         deleteUnreferencedAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
         return buildDetail(portfolio, normalized);
     }
@@ -921,16 +947,88 @@ public class MinePortfolioService {
             LocalDateTime savedAt,
             String actionType
     ) {
+        insertHistory(portfolio, revision, config, hash, userId, savedAt, actionType, null, null);
+    }
+
+    /** 写入历史快照，并为携带幂等键的草稿保留原请求指纹与结果版本。 */
+    private void insertHistory(
+            PortfolioEntity portfolio,
+            int revision,
+            PortfolioConfigDto config,
+            String hash,
+            Long userId,
+            LocalDateTime savedAt,
+            String actionType,
+            String idempotencyKey,
+            String requestHash
+    ) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put(HISTORY_KEY_ACTION, actionType);
+        snapshot.put(HISTORY_KEY_CONFIG, config);
+        if (idempotencyKey != null) {
+            snapshot.put(HISTORY_KEY_IDEMPOTENCY, idempotencyKey);
+            snapshot.put(HISTORY_KEY_REQUEST_HASH, requestHash);
+            snapshot.put(HISTORY_KEY_DRAFT_REVISION, portfolio.getDraftRevision());
+        }
         PortfolioHistoryEntity history = new PortfolioHistoryEntity();
         history.setPortfolioId(portfolio.getId());
         history.setRevisionNo(revision);
         history.setSchemaVersion(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
-        history.setSnapshotJson(toJson(Map.of("actionType", actionType, "config", config)));
+        history.setSnapshotJson(toJson(snapshot));
         history.setSourceType(SOURCE_TYPE_MANUAL);
         history.setContentHash(hash);
         history.setSavedBy(userId);
         history.setSavedAt(savedAt);
         portfolioHistoryEntityMapper.insert(history);
+    }
+
+    /** 仅重放当前最后一次保存；后续保存或发布已经推进历史时仍保留真实版本冲突。 */
+    private boolean restoreSavedDraft(
+            PortfolioEntity portfolio,
+            MinePortfolioDraftSaveRequest request,
+            String requestHash
+    ) {
+        if (!hasDraftIdempotencyKey(request) || safeInt(portfolio.getCurrentRevision()) <= 0) {
+            return false;
+        }
+        // 使用已有唯一索引精确当前读；不能回到取得图锁之前的可重复读快照。
+        PortfolioHistoryEntity latest = portfolioHistoryEntityMapper.selectOne(
+                Wrappers.lambdaQuery(PortfolioHistoryEntity.class)
+                        .eq(PortfolioHistoryEntity::getPortfolioId, portfolio.getId())
+                        .eq(PortfolioHistoryEntity::getRevisionNo, portfolio.getCurrentRevision())
+                        .last(HISTORY_CURRENT_READ_CLAUSE)
+        );
+        if (latest == null || latest.getSnapshotJson() == null) {
+            return false;
+        }
+        JSONObject snapshot = JSON.parseObject(latest.getSnapshotJson());
+        if (snapshot == null || !HISTORY_ACTION_DRAFT_SAVE.equals(snapshot.getString(HISTORY_KEY_ACTION))
+                || !request.getIdempotencyKey().equals(snapshot.getString(HISTORY_KEY_IDEMPOTENCY))) {
+            return false;
+        }
+        if (!requestHash.equals(snapshot.getString(HISTORY_KEY_REQUEST_HASH))
+                || !Objects.equals(portfolio.getDraftRevision(), snapshot.getInteger(HISTORY_KEY_DRAFT_REVISION))) {
+            throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+        }
+        return true;
+    }
+
+    /** 旧客户端未携带幂等键时保持原保存行为。 */
+    private boolean hasDraftIdempotencyKey(MinePortfolioDraftSaveRequest request) {
+        return request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank();
+    }
+
+    /** 递归排序对象字段，使请求指纹不受 JSON 对象字段顺序影响，数组顺序保持不变。 */
+    private Object sortJsonKeys(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> sorted = new TreeMap<>();
+            map.forEach((key, item) -> sorted.put(String.valueOf(key), sortJsonKeys(item)));
+            return sorted;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(this::sortJsonKeys).toList();
+        }
+        return value;
     }
 
     /**

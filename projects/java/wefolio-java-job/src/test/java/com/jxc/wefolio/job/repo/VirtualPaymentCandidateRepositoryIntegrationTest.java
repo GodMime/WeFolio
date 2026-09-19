@@ -59,6 +59,30 @@ class VirtualPaymentCandidateRepositoryIntegrationTest {
         assertThat(repository.findDueDebitTaskIds(10)).containsExactly(13L, 11L, 12L);
     }
 
+    /** 已支付订单不再进入定时核对，核对时间为空、到期或未到期都不能重新扫描。 */
+    @Test
+    void findDueRechargeOrderIdsShouldExcludePaidOrdersRegardlessOfNextQueryTime() {
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update("INSERT INTO wf_maintainer_wechat_session VALUES (101, 'AVAILABLE', 0)");
+        jdbcTemplate.update("""
+                INSERT INTO wf_recharge_order
+                    (id, user_id, status, deleted, pay_channel, next_query_at, paid_fee)
+                VALUES
+                    (1, 101, 'PENDING_PAYMENT', 0, 'WECHAT_VIRTUAL_PAYMENT', NULL, 0),
+                    (2, 101, 'CLOSED', 0, 'WECHAT_VIRTUAL_PAYMENT', ?, 0),
+                    (3, 101, 'PAID', 0, 'WECHAT_VIRTUAL_PAYMENT', NULL, 100),
+                    (4, 101, 'PAID', 0, 'WECHAT_VIRTUAL_PAYMENT', ?, 100),
+                    (5, 101, 'PAID', 0, 'WECHAT_VIRTUAL_PAYMENT', ?, 100),
+                    (6, 101, 'PAYMENT_FAILED', 0, 'WECHAT_VIRTUAL_PAYMENT', NULL, 100),
+                    (7, 101, 'PAYMENT_FAILED', 0, 'WECHAT_VIRTUAL_PAYMENT', NULL, 0),
+                    (8, 101, 'PAYMENT_FAILED', 0, 'WECHAT_VIRTUAL_PAYMENT', NULL, NULL),
+                    (9, 101, 'REFUNDED', 0, 'WECHAT_VIRTUAL_PAYMENT', NULL, 100)
+                """, now.minusMinutes(1), now.minusDays(30), now.plusDays(1));
+
+        assertThat(repository.findDueRechargeOrderIds(0L, 100)).containsExactly(1L, 2L, 6L);
+        assertThat(repository.findDueRechargeOrderIds(2L, 1)).containsExactly(6L);
+    }
+
     /** 仅返回仍有待扣且缺少活动任务的用户。 */
     @Test
     void findUsersMissingActiveDebitTasksShouldExcludeExistingActiveTasks() {
@@ -68,7 +92,28 @@ class VirtualPaymentCandidateRepositoryIntegrationTest {
         insertAccount(24L, 10L, 80L, 1);
         insertDebit(31L, 8L, "WAITING", LocalDateTime.now(), null, 1, 0);
 
-        assertThat(repository.findUsersMissingActiveDebitTasks(10)).containsExactly(7L);
+        assertThat(repository.findAccountsMissingActiveDebitTasks(0L, 10))
+                .extracting(VirtualPaymentCandidateRepository.RecoveryCandidate::userId).containsExactly(7L);
+    }
+
+    /** 零待扣退款可以恢复，首次未同步、跨账户退款和不可用会话不会混入候选。 */
+    @Test
+    void shouldRecoverZeroPendingRefundOnlyWithMatchingAccountAndAvailableSession() {
+        for (long userId = 1; userId <= 6; userId++) {
+            insertAccount(100L + userId, userId, 0L, 0);
+            jdbcTemplate.update("INSERT INTO wf_maintainer_wechat_session VALUES (?, ?, 0)",
+                    userId, userId == 6 ? "INVALID" : "AVAILABLE");
+        }
+        jdbcTemplate.update("""
+                INSERT INTO wf_recharge_order (id, account_id, user_id, status, deleted)
+                VALUES (1, 101, 1, 'REFUNDED', 0), (2, 999, 2, 'REFUNDED', 0),
+                    (3, 103, 3, 'PAID', 0), (4, 104, 4, 'REFUNDED', 1),
+                    (5, 105, 5, 'REFUNDED', 0), (6, 106, 6, 'REFUNDED', 0)
+                """);
+        jdbcTemplate.update("UPDATE wf_point_account SET wechat_balance_synced_at = CURRENT_TIMESTAMP WHERE user_id = 5");
+
+        assertThat(repository.findRefundStaleAccounts(0L, 10))
+                .extracting(VirtualPaymentCandidateRepository.RecoveryCandidate::userId).containsExactly(1L);
     }
 
     /** 创建查询所需的最小共享表结构。 */
@@ -98,7 +143,20 @@ class VirtualPaymentCandidateRepositoryIntegrationTest {
                   id BIGINT PRIMARY KEY,
                   user_id BIGINT NOT NULL,
                   pending_debit BIGINT NOT NULL,
+                  wechat_balance_synced_at TIMESTAMP NULL,
                   deleted TINYINT NOT NULL
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE wf_recharge_order (
+                  id BIGINT PRIMARY KEY, account_id BIGINT, user_id BIGINT,
+                  status VARCHAR(32), deleted BIGINT NOT NULL,
+                  pay_channel VARCHAR(32), next_query_at TIMESTAMP, paid_fee BIGINT
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE wf_maintainer_wechat_session (
+                  user_id BIGINT, status VARCHAR(32), deleted BIGINT NOT NULL
                 )
                 """);
     }

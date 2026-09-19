@@ -1,4 +1,4 @@
-const { hexToHsv, hsvToHex } = require('../../../../utils/portfolio-color')
+const { hexToHsv, hsvToHex } = require('../../utils/portfolio-color')
 const AUTO_COLOR = 'AUTO'
 const WHITE_COLOR = '#FFFFFF'
 const BLACK_COLOR = '#000000'

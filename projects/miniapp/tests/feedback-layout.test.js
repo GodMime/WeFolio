@@ -166,6 +166,7 @@ test('new feedback page creates a fresh idempotency key for every page instance'
     wx: {},
     require(request) {
       if (request === '../../utils/feedback') return feedbackModule
+      if (request === '../../utils/app-version') return require('../utils/app-version')
       if (request === '../../utils/session') return sessionModule
       throw new Error(`unexpected require: ${request}`)
     }
@@ -452,4 +453,42 @@ test('background first-page refresh blocks load-more until the fresh page is app
   await new Promise((resolve) => setImmediate(resolve))
   assert.deepEqual(requests.map((request) => request.pageNo), [1, 2])
   assert.deepEqual(page.data.feedbackPage.items.map((item) => item.state), ['fresh', 'next'])
+})
+
+
+test('version modal works offline in every page state and leaves the draft untouched', () => {
+  let pageDefinition
+  const modals = []
+  vm.runInNewContext(readProjectFile('pages/feedback/feedback.js'), {
+    Page(definition) { pageDefinition = definition },
+    wx: { showModal(options) { modals.push(options) } },
+    require(request) {
+      if (request === '../../utils/feedback') return require('../utils/feedback')
+      if (request === '../../utils/app-version') return require('../utils/app-version')
+      if (request === '../../utils/session') return {}
+      throw new Error(`unexpected require: ${request}`)
+    }
+  })
+  const page = Object.assign({}, pageDefinition, {
+    data: structuredClone(pageDefinition.data),
+    setData() { assert.fail('viewing the version must not change page data') }
+  })
+  page.data.draft.description = '保留输入内容'
+  page.data.draft.attachments = [{ tempFilePath: '/tmp/photo.jpg', status: 'READY' }]
+  for (const state of [
+    { loading: true, errorMessage: '' },
+    { loading: false, errorMessage: '网络异常' },
+    { loading: false, errorMessage: '' }
+  ]) {
+    Object.assign(page.data, state)
+    const before = structuredClone(page.data)
+    assert.equal(typeof page.handleVersionTap, 'function')
+    page.handleVersionTap()
+    const modal = modals.at(-1)
+    assert.equal(modal.title, '版本信息')
+    assert.equal(modal.content, `当前前端版本：${require('../utils/app-version').FRONTEND_VERSION}`)
+    assert.equal(modal.confirmText, '知道了')
+    assert.equal(modal.showCancel, false)
+    assert.deepEqual(page.data, before)
+  }
 })

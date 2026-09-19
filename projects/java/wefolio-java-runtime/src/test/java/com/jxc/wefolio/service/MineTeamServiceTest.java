@@ -36,6 +36,7 @@ import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
+import com.jxc.wefolio.service.teamportfolio.LocalPortfolioReferenceMutex;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -918,7 +919,8 @@ class MineTeamServiceTest {
                 teamRegistrationService,
                 pointService,
                 uniqueCodeGenerator,
-                teamPortfolioReferenceGuardService
+                teamPortfolioReferenceGuardService,
+                new LocalPortfolioReferenceMutex()
         );
     }
 }

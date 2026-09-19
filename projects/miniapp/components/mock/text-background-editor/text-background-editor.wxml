@@ -1,0 +1,10 @@
+<view class="editor"><view class="row"><text>背景作品</text><switch checked="{{draft.backgroundEnabled}}" bindchange="handleSwitch" /></view>
+<block wx:if="{{draft.backgroundEnabled}}">
+  <view class="background-selection" bindtap="handleTogglePicker" aria-role="button" aria-expanded="{{pickerOpen}}">{{pickerOpen ? '收起作品列表' : (draft.backgroundWorkId ? '已选作品 #' + draft.backgroundWorkId + ' · 点击更换' : '选择图片、动图或视频作品')}}</view>
+  <view class="help">视频背景自动静音循环播放</view>
+  <view wx:if="{{pickerOpen}}" class="background-picker">
+    <view class="background-search"><input class="background-search-input" value="{{keyword}}" placeholder="搜索作品名称" bindinput="handleKeyword" bindconfirm="handleSearch"/><button class="background-search-button" bindtap="handleSearch">搜索</button><button class="background-search-button" bindtap="handleClosePicker">收起</button></view>
+    <view class="media-list"><view wx:for="{{displayWorks}}" wx:key="id" class="media-choice {{draft.backgroundWorkId == item.id ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="handleWork"><image wx:if="{{item.mediaType !== 'VIDEO'}}" src="{{item.mediaUrl}}" mode="aspectFill"/><view wx:else class="video-placeholder">视频</view><text>{{item.title || '未命名作品'}}</text></view><view wx:if="{{!displayWorks.length}}" class="help">{{keyword ? '没有符合条件的图片、动图或视频' : '暂无可用图片、动图或视频作品'}}</view></view>
+  </view>
+  <block wx:if="{{!pickerOpen}}"><picker range="{{treatmentLabels}}" value="{{optionIndexes[draft.backgroundTreatment || 'GRADIENT']}}" bindchange="handleTreatment"><view class="choice">背景处理：{{optionLabels[draft.backgroundTreatment || 'GRADIENT']}}</view></picker><picker wx:if="{{!structured}}" range="{{alignmentLabels}}" value="{{optionIndexes[draft.verticalAlignment || 'CENTER']}}" bindchange="handleAlignment"><view class="choice">上下对齐方式：{{optionLabels[draft.verticalAlignment || 'CENTER']}}</view></picker></block>
+</block></view>

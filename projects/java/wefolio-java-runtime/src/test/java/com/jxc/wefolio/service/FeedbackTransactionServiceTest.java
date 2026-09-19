@@ -16,6 +16,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -30,6 +32,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -169,16 +172,21 @@ class FeedbackTransactionServiceTest {
     /** 创建幂等重放直接返回旧反馈，不重复统计、写入或确认附件。 */
     @Test
     void createShouldReturnExistingFeedbackForIdempotentReplay() {
-        FeedbackEntity existing = feedback(31L, FeedbackStatusDict.RESOLVED.getCode(), List.of(round(1, "create-key")));
+        FeedbackRoundSnapshot existingRound = round(1, "create-key");
+        existingRound.setFrontendVersion("1.2.5");
+        FeedbackEntity existing = feedback(31L, FeedbackStatusDict.RESOLVED.getCode(), List.of(existingRound));
         when(feedbackEntityMapper.selectByUserIdAndCreateIdempotencyKey(USER_ID, "create-key"))
                 .thenReturn(existing);
+        MineFeedbackCreateRequest request = request("create-key", "重放时内容可以不同");
+        request.setFrontendVersion("9.9.9");
 
         FeedbackTransactionService.MutationResult result =
-                service.create(request("create-key", "重放时内容可以不同"));
+                service.create(request);
 
         assertThat(result.changed()).isFalse();
         assertThat(result.feedback()).isSameAs(existing);
         assertThat(result.submittedRound().getRoundNo()).isEqualTo(1);
+        assertThat(result.submittedRound().getFrontendVersion()).isEqualTo("1.2.5");
         verify(feedbackEntityMapper, never()).countActiveByUserId(any(), anyList());
         verify(feedbackEntityMapper, never()).insert(any(FeedbackEntity.class));
         verifyNoInteractions(feedbackUploadService);
@@ -189,6 +197,7 @@ class FeedbackTransactionServiceTest {
     void createShouldPersistInitialRoundAndConfirmAttachments() {
         when(feedbackEntityMapper.countActiveByUserId(eq(USER_ID), anyList())).thenReturn(0);
         MineFeedbackCreateRequest request = request("create-key", "  网络无法加载  ");
+        request.setFrontendVersion(" 1.2.5 ");
         request.setUploadTaskIds(List.of(101L, 102L, 103L));
 
         FeedbackTransactionService.MutationResult result = service.create(request);
@@ -211,6 +220,7 @@ class FeedbackTransactionServiceTest {
             assertThat(savedRound.getRoundNo()).isEqualTo(1);
             assertThat(savedRound.getIdempotencyKey()).isEqualTo("create-key");
             assertThat(savedRound.getDescription()).isEqualTo("网络无法加载");
+            assertThat(savedRound.getFrontendVersion()).isEqualTo("1.2.5");
             assertThat(savedRound.getSubmittedAt()).isEqualTo(NOW);
             assertThat(savedRound.getTeamResult()).isNull();
             assertThat(savedRound.getTeamResultAt()).isNull();
@@ -218,6 +228,25 @@ class FeedbackTransactionServiceTest {
         });
         verify(feedbackUploadService).confirmTasks(USER_ID, List.of(101L, 102L, 103L), 88L, 1);
         assertThat(result.submittedRound().getDescription()).isEqualTo("网络无法加载");
+        assertThat(result.submittedRound().getFrontendVersion()).isEqualTo("1.2.5");
+    }
+
+    /** 前端版本为空或非法时降级为空，合法边界值应原样保存。 */
+    @ParameterizedTest
+    @MethodSource("frontendVersionCases")
+    void createShouldNormalizeFrontendVersion(String frontendVersion, String expectedVersion) {
+        when(feedbackEntityMapper.countActiveByUserId(eq(USER_ID), anyList())).thenReturn(0);
+        MineFeedbackCreateRequest request = request("version-key", "问题");
+        request.setFrontendVersion(frontendVersion);
+
+        FeedbackTransactionService.MutationResult result = service.create(request);
+
+        assertThat(result.changed()).isTrue();
+        assertThat(result.submittedRound().getFrontendVersion()).isEqualTo(expectedVersion);
+        ArgumentCaptor<FeedbackEntity> captor = ArgumentCaptor.forClass(FeedbackEntity.class);
+        verify(feedbackEntityMapper).insert(captor.capture());
+        assertThat(feedbackRoundCodec.parse(captor.getValue().getRoundsJson()).getFirst().getFrontendVersion())
+                .isEqualTo(expectedVersion);
     }
 
     /** 一字与两百字描述均应通过创建校验。 */
@@ -309,15 +338,21 @@ class FeedbackTransactionServiceTest {
     /** 追加幂等键命中历史轮次时，即使状态已回处理中也不重复更新或确认。 */
     @Test
     void appendShouldReplayExistingRoundBeforeStateValidation() {
+        FeedbackRoundSnapshot firstRound = round(1, "create-key");
+        FeedbackRoundSnapshot replayedRound = round(2, "append-key");
+        replayedRound.setFrontendVersion("1.2.5");
         FeedbackEntity feedback = feedback(41L, FeedbackStatusDict.PROCESSING.getCode(),
-                List.of(round(1, "create-key"), round(2, "append-key")));
+                List.of(firstRound, replayedRound));
         when(feedbackEntityMapper.lockByIdAndUserId(41L, USER_ID)).thenReturn(feedback);
+        MineFeedbackCreateRequest request = request("append-key", "重放内容");
+        request.setFrontendVersion("9.9.9");
 
         FeedbackTransactionService.MutationResult result =
-                service.append(41L, request("append-key", "重放内容"));
+                service.append(41L, request);
 
         assertThat(result.changed()).isFalse();
         assertThat(result.submittedRound().getRoundNo()).isEqualTo(2);
+        assertThat(result.submittedRound().getFrontendVersion()).isEqualTo("1.2.5");
         verify(feedbackEntityMapper, never()).updateById(any(FeedbackEntity.class));
         verifyNoInteractions(feedbackUploadService);
     }
@@ -361,6 +396,7 @@ class FeedbackTransactionServiceTest {
     void appendShouldArchiveCurrentTeamResultAndReturnToProcessing() {
         FeedbackRoundSnapshot firstRound = round(1, "create-key");
         firstRound.setDescription("原始描述");
+        firstRound.setFrontendVersion("1.2.5");
         firstRound.setAttachments(attachments(List.of(91L)));
         FeedbackEntity feedback = feedback(41L, FeedbackStatusDict.WAITING_FOLLOW_UP.getCode(), List.of(firstRound));
         feedback.setFeedbackResult("请补充录屏");
@@ -368,6 +404,7 @@ class FeedbackTransactionServiceTest {
         feedback.setAttachmentCount(1);
         when(feedbackEntityMapper.lockByIdAndUserId(41L, USER_ID)).thenReturn(feedback);
         MineFeedbackCreateRequest request = request("append-key", "  这是补充  ");
+        request.setFrontendVersion("1.2.6");
         request.setUploadTaskIds(List.of(101L, 102L));
 
         FeedbackTransactionService.MutationResult result = service.append(41L, request);
@@ -378,11 +415,13 @@ class FeedbackTransactionServiceTest {
         List<FeedbackRoundSnapshot> rounds = feedbackRoundCodec.parse(updated.getRoundsJson());
         assertThat(rounds).hasSize(2);
         assertThat(rounds.get(0).getDescription()).isEqualTo("原始描述");
+        assertThat(rounds.get(0).getFrontendVersion()).isEqualTo("1.2.5");
         assertThat(rounds.get(0).getAttachments()).hasSize(1);
         assertThat(rounds.get(0).getTeamResult()).isEqualTo("请补充录屏");
         assertThat(rounds.get(0).getTeamResultAt()).isEqualTo(NOW.minusHours(2));
         assertThat(rounds.get(1).getRoundNo()).isEqualTo(2);
         assertThat(rounds.get(1).getDescription()).isEqualTo("这是补充");
+        assertThat(rounds.get(1).getFrontendVersion()).isEqualTo("1.2.6");
         assertThat(rounds.get(1).getSubmittedAt()).isEqualTo(NOW);
         assertThat(updated.getStatus()).isEqualTo(FeedbackStatusDict.PROCESSING.getCode());
         assertThat(updated.getFeedbackResult()).isNull();
@@ -392,6 +431,7 @@ class FeedbackTransactionServiceTest {
         verify(feedbackUploadService).confirmTasks(USER_ID, List.of(101L, 102L), 41L, 2);
         assertThat(result.changed()).isTrue();
         assertThat(result.submittedRound().getRoundNo()).isEqualTo(2);
+        assertThat(result.submittedRound().getFrontendVersion()).isEqualTo("1.2.6");
     }
 
     /** 追加描述长度必须按 Unicode 代码点计算。 */
@@ -698,6 +738,18 @@ class FeedbackTransactionServiceTest {
         request.setDescription(description);
         request.setUploadTaskIds(new ArrayList<>());
         return request;
+    }
+
+    /** 提供前端版本规范化边界：空值、空白、最大长度、超长、控制字符及合法预发布版本。 */
+    private static Stream<Arguments> frontendVersionCases() {
+        return Stream.of(
+                Arguments.of(null, null),
+                Arguments.of("", null),
+                Arguments.of("   ", null),
+                Arguments.of("a".repeat(64), "a".repeat(64)),
+                Arguments.of("a".repeat(65), null),
+                Arguments.of("1.2.5\nextra", null),
+                Arguments.of("1.2.5-beta+1", "1.2.5-beta+1"));
     }
 
     /** 构造内部状态更新请求。 */

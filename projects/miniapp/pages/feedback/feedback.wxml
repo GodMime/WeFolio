@@ -78,5 +78,9 @@
     <button class="history-action" bindtap="handleHistoryTap" aria-label="历史问题">
       历史问题
     </button>
+    <text class="footer-divider" aria-hidden="true">｜</text>
+    <button class="history-action version-action" bindtap="handleVersionTap" aria-label="查看版本">
+      查看版本
+    </button>
   </view>
 </view>

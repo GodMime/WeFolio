@@ -2,8 +2,14 @@ package com.jxc.wefolio.job.service;
 
 import com.jxc.wefolio.job.config.VirtualPaymentDispatchProperties;
 import com.jxc.wefolio.job.repo.VirtualPaymentCandidateRepository;
+import com.jxc.wefolio.job.repo.VirtualPaymentCandidateRepository.RecoveryCandidate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import java.time.Duration;
 import java.util.List;
@@ -28,6 +34,7 @@ import static org.mockito.Mockito.when;
 /**
  * 微信虚拟支付候选任务分发服务测试。
  */
+@ExtendWith(OutputCaptureExtension.class)
 class VirtualPaymentDispatchServiceTest {
 
     private ExecutorService executor;
@@ -62,7 +69,8 @@ class VirtualPaymentDispatchServiceTest {
     void dispatchDebitTasksShouldRecoverAndSummarizeCandidatesOnce() {
         VirtualPaymentCandidateRepository repository = mock(VirtualPaymentCandidateRepository.class);
         RuntimeVirtualPaymentTaskClient client = mock(RuntimeVirtualPaymentTaskClient.class);
-        when(repository.findUsersMissingActiveDebitTasks(100)).thenReturn(List.of(7L, 8L));
+        when(repository.findAccountsMissingActiveDebitTasks(0L, 100)).thenReturn(
+                List.of(new RecoveryCandidate(21L, 7L), new RecoveryCandidate(22L, 8L)));
         when(repository.findDueDebitTaskIds(100)).thenReturn(List.of(23L, 24L));
         when(client.recoverDebitTask(7L)).thenReturn(recoveryResult("ACTIVE_TASK_ENSURED"));
         doThrow(new IllegalStateException("runtime timeout")).when(client).recoverDebitTask(8L);
@@ -77,6 +85,21 @@ class VirtualPaymentDispatchServiceTest {
         verify(client, times(1)).recoverDebitTask(8L);
         verify(client, times(1)).executeDebitTask(23L);
         verify(client, times(1)).executeDebitTask(24L);
+    }
+
+    /** 充值核对成功、已持久化退避和等待会话都属于本轮已处理，不应误计为跳过。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"SUCCEEDED", "RETRY_WAIT", "WAITING_SESSION"})
+    void rechargeReconciliationShouldCountPersistedOutcomesAsProcessed(String outcome, CapturedOutput output) {
+        VirtualPaymentCandidateRepository repository = mock(VirtualPaymentCandidateRepository.class);
+        RuntimeVirtualPaymentTaskClient client = mock(RuntimeVirtualPaymentTaskClient.class);
+        when(repository.findDueRechargeOrderIds(0L, 100)).thenReturn(List.of(17L));
+        when(client.reconcileRechargeOrder(17L)).thenReturn(executionResult(outcome));
+
+        service(repository, client).dispatchDebitTasks();
+
+        assertThat(output).contains("taskType=充值订单核对 candidateCount=1 requestCount=1 "
+                + "processedCount=1 skippedCount=0 failedCount=0");
     }
 
     /** 关闭时取消排队任务，但不得中断已经开始的 runtime 请求。 */

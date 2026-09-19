@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.common.lock.DistributedLockExecutor;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
@@ -63,6 +64,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -293,6 +295,9 @@ public class MineWorkService {
     /** 视频 MIME 前缀 */
     private static final String VIDEO_MIME_PREFIX = "video/";
 
+    /** 作品资料保存锁前缀，同一作品的封面替换按事务串行。 */
+    private static final String WORK_UPDATE_LOCK_PREFIX = "work:update:";
+
     /** 当前用户 Mapper */
     private final UserEntityMapper userEntityMapper;
 
@@ -328,6 +333,9 @@ public class MineWorkService {
 
     /** 上传任务过期状态独立事务服务。 */
     private final WorkUploadTaskExpirationService workUploadTaskExpirationService;
+
+    /** 作品资料保存互斥，持有到提交或回滚完成。 */
+    private final DistributedLockExecutor distributedLockExecutor;
 
     /**
      * 分页查询我的作品。
@@ -965,6 +973,12 @@ public class MineWorkService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MineWorkDetailResponse updateWork(Long workId, MineWorkUpdateRequest request) {
+        return distributedLockExecutor.executeFairUntilTransactionCompletion(
+                WORK_UPDATE_LOCK_PREFIX + workId, () -> updateWorkUnderLock(workId, request));
+    }
+
+    /** 在读取作品前取得互斥，避免并发请求使用过期的封面和上传任务状态。 */
+    private MineWorkDetailResponse updateWorkUnderLock(Long workId, MineWorkUpdateRequest request) {
         WorkEntity work = requireOwnedWork(workId);
         Long coverFrameTimeMs = request == null ? null : request.getCoverFrameTimeMs();
         String audioCoverKey = request == null ? null : request.getAudioCoverObjectKey();
@@ -1060,19 +1074,16 @@ public class MineWorkService {
             int updated = workEntityMapper.updateById(work);
             if (updated <= 0) {
                 deleteGeneratedCoverIfNeeded(generatedCover, oldCoverObjectKey, work.getMediaObjectKey());
-                deleteUploadedCoverIfNeeded(uploadedCoverTask, oldCoverObjectKey, work.getMediaObjectKey());
-                deleteUploadedCoverIfNeeded(uploadedThumbnailTask, oldCoverObjectKey, work.getMediaObjectKey());
+                // 手动上传对象可能正被其它请求使用；保存失败时保留原任务供重试。
                 throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
             }
             if (uploadedCoverTask != null) {
-                confirmReplacementCoverTask(uploadedCoverTask, work.getId(), oldCoverObjectKey, work.getMediaObjectKey());
+                confirmReplacementCoverTask(uploadedCoverTask, work.getId());
             }
             if (uploadedThumbnailTask != null) {
                 confirmImageThumbnailTask(
                         uploadedThumbnailTask,
-                        work.getId(),
-                        oldCoverObjectKey,
-                        work.getMediaObjectKey());
+                        work.getId());
             }
             if (animationCover != null) {
                 confirmAnimationCoverTask(animationCover.task(), work.getId());
@@ -2118,10 +2129,11 @@ public class MineWorkService {
         }
         WorkUploadTaskEntity coverTask = requireOwnedUploadTask(work.getUserId(), coverTaskId);
         WorkUploadCoverTaskValidator.ensureImageCoverTask(coverTask);
-        if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(coverTask.getStatus())) {
+        boolean confirmed = WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(coverTask.getStatus());
+        if (confirmed && !isCurrentCoverTask(work, coverTask)) {
             throw new BusinessException(MineWorkMessage.COVER_TASK_USED_MESSAGE);
         }
-        if (coverTask.getExpiresAt() != null && coverTask.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (!confirmed && coverTask.getExpiresAt() != null && coverTask.getExpiresAt().isBefore(LocalDateTime.now())) {
             workUploadTaskExpirationService.markExpired(coverTask, "封面上传任务已过期");
             throw new BusinessException(MineWorkMessage.COVER_TASK_EXPIRED_MESSAGE);
         }
@@ -2147,10 +2159,11 @@ public class MineWorkService {
         WorkUploadTaskEntity thumbnailTask = requireOwnedUploadTask(work.getUserId(), thumbnailTaskId);
         WorkUploadCoverTaskValidator.ensureImageThumbnailTask(thumbnailTask);
         ensureThumbnailTaskDoesNotTargetOriginal(work, thumbnailTask.getObjectKey());
-        if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(thumbnailTask.getStatus())) {
+        boolean confirmed = WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(thumbnailTask.getStatus());
+        if (confirmed && !isCurrentCoverTask(work, thumbnailTask)) {
             throw new BusinessException(MineWorkMessage.COVER_TASK_USED_MESSAGE);
         }
-        if (thumbnailTask.getExpiresAt() != null && thumbnailTask.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (!confirmed && thumbnailTask.getExpiresAt() != null && thumbnailTask.getExpiresAt().isBefore(LocalDateTime.now())) {
             workUploadTaskExpirationService.markExpired(thumbnailTask, IMAGE_THUMBNAIL_TASK_EXPIRED_ERROR_MESSAGE);
             throw new BusinessException(MineWorkMessage.COVER_TASK_EXPIRED_MESSAGE);
         }
@@ -2167,22 +2180,20 @@ public class MineWorkService {
      *
      * @param coverTask 封面上传任务
      * @param workId 作品 ID
-     * @param oldCoverObjectKey 旧封面对象键
-     * @param mediaObjectKey 视频源文件对象键
      */
     private void confirmReplacementCoverTask(
             WorkUploadTaskEntity coverTask,
-            Long workId,
-            String oldCoverObjectKey,
-            String mediaObjectKey
+            Long workId
     ) {
+        if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(coverTask.getStatus())) {
+            return;
+        }
         coverTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
         coverTask.setConfirmedWorkId(workId);
         coverTask.setCoverObjectKey(coverTask.getObjectKey());
         coverTask.setErrorMessage(null);
         int updated = workUploadTaskEntityMapper.updateById(coverTask);
         if (updated <= 0) {
-            deleteUploadedCoverIfNeeded(coverTask, oldCoverObjectKey, mediaObjectKey);
             throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
         }
     }
@@ -2192,22 +2203,20 @@ public class MineWorkService {
      *
      * @param thumbnailTask 缩略图上传任务
      * @param workId 作品 ID
-     * @param oldCoverObjectKey 旧缩略图对象键
-     * @param mediaObjectKey 图片原图对象键
      */
     private void confirmImageThumbnailTask(
             WorkUploadTaskEntity thumbnailTask,
-            Long workId,
-            String oldCoverObjectKey,
-            String mediaObjectKey
+            Long workId
     ) {
+        if (WorkUploadTaskStatusDict.CONFIRMED.getCode().equals(thumbnailTask.getStatus())) {
+            return;
+        }
         thumbnailTask.setStatus(WorkUploadTaskStatusDict.CONFIRMED.getCode());
         thumbnailTask.setConfirmedWorkId(workId);
         thumbnailTask.setCoverObjectKey(thumbnailTask.getObjectKey());
         thumbnailTask.setErrorMessage(null);
         int updated = workUploadTaskEntityMapper.updateById(thumbnailTask);
         if (updated <= 0) {
-            deleteUploadedCoverIfNeeded(thumbnailTask, oldCoverObjectKey, mediaObjectKey);
             throw new BusinessException(MineWorkMessage.WORK_SAVE_FAILED_MESSAGE);
         }
     }
@@ -2259,25 +2268,11 @@ public class MineWorkService {
         cosService.delete(generatedCover.objectKey());
     }
 
-    /**
-     * 保存失败时删除已上传但未入库的手动封面对象。
-     *
-     * @param coverTask 封面上传任务
-     * @param oldCoverObjectKey 旧封面对象键
-     * @param mediaObjectKey 视频源文件对象键
-     */
-    private void deleteUploadedCoverIfNeeded(
-            WorkUploadTaskEntity coverTask,
-            String oldCoverObjectKey,
-            String mediaObjectKey
-    ) {
-        String objectKey = coverTask == null ? "" : normalizeText(coverTask.getObjectKey());
-        if (objectKey.isBlank()
-                || objectKey.equals(oldCoverObjectKey)
-                || objectKey.equals(mediaObjectKey)) {
-            return;
-        }
-        cosService.delete(objectKey);
+    /** 只允许重放当前已应用的封面任务，不能借重试复用其它作品或旧封面任务。 */
+    private boolean isCurrentCoverTask(WorkEntity work, WorkUploadTaskEntity task) {
+        return Objects.equals(work.getId(), task.getConfirmedWorkId())
+                && hasText(task.getObjectKey())
+                && Objects.equals(work.getCoverObjectKey(), task.getObjectKey());
     }
 
     /**

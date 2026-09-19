@@ -1,4 +1,4 @@
-<!-- 参考正式组件：components/portfolio-schedule-query/portfolio-schedule-query.wxml；本组件仅渲染本地 Mock 数据。 -->
+<!-- 参考正式组件：pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxml；本组件仅渲染本地 Mock 数据。 -->
 <template name="mockScheduleCalendarContent">
   <view class="schedule-query-calendar">
     <view class="schedule-query-month-bar">

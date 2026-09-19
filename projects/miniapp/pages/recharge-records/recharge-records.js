@@ -82,7 +82,7 @@ Page({
 
   async syncPendingOrders(records) {
     const pendingRecords = records.filter((item) => (
-      item.status === 'PENDING_PAYMENT' && !this.syncedOrderNos[item.merchantOrderNo]
+      (item.status === 'PENDING_PAYMENT' || item.status === 'CLOSED') && !this.syncedOrderNos[item.merchantOrderNo]
     ))
     pendingRecords.forEach((item) => {
       this.syncedOrderNos[item.merchantOrderNo] = true
@@ -94,6 +94,7 @@ Page({
       url: `${RECHARGE_ORDERS_URL}/${encodeURIComponent(item.merchantOrderNo)}/sync`,
       method: 'POST'
     }).catch((error) => {
+      delete this.syncedOrderNos[item.merchantOrderNo]
       if (error && error.authRequired) {
         handleMaintainerAuthRequired(error.message)
       }

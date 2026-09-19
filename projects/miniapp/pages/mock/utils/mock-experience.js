@@ -5,11 +5,19 @@ const {
   formatLunarDayMeta,
   formatLunarFullText,
   toLunarDate
-} = require('../../../utils/lunar')
+} = require('./lunar')
 
 const MOCK_LOGIN_REQUIRED_MESSAGE = '请去“我的”页面注册登录'
 const MOCK_AVATAR_URL = 'https://cdn2.we-folio.dingchenyong.top/demo/demo-avatar.png'
 const MOCK_ASSET_ROOT = 'https://cdn2.we-folio.dingchenyong.top/demo'
+const MOCK_AUDIO_URL = 'https://cdn2.we-folio.dingchenyong.top/system/IF_YOU-BIGBANG.mp3'
+const MOCK_ANIMATION_URL = 'https://cdn2.we-folio.dingchenyong.top/system/OpenAI-transparent.gif'
+const MOCK_SKY_VIDEO_URL = 'https://cdn2.we-folio.dingchenyong.top/system/mixkit-blue-sky-background-as-the-clouds-travel-blown-by-the-26108-full-hd.mp4'
+const MOCK_WAVES_VIDEO_URL = 'https://cdn2.we-folio.dingchenyong.top/system/mixkit-waves-coming-to-the-beach-5016-full-hd.mp4'
+const MOCK_AUDIO_COVER_URL = 'https://cdn2.we-folio.dingchenyong.top/system/default-audio-cover-v1-200kb.png'
+const MOCK_MEDIA_TYPE_LABELS = { IMAGE: '图片', VIDEO: '视频', AUDIO: '音频', ANIMATION: '动图' }
+const { selectMockWorksFor } = require('./mock-work-media')
+const { createMockComponentConfig, validateMockComponentConfig } = require('./mock-portfolio-components')
 const CALENDAR_DAY_COUNT = 42
 const MOCK_PORTFOLIO_DRAFT_STORAGE_KEY = 'wefolio_mock_portfolio_draft'
 const MOCK_PORTFOLIO_ID = 9001
@@ -17,8 +25,8 @@ const MOCK_TAG = {
   id: 201,
   name: '风景作品',
   color: '#0f766e',
-  count: 7,
-  labelText: '风景作品 7',
+  count: 9,
+  labelText: '风景作品 9',
   filterStyle: 'color: #0f766e; background: #ffffff; border-color: #0f766e;',
   activeStyle: 'color: #ffffff; background: #0f766e; border-color: #0f766e;'
 }
@@ -35,7 +43,7 @@ const COMPONENT_TYPES = {
   QR_CONTACT: 'QR_CONTACT',
   CONTACT_FORM: 'CONTACT_FORM',
   TEXT_SECTION: 'TEXT_SECTION',
-  DIVIDER: 'DIVIDER'
+  DIVIDER: 'DIVIDER', VIDEO_CAROUSEL:'VIDEO_CAROUSEL', STRUCTURED_TEXT_SECTION:'STRUCTURED_TEXT_SECTION', TEXT_GRID:'TEXT_GRID', CONTACT_INFO:'CONTACT_INFO', HYPERLINK:'HYPERLINK'
 }
 const COMPONENT_NAMES = {
   CAROUSEL: '轮播图',
@@ -47,7 +55,7 @@ const COMPONENT_NAMES = {
   QR_CONTACT: '二维码联系',
   CONTACT_FORM: '预留联系信息',
   TEXT_SECTION: '文字说明',
-  DIVIDER: '分割线'
+  DIVIDER: '分割线', VIDEO_CAROUSEL:'视频轮播', STRUCTURED_TEXT_SECTION:'结构化文字', TEXT_GRID:'文字网格', CONTACT_INFO:'联系信息', HYPERLINK:'超链接'
 }
 const MOCK_COMPONENT_DESCRIPTIONS = {
   CAROUSEL: '展示已选择的图片作品',
@@ -59,11 +67,11 @@ const MOCK_COMPONENT_DESCRIPTIONS = {
   QR_CONTACT: '展示二维码联系方式',
   CONTACT_FORM: '收集访客预留联系信息',
   TEXT_SECTION: '添加服务说明文字',
-  DIVIDER: '分隔不同内容区块'
+  DIVIDER: '分隔不同内容区块', VIDEO_CAROUSEL:'滑动展示视频作品', STRUCTURED_TEXT_SECTION:'自由编排文字区块', TEXT_GRID:'合并与编排文字网格', CONTACT_INFO:'复制演示联系信息', HYPERLINK:'图片入口与本地跳转'
 }
 const MOCK_COMPONENT_SORT_ORDER_STEP = 1000
 const MOCK_SINGLE_WORK_MEDIA_WIDTH_RPX = 710
-const MOCK_EDITOR_SCHEMA_REVISION = 2
+const MOCK_EDITOR_SCHEMA_REVISION = 3
 const MOCK_NAVIGATION_MIN_COUNT = 2
 const MOCK_NAVIGATION_MAX_COUNT = 4
 const MOCK_NAVIGATION_TITLE_MAX_LENGTH = 5
@@ -87,7 +95,7 @@ const MOCK_COMPONENT_KEY_PREFIXES = {
   QR_CONTACT: 'mock_qr_contact',
   CONTACT_FORM: 'mock_contact_form',
   TEXT_SECTION: 'mock_text_section',
-  DIVIDER: 'mock_divider'
+  DIVIDER: 'mock_divider', VIDEO_CAROUSEL:'mock_video_carousel', STRUCTURED_TEXT_SECTION:'mock_structured_text', TEXT_GRID:'mock_text_grid', CONTACT_INFO:'mock_contact_info', HYPERLINK:'mock_hyperlink'
 }
 const MOCK_COMPONENT_DEFAULT_CONFIGS = {
   CAROUSEL: {
@@ -114,7 +122,8 @@ const MOCK_COMPONENT_DEFAULT_CONFIGS = {
   },
   SINGLE_WORK: {
     workId: 0,
-    showTitle: true
+    showTitle: true,
+    showDescription: false
   },
   SCHEDULE_QUERY: {
     displayMode: 'MODAL_CALENDAR',
@@ -123,9 +132,7 @@ const MOCK_COMPONENT_DEFAULT_CONFIGS = {
   },
   QR_CONTACT: {
     qrUrlSource: 'PROFILE',
-    qrUrl: '',
-    qrSize: 240,
-    showLabel: true
+    qrUrl: ''
   },
   CONTACT_FORM: {
     displayMode: 'MODAL_FORM',
@@ -194,11 +201,17 @@ function buildWork({
     workId: id,
     mediaType,
     isVideo: mediaType === 'VIDEO',
+    isAudio: mediaType === 'AUDIO',
+    isAnimation: mediaType === 'ANIMATION',
+    mediaTypeLabel: MOCK_MEDIA_TYPE_LABELS[mediaType] || '',
+    hasCover: Boolean(coverUrl),
+    showPlayIndicator: mediaType === 'VIDEO',
+    tagText: ['AUDIO', 'ANIMATION'].includes(mediaType) ? '' : MOCK_TAG.name,
     title,
     originalFileName: fileName,
     mediaUrl,
     coverUrl,
-    thumbnailUrl: coverUrl || mediaUrl,
+    thumbnailUrl: coverUrl || (mediaType === 'VIDEO' ? '' : mediaUrl),
     previewUrl: mediaUrl || coverUrl,
     aspectRatio: normalizedAspectRatio,
     aspectRatioText: normalizedAspectRatio,
@@ -215,7 +228,7 @@ function buildWork({
     auditStatusText: MOCK_WORK_AUDIT_STATUS_TEXT,
     auditStatusTone: MOCK_WORK_AUDIT_STATUS_TONE,
     referenceCount: 1,
-    tags: [clone(MOCK_TAG)]
+    tags: ['AUDIO', 'ANIMATION'].includes(mediaType) ? [] : [clone(MOCK_TAG)]
   }
 }
 
@@ -277,7 +290,7 @@ const MOCK_DASHBOARD = {
     lowBalance: false
   },
   metrics: {
-    workCount: 7,
+    workCount: 0,
     publishedPortfolioCount: 0,
     recentVisitCount: 18
   },
@@ -469,6 +482,22 @@ const MOCK_WORK_LIBRARY = {
   ]
 }
 
+MOCK_WORK_LIBRARY.works.push(
+  buildWork({ id: 108, mediaType: 'AUDIO', title: 'IF YOU - BIGBANG', fileName: 'IF_YOU-BIGBANG.mp3', mediaUrl: MOCK_AUDIO_URL, coverUrl: MOCK_AUDIO_COVER_URL, mimeType: 'audio/mpeg', sortOrder: 8000 }),
+  buildWork({ id: 109, mediaType: 'ANIMATION', title: 'OpenAI 透明动图', fileName: 'OpenAI-transparent.gif', mediaUrl: MOCK_ANIMATION_URL, coverUrl: MOCK_ANIMATION_URL, mimeType: 'image/gif', sortOrder: 9000 }),
+  buildWork({ id: 110, mediaType: 'VIDEO', title: '蓝天流云', fileName: 'mixkit-blue-sky-background-as-the-clouds-travel-blown-by-the-26108-full-hd.mp4', mediaUrl: MOCK_SKY_VIDEO_URL, coverUrl: '', mimeType: 'video/mp4', sortOrder: 10000 }),
+  buildWork({ id: 111, mediaType: 'VIDEO', title: '海浪沙滩', fileName: 'mixkit-waves-coming-to-the-beach-5016-full-hd.mp4', mediaUrl: MOCK_WAVES_VIDEO_URL, coverUrl: '', mimeType: 'video/mp4', sortOrder: 11000 })
+)
+MOCK_WORK_LIBRARY.total = MOCK_WORK_LIBRARY.works.length
+MOCK_DASHBOARD.metrics.workCount = MOCK_WORK_LIBRARY.total
+MOCK_WORK_LIBRARY.filterTags[0].count = MOCK_WORK_LIBRARY.total
+MOCK_WORK_LIBRARY.filterTags[0].labelText = `全部 ${MOCK_WORK_LIBRARY.total}`
+MOCK_WORK_LIBRARY.tags.forEach(tag => {
+  tag.count = MOCK_WORK_LIBRARY.works.filter(work => work.tags.some(item => item.id === tag.id)).length
+  tag.labelText = `${tag.name} ${tag.count}`
+})
+MOCK_WORK_LIBRARY.filterTags[1] = clone(MOCK_WORK_LIBRARY.tags[0])
+
 const MOCK_PORTFOLIO_LIST = {
   ownerType: 'USER',
   ownerTitle: '个人作品集',
@@ -656,6 +685,25 @@ const MOCK_PORTFOLIO_CONFIG = {
   ]
 }
 
+
+const MOCK_DEMO_HOME_TYPES = ['TEXT_SECTION','STRUCTURED_TEXT_SECTION','TEXT_GRID','DIVIDER','CONTACT_INFO','QR_CONTACT']
+const MOCK_DEMO_WORK_TYPES = ['VIDEO_CAROUSEL','SINGLE_WORK','WORK_LIST','HYPERLINK']
+function createMockDemoComponent(type,index) {
+  const config = clone(MOCK_COMPONENT_DEFAULT_CONFIGS[type] || createMockComponentConfig(type))
+  if (type === 'SINGLE_WORK') config.workId = 109
+  if (type === 'TEXT_GRID') {
+    const labels = ['婚礼纪实', '自然光影', '温暖叙事', '用心记录']
+    config.cells.forEach((cell,index) => {cell.blocks[0].runs[0].text = labels[index] || ''})
+  }
+  return {componentKey:MOCK_COMPONENT_KEY_PREFIXES[type],componentType:type,name:COMPONENT_NAMES[type],sortOrder:(index+1)*1000,enabled:true,config}
+}
+MOCK_PORTFOLIO_CONFIG.components.push(...MOCK_DEMO_HOME_TYPES.map((type,index)=>createMockDemoComponent(type,index+5)))
+const mockDemoGrid = MOCK_PORTFOLIO_CONFIG.components.find(component=>component.componentType === 'WORK_GRID')
+MOCK_PORTFOLIO_CONFIG.components = MOCK_PORTFOLIO_CONFIG.components.filter(component=>component !== mockDemoGrid)
+MOCK_PORTFOLIO_CONFIG.bottomNav.items[1].components = MOCK_DEMO_WORK_TYPES.map(createMockDemoComponent).concat(Object.assign({},mockDemoGrid,{sortOrder:5000}))
+MOCK_PORTFOLIO_CONFIG.style.componentSpacingRpx = 32
+MOCK_PORTFOLIO_CONFIG.backgroundAudio = {enabled:false,workId:108,displayStyle:'DISC'}
+
 function getMockTabs(activeKey) {
   return MOCK_BOTTOM_TABS.map((item) => Object.assign({}, item, {
     active: item.key === activeKey
@@ -778,9 +826,8 @@ function buildMockCalendarMonth(yearMonth = formatYearMonth(new Date()), selecte
 }
 
 function findWorksByIds(workIds = []) {
-  const idSet = new Set(workIds.map(toPositiveId).filter(Boolean))
-  return MOCK_WORK_LIBRARY.works
-    .filter((work) => idSet.has(work.id))
+  const ids = [...new Set(workIds.map(toPositiveId).filter(Boolean))]
+  return ids.map(id => MOCK_WORK_LIBRARY.works.find(work => work.id === id)).filter(Boolean)
     .map((work) => ({
       workId: work.id,
       title: work.title,
@@ -788,7 +835,7 @@ function findWorksByIds(workIds = []) {
       isVideo: work.mediaType === 'VIDEO',
       coverUrl: work.coverUrl,
       mediaUrl: work.mediaUrl,
-      thumbnailUrl: work.coverUrl || work.mediaUrl,
+      thumbnailUrl: work.thumbnailUrl,
       previewUrl: work.mediaUrl || work.coverUrl,
       aspectRatioStyle: buildMockWorkAspectRatioStyle(work),
       aspectRatio: work.aspectRatio,
@@ -811,7 +858,8 @@ function buildMockWorkAspectRatioStyle(work = {}) {
 function normalizeMockSingleWorkConfig(config = {}) {
   return {
     workId: toPositiveId(config.workId),
-    showTitle: typeof config.showTitle === 'boolean' ? config.showTitle : true
+    showTitle: typeof config.showTitle === 'boolean' ? config.showTitle : true,
+    showDescription: config.showDescription === true
   }
 }
 
@@ -834,7 +882,7 @@ function buildMockRenderGroups(componentConfig = {}) {
     groupKey: group.groupKey || 'g_all',
     name: group.name || '全部作品',
     sortOrder: Number(group.sortOrder) || 1000,
-    works: findWorksByIds(group.workIds || componentConfig.workIds)
+    works: findWorksByIds(group.workIds || componentConfig.workIds).filter(work => ['IMAGE','VIDEO'].includes(work.mediaType))
   }))
 }
 
@@ -882,14 +930,14 @@ function buildMockTextSectionConfig(componentConfig = {}) {
 }
 
 function buildMockDividerConfig(componentConfig = {}) {
-  const color = DIVIDER_COLOR_VALUE_MAP[componentConfig.color]
+  const color = /^#[a-fA-F0-9]{6}$/.test(componentConfig.color) ? componentConfig.color : DIVIDER_COLOR_VALUE_MAP[componentConfig.color]
     ? componentConfig.color
     : MOCK_COMPONENT_DEFAULT_CONFIGS.DIVIDER.color
   const heightPx = Number(componentConfig.heightPx)
   const normalizedHeightPx = Number.isFinite(heightPx) && heightPx > 0
     ? Math.round(heightPx)
     : MOCK_COMPONENT_DEFAULT_CONFIGS.DIVIDER.heightPx
-  const colorValue = DIVIDER_COLOR_VALUE_MAP[color]
+  const colorValue = DIVIDER_COLOR_VALUE_MAP[color] || color
   return Object.assign({}, MOCK_COMPONENT_DEFAULT_CONFIGS.DIVIDER, componentConfig, {
     color,
     heightPx: normalizedHeightPx,
@@ -929,14 +977,17 @@ function normalizeMockNavigationItem(item = {}, index = 0) {
 
 function normalizeMockPortfolioConfig(config = {}) {
   const normalized = Object.assign({}, clone(config || {}))
+  if (Number(normalized.editorSchemaRevision) > MOCK_EDITOR_SCHEMA_REVISION) throw new Error('本地体验草稿版本不兼容，已展示默认示例')
   normalized.editorSchemaRevision = MOCK_EDITOR_SCHEMA_REVISION
   normalized.share = Object.assign({}, normalized.share || {})
   normalized.components = Array.isArray(normalized.components) ? normalized.components : []
-  normalized.style = {
+  normalized.style = Object.assign({}, normalized.style || {}, {
+    componentSpacingRpx: Math.max(0,Math.min(96,Number.isFinite(Number(normalized.style && normalized.style.componentSpacingRpx)) ? Number(normalized.style.componentSpacingRpx) : 32)),
     backgroundColor: normalizeMockBackgroundColor(
       normalized.style && normalized.style.backgroundColor
     )
-  }
+  })
+  normalized.backgroundAudio = require('./mock-portfolio-audio').normalizeMockBackgroundAudio(normalized.backgroundAudio,MOCK_WORK_LIBRARY.works)
   const rawBottomNav = normalized.bottomNav || {}
   const rawItems = Array.isArray(rawBottomNav.items) ? rawBottomNav.items : []
   if (rawBottomNav.enabled === true && rawItems.length >= MOCK_NAVIGATION_MIN_COUNT) {
@@ -988,7 +1039,7 @@ function listMockPortfolioComponents(config = {}) {
   return allComponents
 }
 
-function buildMockRenderComponents(sourceComponents = [], allSourceComponents = sourceComponents) {
+function buildMockRenderComponents(sourceComponents = [], allSourceComponents = sourceComponents, themeMode = 'light') {
   return sourceComponents
     .filter((component) => component.enabled !== false)
     .map(normalizeComponentConfig)
@@ -1005,12 +1056,21 @@ function buildMockRenderComponents(sourceComponents = [], allSourceComponents = 
             carouselIntervalMs: Number(componentConfig.carouselIntervalMs) || 3000
           },
           carouselIntervalMs: Number(componentConfig.carouselIntervalMs) || 3000,
-          works: findWorksByIds(componentConfig.workIds)
+          works: findWorksByIds(componentConfig.workIds).filter(work => work.mediaType === 'IMAGE')
         }
       }
       if (component.componentType === COMPONENT_TYPES.PROFILE) {
+        const borderVisible = componentConfig.profileBorder === true
+        const horizontalMargin = componentConfig.profileHorizontalMarginRpx === undefined ? 32 : Number(componentConfig.profileHorizontalMarginRpx) || 0
+        const verticalMargin = Number(componentConfig.profileVerticalMarginRpx) || 0
+        const borderColor = /^#[a-fA-F0-9]{6}$/.test(componentConfig.profileBorderColor) ? componentConfig.profileBorderColor : 'var(--portfolio-border)'
         const profile = Object.assign({}, componentConfig.profile || {}, {
-          visibleFields: Object.assign({}, componentConfig.visibleFields || {})
+          avatarUrl: MOCK_AVATAR_URL,
+          layout: componentConfig.layout === 'HORIZONTAL' ? 'HORIZONTAL' : 'VERTICAL',
+          borderVisible,
+          spacingStyle: borderVisible ? `padding: ${Math.max(0,Math.min(96,verticalMargin))}rpx ${Math.max(0,Math.min(96,horizontalMargin))}rpx;` : '',
+          style: borderVisible ? `border-width: ${Math.max(1,Math.min(12,Number(componentConfig.profileBorderWidthRpx)||1))}rpx; border-color: ${borderColor};` : '',
+          visibleFields: Object.assign({avatar:true,displayName:true,profession:true,city:true,bio:true,tags:true,wechatQr:false}, componentConfig.visibleFields || {})
         })
         return {
           componentKey: component.componentKey,
@@ -1030,7 +1090,8 @@ function buildMockRenderComponents(sourceComponents = [], allSourceComponents = 
           groups: renderGroups,
           activeGroup: renderGroups[0] || { groupKey: '', name: '', works: [] },
           displayTags: buildMockDisplayTags(renderGroups),
-          layout: component.componentType === COMPONENT_TYPES.WORK_LIST ? 'single' : 'grid'
+          layout: component.componentType === COMPONENT_TYPES.WORK_LIST ? 'single' : 'grid',
+          showTitle: componentConfig.showTitle !== false, showDescription: componentConfig.showDescription === true
         }
       }
       if (component.componentType === COMPONENT_TYPES.SINGLE_WORK) {
@@ -1040,8 +1101,9 @@ function buildMockRenderComponents(sourceComponents = [], allSourceComponents = 
           componentType: component.componentType,
           name: component.name,
           sortOrder: component.sortOrder,
-          work: findWorksByIds([singleWorkConfig.workId])[0] || null,
-          showTitle: singleWorkConfig.showTitle
+          work: findWorksByIds([singleWorkConfig.workId]).find(work => ['IMAGE','VIDEO','ANIMATION'].includes(work.mediaType)) || null,
+          showTitle: singleWorkConfig.showTitle,
+          showDescription: singleWorkConfig.showDescription
         }
       }
       if (component.componentType === COMPONENT_TYPES.SCHEDULE_QUERY) {
@@ -1068,7 +1130,8 @@ function buildMockRenderComponents(sourceComponents = [], allSourceComponents = 
           componentType: component.componentType,
           name: component.name,
           sortOrder: component.sortOrder,
-          textSection: buildMockTextSectionConfig(componentConfig)
+          textSection: buildMockTextSectionConfig(componentConfig),
+          viewModel: require('./mock-portfolio-text').buildMockTextViewModel(componentConfig,MOCK_WORK_LIBRARY.works,{themeMode})
         }
       }
       if (component.componentType === COMPONENT_TYPES.DIVIDER) {
@@ -1080,13 +1143,17 @@ function buildMockRenderComponents(sourceComponents = [], allSourceComponents = 
           divider: buildMockDividerConfig(componentConfig)
         }
       }
-      return {
-        componentKey: component.componentKey,
-        componentType: component.componentType,
-        name: component.name,
-        sortOrder: component.sortOrder,
-        contactForm: Object.assign({}, componentConfig)
+      const base = { componentKey: component.componentKey, componentType: component.componentType, name: component.name, sortOrder: component.sortOrder, config: clone(componentConfig) }
+      if (component.componentType === 'CONTACT_FORM') return Object.assign(base,{contactForm: clone(componentConfig)})
+      if (component.componentType === 'VIDEO_CAROUSEL') return Object.assign(base,{works:findWorksByIds(componentConfig.workIds).filter(work=>work.mediaType === 'VIDEO')})
+      if (component.componentType === 'STRUCTURED_TEXT_SECTION') return Object.assign(base,{viewModel:require('./mock-portfolio-text').buildMockTextViewModel(componentConfig,MOCK_WORK_LIBRARY.works,{structured:true,themeMode})})
+      if (component.componentType === 'TEXT_GRID') {
+        try { return Object.assign(base,{viewModel:require('./mock-portfolio-text-grid').buildMockGridViewModel(componentConfig,themeMode)}) }
+        catch(error) { return Object.assign(base,{unsupported:true,errorMessage:'文字网格配置暂不可用，请重新编辑'}) }
       }
+      if (component.componentType === 'CONTACT_INFO') return base
+      if (component.componentType === 'HYPERLINK') return Object.assign(base,{work:findWorksByIds([componentConfig.workId]).find(work=>['IMAGE','ANIMATION'].includes(work.mediaType)) || null})
+      return Object.assign(base,{unsupported:true})
     })
 }
 
@@ -1094,9 +1161,9 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
   const sourceConfig = normalizeMockPortfolioConfig(config)
   const sourceComponents = Array.isArray(sourceConfig.components) ? sourceConfig.components : []
   const allSourceComponents = listMockPortfolioComponents(sourceConfig)
-  const components = buildMockRenderComponents(sourceComponents, allSourceComponents)
   const backgroundColor = sourceConfig.style.backgroundColor
   const themeMode = getMockThemeMode(backgroundColor)
+  const components = buildMockRenderComponents(sourceComponents, allSourceComponents,themeMode)
   const bottomNav = sourceConfig.bottomNav.enabled
     ? {
         enabled: true,
@@ -1106,7 +1173,7 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
             title: item.title
           }
           if (index > 0) {
-            renderedItem.components = buildMockRenderComponents(item.components || [], allSourceComponents)
+            renderedItem.components = buildMockRenderComponents(item.components || [], allSourceComponents,themeMode)
           }
           return renderedItem
         })
@@ -1118,7 +1185,8 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
     shareCode: 'MOCK9001',
     title: sourceConfig.share && sourceConfig.share.title ? sourceConfig.share.title : '风景标准个人作品集',
     share: Object.assign({}, sourceConfig.share || {}),
-    style: { backgroundColor },
+    style: Object.assign({},sourceConfig.style,{ backgroundColor }),
+    backgroundAudio: clone(sourceConfig.backgroundAudio),
     themeMode,
     components,
     bottomNav,
@@ -1183,7 +1251,7 @@ function buildMockComponent(componentType, existingComponents = []) {
         componentType: resolvedType,
         name: option.name,
         enabled: true,
-        config: clone(MOCK_COMPONENT_DEFAULT_CONFIGS[resolvedType] || {})
+        config: clone(MOCK_COMPONENT_DEFAULT_CONFIGS[resolvedType] || createMockComponentConfig(resolvedType))
       }
   return Object.assign({}, component, {
     componentKey: buildMockComponentKey(existingComponents, resolvedType),
@@ -1365,15 +1433,18 @@ function getMockPortfolioDraft() {
     if (storedDraft && storedDraft.config && Array.isArray(storedDraft.config.components)) {
       return refreshMockDraftRenderData(storedDraft)
     }
+    if (storedDraft) throw new Error('本地体验草稿无法读取，已展示默认示例')
   } catch (error) {
-    return clone(MOCK_STANDARD_PORTFOLIO)
+    return Object.assign(clone(MOCK_STANDARD_PORTFOLIO),{draftWarning: (error && error.message && error.message.includes('版本不兼容') ? error.message : '本地体验草稿无法读取，已展示默认示例')})
   }
   return clone(MOCK_STANDARD_PORTFOLIO)
 }
 
 function saveMockPortfolioDraft(draft) {
   const nextDraft = Object.assign({}, clone(draft || MOCK_STANDARD_PORTFOLIO))
+  nextDraft.config = normalizeMockPortfolioConfig(nextDraft.config)
   nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
+  delete nextDraft.draftWarning
   const runtimeWx = getRuntimeWx()
   if (runtimeWx && runtimeWx.setStorageSync) {
     runtimeWx.setStorageSync(MOCK_PORTFOLIO_DRAFT_STORAGE_KEY, nextDraft)
@@ -1416,6 +1487,20 @@ function updateMockSingleWorkConfig(portfolioDraft, componentKey, config, menuKe
   )
 }
 
+
+/** 验证并应用临时组件配置，失败不污染页面草稿。 */
+function applyMockComponentConfig(draft,componentKey,nextConfig,menuKey) {
+  const component = getMockMenuComponents(draft.config,menuKey).find(item=>item.componentKey === componentKey)
+  if (!component) return {valid:false,message:'组件不存在',draft}
+  const result = validateMockComponentConfig(component.componentType,nextConfig,MOCK_WORK_LIBRARY.works)
+  if (!result.valid) return Object.assign({},result,{draft})
+  let config = clone(nextConfig)
+  if(component.componentType === 'HYPERLINK') config = require('./mock-portfolio-hyperlink').normalizeMockHyperlinkConfig(config)
+  if(component.componentType === 'CONTACT_INFO') config = require('./mock-portfolio-hyperlink').normalizeMockContactInfoConfig(config)
+  if (['TEXT_SECTION','STRUCTURED_TEXT_SECTION'].includes(component.componentType) && !config.backgroundEnabled) delete config.backgroundWorkId
+  return {valid:true,message:'',draft:updateComponentConfig(draft,componentKey,()=>config,menuKey)}
+}
+
 function getWorkIdsFromComponent(component = {}) {
   const config = component.config || {}
   if (component.componentType === COMPONENT_TYPES.SINGLE_WORK) {
@@ -1430,6 +1515,7 @@ function getWorkIdsFromComponent(component = {}) {
 }
 
 module.exports = {
+  normalizeMockPortfolioConfig, applyMockComponentConfig,
   MOCK_LOGIN_REQUIRED_MESSAGE,
   MOCK_AVATAR_URL,
   MOCK_PORTFOLIO_DRAFT_STORAGE_KEY,

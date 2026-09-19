@@ -1,0 +1,6 @@
+<view class="meta-viewport {{titleStyle ? 'is-title' : ''}}">
+  <text
+    class="meta-text {{animationEnabled ? 'is-auto-scrolling' : ''}}"
+    style="--meta-distance: -{{distance}}px; --meta-duration: {{duration}}s; animation-play-state: {{visible ? 'running' : 'paused'}};"
+  >{{text}}</text>
+</view>

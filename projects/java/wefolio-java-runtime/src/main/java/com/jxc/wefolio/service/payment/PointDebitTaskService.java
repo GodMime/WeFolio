@@ -9,6 +9,8 @@ import com.jxc.wefolio.mapper.PointAccountEntityMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -81,6 +83,7 @@ public class PointDebitTaskService {
     }
 
     /** 新维护者会话可用时唤醒等待会话任务，并保障仍有待扣的活动任务。 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public PointDebitTaskEntity ensureActiveTaskAfterSessionRefresh(Long userId) {
         pointDebitTaskEntityMapper.wakeWaitingSession(
                 userId, LocalDateTime.now().plus(effectiveDelay()));

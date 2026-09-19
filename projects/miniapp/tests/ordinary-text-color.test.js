@@ -1,11 +1,11 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const personal = require('../utils/portfolios')
+const personal = require('../pages/portfolios/utils/portfolios')
 const fs = require('node:fs')
 const path = require('node:path')
 
 test('主包和团队文字颜色纯规则保持一致，且团队组件不跨包依赖', () => {
-  const shared = fs.readFileSync(path.join(__dirname, '../utils/portfolio-text-color.js'), 'utf8').split('\n').slice(1).join('\n')
+  const shared = fs.readFileSync(path.join(__dirname, '../pages/portfolios/utils/portfolio-text-color.js'), 'utf8').split('\n').slice(1).join('\n')
   const team = fs.readFileSync(path.join(__dirname, '../pages/team-portfolios/utils/portfolio-text-color.js'), 'utf8').split('\n').slice(1).join('\n')
   assert.equal(team, shared)
 })

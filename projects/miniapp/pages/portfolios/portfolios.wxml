@@ -248,6 +248,7 @@
     disabled="{{shareActionPending}}"
     bindclose="handleCloseShareSheet"
     bindtimeline="handleTimelineShare"
+    bindqrcode="handleQrCodeShare"
   ></share-channel-sheet>
 
   <root-portal wx:if="{{teamSelectSheetVisible}}">

@@ -1,6 +1,7 @@
 {
   "enablePullDownRefresh": true,
   "usingComponents": {
-    "navigation-bar": "/components/navigation-bar/navigation-bar"
+    "navigation-bar": "/components/navigation-bar/navigation-bar",
+    "work-meta-marquee": "/pages/works/components/work-meta-marquee/work-meta-marquee"
   }
 }

@@ -17,6 +17,8 @@ const CREATE_ORDER_URL = '/api/mine/recharges/orders'
 const RECHARGE_RECORDS_PAGE_URL = '/pages/recharge-records/recharge-records'
 const POINT_RULES_PAGE_URL = '/pages/points-rules/points-rules'
 const LOGIN_PAGE_URL = '/pages/login/login'
+const RECHARGE_STATUS_REFUNDED = 'REFUNDED'
+const RECHARGE_REFUNDED_MESSAGE = '已退款'
 
 function emptyRechargeData() {
   return normalizeRechargePage({})
@@ -160,6 +162,8 @@ Page({
         })
         await this.loadRechargePage({ silent: true })
         wx.showToast({ title: '充值成功，积分已到账', icon: 'success' })
+      } else if (syncResult.status === RECHARGE_STATUS_REFUNDED) {
+        wx.showToast({ title: syncResult.statusText || RECHARGE_REFUNDED_MESSAGE, icon: 'none' })
       } else {
         wx.showToast({ title: '支付结果确认中，请稍后在充值记录中查看', icon: 'none' })
       }

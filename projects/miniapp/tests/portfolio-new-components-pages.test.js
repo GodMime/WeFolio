@@ -23,7 +23,7 @@ for (const team of [false, true]) {
     const api = require(`../pages/${folder}/utils/portfolio-text-grid`)
     const normalizeConfig = team
       ? require('../pages/team-portfolios/utils/team-portfolios').normalizeTeamPortfolioConfig
-      : require('../utils/portfolios').normalizePortfolioConfig
+      : require('../pages/portfolios/utils/portfolios').normalizePortfolioConfig
     const oldConfig = normalizeConfig({ ...page.data.config, style: { backgroundColor: '#151515' } })
     assert.equal(oldConfig.style.backgroundColor, '#151515')
     page.setData({ config: oldConfig, canMaintain: true })
@@ -58,7 +58,7 @@ for (const team of [false, true]) {
       if (menu === 'second') {
         config = team
           ? require('../pages/team-portfolios/utils/team-portfolios').setTeamBottomNavigationCount(config, 2)
-          : require('../utils/portfolios').setBottomNavigationCount(config, 2)
+          : require('../pages/portfolios/utils/portfolios').setBottomNavigationCount(config, 2)
         activeMenuKey = config.bottomNav.items[1].key
         config.bottomNav.items[1].components = [component]
       } else {
@@ -94,7 +94,7 @@ for (const team of [false, true]) {
     page.openNewComponentSheet('TEXT_GRID'); page.handleCancelNewComponent(); assert.deepEqual(page.data.config, initial)
     const config = team
       ? require('../pages/team-portfolios/utils/team-portfolios').setTeamBottomNavigationCount(page.data.config, 2)
-      : require('../utils/portfolios').setBottomNavigationCount(page.data.config, 2)
+      : require('../pages/portfolios/utils/portfolios').setBottomNavigationCount(page.data.config, 2)
     page.setData({ config, activeMenuKey: config.bottomNav.items[1].key })
     page.openNewComponentSheet('TEXT_GRID'); const grid = clone(page.data.newComponentConfig); grid.cells[0].blocks[0].runs[0].text = '10年'
     page.handleConfirmNewComponent({ detail: grid })
@@ -115,7 +115,7 @@ for (const team of [false, true]) {
     for (const type of ['TEXT_GRID', 'CONTACT_INFO']) for (const change of ['delete', 'move', 'replace-type', 'remove-menu']) {
       const page = loadEditor(team)
       const config = team ? require('../pages/team-portfolios/utils/team-portfolios').setTeamBottomNavigationCount(page.data.config, 2)
-        : require('../utils/portfolios').setBottomNavigationCount(page.data.config, 2)
+        : require('../pages/portfolios/utils/portfolios').setBottomNavigationCount(page.data.config, 2)
       page.setData({ config, activeMenuKey: config.bottomNav.items[1].key })
       const value = type === 'TEXT_GRID' ? gridApi.createTextGrid() : { contactPhone: '原联系', contactWechat: '' }
       if (type === 'TEXT_GRID') value.cells[0].blocks[0].runs[0].text = '原文字'
@@ -138,7 +138,7 @@ for (const team of [false, true]) {
   test(`${scope}: new component confirmation rejects a removed originating menu`, () => {
     const page = loadEditor(team)
     const config = team ? require('../pages/team-portfolios/utils/team-portfolios').setTeamBottomNavigationCount(page.data.config, 2)
-      : require('../utils/portfolios').setBottomNavigationCount(page.data.config, 2)
+      : require('../pages/portfolios/utils/portfolios').setBottomNavigationCount(page.data.config, 2)
     page.setData({ config, activeMenuKey: config.bottomNav.items[1].key })
     page.openNewComponentSheet('TEXT_GRID')
     const result = clone(page.data.newComponentConfig); result.cells[0].blocks[0].runs[0].text = '新文字'
@@ -162,7 +162,7 @@ for (const team of [false, true]) {
 test('new components survive personal render normalization and team data normalization in menus', () => {
   const grid = gridApi.createTextGrid(); grid.cells[0].blocks[0].runs[0].text = '内容'
   const contactInfo = { contactPhone: '123', contactWechat: '微信' }
-  const personal = require('../utils/visitor-portfolio')
+  const personal = require('../pages/portfolios/utils/visitor-portfolio')
   assert.deepEqual(personal.normalizeRenderComponent({ componentType: 'TEXT_GRID', config: grid, textGrid: grid }).textGrid, grid)
   assert.deepEqual(personal.normalizeRenderComponent({ componentType: 'CONTACT_INFO', contactInfo }).contactInfo, { ...contactInfo, ...contactDefaults })
   const team = require('../pages/team-portfolios/utils/team-visitor-portfolio')

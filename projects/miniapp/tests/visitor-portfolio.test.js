@@ -11,7 +11,7 @@ const {
   normalizeVisitorScheduleQueryResult,
   switchPortfolioMenu,
   switchDisplayGroup
-} = require('../utils/visitor-portfolio')
+} = require('../pages/portfolios/utils/visitor-portfolio')
 
 test('component spacing reaches previews and visitors from render data and legacy config', () => {
   for (const source of ['renderData', 'config']) {
@@ -248,7 +248,7 @@ function createDeferred() {
 function loadVisitorPage(fakeRequest, wxOverrides = {}) {
   const pagePath = path.join(__dirname, '../pages/portfolios/visitor-portfolio/visitor-portfolio.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
-  const visitorSessionPath = path.join(__dirname, '../utils/visitor-session.js')
+  const visitorSessionPath = path.join(__dirname, '../pages/portfolios/utils/visitor-session.js')
   const requestCacheKey = require.resolve(requestPath)
   const visitorSessionCacheKey = require.resolve(visitorSessionPath)
   const originalRequestCache = require.cache[requestCacheKey]
@@ -303,9 +303,9 @@ function loadVisitorPage(fakeRequest, wxOverrides = {}) {
 }
 
 function loadScheduleQueryComponent(fakeRequest, wxOverrides = {}) {
-  const componentPath = path.join(__dirname, '../components/portfolio-schedule-query/portfolio-schedule-query.js')
+  const componentPath = path.join(__dirname, '../pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.js')
   const requestPath = path.join(__dirname, '../utils/request.js')
-  const visitorSessionPath = path.join(__dirname, '../utils/visitor-session.js')
+  const visitorSessionPath = path.join(__dirname, '../pages/portfolios/utils/visitor-session.js')
   const requestCacheKey = require.resolve(requestPath)
   const visitorSessionCacheKey = require.resolve(visitorSessionPath)
   const originalRequestCache = require.cache[requestCacheKey]
@@ -371,7 +371,7 @@ function loadScheduleQueryComponent(fakeRequest, wxOverrides = {}) {
 }
 
 test('loadScheduleQueryComponent restores globals when component module fails to load', () => {
-  const visitorUtilsPath = path.join(__dirname, '../utils/visitor-portfolio.js')
+  const visitorUtilsPath = path.join(__dirname, '../pages/portfolios/utils/visitor-portfolio.js')
   const visitorUtilsCacheKey = require.resolve(visitorUtilsPath)
   const originalVisitorUtilsCache = require.cache[visitorUtilsCacheKey]
   const previousComponent = global.Component
@@ -1490,7 +1490,7 @@ test('visitor page preserves WeChat source by default and accepts controlled per
     'utf8'
   )
   const visitorSessionSource = fs.readFileSync(
-    path.join(__dirname, '../utils/visitor-session.js'),
+    path.join(__dirname, '../pages/portfolios/utils/visitor-session.js'),
     'utf8'
   )
 
@@ -2954,4 +2954,21 @@ test('team member portfolio preview loads options without submitting a real quer
   assert.equal(submitResult, false)
   assert.equal(component.data.submitting, false)
   assert.equal(component.data.result, null)
+})
+
+test('personal visitor decodes scene once, records QR_CODE, and preserves explicit old links', async () => {
+  for (const [input, expectedCode, expectedSource] of [
+    [{ scene: 'PF%2B001' }, 'PF+001', 'QR_CODE'],
+    [{ scene: 'PF%252B001' }, 'PF%2B001', 'QR_CODE'],
+    [{ scene: '%E0%A4%A' }, '', 'QR_CODE'],
+    [{ shareCode: 'PF%2Bexplicit', scene: 'ignored' }, 'PF%2Bexplicit', 'WECHAT_SHARE_CARD'],
+    [{ shareCode: 'PF-old', sourceType: 'PERSONAL_PORTFOLIO' }, 'PF-old', 'PERSONAL_PORTFOLIO']
+  ]) {
+    const page = loadVisitorPage(() => Promise.resolve({}))
+    page.bootstrap = async () => {}
+    page.positionBackgroundAudio = () => {}
+    await page.onLoad(input)
+    assert.equal(page.data.shareCode, expectedCode)
+    assert.equal(page.visitorSourceType, expectedSource)
+  }
 })

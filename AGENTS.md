@@ -217,6 +217,8 @@ node --test tests/*.test.js
 
 ## 安全与工作区
 
+- 设计文档、方案和计划统一放在 `docs/`，设计稿及配套素材统一放在 `design/`，均只保留本地，不提交 Git；`docs/TECHNICAL_RUNBOOK.md`（技术配置台账）是 `docs/` 中唯一继续跟踪的文件。
+- `promote/` 下所有文件均只保留本地，不提交 Git；禁止用 `git add -f` 绕过设计资料和推广目录的忽略规则。
 - 未经用户在当前任务中明确指示，禁止执行 `git commit`；完成代码修改或验证不等于获得提交授权，不得因流程、技能或“完成任务”自动创建提交。
 - `projects/java/wefolio-java-runtime/.env` 和 `projects/java/wefolio-java-job/.env` 含敏感配置，禁止提交。
 - 不要打印、复制或提交真实密钥，除非用户明确要求用于排查并确认风险。

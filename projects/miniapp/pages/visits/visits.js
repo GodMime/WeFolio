@@ -90,7 +90,7 @@ Page({
     })
 
     try {
-      const [statistics, recordPageResponse] = await Promise.all([
+      const responses = await Promise.all([
         request({
           url: MINE_VISIT_STATISTICS_URL
         }),
@@ -102,7 +102,9 @@ Page({
           }
         })
       ])
-      const recordPage = normalizeVisitRecordPage(recordPageResponse)
+      // 按下标读取，避免微信 SWC 数组解构引入缺失的 _array_with_holes 运行时模块。
+      const statistics = responses[0]
+      const recordPage = normalizeVisitRecordPage(responses[1])
       const scopeComplete = statistics.scopeComplete !== false && recordPage.scopeComplete !== false
       const scopeReason = statistics.scopeReason || recordPage.scopeReason
       this.setData({

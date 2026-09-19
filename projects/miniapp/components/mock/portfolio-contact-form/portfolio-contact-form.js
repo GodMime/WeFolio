@@ -1,5 +1,5 @@
 /**
- * 事件接口参考正式组件 components/portfolio-contact-form/portfolio-contact-form.js。
+ * 事件接口参考正式组件 pages/portfolios/components/portfolio-contact-form/portfolio-contact-form.js。
  * 本组件只回传体验版本地表单事件，不得包含真实提交能力。
  */
 const DEFAULT_CONTACT_FORM_TITLE = '预留联系信息'

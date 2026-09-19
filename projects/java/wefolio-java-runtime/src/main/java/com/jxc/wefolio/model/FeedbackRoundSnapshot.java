@@ -21,6 +21,9 @@ public class FeedbackRoundSnapshot {
     /** 用户提交的反馈描述。 */
     private String description;
 
+    /** 用户提交本轮反馈时的前端版本，旧客户端未上报时为空。 */
+    private String frontendVersion;
+
     /** 用户提交本轮反馈的时间。 */
     private LocalDateTime submittedAt;
 

@@ -1,0 +1,55 @@
+:host {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.meta-viewport {
+  display: flex;
+  width: 100%;
+  height: 36rpx;
+  margin-top: 8rpx;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.meta-text {
+  display: inline-block;
+  flex: none;
+  min-width: 100%;
+  color: #66727f;
+  font-size: 25rpx;
+  font-weight: 600;
+  line-height: 36rpx;
+  white-space: nowrap;
+}
+
+.meta-viewport.is-title {
+  height: 40rpx;
+  margin-top: 0;
+}
+
+.is-title .meta-text {
+  color: #17202a;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.32;
+}
+
+.meta-text.is-auto-scrolling {
+  animation-name: work-meta-auto-scroll;
+  animation-duration: var(--meta-duration);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+@keyframes work-meta-auto-scroll {
+  0%, 15% {
+    transform: translateX(0);
+  }
+
+  85%, 100% {
+    transform: translateX(var(--meta-distance));
+  }
+}

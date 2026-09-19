@@ -1,0 +1,27 @@
+<view class="editor">
+  <view class="editor-tabs"><view class="editor-tab {{tab === 'content' ? 'active' : ''}}" data-value="content" bindtap="handleTab">内容</view><view class="editor-tab {{tab === 'background' ? 'active' : ''}}" data-value="background" bindtap="handleTab">背景</view></view>
+  <block wx:if="{{tab === 'content'}}">
+    <view class="help">最多 20 个区块、合计 2000 字。选择区块后编辑详细内容。</view>
+    <view class="summary-list"><view wx:for="{{blockSummaries}}" wx:key="blockKey" class="summary-row {{selectedBlockIndex === index ? 'selected' : ''}}" data-index="{{index}}" bindtap="handleSelectBlock"><view class="summary-copy"><text>{{index + 1}} · {{item.label}}</text><text>{{item.summary}}</text></view><view class="actions"><button size="mini" data-type="moveBlock" data-index="{{index}}" data-offset="-1" catchtap="handleOperation">上移</button><button size="mini" data-type="moveBlock" data-index="{{index}}" data-offset="1" catchtap="handleOperation">下移</button><button size="mini" data-type="removeBlock" data-index="{{index}}" catchtap="handleOperation">删除</button></view></view></view>
+    <view wx:if="{{selectedBlock}}" class="block-card detail-card">
+      <view class="detail-title">{{optionLabels[selectedBlock.type]}} · 详细设置</view>
+      <block wx:if="{{selectedBlock.type !== 'SPACER'}}">
+        <block wx:if="{{selectedBlock.type === 'LIST'}}"><view wx:for="{{selectedBlock.items}}" wx:key="index" wx:for-item="listItem" wx:for-index="listIndex" class="row"><input value="{{listItem}}" maxlength="-1" data-index="{{selectedBlockIndex}}" data-item="{{listIndex}}" data-field="items" bindinput="handleInput" placeholder="列表文字"/><button size="mini" data-type="removeListItem" data-index="{{selectedBlockIndex}}" data-item="{{listIndex}}" bindtap="handleOperation">删除</button></view><button size="mini" data-type="addListItem" data-index="{{selectedBlockIndex}}" bindtap="handleOperation">添加列表项</button></block>
+        <textarea wx:else value="{{selectedBlock.content}}" maxlength="-1" auto-height data-index="{{selectedBlockIndex}}" data-field="content" bindinput="handleInput" placeholder="输入文字" />
+        <view class="field-label">字体</view><view class="font-choice-list"><view wx:for="{{fontOptions}}" wx:key="value" class="font-choice {{selectedBlock.fontFamily === item.value ? 'selected' : ''}} {{item.available ? '' : 'disabled'}}" data-value="{{item.value}}" bindtap="handleFontTap" aria-disabled="{{!item.available}}"><text>{{item.label}}</text><text wx:if="{{!item.available}}">当前设备不可用</text><text wx:if="{{!item.available && selectedBlock.fontFamily === item.value}}">已保存字体保留，当前以系统字体预览</text></view></view>
+        <view class="row"><text>字重</text><picker range="{{weightLabels}}" value="{{optionIndexes[selectedBlock.fontWeight]}}" data-index="{{selectedBlockIndex}}" data-field="fontWeight" bindchange="handleChoice"><view class="choice">{{optionLabels[selectedBlock.fontWeight]}}</view></picker></view>
+        <view class="row"><text>字号 10–96</text><input type="number" value="{{selectedBlock.fontSizeRpx}}" data-index="{{selectedBlockIndex}}" data-field="fontSizeRpx" bindinput="handleInput" /></view>
+        <view class="row"><text>行距 0.5–3.0</text><input type="digit" value="{{selectedBlock.lineHeight}}" placeholder="沿用默认" data-index="{{selectedBlockIndex}}" data-field="lineHeight" bindinput="handleInput" /></view>
+        <view class="field-label">颜色</view><mock-text-color-editor color="{{selectedBlock.color}}" active="{{tab === 'content'}}" bindchange="handleBlockColor" />
+        <view class="row"><text>对齐</text><picker range="{{alignmentLabels}}" value="{{optionIndexes[selectedBlock.alignment]}}" data-index="{{selectedBlockIndex}}" data-field="alignment" bindchange="handleChoice"><view class="choice">{{optionLabels[selectedBlock.alignment]}}</view></picker></view>
+        <view class="row"><text>上间距（步长 4）</text><input type="number" value="{{selectedBlock.marginTopRpx}}" data-index="{{selectedBlockIndex}}" data-field="marginTopRpx" bindinput="handleInput" /></view>
+        <view class="row"><text>下间距（步长 4）</text><input type="number" value="{{selectedBlock.marginBottomRpx}}" data-index="{{selectedBlockIndex}}" data-field="marginBottomRpx" bindinput="handleInput" /></view>
+      </block>
+      <view wx:else class="row"><text>留白高度 0–512</text><input type="number" value="{{selectedBlock.heightRpx}}" data-index="{{selectedBlockIndex}}" data-field="heightRpx" bindinput="handleInput" /></view>
+    </view>
+    <view wx:else class="help empty">添加一个区块后开始编辑</view>
+    <picker range="{{blockLabels}}" bindchange="handleAdd"><view class="choice add">＋ 添加区块</view></picker>
+  </block>
+  <view wx:else class="background-tab-hint">在下方选择背景作品、遮罩效果和对齐方式。</view>
+  <text wx:if="{{error}}" class="error">{{error}}</text>
+</view>

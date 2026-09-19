@@ -17,12 +17,15 @@ import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.entity.PortfolioReferenceEntity;
 import com.jxc.wefolio.entity.VisitEventEntity;
 import com.jxc.wefolio.entity.VisitRecordEntity;
+import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
+import com.jxc.wefolio.mapper.WorkEntityMapper;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +34,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -39,7 +43,11 @@ import java.util.Objects;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PortfolioVisitService {
+
+    /** 旧客户端失效作品事件的观测标识，可用于日志聚合计数。 */
+    private static final String LEGACY_WORK_EVENT_IGNORED = "PORTFOLIO_LEGACY_WORK_EVENT_IGNORED";
 
     /** 打开个人作品集业务类型 */
     private static final String BUSINESS_TYPE_PORTFOLIO_OPEN = "PORTFOLIO_OPEN";
@@ -89,6 +97,9 @@ public class PortfolioVisitService {
     /** 分享编码快照兜底 */
     private static final String DEFAULT_PORTFOLIO_SHARE_CODE_SNAPSHOT = "";
 
+    /** 访问事件中的作品名称快照键。 */
+    private static final String METADATA_KEY_WORK_TITLE = "workTitle";
+
     /** 访问汇总 Mapper */
     private final VisitRecordEntityMapper visitRecordEntityMapper;
 
@@ -100,6 +111,9 @@ public class PortfolioVisitService {
 
     /** 作品集引用 Mapper */
     private final PortfolioReferenceEntityMapper portfolioReferenceEntityMapper;
+
+    /** 作品主数据 Mapper，用于写入可信作品名称快照。 */
+    private final WorkEntityMapper workEntityMapper;
 
     /**
      * 记录作品集打开。
@@ -237,7 +251,9 @@ public class PortfolioVisitService {
             VisitorPortfolioEventRequest request
     ) {
         validateEventMediaType(request);
-        validatePublishedWorkReference(portfolio, request);
+        if (!shouldRecordPublishedWorkEvent(portfolio, request)) {
+            return;
+        }
         if (hasRecordedEvent(request.getIdempotencyKey())) {
             return;
         }
@@ -245,7 +261,7 @@ public class PortfolioVisitService {
         String eventType = request.getEventType();
         LocalDateTime now = LocalDateTime.now();
         boolean inserted = insertEventIfAbsent(record, portfolio, eventType, request.getWorkId(), request.getQueriedDate(),
-                request.getDurationSeconds(), request.getIdempotencyKey(), request.getMetadata(), now);
+                request.getDurationSeconds(), request.getIdempotencyKey(), buildEventMetadata(request), now);
         if (!inserted) {
             return;
         }
@@ -284,6 +300,30 @@ public class PortfolioVisitService {
     }
 
     /**
+     * 为新作品事件补充服务端名称快照，兼容未上报名称的客户端和组件。
+     *
+     * @param request 已通过发布引用与幂等校验的事件请求
+     * @return 保留原有扩展字段并补充作品名称的元数据
+     */
+    private Map<String, Object> buildEventMetadata(VisitorPortfolioEventRequest request) {
+        if (!VisitEventTypeDict.WORK_VIEWED.getCode().equals(request.getEventType())
+                && !VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(request.getEventType())) {
+            return request.getMetadata();
+        }
+        WorkEntity work = workEntityMapper.selectById(request.getWorkId());
+        // 已删除作品的延迟事件保留原处理语义，不能因补充名称而影响原有计数和扣费。
+        if (work == null || work.getTitle() == null || work.getTitle().isBlank()) {
+            return request.getMetadata();
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (request.getMetadata() != null) {
+            metadata.putAll(request.getMetadata());
+        }
+        metadata.put(METADATA_KEY_WORK_TITLE, work.getTitle().strip());
+        return metadata;
+    }
+
+    /**
      * 校验新客户端上报的媒体类型；缺失时保留旧客户端兼容行为。
      *
      * @param request 访客事件请求
@@ -307,41 +347,46 @@ public class PortfolioVisitService {
     }
 
     /**
-     * 校验新版客户端上报的作品与组件已发布引用对。
+     * 校验上报的作品属于已发布引用，防止省略组件键后绕过计费资源校验。
      *
-     * <p>旧版客户端不传 componentKey，此时保留原有行为；一旦携带则必须精确命中已发布引用。</p>
+     * <p>旧版客户端可省略组件键；其已失效引用事件不入账并保留成功响应，避免阻断已打开页面的媒体展示。
+     * 忽略事件输出作品与发布版本的观测日志，不包含访客标识、令牌或请求元数据。
+     * 传入组件键时仍须精确命中作品与组件引用对。
+     * 不追加作品当前状态或媒体类型校验，保留旧发布配置和延迟事件的处理语义。</p>
      *
      * @param portfolio 已发布作品集
      * @param request 访客事件请求
      */
-    private void validatePublishedWorkReference(
+    private boolean shouldRecordPublishedWorkEvent(
             PortfolioEntity portfolio,
             VisitorPortfolioEventRequest request
     ) {
-        if (request == null || request.getComponentKey() == null) {
-            return;
+        if (request == null) {
+            return true;
         }
         String eventType = request.getEventType();
         if (!VisitEventTypeDict.WORK_VIEWED.getCode().equals(eventType)
                 && !VisitEventTypeDict.VIDEO_PLAYED.getCode().equals(eventType)) {
-            return;
+            return true;
         }
-        String componentKey = request.getComponentKey().strip();
+        String componentKey = request.getComponentKey() == null ? null : request.getComponentKey().strip();
         Long workId = request.getWorkId();
-        if (componentKey.isEmpty() || workId == null || workId <= 0L || portfolio == null
+        if ((componentKey != null && componentKey.isEmpty()) || workId == null || workId <= 0L || portfolio == null
                 || portfolio.getId() == null) {
             throw new BusinessException(EVENT_REFERENCE_INVALID_MESSAGE);
         }
         request.setComponentKey(componentKey);
+        // 此处只判断是否存在匹配引用；SQL 已包含下方全部匹配条件，任意一条即能证明，故可 LIMIT 1。
         List<PortfolioReferenceEntity> references = portfolioReferenceEntityMapper.selectList(
                 Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
                         .eq(PortfolioReferenceEntity::getPortfolioId, portfolio.getId())
                         .eq(PortfolioReferenceEntity::getConfigScope, PortfolioConfigScopeDict.PUBLISHED.getCode())
                         .eq(PortfolioReferenceEntity::getReferenceType, ReferenceTypeDict.WORK.getCode())
                         .eq(PortfolioReferenceEntity::getReferenceId, workId)
-                        .eq(PortfolioReferenceEntity::getComponentKey, componentKey)
+                        .eq(componentKey != null, PortfolioReferenceEntity::getComponentKey, componentKey)
                         .eq(PortfolioReferenceEntity::getIsValid, 1)
                         .eq(PortfolioReferenceEntity::getDeleted, 0L)
+                        .last(SQL_SINGLE_LIMIT_CLAUSE)
         );
         boolean matched = (references == null ? List.<PortfolioReferenceEntity>of() : references).stream()
                 .anyMatch(reference -> reference != null
@@ -349,12 +394,17 @@ public class PortfolioVisitService {
                         && PortfolioConfigScopeDict.PUBLISHED.getCode().equals(reference.getConfigScope())
                         && ReferenceTypeDict.WORK.getCode().equals(reference.getReferenceType())
                         && Objects.equals(reference.getReferenceId(), workId)
-                        && componentKey.equals(reference.getComponentKey())
+                        && (componentKey == null || componentKey.equals(reference.getComponentKey()))
                         && Objects.equals(reference.getIsValid(), 1)
                         && Objects.equals(reference.getDeleted(), 0L));
-        if (!matched) {
+        if (!matched && componentKey != null) {
             throw new BusinessException(EVENT_REFERENCE_INVALID_MESSAGE);
         }
+        if (!matched) {
+            log.info("{} portfolioId={} publishedRevision={} workId={} eventType={}",
+                    LEGACY_WORK_EVENT_IGNORED, portfolio.getId(), portfolio.getPublishedRevision(), workId, eventType);
+        }
+        return matched;
     }
 
     /**

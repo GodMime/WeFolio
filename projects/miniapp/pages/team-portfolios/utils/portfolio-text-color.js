@@ -1,4 +1,4 @@
-// 团队组件保持分包内依赖；与主包颜色纯规则通过一致性测试同步。
+// 团队组件保持分包内依赖；与个人作品集颜色规则通过一致性测试同步。
 const TEXT_COLOR_AUTO = 'AUTO'
 const TEXT_COLOR_HEX = /^#[0-9a-fA-F]{6}$/
 const TEXT_COLOR_ERROR = '颜色须为跟随主题或六位十六进制颜色'

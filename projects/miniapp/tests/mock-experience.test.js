@@ -291,7 +291,7 @@ test('mock mine dashboard uses demo avatar and disables content entries', () => 
   const dashboard = mock.MOCK_DASHBOARD
 
   assert.equal(dashboard.profile.avatarUrl, MOCK_AVATAR_URL)
-  assert.equal(dashboard.metrics.workCount, 7)
+  assert.equal(dashboard.metrics.workCount, mock.MOCK_WORK_LIBRARY.total)
   assert.equal(dashboard.profile.tags[0].name, '风景作品')
   dashboard.entries.forEach((entry) => {
     assert.equal(entry.clickable, false)
@@ -455,15 +455,21 @@ test('mock schedule status independently uses original color dot and text withou
   assert.doesNotMatch(mutedRule, /background:/)
 })
 
-test('mock work library contains one tag, six images, one video, and correct covers', () => {
+test('mock work library contains one tag, eleven works across four media types, and correct covers', () => {
   const mock = loadMockExperience()
   const library = mock.MOCK_WORK_LIBRARY
 
   assert.equal(library.tags.length, 1)
   assert.equal(library.tags[0].name, '风景作品')
   assert.equal(library.works.filter((work) => work.mediaType === 'IMAGE').length, 6)
-  assert.equal(library.works.filter((work) => work.mediaType === 'VIDEO').length, 1)
-  assert.equal(library.total, 7)
+  assert.equal(library.works.filter((work) => work.mediaType === 'VIDEO').length, 3)
+  assert.equal(library.works.filter((work) => work.mediaType === 'AUDIO').length, 1)
+  assert.equal(library.works.filter((work) => work.mediaType === 'ANIMATION').length, 1)
+  assert.equal(library.total, 11)
+  assert.equal(library.tags[0].count, 9)
+  assert.equal(library.filterTags[0].count, 11)
+  assert.equal(library.filterTags[1].count, 9)
+  assert.equal(new Set(library.works.map(work => work.id)).size, 11)
   assert.ok(library.works.every((work) => work.auditStatus === 'PASSED'))
   assert.ok(library.works.every((work) => work.auditStatusText === '审核通过'))
   assert.equal(library.works[0].coverUrl, library.works[0].mediaUrl)
@@ -471,6 +477,10 @@ test('mock work library contains one tag, six images, one video, and correct cov
   assert.match(library.works[2].mediaUrl, /demo-image-3\.jpg$/)
   assert.match(library.works[6].coverUrl, /demo-video-1-thumb\.jpg$/)
   assert.match(library.works[6].mediaUrl, /demo-video-1\.mp4$/)
+  assert.match(library.works[7].coverUrl, /default-audio-cover-v1-200kb\.png$/)
+  assert.equal(library.works[8].coverUrl, library.works[8].mediaUrl)
+  assert.match(library.works[8].mediaUrl, /OpenAI-transparent\.gif$/)
+  assert.ok(library.works.slice(9).every(work => work.coverUrl === '' && work.thumbnailUrl === ''))
 })
 
 test('mock portfolio list exposes preview while locking backend actions', () => {
@@ -598,27 +608,27 @@ test('mock portfolio draft helpers add, remove, and reorder components locally',
   const added = mock.addMockComponent(original, mock.COMPONENT_TYPES.CAROUSEL)
   const addedComponent = added.config.components[added.config.components.length - 1]
 
-  assert.equal(original.config.components.length, 5)
-  assert.equal(added.config.components.length, 6)
+  assert.equal(original.config.components.length, 10)
+  assert.equal(added.config.components.length, 11)
   assert.equal(addedComponent.componentType, mock.COMPONENT_TYPES.CAROUSEL)
-  assert.equal(addedComponent.sortOrder, 6000)
+  assert.equal(addedComponent.sortOrder, 11000)
   assert.deepEqual(mock.getWorkIdsFromComponent(addedComponent), [101, 102, 103])
   assert.equal(
     new Set(added.config.components.map((component) => component.componentKey)).size,
     added.config.components.length
   )
-  assert.equal(added.renderData.components.length, 6)
+  assert.equal(added.renderData.components.length, 11)
 
-  const reordered = mock.reorderMockComponent(added, 5, 0)
+  const reordered = mock.reorderMockComponent(added, 10, 0)
   assert.equal(reordered.config.components[0].componentKey, addedComponent.componentKey)
   assert.deepEqual(
     reordered.config.components.map((component) => component.sortOrder),
-    [1000, 2000, 3000, 4000, 5000, 6000]
+    Array.from({ length: 11 }, (_, index) => (index + 1) * 1000)
   )
   assert.equal(reordered.renderData.components[0].componentKey, addedComponent.componentKey)
 
   const removed = mock.removeMockComponent(reordered, addedComponent.componentKey)
-  assert.equal(removed.config.components.length, 5)
+  assert.equal(removed.config.components.length, 10)
   assert.equal(
     removed.config.components.some((component) => component.componentKey === addedComponent.componentKey),
     false
@@ -641,13 +651,26 @@ test('mock portfolio add component sheet exposes every production standard compo
     'QR_CONTACT',
     'CONTACT_FORM',
     'TEXT_SECTION',
-    'DIVIDER'
+    'DIVIDER',
+    'VIDEO_CAROUSEL',
+    'STRUCTURED_TEXT_SECTION',
+    'TEXT_GRID',
+    'CONTACT_INFO',
+    'HYPERLINK'
   ]
 
   assert.deepEqual(
     mock.MOCK_COMPONENT_OPTIONS.map((item) => item.componentType),
     expectedTypes
   )
+  const formalTypeTable = read('pages/portfolios/utils/portfolios.js').match(/const COMPONENT_TYPES\s*=\s*\{([\s\S]*?)\n\}/)
+  assert.ok(formalTypeTable, 'formal personal component table should remain discoverable')
+  const formalTypes = Array.from(formalTypeTable[1].matchAll(/([A-Z_]+)\s*:\s*'([A-Z_]+)'/g), match => {
+    assert.equal(match[1], match[2])
+    return match[2]
+  })
+  assert.equal(formalTypes.length, 15)
+  assert.deepEqual([...expectedTypes].sort(), formalTypes.sort())
   expectedTypes.forEach((componentType) => {
     assert.equal(mock.COMPONENT_TYPES[componentType], componentType)
     const added = mock.addMockComponent(mock.MOCK_STANDARD_PORTFOLIO, componentType)
@@ -664,7 +687,7 @@ test('mock singular work uses local single selection, strict config, and render 
   const added = mock.addMockComponent(mock.MOCK_STANDARD_PORTFOLIO, mock.COMPONENT_TYPES.SINGLE_WORK)
   const component = added.config.components[added.config.components.length - 1]
 
-  assert.deepEqual(component.config, { workId: 0, showTitle: true })
+  assert.deepEqual(component.config, { workId: 0, showTitle: true, showDescription: false })
 
   const configured = mock.updateMockSingleWorkConfig(added, component.componentKey, {
     workId: 107,
@@ -675,9 +698,10 @@ test('mock singular work uses local single selection, strict config, and render 
   const configuredComponent = configured.config.components[configured.config.components.length - 1]
   const renderComponent = configured.renderData.components[configured.renderData.components.length - 1]
 
-  assert.deepEqual(configuredComponent.config, { workId: 107, showTitle: false })
+  assert.deepEqual(configuredComponent.config, { workId: 107, showTitle: false, showDescription: false })
   assert.equal(renderComponent.componentType, 'SINGLE_WORK')
   assert.equal(renderComponent.showTitle, false)
+  assert.equal(renderComponent.showDescription, false)
   assert.equal(renderComponent.work.workId, 107)
   assert.equal(renderComponent.work.isVideo, true)
   assert.equal(renderComponent.work.aspectRatioStyle, 'height: 399rpx; aspect-ratio: 16 / 9;')
@@ -721,12 +745,18 @@ test('mock singular work persists through local draft and preview without networ
     editor.handleWorkToggle({ currentTarget: { dataset: { id: 107 } } })
     editor.handleSingleWorkShowTitleChange({ detail: { value: false } })
     editor.handleConfirmComponentEditSheet()
+    editor.handleSelectComponent({ currentTarget: { dataset: { type: 'SINGLE_WORK' } } })
+    const imageComponentKey = editor.data.selectedComponentKey
+    editor.handleWorkToggle({ currentTarget: { dataset: { id: 101 } } })
+    editor.handleConfirmComponentEditSheet()
     editor.handlePreview()
 
     assert.equal(editor.data.selectedWorkIds.length, 1)
     assert.equal(navigations.length, 1)
     assert.equal(storedDraft.config.components.find((item) => item.componentKey === componentKey).config.workId, 107)
     assert.equal(storedDraft.config.components.find((item) => item.componentKey === componentKey).config.showTitle, false)
+    assert.equal(storedDraft.config.components.find((item) => item.componentKey === componentKey).config.showDescription, false)
+    assert.equal(storedDraft.config.components.find((item) => item.componentKey === imageComponentKey).config.workId, 101)
 
     const preview = loadMockPage('pages/mock/portfolio-standard-preview/portfolio-standard-preview.js', wxMock)
     preview.onShow()
@@ -734,6 +764,7 @@ test('mock singular work persists through local draft and preview without networ
       currentTarget: {
         dataset: {
           componentKey,
+          workId: 107,
           mediaType: 'VIDEO',
           mediaUrl: mock.MOCK_WORK_LIBRARY.works[6].mediaUrl
         }
@@ -741,12 +772,20 @@ test('mock singular work persists through local draft and preview without networ
     })
     assert.equal(preview.data.activeSingleWorkVideoKey, componentKey)
 
+    assert.equal(preview.handleSingleWorkTap({
+      detail: { componentKey: `${imageComponentKey}-unknown`, workId: 101, mediaType: 'IMAGE', mediaUrl: 'https://example.com/untrusted.jpg' }
+    }), false)
+    assert.equal(preview.handleSingleWorkTap({
+      detail: { componentKey: imageComponentKey, workId: 107, mediaType: 'IMAGE', mediaUrl: 'https://example.com/untrusted.jpg' }
+    }), false)
+    assert.equal(previews.length, 0)
     preview.handleSingleWorkTap({
       currentTarget: {
         dataset: {
-          componentKey: `${componentKey}-image`,
+          componentKey: imageComponentKey,
+          workId: 101,
           mediaType: 'IMAGE',
-          mediaUrl: mock.MOCK_WORK_LIBRARY.works[0].mediaUrl
+          mediaUrl: 'https://example.com/untrusted.jpg'
         }
       }
     })
@@ -755,6 +794,8 @@ test('mock singular work persists through local draft and preview without networ
   }
 
   assert.equal(previews.length, 1)
+  assert.equal(previews[0].current, mock.MOCK_WORK_LIBRARY.works[0].mediaUrl)
+  assert.deepEqual(previews[0].urls, [mock.MOCK_WORK_LIBRARY.works[0].mediaUrl])
   assert.equal(networkCalls, 0)
 })
 
@@ -795,7 +836,8 @@ test('mock singular work editor and preview expose title switch, width-fix image
 test('mock standard portfolio renders complete component json in fixed order', () => {
   const mock = loadMockExperience()
   const portfolio = mock.MOCK_STANDARD_PORTFOLIO
-  const expectedOrder = ['CAROUSEL', 'PROFILE', 'WORK_GRID', 'SCHEDULE_QUERY', 'CONTACT_FORM']
+  const expectedOrder = ['CAROUSEL', 'PROFILE', 'SCHEDULE_QUERY', 'CONTACT_FORM', 'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'DIVIDER', 'CONTACT_INFO', 'QR_CONTACT']
+  const expectedWorkOrder = ['VIDEO_CAROUSEL', 'SINGLE_WORK', 'WORK_LIST', 'HYPERLINK', 'WORK_GRID']
 
   assert.deepEqual(
     portfolio.config.components.map((item) => item.componentType),
@@ -805,10 +847,12 @@ test('mock standard portfolio renders complete component json in fixed order', (
     portfolio.renderData.components.map((item) => item.componentType),
     expectedOrder
   )
+  assert.deepEqual(portfolio.config.bottomNav.items[1].components.map(item => item.componentType), expectedWorkOrder)
+  assert.deepEqual(portfolio.renderData.bottomNav.items[1].components.map(item => item.componentType), expectedWorkOrder)
   assert.equal(portfolio.config.share.avatarUrl, MOCK_AVATAR_URL)
   assert.equal(portfolio.renderData.share.avatarUrl, MOCK_AVATAR_URL)
   assert.equal(portfolio.renderData.components[1].profile.avatarUrl, MOCK_AVATAR_URL)
-  assert.equal(portfolio.renderData.components[2].groups[0].works.length, 7)
+  assert.equal(portfolio.renderData.bottomNav.items[1].components.find(item => item.componentType === 'WORK_GRID').groups[0].works.length, 7)
 })
 
 test('mock personal portfolio preview uses its own isolated renderer without editor labels', () => {
@@ -914,7 +958,8 @@ test('mock preview handles display component events locally without network call
   global.wx = wxMock
   try {
     const page = loadMockPage('pages/mock/portfolio-standard-preview/portfolio-standard-preview.js', wxMock)
-    const grid = page.data.portfolio.components.find((item) => item.componentType === 'WORK_GRID')
+    page.handlePortfolioMenuChange({ detail: { menuKey: page.data.portfolio.bottomNav.items[1].key } })
+    const grid = page.data.portfolio.activeComponents.find((item) => item.componentType === 'WORK_GRID')
     const work = grid.activeGroup.works[0]
 
     page.handleDisplayTagTap({
@@ -925,6 +970,8 @@ test('mock preview handles display component events locally without network call
     })
     page.handleWorkTap({
       detail: {
+        componentKey: grid.componentKey,
+        workId: work.workId,
         mediaType: 'IMAGE',
         mediaUrl: work.previewUrl,
         coverUrl: work.thumbnailUrl,
@@ -1026,7 +1073,8 @@ test('mock page markup exposes required registration prompts and navigation acti
   assert.match(mineJs, /url:\s*'\/pages\/login\/login'/)
   assert.match(scheduleWxml, /新增档期/)
   assert.match(scheduleJs, /showMockLoginRequiredToast/)
-  assert.match(worksWxml, /风景作品/)
+  assert.match(worksWxml, /wx:for="\{\{list\.filterTags\}\}"[\s\S]*\{\{item\.labelText\}\}/)
+  assert.equal(loadMockExperience().MOCK_WORK_LIBRARY.filterTags[1].labelText, '风景作品 9')
   assert.match(worksWxml, /class="reference-pill \{\{item\.referenceCount > 0 \? 'used' : ''\}\}"[\s\S]*引用[\s\S]*item\.referenceCount[\s\S]*未引用/)
   assert.match(worksWxml, /class="status-badge \{\{item\.auditStatusTone\}\}"[\s\S]*class="status-dot"[\s\S]*\{\{item\.auditStatusText\}\}/)
   assert.doesNotMatch(worksWxml, /已使用 1 次/)

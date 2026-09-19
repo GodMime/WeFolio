@@ -20,6 +20,11 @@ Component({
       this.triggerEvent('close', {})
     },
 
+    handleQrCode() {
+      if (this.data.disabled) return
+      this.triggerEvent('qrcode', {})
+    },
+
     handleTimeline() {
       if (this.data.disabled) {
         return

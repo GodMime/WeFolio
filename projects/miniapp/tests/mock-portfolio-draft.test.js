@@ -1,0 +1,32 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const mock = require('../pages/mock/utils/mock-experience')
+test('revision2草稿无损升级且不插入新组件', () => {
+  const before = { editorSchemaRevision: 2, style: {backgroundColor:'#151515'}, components:[{componentKey:'custom',componentType:'TEXT_SECTION',sortOrder:1000,config:{content:'保留内容',fontSizeRpx:26}}],bottomNav:{enabled:false} }
+  const result = mock.normalizeMockPortfolioConfig(before)
+  assert.equal(result.editorSchemaRevision,3)
+  assert.equal(result.style.componentSpacingRpx,32)
+  assert.equal(result.components.length,1)
+  assert.equal(result.components[0].config.content,'保留内容')
+  assert.equal(result.components[0].config.lineHeight,undefined)
+  assert.equal(result.backgroundAudio.enabled,false)
+  assert.equal(before.editorSchemaRevision,2)
+})
+test('默认覆盖15类，未知组件保留并使用明确占位', () => {
+  const draft = mock.buildStandardPortfolio()
+  const components = draft.config.components.concat(...draft.config.bottomNav.items.slice(1).map(x=>x.components))
+  assert.equal(new Set(components.map(x=>x.componentType)).size,15)
+  const render = mock.buildMockPortfolioRenderData({components:[{componentKey:'unknown',componentType:'FUTURE',config:{foo:1}}]})
+  assert.equal(render.components[0].unsupported,true)
+  assert.equal(render.components[0].contactForm,undefined)
+})
+test('组件校验失败不修改原草稿，成功保留选择顺序', () => {
+  const draft = mock.addMockComponent(mock.buildStandardPortfolio(),'VIDEO_CAROUSEL')
+  const key = draft.config.components.at(-1).componentKey
+  const bad = mock.applyMockComponentConfig(draft,key,{workIds:[107,110]})
+  assert.equal(bad.valid,false)
+  assert.equal(bad.draft,draft)
+  const good = mock.applyMockComponentConfig(draft,key,{workIds:[111,107,110],displayStyle:'STACKED',title:'视频'})
+  assert.equal(good.valid,true)
+  assert.deepEqual(good.draft.renderData.components.at(-1).works.map(w=>w.workId),[111,107,110])
+})

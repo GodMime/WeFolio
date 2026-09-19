@@ -36,7 +36,7 @@
     </block>
 
     <view wx:else class="portfolio-menu-transition-content {{portfolioMenuTransitionClass}}">
-    <view wx:for="{{portfolio.activeComponents}}" wx:key="componentKey" class="folio-component">
+    <view wx:for="{{portfolio.activeComponents}}" wx:key="componentKey" class="folio-component" style="margin-bottom:{{portfolio.style.componentSpacingRpx}}rpx;">
       <block wx:if="{{item.componentType === 'CAROUSEL'}}">
         <portfolio-carousel
           works="{{item.works}}"
@@ -69,6 +69,11 @@
       <mock-portfolio-renderer
         wx:else
         component="{{item}}"
+        active="{{mediaActive}}"
+        copied-field="{{copiedComponentKey === item.componentKey ? copiedField : ''}}"
+        bindcopy="handleCopyContact"
+        bindhyperlink="handleHyperlink"
+        bindgridmeasure="handleGridMeasure"
         theme-mode="{{portfolio.themeMode}}"
         active-single-work-video-key="{{activeSingleWorkVideoKey}}"
         binddisplaytagtap="handleDisplayTagTap"
@@ -87,6 +92,9 @@
     </view>
   </scroll-view>
 
+  <mock-background-audio-control wx:if="{{audioResource}}" title="{{audioResource.title}}" cover-url="{{audioResource.coverUrl}}" display-style="{{audioResource.displayStyle}}" playing="{{audioPlaying}}" bindtoggle="handleToggleAudio" />
+  <view wx:if="{{hyperlinkPrompt}}" class="mock-copy-prompt">{{hyperlinkPrompt}}</view>
+
   <portfolio-bottom-nav
     navigation="{{portfolio.bottomNav}}"
     active-menu-key="{{portfolio.activeMenuKey}}"
@@ -102,6 +110,7 @@
           <view class="work-video-close" catchtap="handleCloseVideoPreview">×</view>
         </view>
         <video
+          binderror="handleVideoError"
           id="mockPortfolioWorkVideo"
           class="work-video-player"
           src="{{videoPreview.src}}"

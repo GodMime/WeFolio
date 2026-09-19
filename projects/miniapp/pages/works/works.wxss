@@ -50,7 +50,6 @@
 .work-delete-pane,
 .work-delete-button,
 .work-card,
-.work-meta,
 .work-status-row,
 .reference-pill,
 .status-badge,
@@ -527,27 +526,6 @@
 .work-copy {
   flex: 1;
   min-width: 0;
-}
-
-.work-title {
-  overflow: hidden;
-  color: #17202a;
-  font-size: 30rpx;
-  font-weight: 900;
-  line-height: 1.32;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.work-meta {
-  margin-top: 8rpx;
-  overflow: hidden;
-  color: #66727f;
-  font-size: 25rpx;
-  font-weight: 600;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .work-status-row {

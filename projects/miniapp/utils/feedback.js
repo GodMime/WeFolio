@@ -1,4 +1,5 @@
 const { request } = require('./request')
+const { FRONTEND_VERSION } = require('./app-version')
 
 const FEEDBACKS_ENDPOINT = '/api/mine/feedbacks'
 const MAX_DESCRIPTION_LENGTH = 200
@@ -271,6 +272,7 @@ function buildFeedbackSubmitPayload(draft = {}) {
   return {
     idempotencyKey,
     description: descriptionValidation.description,
+    frontendVersion: draft.frontendVersion || FRONTEND_VERSION,
     uploadTaskIds
   }
 }
@@ -719,6 +721,7 @@ async function submitFeedbackDraft(options = {}) {
   let draft = {
     idempotencyKey,
     description: validation.description,
+    frontendVersion: sourceDraft.frontendVersion || FRONTEND_VERSION,
     attachments: prepareAttachmentsForSubmission(sourceAttachments, nowMs, identifierOptions)
   }
   const attachmentsNeedingTickets = draft.attachments.filter((file) => (

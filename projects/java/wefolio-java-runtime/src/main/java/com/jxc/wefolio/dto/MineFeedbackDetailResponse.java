@@ -66,6 +66,9 @@ public class MineFeedbackDetailResponse {
         /** 用户反馈描述。 */
         private String description;
 
+        /** 用户提交本轮反馈时的前端版本，旧客户端未上报时为空。 */
+        private String frontendVersion;
+
         /** 本轮提交时间。 */
         private LocalDateTime submittedAt;
 

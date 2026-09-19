@@ -1,0 +1,21 @@
+<view class="hyperlink-editor">
+  <view class="field-row"><text>展示图片（图片 / 动图作品）</text><button class="small-button" bindtap="handleSelectWork">选择图片 / 动图</button></view>
+  <view wx:if="{{work}}" class="work-card" bindtap="handleSelectWork"><image src="{{work.mediaUrl || work.previewUrl}}" mode="aspectFill"/><text>{{work.title}}</text></view>
+  <text wx:else class="editor-hint">请从作品库选择图片或动图作品</text>
+  <text class="field-label">点击行为（二选一）</text>
+  <view class="choices vertical"><view wx:for="{{actionTypes}}" wx:key="value" class="choice {{config.actionType === item.value ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="handleAction"><text class="choice-title">{{item.label}}</text><text class="choice-description">{{item.description}}</text></view></view>
+  <view wx:if="{{config.actionType === 'INTERNAL_PORTFOLIO'}}">
+    <text class="field-label">跳转作品集（仅本地演示）</text>
+    <view class="target-card {{config.targetPortfolioId === 9002 ? 'selected' : ''}}" bindtap="handleSelectTarget"><text>演示联系作品集</text><text class="editor-hint">本地只读演示 · 不影响当前草稿</text></view>
+  </view>
+  <view wx:if="{{config.actionType === 'EXTERNAL_LINK'}}">
+    <text class="field-label">链接 / 分享内容（最多 2048 字）</text>
+    <textarea class="field-textarea" value="{{config.externalContent}}" maxlength="2048" data-field="externalContent" placeholder="粘贴链接、口令或带说明的分享内容" bindinput="handleInput" />
+    <text class="field-label">提示语（复制成功后展示，最多 30 字）</text>
+    <input class="field-input" value="{{config.promptText}}" maxlength="30" data-field="promptText" placeholder="已复制，请在浏览器打开" bindinput="handleInput" />
+    <text class="editor-hint">只复制内容，不会打开外部网页。</text>
+  </view>
+  <view class="field-row"><text>展示点击图标</text><switch checked="{{config.showClickIcon}}" color="#212529" bindchange="handleIconToggle" /></view>
+  <view wx:if="{{config.showClickIcon}}"><view class="choices vertical"><view wx:for="{{iconPositions}}" wx:key="value" class="choice {{config.iconPosition === item.value ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="handleIconPosition"><text class="choice-title">{{item.label}}</text><text class="choice-description">{{item.description}}</text></view></view></view>
+  <text wx:if="{{!config.actionType}}" class="editor-hint">选择点击行为后才显示对应配置；关闭开关时不显示图标位置。</text>
+</view>

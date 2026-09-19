@@ -23,16 +23,18 @@ const {
   normalizeVisitorPortfolio,
   switchDisplayGroup,
   switchPortfolioMenu
-} = require('../../../utils/visitor-portfolio')
+} = require('../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../utils/visitor-profile')
 const { createClipboardPromptController } = require('../utils/portfolio-hyperlink')
 const { request } = require('../../../utils/request')
 const {
+  SOURCE_TYPE_QR_CODE,
+  resolvePersonalShareCode,
   SOURCE_TYPE_PERSONAL_PORTFOLIO,
   SOURCE_TYPE_WECHAT_SHARE_CARD,
   openVisitorSession,
   requestWithVisitorSessionRefresh
-} = require('../../../utils/visitor-session')
+} = require('../utils/visitor-session')
 const {
   createAnonymousSessionId,
   isWechatTimelineSinglePage
@@ -114,12 +116,12 @@ Page({
     this.positionBackgroundAudio()
     this.singleWorkPageVisible = true
     this.singleWorkInteractionRevision = 0
-    const shareCode = options.shareCode || options.scene || ''
+    const shareCode = resolvePersonalShareCode(options)
     const showNavigationBack = hasPreviousPage()
     const timelineGuideRequested = options.shareGuide === TIMELINE_SHARE_GUIDE_VALUE
     this.visitorSourceType = options.sourceType === SOURCE_TYPE_PERSONAL_PORTFOLIO
       ? SOURCE_TYPE_PERSONAL_PORTFOLIO
-      : SOURCE_TYPE_WECHAT_SHARE_CARD
+      : options.scene && !options.shareCode ? SOURCE_TYPE_QR_CODE : SOURCE_TYPE_WECHAT_SHARE_CARD
     this.anonymousSessionId = isWechatTimelineSinglePage()
       ? createAnonymousSessionId()
       : ''

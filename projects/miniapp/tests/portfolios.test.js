@@ -43,13 +43,13 @@ const {
   validateHyperlinkComponent,
   validateSingleWorkComponent,
   validateWorkGridComponent
-} = require('../utils/portfolios')
+} = require('../pages/portfolios/utils/portfolios')
 const {
   hexToHsv,
   hsvToHex,
   normalizeHexColor,
   themeModeFromHex
-} = require('../utils/portfolio-color')
+} = require('../pages/portfolios/utils/portfolio-color')
 
 test('new editor advertises video carousel component title schema revision', () => {
   assert.equal(EDITOR_SCHEMA_REVISION, 14)

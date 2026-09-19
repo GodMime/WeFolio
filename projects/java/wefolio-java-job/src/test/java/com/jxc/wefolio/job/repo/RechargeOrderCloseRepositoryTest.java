@@ -36,6 +36,7 @@ class RechargeOrderCloseRepositoryTest {
                 .doesNotContain("'CLOSED'", "'PENDING_PAYMENT'")
                 .contains("deleted = 0")
                 .contains("expire_at < ?")
+                .contains("(paid_fee IS NULL OR paid_fee <= 0)")
                 .contains("ORDER BY expire_at ASC, id ASC")
                 .contains("LIMIT ?")
                 .contains("version = version + 1");

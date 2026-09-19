@@ -2,10 +2,12 @@ package com.jxc.wefolio.service.payment;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.AuthTypeDict;
+import com.jxc.wefolio.dict.PointGiftOrderStatusDict;
 import com.jxc.wefolio.entity.PointGiftOrderEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import com.jxc.wefolio.service.point.UserPointMutex;
+import com.jxc.wefolio.message.WechatVirtualPaymentMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,9 @@ public class PointGiftOrderProcessor {
     private final UserAuthEntityMapper userAuthEntityMapper;
     private final UserPointMutex userPointMutex;
     private final ExecutionLeaseTokenGenerator tokenGenerator;
+
+    /** 重复赠送应答补查余额所需的维护者会话。 */
+    private final MaintainerWechatSessionService sessionService;
 
     /** 领取并独立处理一条赠送订单。 */
     public TaskExecutionOutcome process(Long orderId) {
@@ -55,8 +60,13 @@ public class PointGiftOrderProcessor {
             transactionService.markFailure(order.getId(), executionLeaseToken,
                     failure(WechatVirtualPaymentErrorType.PERMANENT, "用户缺少有效微信身份"));
             log.info("微信虚拟支付业务完成 operation=处理赠送订单 referenceNo={} userId={} "
-                            + "localStatus=FAILED reason=MISSING_WECHAT_IDENTITY",
-                    order.getOrderNo(), order.getUserId());
+                            + "localStatus={} reason=MISSING_WECHAT_IDENTITY",
+                    order.getOrderNo(), order.getUserId(),
+                    PointGiftOrderStatusDict.FAILED.getCode());
+            return;
+        }
+        if (PointGiftOrderTransactionService.hasRecordedSuccess(order)) {
+            confirmDuplicateGift(order, executionLeaseToken, openid);
             return;
         }
         transactionService.renewLease(order.getId(), executionLeaseToken);
@@ -80,8 +90,13 @@ public class PointGiftOrderProcessor {
                         + "errcode={} errorType={} balance={} presentBalance={}",
                 order.getOrderNo(), order.getUserId(), result.errorCode(), result.errorType(),
                 result.balance(), result.presentBalance());
-        if (result.errorType() == WechatVirtualPaymentErrorType.SUCCESS
-                || result.errorType() == WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS) {
+        if (result.errorType() == WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS) {
+            transactionService.recordDuplicateSuccess(order.getId(), executionLeaseToken);
+            order.setLastErrorCode(WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS.name());
+            confirmDuplicateGift(order, executionLeaseToken, openid);
+            return;
+        }
+        if (result.errorType() == WechatVirtualPaymentErrorType.SUCCESS) {
             transactionService.completeSuccess(order.getId(), executionLeaseToken, result);
             log.info("微信虚拟支付业务完成 operation=处理赠送订单 referenceNo={} userId={} "
                             + "localStatus=SUCCESS balance={} presentBalance={}",
@@ -92,6 +107,53 @@ public class PointGiftOrderProcessor {
                             + "localStatus=FAILED errorType={}",
                     order.getOrderNo(), order.getUserId(), result.errorType());
         }
+    }
+
+    /** 已持久确认重复赠送后仅补查余额，失败仍保留同一订单等待自动恢复。 */
+    private void confirmDuplicateGift(PointGiftOrderEntity order, String executionLeaseToken, String openid) {
+        WechatVirtualPaymentResult duplicate = new WechatVirtualPaymentResult(
+                null, null, WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS,
+                0L, 0L, 0L, null, 0L, 0L, 200);
+        WechatVirtualPaymentResult confirmed = completeDuplicateBalance(order, executionLeaseToken, openid, duplicate);
+        if (confirmed.isSuccessful()) {
+            transactionService.completeSuccess(order.getId(), executionLeaseToken, confirmed);
+            log.info("微信重复赠送余额确认完成 orderId={} balance={} presentBalance={}",
+                    order.getId(), confirmed.balance(), confirmed.presentBalance());
+        } else {
+            transactionService.markFailure(order.getId(), executionLeaseToken, confirmed);
+            log.warn("微信重复赠送等待余额确认 orderId={} errorType={}", order.getId(), confirmed.errorType());
+        }
+    }
+
+    /** 重复赠送只确认已到账，取得权威余额后才允许结算同一赠送订单。 */
+    private WechatVirtualPaymentResult completeDuplicateBalance(
+            PointGiftOrderEntity order, String executionLeaseToken, String openid,
+            WechatVirtualPaymentResult duplicate
+    ) {
+        MaintainerWechatSession session = sessionService.findAvailableSession(order.getUserId());
+        if (session == null || session.sessionKey() == null || session.sessionKey().isBlank()
+                || session.clientIp() == null || session.clientIp().isBlank()) {
+            return failure(WechatVirtualPaymentErrorType.SESSION_INVALID,
+                    WechatVirtualPaymentMessage.DUPLICATE_GIFT_SESSION_REQUIRED_MESSAGE);
+        }
+        transactionService.renewLease(order.getId(), executionLeaseToken);
+        WechatVirtualPaymentResult balance;
+        try {
+            balance = wechatVirtualPaymentClient.queryUserBalance(new WechatBalanceQueryRequest(
+                    order.getUserId(), order.getOrderNo(), openid, session.sessionKey(),
+                    session.clientIp(), Instant.now().getEpochSecond()));
+        } catch (RuntimeException exception) {
+            return failure(WechatVirtualPaymentErrorType.TRANSIENT, WechatVirtualPaymentMessage.DUPLICATE_GIFT_BALANCE_QUERY_FAILED_MESSAGE);
+        }
+        if (balance.errorType() == WechatVirtualPaymentErrorType.SESSION_INVALID) {
+            sessionService.invalidateVersion(order.getUserId(), session.sessionVersion(), balance.errorMessage());
+        }
+        if (balance.errorType() != WechatVirtualPaymentErrorType.SUCCESS) {
+            // 保留真实失败分类，使永久错误停止自动补查；成功事实仍由事务服务保留。
+            return failure(balance.errorType(),
+                    WechatVirtualPaymentMessage.DUPLICATE_GIFT_BALANCE_UNCONFIRMED_MESSAGE);
+        }
+        return duplicate.withBalanceSnapshot(balance);
     }
 
     /** 查询用户当前有效微信 openid。 */

@@ -2,7 +2,7 @@ const { parsePortfolioTextLineHeightInput, stepPortfolioTextLineHeight,
   buildPortfolioTextLineHeightEditor } = require('../../utils/portfolio-component-platform')
 // 未设置行高时沿用当前分包既有展示样式，只在用户操作后写入倍数。
 const DEFAULT_LINE_HEIGHT = 1.65
-const { normalizeTextColor, isValidTextColor } = require('../../../../utils/portfolio-text-color')
+const { normalizeTextColor, isValidTextColor } = require('../../utils/portfolio-text-color')
 const {
   createStructuredBlock, normalizeStructuredTextConfig, validateStructuredTextConfig,
   finalizeStructuredTextConfig, createBlockEditDraft, switchBlockEditType,

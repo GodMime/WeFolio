@@ -1,0 +1,171 @@
+.share-code-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f5f6f7;
+}
+
+.share-code-scroll {
+  flex: 1;
+  min-height: 0;
+  height: 0;
+}
+
+.share-code-content {
+  padding: 32rpx 48rpx calc(40rpx + env(safe-area-inset-bottom));
+}
+
+.share-code-card {
+  position: relative;
+  /* 内容宽 654rpx，成图为 3:4；预留高度避免加载或切换时页面跳动。 */
+  height: 872rpx;
+  overflow: hidden;
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 32rpx rgba(23, 32, 42, 0.06);
+}
+
+.share-code-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.share-code-state {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 48rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.9);
+  box-sizing: border-box;
+}
+
+.share-code-state-title {
+  margin-top: 28rpx;
+  color: #212529;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.share-code-state-desc {
+  margin-top: 16rpx;
+  color: #687787;
+  font-size: 26rpx;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.share-code-loading {
+  width: 52rpx;
+  height: 52rpx;
+  border: 5rpx solid #e9ecef;
+  border-top-color: #c68f35;
+  border-radius: 50%;
+  animation: code-loading 1s linear infinite;
+}
+
+.share-code-state-mark {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  color: #8a4b09;
+  background: #fbf8f2;
+  font-size: 40rpx;
+  line-height: 64rpx;
+  text-align: center;
+}
+
+.share-code-option {
+  margin-top: 24rpx;
+  padding: 20rpx 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 24rpx;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.share-code-option-label {
+  color: #212529;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.share-code-actions {
+  margin-top: 32rpx;
+}
+
+/* 与资料页一致，基础样式直接绑定按钮类，避免真机依赖关系或属性选择器。 */
+.primary-button,
+.secondary-button {
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  height: 92rpx;
+  min-height: 92rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0 28rpx;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.primary-button {
+  color: #ffffff;
+  background-color: #212529;
+}
+
+.secondary-button {
+  margin-top: 16rpx;
+  color: #212529;
+  background-color: #f1f3f5;
+}
+
+.retry-button {
+  width: 240rpx;
+  height: 80rpx;
+  margin-top: 32rpx;
+  border-radius: 24rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 80rpx;
+  color: #212529;
+  background: #f5f6f7;
+}
+
+.share-code-hint {
+  margin-top: 24rpx;
+  color: #8b949e;
+  font-size: 23rpx;
+  text-align: center;
+}
+
+@keyframes code-loading {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 常驻屏外节点，避免加载态切换卸载 Canvas，不能使用 display:none。 */
+.share-code-canvas {
+  position: fixed;
+  left: -12000px;
+  top: 0;
+  width: 1080px;
+  height: 1440px;
+  pointer-events: none;
+}

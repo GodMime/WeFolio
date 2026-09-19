@@ -18,6 +18,7 @@ import com.jxc.wefolio.mapper.PointTransactionEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.message.PointMessage;
 import com.jxc.wefolio.service.payment.PointDebitTaskService;
+import com.jxc.wefolio.service.payment.WechatAuthoritativeBalanceSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -66,6 +67,9 @@ public class PointCommandTransactionService {
     /** 扣币活动任务保障服务。 */
     private final PointDebitTaskService pointDebitTaskService;
 
+    /** 消费前恢复有退款事实的失效余额。 */
+    private final WechatAuthoritativeBalanceSyncService balanceSyncService;
+
     /** 赠送订单 Mapper。 */
     private final PointGiftOrderEntityMapper pointGiftOrderEntityMapper;
 
@@ -78,6 +82,12 @@ public class PointCommandTransactionService {
                 .sorted()
                 .toList();
         return executeWithUserLocks(userIds, 0, () -> createGiftOrdersInsideLocks(commands));
+    }
+
+    /** 仅由已持有该用户积分锁的充值结算调用，加入现有事务而不嵌套加锁。 */
+    @Transactional(propagation = Propagation.MANDATORY, rollbackFor = Exception.class)
+    public GiftOrderResult createGiftOrderWithinUserLock(GiftCommand command) {
+        return createGiftOrdersInsideLocks(List.of(command));
     }
 
     /** 按维护者语义执行完整本地扣除。 */
@@ -171,6 +181,9 @@ public class PointCommandTransactionService {
             return DebitOutcome.mutated(toMutation(existing, true));
         }
 
+        if (mode == DebitMode.MAINTAINER) {
+            balanceSyncService.requireFreshBalanceForMaintainer(command.userId());
+        }
         PointAccountEntity account = ensureAccount(command.userId());
         int updated = updateAccount(account, command, mode);
         if (updated != 1) {

@@ -861,10 +861,7 @@ public class PortfolioConfigValidator {
      */
     private void validateCarousel(Long userId, PortfolioConfigDto.Component component) {
         List<Long> workIds = normalizeWorkIds(component, CAROUSEL_WORK_MAX_COUNT);
-        Map<Long, WorkEntity> workMap = loadUsableWorks(userId, workIds);
-        if (workMap.size() != workIds.size()) {
-            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
-        }
+        Map<Long, WorkEntity> workMap = requireUsableWorks(userId, workIds);
         boolean hasVideo = workMap.values().stream()
                 .anyMatch(work -> !MediaTypeDict.IMAGE.getCode().equals(work.getMediaType()));
         if (hasVideo) {
@@ -892,16 +889,16 @@ public class PortfolioConfigValidator {
             throw new BusinessException(PortfolioMessage.VIDEO_CAROUSEL_TITLE_LENGTH_MESSAGE);
         }
 
-        Map<Long, WorkEntity> workMap = loadUsableWorks(userId, workIds);
-        boolean allAvailableVideos = workMap.size() == workIds.size()
-                && workIds.stream().allMatch(workId -> {
-                    WorkEntity work = workMap.get(workId);
-                    return work != null
-                            && MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())
-                            && WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus());
-                });
-        if (!allAvailableVideos) {
-            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        Map<Long, WorkEntity> workMap = requireUsableWorks(userId, workIds);
+        for (Long workId : workIds) {
+            WorkEntity work = workMap.get(workId);
+            if (!MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())) {
+                throw new BusinessException(PortfolioMessage.VIDEO_CAROUSEL_VIDEO_ONLY_MESSAGE);
+            }
+            String auditError = workAuditError(work);
+            if (auditError != null) {
+                throw new BusinessException(auditError);
+            }
         }
 
         Map<String, Object> normalized = new LinkedHashMap<>();
@@ -935,7 +932,7 @@ public class PortfolioConfigValidator {
         for (Object item : collection) {
             Long workId = asExactLong(item);
             if (workId == null || workId <= 0L) {
-                throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+                throw new BusinessException(PortfolioMessage.WORK_REFERENCE_ID_INVALID_MESSAGE);
             }
             if (!uniqueIds.add(workId)) {
                 throw new BusinessException(PortfolioMessage.VIDEO_CAROUSEL_WORK_DUPLICATE_MESSAGE);
@@ -963,14 +960,11 @@ public class PortfolioConfigValidator {
                 .flatMap(group -> asLongList(group.get(CONFIG_KEY_WORK_IDS)).stream())
                 .distinct()
                 .toList();
-        Map<Long, WorkEntity> workMap = loadUsableWorks(userId, workIds);
-        if (workMap.size() != workIds.size()) {
-            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
-        }
+        Map<Long, WorkEntity> workMap = requireUsableWorks(userId, workIds);
         boolean hasUnsupportedMedia = workMap.values().stream()
                 .anyMatch(work -> !BULK_WORK_MEDIA_TYPES.contains(work.getMediaType()));
         if (hasUnsupportedMedia) {
-            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+            throw new BusinessException(PortfolioMessage.WORK_LIST_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
         }
         component.getConfig().put(CONFIG_KEY_GROUPS, groups);
         component.getConfig().put(CONFIG_KEY_COLUMNS, columns);
@@ -984,14 +978,20 @@ public class PortfolioConfigValidator {
      * @param component 组件
      */
     private void validateSingleWork(Long userId, PortfolioConfigDto.Component component) {
-        Long workId = asExactLong(component.getConfig().get(CONFIG_KEY_WORK_ID));
-        if (workId == null || workId <= 0L) {
-            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        Object rawWorkId = component.getConfig().get(CONFIG_KEY_WORK_ID);
+        Long workId = asExactLong(rawWorkId);
+        // 编辑器尚未选择作品时使用 0；缺省值同样按未选择处理。
+        if (rawWorkId == null || Long.valueOf(0L).equals(workId)
+                || rawWorkId instanceof String text && text.isBlank()) {
+            throw new BusinessException(PortfolioMessage.SINGLE_WORK_REQUIRED_MESSAGE);
         }
-        Map<Long, WorkEntity> workMap = loadUsableWorks(userId, List.of(workId));
+        if (workId == null || workId <= 0L) {
+            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_ID_INVALID_MESSAGE);
+        }
+        Map<Long, WorkEntity> workMap = requireUsableWorks(userId, List.of(workId));
         WorkEntity work = workMap.get(workId);
-        if (work == null || !SINGLE_WORK_MEDIA_TYPES.contains(work.getMediaType())) {
-            throw new BusinessException(PortfolioMessage.WORK_REFERENCE_INVALID_MESSAGE);
+        if (!SINGLE_WORK_MEDIA_TYPES.contains(work.getMediaType())) {
+            throw new BusinessException(PortfolioMessage.SINGLE_WORK_MEDIA_TYPE_UNSUPPORTED_MESSAGE);
         }
         Map<String, Object> normalizedConfig = new LinkedHashMap<>();
         normalizedConfig.put(CONFIG_KEY_WORK_ID, workId);
@@ -1280,6 +1280,37 @@ public class PortfolioConfigValidator {
      * @return 可用作品映射
      */
     private Map<Long, WorkEntity> loadUsableWorks(Long userId, List<Long> workIds) {
+        Map<Long, WorkEntity> result = loadReferencedWorks(workIds);
+        // 超链接与文字背景仍由各自组件返回既有文案。
+        result.values().removeIf(work -> workReferenceError(userId, work) != null);
+        return result;
+    }
+
+    /**
+     * 按引用顺序校验所有作品，保留失败原因而不是静默过滤。
+     *
+     * @param userId 当前用户 ID
+     * @param workIds 作品 ID 列表
+     * @return 全部可用的作品映射
+     */
+    private Map<Long, WorkEntity> requireUsableWorks(Long userId, List<Long> workIds) {
+        Map<Long, WorkEntity> result = loadReferencedWorks(workIds);
+        for (Long workId : workIds) {
+            String error = workReferenceError(userId, result.get(workId));
+            if (error != null) {
+                throw new BusinessException(error);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 批量读取被引用的作品，不提前过滤归属和状态，避免丢失校验原因。
+     *
+     * @param workIds 作品 ID 列表
+     * @return 实际查到的作品映射
+     */
+    private Map<Long, WorkEntity> loadReferencedWorks(List<Long> workIds) {
         List<WorkEntity> works = workIds.isEmpty()
                 ? List.of()
                 : safeList(workEntityMapper.selectBatchIds(workIds));
@@ -1292,19 +1323,50 @@ public class PortfolioConfigValidator {
             if (!requestedIds.contains(work.getId())) {
                 continue;
             }
-            if (!Objects.equals(userId, work.getUserId())) {
-                continue;
-            }
-            if (!WorkStatusDict.ACTIVE.getCode().equals(work.getStatus())) {
-                continue;
-            }
-            if (MediaTypeDict.ANIMATION.getCode().equals(work.getMediaType())
-                    && !WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus())) {
-                continue;
-            }
             result.put(work.getId(), work);
         }
         return result;
+    }
+
+    /**
+     * 按既有规则检查作品归属、处理状态和动图审核，返回具体错误原因。
+     *
+     * @param userId 当前用户 ID
+     * @param work 引用的作品；不存在或已逻辑删除时为空
+     * @return 错误文案，可用时为空
+     */
+    private String workReferenceError(Long userId, WorkEntity work) {
+        if (work == null) {
+            return PortfolioMessage.WORK_REFERENCE_NOT_FOUND_MESSAGE;
+        }
+        if (!Objects.equals(userId, work.getUserId())) {
+            return PortfolioMessage.WORK_REFERENCE_NOT_OWNED_MESSAGE;
+        }
+        if (WorkStatusDict.PROCESSING.getCode().equals(work.getStatus())) {
+            return PortfolioMessage.WORK_REFERENCE_PROCESSING_MESSAGE;
+        }
+        if (WorkStatusDict.PROCESSING_FAILED.getCode().equals(work.getStatus())) {
+            return PortfolioMessage.WORK_REFERENCE_PROCESSING_FAILED_MESSAGE;
+        }
+        if (!WorkStatusDict.ACTIVE.getCode().equals(work.getStatus())) {
+            return PortfolioMessage.WORK_REFERENCE_STATUS_INVALID_MESSAGE;
+        }
+        return MediaTypeDict.ANIMATION.getCode().equals(work.getMediaType()) ? workAuditError(work) : null;
+    }
+
+    /**
+     * 为需要审核的作品区分未审核、审核中及审核失败等状态。
+     *
+     * @param work 引用的作品
+     * @return 错误文案，审核通过时为空
+     */
+    private String workAuditError(WorkEntity work) {
+        WorkAuditStatusDict status = WorkAuditStatusDict.fromCode(work.getAuditStatus());
+        if (status == WorkAuditStatusDict.PASSED) {
+            return null;
+        }
+        return status == null ? PortfolioMessage.WORK_REFERENCE_AUDIT_NOT_PASSED_MESSAGE
+                : String.format(PortfolioMessage.WORK_REFERENCE_AUDIT_STATUS_TEMPLATE, status.getDisplayName());
     }
 
     /**

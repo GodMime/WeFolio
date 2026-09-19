@@ -19,12 +19,14 @@ const {
   createChooseCoverImageOptions,
   createChooseMediaOptions,
   classifyChosenMediaFiles,
+  measureChosenMediaFiles,
+  prepareWorkMainFiles,
+  releasePreparedWorkFiles,
   enrichVideoFileMetadata,
   normalizeChosenMediaFiles,
   readAudioDuration,
   prepareLocalCoverUploadFile,
   prepareCoverUploadFiles,
-  prepareStaticImageMainFiles,
   runWorkUploadQueue,
   validateChosenMediaFiles
 } = require('../pages/works/utils/work-upload')
@@ -268,7 +270,7 @@ test('后续 WebP 段读取失败时沿用单文件回退并继续分类其它�
   ])
 })
 
-test('does not read or compress GIF and WebP candidates at or above 32MB', async () => {
+test('does not read or compress GIF candidates at or above 32MB', async () => {
   let readCount = 0
   const wxApi = {
     getFileSystemManager() {
@@ -282,7 +284,7 @@ test('does not read or compress GIF and WebP candidates at or above 32MB', async
       assert.fail('oversized animation candidate must not be compressed')
     }
   }
-  for (const extension of ['gif', 'webp']) {
+  for (const extension of ['gif']) {
     for (const size of [32 * 1024 * 1024, 32 * 1024 * 1024 + 1]) {
       const files = normalizeChosenMediaFiles([
         {
@@ -303,49 +305,6 @@ test('does not read or compress GIF and WebP candidates at or above 32MB', async
   assert.equal(readCount, 0)
 })
 
-test('compresses oversized static image with independent main-image attempts', async () => {
-  const compressCalls = []
-  const sizes = {
-    'wxfile://tmp/large.jpg': IMAGE_MAX_BYTES + 1,
-    'wxfile://tmp/main-compressed.jpg': IMAGE_MAX_BYTES - 1
-  }
-  const wxApi = {
-    getFileSystemManager() {
-      return {
-        statSync(filePath) {
-          return { size: sizes[filePath] }
-        }
-      }
-    },
-    compressImage(options) {
-      compressCalls.push(options)
-      options.success({ tempFilePath: 'wxfile://tmp/main-compressed.jpg' })
-    },
-    getImageInfo(options) {
-      options.success({ width: 1600, height: 900 })
-    }
-  }
-  const [file] = await prepareStaticImageMainFiles([
-    {
-      tempFilePath: 'wxfile://tmp/large.jpg',
-      mediaType: 'IMAGE',
-      size: IMAGE_MAX_BYTES + 1,
-      sha256: 'old'
-    }
-  ], {
-    wxApi,
-    calculateSha256: async () => 'new-sha'
-  })
-
-  assert.equal(file.tempFilePath, 'wxfile://tmp/main-compressed.jpg')
-  assert.equal(file.size, IMAGE_MAX_BYTES - 1)
-  assert.equal(file.width, 1600)
-  assert.equal(file.height, 900)
-  assert.equal(file.sha256, 'new-sha')
-  assert.equal(compressCalls[0].quality, 90)
-  assert.equal(compressCalls[0].compressedWidth, 2048)
-})
-
 test('cover image picker only allows one album image', () => {
   assert.deepEqual(createChooseCoverImageOptions(), {
     count: 1,
@@ -363,10 +322,11 @@ test('builds simplified aspect ratio from positive dimensions', () => {
   assert.equal(buildAspectRatio('bad', 1000), '')
 })
 
-test('normalizes chosen media files with default titles and media types', () => {
+test('normalizes chosen media files with original titles and media types', () => {
   const files = normalizeChosenMediaFiles([
     {
       tempFilePath: 'wxfile://tmp/photo.jpg',
+      name: 'photo.jpg',
       size: 1024,
       fileType: 'image',
       width: 1200,
@@ -395,6 +355,7 @@ test('truncates default titles from long file names to thirty characters', () =>
   const files = normalizeChosenMediaFiles([
     {
       tempFilePath: `wxfile://tmp/${longStem}.jpg`,
+      name: `${longStem}.jpg`,
       size: 1024,
       fileType: 'image'
     }
@@ -1122,4 +1083,436 @@ test('runs image uploads with concurrency two and video uploads serially', async
   assert.equal(maxByType.VIDEO, 1)
   assert.equal(maxByType.ANIMATION, 2)
   assert.deepEqual(order.filter((id) => id.startsWith('v')), ['v1', 'v2'])
+})
+
+
+// 仅读取容器头，避免测试自身分配大图片；错误段长不能获得静态确认。
+function webpFixture(chunks) {
+  const encoded = chunks.map(([type, payload]) => {
+    const part = Buffer.alloc(8 + payload.length + payload.length % 2)
+    part.write(type, 0)
+    part.writeUInt32LE(payload.length, 4)
+    payload.copy(part, 8)
+    return part
+  })
+  const body = Buffer.concat(encoded)
+  const header = Buffer.alloc(12)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(body.length + 4, 4)
+  header.write('WEBP', 8)
+  return Buffer.concat([header, body])
+}
+
+function classifiedWebpFixture(source, extra = {}) {
+  const reads = []
+  const wxApi = {
+    getImageInfo() { assert.fail('分类不能解码') },
+    compressImage() { assert.fail('分类不能编码') },
+    getFileSystemManager() {
+      return {
+        statSync() { return { size: extra.size || source.length } },
+        readFile(args) {
+          reads.push([args.position, args.length])
+          assert.ok(Number.isInteger(args.position) && args.position >= 0)
+          assert.ok(args.length > 0 && args.length <= 21)
+          const data = source.subarray(args.position, args.position + args.length)
+          args.success({ data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) })
+        }
+      }
+    }
+  }
+  const file = { clientId: 'webp', mediaType: 'IMAGE', tempFilePath: 'wxfile://source.webp',
+    fileName: 'source.webp', mimeType: 'image/webp', size: source.length, ...extra }
+  return { file, wxApi, reads }
+}
+
+test('实测大小修正仅清主SHA，保留两种封面指纹，stat失败不回退picker', () => {
+  const file = { mediaType: 'IMAGE', tempFilePath: 'source', size: 1, sha256: 'old',
+    coverSha256: 'cover', customCoverPath: 'custom', customCoverSha256: 'custom-sha' }
+  const wxApi = { getFileSystemManager: () => ({ statSync: () => ({ size: 2 }) }) }
+  const [result] = measureChosenMediaFiles([file], { wxApi })
+  assert.deepEqual(result, { ...file, size: 2, sha256: '' })
+  assert.equal(file.size, 1)
+  for (const size of [undefined, NaN, -1, 1.5]) {
+    assert.throws(() => measureChosenMediaFiles([file], {
+      wxApi: { getFileSystemManager: () => ({ statSync: () => ({ size }) }) }
+    }), /无法读取作品文件大小/)
+  }
+})
+
+test('大静态WebP有界分类且stat覆盖picker少报大小', async () => {
+  const size = 32 * 1024 * 1024 + 10
+  const header = Buffer.alloc(21)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(size - 8, 4)
+  header.write('WEBP', 8)
+  header.write('VP8 ', 12)
+  header.writeUInt32LE(size - 20, 16)
+  const { file, wxApi, reads } = classifiedWebpFixture(header, { size })
+  const [measured] = measureChosenMediaFiles([{ ...file, size: 100, sha256: 'old' }], { wxApi })
+  const [result] = await classifyChosenMediaFiles([measured], { wxApi })
+  assert.equal(result.size, size)
+  assert.equal(result.sha256, '')
+  assert.equal(result.mediaType, 'IMAGE')
+  assert.equal(result.staticImageVerified, true)
+  assert.equal(result.webpAlpha, 'opaque')
+  assert.ok(reads.reduce((n, read) => n + read[1], 0) <= 64 * 1024)
+  header.writeUInt32LE(size + 1, 16)
+  await assert.rejects(classifyChosenMediaFiles([measured], { wxApi }), /无法确认.*WebP.*JPEG.*PNG.*GIF/)
+})
+
+test('WebP透明标志区别EXIF且VP8L提示不能证明不透明', async () => {
+  const vp8x = flag => { const bytes = Buffer.alloc(10); bytes[0] = flag; return bytes }
+  const vp8l = hint => Buffer.from([0x2f, 0, 0, 0, hint ? 0x10 : 0])
+  const cases = [
+    { chunks: [['VP8 ', Buffer.from([1, 2])]], alpha: 'opaque', hint: null },
+    { chunks: [['VP8X', vp8x(0x10)], ['ALPH', Buffer.from([0, 1])], ['VP8 ', Buffer.from([1, 2])]], alpha: 'present', hint: null },
+    { chunks: [['VP8X', vp8x(0x08)], ['VP8 ', Buffer.from([1, 2])], ['EXIF', Buffer.from([1, 2])]], alpha: 'opaque', hint: null },
+    { chunks: [['VP8L', vp8l(false)]], alpha: 'unknown', hint: false },
+    { chunks: [['VP8L', vp8l(true)]], alpha: 'present', hint: true },
+    { chunks: [['VP8X', vp8x(0)], ['ALPH', Buffer.from([0, 1])], ['VP8 ', Buffer.from([1, 2])]], alpha: 'unknown', hint: null }
+  ]
+  for (const { chunks, alpha, hint } of cases) {
+    const { file, wxApi } = classifiedWebpFixture(webpFixture(chunks))
+    const [result] = await classifyChosenMediaFiles([file], { wxApi })
+    assert.equal(result.staticImageVerified, true)
+    assert.equal(result.webpAlpha, alpha)
+    assert.equal(result.webpAlphaHint, hint)
+  }
+})
+
+test('空容器、只有元数据、坏VP8L不能确认为静态WebP', async () => {
+  for (const chunks of [[], [['EXIF', Buffer.from([0, 0])]], [['VP8L', Buffer.from([0, 0, 0, 0, 0])]]]) {
+    const { file, wxApi } = classifiedWebpFixture(webpFixture(chunks))
+    const [result] = await classifyChosenMediaFiles([file], { wxApi })
+    assert.notEqual(result.staticImageVerified, true)
+  }
+})
+
+test('WebP扫描最多1024段，不读整文件，不把未扫描结束当静态', async () => {
+  const chunks = Array.from({ length: 1024 }, () => ['EXIF', Buffer.alloc(0)])
+  chunks.push(['VP8 ', Buffer.from([1, 2])])
+  const { file, wxApi, reads } = classifiedWebpFixture(webpFixture(chunks))
+  const [result] = await classifyChosenMediaFiles([file], { wxApi })
+  assert.notEqual(result.staticImageVerified, true)
+  assert.equal(reads.length, 1024)
+  assert.ok(reads.reduce((n, read) => n + read[1], 0) <= 64 * 1024)
+})
+
+test('超过32MB但达到扫描上限的WebP不能误报为动图超限', async () => {
+  const size = 33 * 1024 * 1024
+  const chunks = Array.from({ length: 1024 }, () => ['JUNK', Buffer.alloc(0)])
+  chunks.push(['VP8 ', Buffer.from([1, 2])])
+  const source = webpFixture(chunks)
+  source.writeUInt32LE(size - 8, 4)
+  const { file, wxApi, reads } = classifiedWebpFixture(source, { size })
+
+  await assert.rejects(classifyChosenMediaFiles([file], { wxApi }), /无法确认.*WebP.*JPEG.*PNG.*GIF/)
+  assert.equal(reads.length, 1024)
+})
+
+test('超限WebP无法完整识别时提示转换格式，未超限仍原样保留', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  for (const size of [9 * 1024 * 1024, 11 * 1024 * 1024]) {
+    const source = webpFixture(Array.from({ length: 1024 }, () => ['JUNK', Buffer.alloc(0)]).concat([['ANIM', Buffer.alloc(6)]]))
+    source.writeUInt32LE(size - 8, 4)
+    const { file, wxApi } = classifiedWebpFixture(source, { size })
+    wxApi.getImageInfo = args => args.success({ width: 1920, height: 1080, type: 'webp' })
+    const session = createCompressionSession({ wxApi, protectedPaths: [file.tempFilePath] })
+    const files = await classifyChosenMediaFiles([file], { wxApi, session })
+    assert.equal(files[0].staticImageVerified, false)
+    if (size > IMAGE_MAX_BYTES) {
+      await assert.rejects(prepareWorkMainFiles(files, { wxApi, session }), /无法确认.*WebP.*JPEG.*PNG.*GIF/)
+    } else {
+      const result = await prepareWorkMainFiles(files, { wxApi, session })
+      assert.equal(result.files[0].tempFilePath, file.tempFilePath)
+      assert.equal(result.files[0].size, size)
+      assert.equal(result.files[0].mediaType, 'IMAGE')
+    }
+    session.dispose()
+  }
+})
+
+test('超10MB且带标准动画标志的WebP仍按动图原样处理', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  const flags = Buffer.alloc(10); flags[0] = 2
+  const source = webpFixture([['VP8X', flags], ['ANIM', Buffer.alloc(6)]])
+  const size = 11 * 1024 * 1024
+  source.writeUInt32LE(size - 8, 4)
+  const { file, wxApi, reads } = classifiedWebpFixture(source, { size })
+  const session = createCompressionSession({ wxApi })
+  const files = await classifyChosenMediaFiles([file], { wxApi, session })
+  const result = await prepareWorkMainFiles(files, { wxApi, session })
+  assert.equal(result.files[0].mediaType, 'ANIMATION')
+  assert.equal(result.files[0].tempFilePath, file.tempFilePath)
+  assert.equal(reads.length, 1)
+  session.dispose()
+})
+
+
+function preparationFixture({ failSecond = false, invalidSecond = false, sizes = null } = {}) {
+  const calls = []
+  const removed = []
+  const files = [0, 1].map(index => ({ clientId: `file-${index}`, mediaType: 'IMAGE',
+    tempFilePath: `wxfile://source-${index}`, fileName: `图片${index}.jpeg`, title: `图片${index}`,
+    mimeType: 'image/jpeg', size: IMAGE_MAX_BYTES + 1, width: 6000, height: 4000, sha256: 'old' }))
+  if (invalidSecond) Object.assign(files[1], { mediaType: 'VIDEO', size: VIDEO_MAX_BYTES + 1 })
+  const wxApi = {
+    getImageInfo(args) { args.success({ width: 6000, height: 4000, type: 'jpeg' }) },
+    getVideoInfo(args) { args.success({ width: 1920, height: 1080, duration: 601, fps: 30, type: 'mp4' }) },
+    compressImage(args) {
+      calls.push(args)
+      if (failSecond && args.src.endsWith('-1')) args.fail({ errMsg: 'encoder failed' })
+      else args.success({ tempFilePath: args.src.replace('source', 'output') })
+    },
+    compressVideo() { assert.fail('时长超限不能编码') },
+    getFileSystemManager() {
+      return {
+        statSync(path) { return { size: sizes && Object.hasOwn(sizes, path) ? sizes[path]
+          : path.includes('source') ? IMAGE_MAX_BYTES + 1 : Math.floor(IMAGE_MAX_BYTES * 0.98) } },
+        unlinkSync(path) { removed.push(path) },
+        readFile() { assert.fail('预处理不读SHA') }
+      }
+    }
+  }
+  return { files, wxApi, calls, removed }
+}
+
+test('统一预处理全批预检，第二个视频过长时第一项编码为零', async () => {
+  const { files, wxApi, calls } = preparationFixture({ invalidSecond: true })
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  const session = createCompressionSession({ wxApi, protectedPaths: files.map(file => file.tempFilePath) })
+  await assert.rejects(prepareWorkMainFiles(files, { wxApi, session }), /视频作品不能超过 10 分钟/)
+  assert.equal(calls.length, 0)
+  session.dispose()
+})
+
+test('统一预处理运行期第二项失败清理首项，重选重新编码', async () => {
+  const { files, wxApi, calls, removed } = preparationFixture({ failSecond: true })
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const session = createCompressionSession({ wxApi, protectedPaths: files.map(file => file.tempFilePath) })
+    await assert.rejects(prepareWorkMainFiles(files, { wxApi, session }))
+    assert.equal(calls.length, (attempt + 1) * 2)
+    assert.deepEqual(removed, Array(attempt + 1).fill('wxfile://output-0'))
+  }
+})
+
+test('统一预处理转移生成文件所有权，摘要复用格式器且票据只发既有字段', async () => {
+  const { files, wxApi, calls, removed } = preparationFixture()
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  const session = createCompressionSession({ wxApi, protectedPaths: files.map(file => file.tempFilePath) })
+  const progress = []
+  const result = await prepareWorkMainFiles(files, { wxApi, session, onProgress: event => progress.push(event) })
+  session.dispose()
+  assert.deepEqual(removed, [])
+  assert.equal(calls.length, 2)
+  assert.equal(result.files[0].compressionText, '已压缩：10.0MB → 9.8MB')
+  assert.equal(result.files[0].sha256, '')
+  assert.deepEqual(result.ownedPathsByClientId, { 'file-0': ['wxfile://output-0'], 'file-1': ['wxfile://output-1'] })
+  assert.deepEqual(progress.map(event => [event.index, event.total, event.stage]),
+    [[1, 2, 'reading'], [1, 2, 'compressing'], [2, 2, 'reading'], [2, 2, 'compressing']])
+  const item = buildUploadTicketPayload([{ ...result.files[0], staticImageVerified: true, webpAlpha: 'opaque' }]).files[0]
+  assert.deepEqual(Object.keys(item).sort(), ['clientId', 'mediaType', 'fileName', 'mimeType', 'fileSize', 'durationMs', 'width', 'height', 'idempotencyKey'].sort())
+  assert.equal(item.fileSize, Math.floor(IMAGE_MAX_BYTES * 0.98))
+  assert.equal(item.fileName, '图片0.jpg')
+  assert.equal(item.mimeType, 'image/jpeg')
+  releasePreparedWorkFiles({ wxApi, ownedPathsByClientId: result.ownedPathsByClientId, clientIds: ['file-0'] })
+  assert.deepEqual(removed, ['wxfile://output-0'])
+})
+
+test('未超限图片只读大小，无压缩API也通过且不转移原片', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  for (const size of [IMAGE_MAX_BYTES - 1, IMAGE_MAX_BYTES]) {
+    const file = { clientId: 'small', mediaType: 'IMAGE', tempFilePath: 'source', size, sha256: 'same', coverSha256: 'cover' }
+    const wxApi = { getFileSystemManager: () => ({ statSync: () => ({ size }) }) }
+    const session = createCompressionSession({ wxApi, protectedPaths: ['source'] })
+    const result = await prepareWorkMainFiles([file], { wxApi, session })
+    assert.equal(result.files[0].tempFilePath, 'source')
+    assert.equal(result.files[0].sha256, 'same')
+    assert.equal(result.files[0].coverSha256, 'cover')
+    assert.equal(result.files[0].compressionText, '')
+    assert.deepEqual(result.ownedPathsByClientId, { small: [] })
+    session.dispose()
+  }
+})
+
+test('统一预处理拒绝空文件，音频动图沿用既有规则且不编码', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  const wxApi = { getFileSystemManager: () => ({ statSync: () => ({ size: 1024 }) }) }
+  const session = createCompressionSession({ wxApi })
+  const files = [
+    { clientId: 'audio', mediaType: 'AUDIO', fileName: 'audio.mp3', tempFilePath: 'audio', size: 1024, durationMs: 5000 },
+    { clientId: 'gif', mediaType: 'ANIMATION', tempFilePath: 'gif', size: 1024 }
+  ]
+  const result = await prepareWorkMainFiles(files, { wxApi, session })
+  assert.deepEqual(result.files.map(file => file.tempFilePath), ['audio', 'gif'])
+  assert.deepEqual(result.ownedPathsByClientId, { audio: [], gif: [] })
+  await assert.rejects(prepareWorkMainFiles([{ ...files[1], size: 0 }], { wxApi, session }), /文件不能为空/)
+})
+
+test('大WebP区分已识别动画与短读读取失败，始终不解码未知文件', async () => {
+  const size = 32 * 1024 * 1024
+  for (const mode of ['dynamic', 'short', 'failure']) {
+    const header = Buffer.alloc(21)
+    header.write('RIFF', 0)
+    header.writeUInt32LE(size - 8, 4)
+    header.write('WEBP', 8)
+    header.write('VP8X', 12)
+    header.writeUInt32LE(10, 16)
+    header[20] = 0x02
+    let reads = 0
+    const wxApi = { getFileSystemManager: () => ({
+      readFile(args) {
+        reads++
+        assert.ok(args.length <= 21)
+        if (mode === 'failure') args.fail({ errMsg: 'read failed' })
+        else args.success({ data: mode === 'short' ? new ArrayBuffer(1)
+          : header.buffer.slice(header.byteOffset, header.byteOffset + header.byteLength) })
+      }
+    }), getImageInfo() { assert.fail('大WebP不得解码') } }
+    await assert.rejects(classifyChosenMediaFiles([{ mediaType: 'IMAGE', fileName: 'big.webp',
+      tempFilePath: 'big', size }], { wxApi }), mode === 'dynamic'
+      ? /动图作品必须小于 32MB/ : /无法确认.*WebP.*JPEG.*PNG.*GIF/)
+    assert.equal(reads, 1)
+  }
+})
+
+test('实测比picker更小的大GIF按真实大小分类', async () => {
+  let reads = 0
+  const wxApi = { getFileSystemManager: () => ({
+    statSync: () => ({ size: 6 }),
+    readFile(args) { reads++; args.success({ data: Uint8Array.from(Buffer.from('GIF89a')).buffer }) }
+  }) }
+  const files = measureChosenMediaFiles([{ mediaType: 'IMAGE', fileName: 'source.gif',
+    tempFilePath: 'source', size: 40 * 1024 * 1024 }], { wxApi })
+  const [result] = await classifyChosenMediaFiles(files, { wxApi })
+  assert.equal(result.mediaType, 'ANIMATION')
+  assert.equal(result.size, 6)
+  assert.equal(reads, 1)
+})
+
+test('WebP有界读取取消/超时不被分类回退吞掉', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] })
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  for (const mode of ['cancel', 'timeout']) {
+    let callback
+    const wxApi = { getFileSystemManager: () => ({ readFile(args) { callback = args } }) }
+    const session = createCompressionSession({ wxApi })
+    const pending = classifyChosenMediaFiles([{ mediaType: 'IMAGE', fileName: 'source.webp',
+      tempFilePath: 'source', size: 1024 }], { wxApi, session })
+    const rejection = assert.rejects(pending, { code: mode === 'cancel' ? 'MEDIA_COMPRESSION_CANCELLED' : 'MEDIA_COMPRESSION_TIMEOUT' })
+    if (mode === 'cancel') session.cancel()
+    else t.mock.timers.tick(10000)
+    await rejection
+    callback.success({ data: new ArrayBuffer(0) })
+    session.dispose()
+  }
+})
+
+test('超限预检缺失元数据使用明确提示且不开始编码', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  for (const mediaType of ['IMAGE', 'VIDEO']) {
+    const wxApi = {
+      getImageInfo(args) { args.success(null) },
+      getVideoInfo(args) { args.success(null) },
+      compressImage() { assert.fail('不得编码') },
+      compressVideo() { assert.fail('不得编码') }
+    }
+    const session = createCompressionSession({ wxApi })
+    await assert.rejects(prepareWorkMainFiles([{ clientId: 'bad', mediaType,
+      tempFilePath: 'source', size: VIDEO_MAX_BYTES + 1 }], { wxApi, session }), /无法读取.*信息|图片处理失败/)
+  }
+})
+
+test('真实视频预处理显示实测原大小到最终大小摘要且不泄露到票据', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  const sourceSize = 120 * 1024 * 1024
+  const finalSize = 97 * 1024 * 1024
+  const wxApi = {
+    getVideoInfo(args) { args.success({ width: 1920, height: 1080, duration: 60, fps: 30, bitrate: 18000, type: 'mp4' }) },
+    compressVideo(args) { args.success({ tempFilePath: 'wxfile://video-result' }) },
+    getFileSystemManager() { return {
+      statSync(path) { return { size: path === 'wxfile://video-source' ? sourceSize : finalSize } },
+      unlinkSync() {}
+    } }
+  }
+  const session = createCompressionSession({ wxApi, protectedPaths: ['wxfile://video-source'] })
+  const result = await prepareWorkMainFiles([{ clientId: 'video', mediaType: 'VIDEO',
+    tempFilePath: 'wxfile://video-source', fileName: '演出.mov', size: VIDEO_MAX_BYTES + 1 }], { wxApi, session })
+  assert.equal(result.files[0].compressed, true)
+  assert.equal(result.files[0].originalSize, sourceSize)
+  assert.equal(result.files[0].compressionText, '已压缩：120.0MB → 97.0MB')
+  const item = buildUploadTicketPayload(result.files).files[0]
+  assert.equal(item.fileSize, finalSize)
+  assert.equal(Object.hasOwn(item, 'compressed'), false)
+  assert.equal(Object.hasOwn(item, 'originalSize'), false)
+  assert.equal(Object.hasOwn(item, 'compressionText'), false)
+  releasePreparedWorkFiles({ wxApi, ownedPathsByClientId: result.ownedPathsByClientId })
+  session.dispose()
+})
+
+test('未超限视频保留picker元数据且不新增getVideoInfo或压缩能力门槛', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  for (const statSize of [1024, VIDEO_MAX_BYTES]) {
+    const wxApi = { getFileSystemManager: () => ({ statSync: () => ({ size: statSize }) }) }
+    const file = { clientId: 'small-video', mediaType: 'VIDEO', tempFilePath: 'source',
+      fileName: 'source.mov', mimeType: 'video/quicktime', size: 1024, sha256: 'old',
+      width: 1920, height: 1080, durationMs: 60000, coverSha256: 'cover' }
+    const session = createCompressionSession({ wxApi, protectedPaths: ['source'] })
+    const result = await prepareWorkMainFiles([file], { wxApi, session })
+    assert.equal(result.files[0].tempFilePath, 'source')
+    assert.equal(result.files[0].size, statSize)
+    assert.equal(result.files[0].sha256, statSize === file.size ? 'old' : '')
+    assert.equal(result.files[0].coverSha256, 'cover')
+    assert.equal(result.files[0].durationMs, 60000)
+    assert.equal(result.files[0].compressionText, '')
+    assert.deepEqual(result.ownedPathsByClientId, { 'small-video': [] })
+    session.dispose()
+  }
+})
+
+test('大视频预检接受数字字符串且复用已读取的源信息完成压缩', async () => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  const infoPaths = []
+  const wxApi = {
+    getVideoInfo(args) {
+      infoPaths.push(args.src)
+      args.success({ width: '1920', height: '1080', duration: '60', fps: 30, bitrate: 18000, type: 'mp4' })
+    },
+    compressVideo(args) { args.success({ tempFilePath: 'wxfile://result' }) },
+    getFileSystemManager() { return {
+      statSync(path) { return { size: path === 'wxfile://source' ? VIDEO_MAX_BYTES + 1 : 97 * 1024 * 1024 } },
+      unlinkSync() {}
+    } }
+  }
+  const session = createCompressionSession({ wxApi, protectedPaths: ['wxfile://source'] })
+  let result
+  try {
+    result = await prepareWorkMainFiles([{ clientId: 'video', mediaType: 'VIDEO',
+      tempFilePath: 'wxfile://source', fileName: '演出.mov', size: VIDEO_MAX_BYTES + 1 }], { wxApi, session })
+    assert.equal(result.files[0].compressed, true)
+    assert.equal(result.files[0].durationMs, 60000)
+    assert.deepEqual(infoPaths, ['wxfile://source', 'wxfile://result'])
+    assert.equal(buildUploadTicketPayload(result.files).files[0].fileSize, 97 * 1024 * 1024)
+  } finally {
+    if (result) releasePreparedWorkFiles({ wxApi, ownedPathsByClientId: result.ownedPathsByClientId })
+    session.dispose()
+  }
+})
+
+test('原生时长缺失时仍拒绝选择器返回的任何真实超十分钟视频', async (t) => {
+  const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
+  for (const duration of [600.0001, 600.001, 601]) {
+    await t.test(String(duration), async () => {
+      const files = normalizeChosenMediaFiles([{ tempFilePath: 'wxfile://source', fileType: 'video',
+        size: VIDEO_MAX_BYTES + 1, width: 1920, height: 1080, duration }])
+      const wxApi = {
+        getVideoInfo(args) { args.success({ width: 1920, height: 1080, duration: 0 }) },
+        compressVideo() { assert.fail('超时长视频不得编码') }
+      }
+      const session = createCompressionSession({ wxApi })
+      await assert.rejects(prepareWorkMainFiles(files, { wxApi, session }), /视频作品不能超过 10 分钟/)
+    })
+  }
 })

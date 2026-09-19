@@ -17,6 +17,7 @@
 }
 
 .feedback-footer {
+  align-items: center;
   flex: none;
   display: flex;
   justify-content: center;
@@ -25,9 +26,14 @@
   box-sizing: border-box;
 }
 
-.history-action {
+.feedback-footer .history-action {
+  /* 两个类名的优先级高于 style v2 的 button:not([size=mini])，避免默认宽度和自动外边距撑开入口。 */
+  width: 192rpx;
   min-width: 160rpx;
-  height: 64rpx;
+  height: 88rpx;
+  flex: none;
+  margin: 0;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -264,4 +270,10 @@
 .skeleton-panel {
   height: 590rpx;
   background: #e9ecef;
+}
+
+.footer-divider {
+  flex: none;
+  color: #ced4da;
+  font-size: 24rpx;
 }

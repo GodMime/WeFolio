@@ -42,21 +42,33 @@ import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioReferenceGuardService;
+import com.jxc.wefolio.service.teamportfolio.LocalPortfolioReferenceMutex;
+import com.jxc.wefolio.service.teamportfolio.PortfolioReferenceMutex;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -570,6 +582,139 @@ class MineTeamMemberChangeFeatureTest {
         verify(teamPortfolioReferenceGuardService).assertMemberCanLeave(100L, 8L);
     }
 
+    /** 引用写入先取得锁时，成员操作必须等其提交后才首次读取，并拒绝留下失效引用。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void memberMutationWaitsForReferenceCommitBeforeReading(boolean remove) throws Exception {
+        TeamMemberEntity target = prepareMemberMutation(remove);
+        if (remove) {
+            doThrow(new BusinessException("成员内容仍被引用"))
+                    .when(teamPortfolioReferenceGuardService).assertMemberCanLeave(100L, target.getUserId());
+        } else {
+            doThrow(new BusinessException("成员内容仍被引用"))
+                    .when(teamPortfolioReferenceGuardService)
+                    .assertMemberPermissionsCanChange(100L, target.getUserId(), true, false);
+        }
+        LocalPortfolioReferenceMutex mutex = new LocalPortfolioReferenceMutex();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CountDownLatch mutationStarted = new CountDownLatch(1);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            // 模拟团队作品集已完成引用写入，但数据库事务尚未提交。
+            mutex.execute(() -> null);
+            Future<?> mutation = executor.submit(() -> {
+                mutationStarted.countDown();
+                return mutateMember(remove, mutex);
+            });
+            assertThat(mutationStarted.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(() -> mutation.get(100, TimeUnit.MILLISECONDS))
+                    .isInstanceOf(TimeoutException.class);
+            verifyNoInteractions(teamEntityMapper, teamMemberEntityMapper,
+                    teamMemberChangeRequestEntityMapper, teamPortfolioReferenceGuardService);
+
+            completeReferenceTransaction(TransactionSynchronization.STATUS_COMMITTED);
+
+            assertThatThrownBy(() -> mutation.get(1, TimeUnit.SECONDS))
+                    .hasRootCauseInstanceOf(BusinessException.class)
+                    .hasRootCauseMessage("成员内容仍被引用");
+            verify(teamMemberEntityMapper, never()).update(any(TeamMemberEntity.class), any(Wrapper.class));
+        } finally {
+            completeReferenceTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+            executor.shutdownNow();
+        }
+    }
+
+    /** 成员操作先取得锁时，后续引用写入必须等成员事务提交后再读取最新成员和授权状态。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void memberMutationKeepsReferenceMutexUntilCommit(boolean remove) throws Exception {
+        TeamMemberEntity target = prepareMemberMutation(remove);
+        when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class)))
+                .thenAnswer(invocation -> {
+                    if (!remove) {
+                        target.setAllowPortfolio(0);
+                    }
+                    return 1;
+                });
+        if (remove) {
+            when(teamMemberEntityMapper.selectList(any())).thenReturn(List.of());
+            when(teamMemberChangeRequestEntityMapper.selectList(any())).thenReturn(List.of());
+        } else {
+            when(teamMemberChangeRequestEntityMapper.update(
+                    any(TeamMemberChangeRequestEntity.class), any(Wrapper.class))).thenReturn(1);
+            when(userEntityMapper.selectBatchIds(any(Collection.class))).thenReturn(List.of());
+        }
+        LocalPortfolioReferenceMutex mutex = new LocalPortfolioReferenceMutex();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CountDownLatch referenceStarted = new CountDownLatch(1);
+        CountDownLatch referenceEntered = new CountDownLatch(1);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            mutateMember(remove, mutex);
+            Future<Boolean> canReference = executor.submit(() -> {
+                referenceStarted.countDown();
+                return mutex.execute(() -> {
+                    referenceEntered.countDown();
+                    return JoinStatusDict.JOINED.getCode().equals(target.getJoinStatus())
+                            && Integer.valueOf(1).equals(target.getAllowPortfolio());
+                });
+            });
+            assertThat(referenceStarted.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(referenceEntered.await(100, TimeUnit.MILLISECONDS)).isFalse();
+
+            completeReferenceTransaction(TransactionSynchronization.STATUS_COMMITTED);
+
+            assertThat(canReference.get(1, TimeUnit.SECONDS)).isFalse();
+        } finally {
+            completeReferenceTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+            executor.shutdownNow();
+        }
+    }
+
+    /** 为成员移除或撤销作品集授权准备共同的成员读取。 */
+    private TeamMemberEntity prepareMemberMutation(boolean remove) {
+        TeamMemberEntity target = member(31L, 8L, TeamRoleDict.MEMBER);
+        when(teamEntityMapper.selectById(100L)).thenReturn(team());
+        when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
+        if (remove) {
+            when(teamMemberEntityMapper.selectOne(any()))
+                    .thenReturn(member(21L, 7L, TeamRoleDict.OWNER));
+        } else {
+            when(teamMemberChangeRequestEntityMapper.selectById(41L))
+                    .thenReturn(changeRequest(41L, target));
+        }
+        return target;
+    }
+
+    /** 在当前线程使用对应身份执行成员移除或授权撤销。 */
+    private Object mutateMember(boolean remove, PortfolioReferenceMutex mutex) {
+        AuthContextHolder.set(new AuthContext(remove ? 7L : 8L, "test-member-mutation"));
+        try {
+            if (remove) {
+                MineTeamMemberRemoveRequest request = new MineTeamMemberRemoveRequest();
+                request.setTeamId(100L);
+                request.setMemberId(31L);
+                return service(mutex).removeMember(request);
+            }
+            MineTeamMemberChangeDetailRequest request = new MineTeamMemberChangeDetailRequest();
+            request.setChangeRequestId(41L);
+            return service(mutex).acceptMemberChangeRequest(request);
+        } finally {
+            AuthContextHolder.clear();
+        }
+    }
+
+    /** 模拟事务提交或回滚回调，并保证测试线程不遗留事务同步状态。 */
+    private void completeReferenceTransaction(int status) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        List<TransactionSynchronization> synchronizations =
+                TransactionSynchronizationManager.getSynchronizations();
+        TransactionSynchronizationManager.clearSynchronization();
+        synchronizations.forEach(synchronization -> synchronization.afterCompletion(status));
+    }
+
     private void assertTransactional(String methodName, Class<?> parameterType) throws NoSuchMethodException {
         Method method = MineTeamService.class.getMethod(methodName, parameterType);
         Transactional transactional = method.getAnnotation(Transactional.class);
@@ -578,6 +723,11 @@ class MineTeamMemberChangeFeatureTest {
     }
 
     private MineTeamService service() {
+        return service(new LocalPortfolioReferenceMutex());
+    }
+
+    /** 构造与团队作品集写入共用指定引用互斥锁的成员服务。 */
+    private MineTeamService service(PortfolioReferenceMutex mutex) {
         return new MineTeamService(
                 teamEntityMapper,
                 teamMemberEntityMapper,
@@ -589,7 +739,8 @@ class MineTeamMemberChangeFeatureTest {
                 teamRegistrationService,
                 pointService,
                 uniqueCodeGenerator,
-                teamPortfolioReferenceGuardService
+                teamPortfolioReferenceGuardService,
+                mutex
         );
     }
 

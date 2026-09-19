@@ -111,7 +111,8 @@ const EXPECTED_SHEET_TIERS = {
   'pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml': {
     backgroundColorSheetVisible: 'compact',
     componentSheetVisible: 'compact',
-    componentEditSheetVisible: 'long'
+    componentEditSheetVisible: 'long',
+    profileTagDialogVisible: 'compact'
   }
 }
 
@@ -609,11 +610,11 @@ test('text section editor headings omit duplicate meta while keeping input count
   )
   const mockHeading = mockEditor.slice(mockEditor.indexOf('<view class="component-picker-heading'), mockEditor.indexOf('<scroll-view'))
   const mockTextSection = mockEditor.slice(mockEditor.indexOf("selectedComponentType === 'TEXT_SECTION'"))
-  assert.match(mockHeading, /wx:if="\{\{selectedComponentType !== 'TEXT_SECTION'\}\}"[^>]*class="component-picker-count pe-sheet-meta"/)
+  assert.match(mockHeading, /wx:if="\{\{selectedComponentType === 'CAROUSEL' \|\| selectedComponentType === 'VIDEO_CAROUSEL'\}\}"[^>]*class="component-picker-count pe-sheet-meta"/)
   assert.match(mockTextSection, /maxlength="200"/)
 })
 
-test('mock portfolio editor consumes three shared sheets without crossing its isolation boundary', () => {
+test('mock portfolio editor and profile tag dialog consume shared sheets without crossing isolation', () => {
   const wxml = readMiniapp('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   const wxss = readMiniapp('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxss')
   const js = readMiniapp('pages/mock/portfolio-standard-edit/portfolio-standard-edit.js')
@@ -636,11 +637,11 @@ test('mock portfolio editor consumes three shared sheets without crossing its is
   assert.equal(classTokenCount(wxml, 'pe-page-content'), 1)
   assert.equal(classTokenCount(wxml, 'pe-component-delete'), 1)
 
-  assert.equal(classTokenCount(wxml, 'pe-sheet-mask'), 3)
-  assert.equal(classTokenCount(wxml, 'pe-sheet-mask-visible'), 3)
-  assert.equal(classTokenCount(wxml, 'pe-sheet-panel'), 3)
-  assert.equal(classTokenCount(wxml, 'pe-sheet-panel-visible'), 3)
-  assert.equal(classTokenCount(wxml, 'pe-sheet-size-compact'), 2)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-mask'), 4)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-mask-visible'), 4)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-panel'), 4)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-panel-visible'), 4)
+  assert.equal(classTokenCount(wxml, 'pe-sheet-size-compact'), 3)
   assert.equal(classTokenCount(wxml, 'pe-sheet-size-standard'), 0)
   assert.equal(classTokenCount(wxml, 'pe-sheet-size-long'), 1)
   assertSheetTierMap(wxml, EXPECTED_SHEET_TIERS['pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml'], 'Mock 作品集编辑器')
@@ -719,8 +720,8 @@ test('portfolio editor style closure has one pe source and no direct contract or
     readMiniapp('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   ].join('\n')
   assert.doesNotMatch(pageMarkup, LEGACY_ACCENT_PATTERN, '编辑器 WXML 不得继续使用旧蓝色或金色控件色')
-  assert.equal(classTokenCount(pageMarkup, 'pe-sheet-panel'), 26)
-  assert.equal(classTokenCount(pageMarkup, 'pe-sheet-size-compact'), 12)
+  assert.equal(classTokenCount(pageMarkup, 'pe-sheet-panel'), 27)
+  assert.equal(classTokenCount(pageMarkup, 'pe-sheet-size-compact'), 13)
   assert.equal(classTokenCount(pageMarkup, 'pe-sheet-size-standard'), 6)
   assert.equal(classTokenCount(pageMarkup, 'pe-sheet-size-long'), 8)
 })
