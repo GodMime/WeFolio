@@ -1,3 +1,4 @@
+const { portfolioOpeningPageMethods } = require('../utils/portfolio-opening')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { openVideoPlayer } = require('../utils/portfolio-video-player')
@@ -35,6 +36,7 @@ function hasPreviousPage() { const pages = typeof getCurrentPages === 'function'
 
 Page({
   ...portfolioAudioPageMethods,
+  ...portfolioOpeningPageMethods,
   data: {
     backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76, shareCode: '', sourceType: 'WECHAT_SHARE_CARD', loading: false, errorMessage: '', render: {}, portfolio: normalizeTeamVisitorPortfolio(), componentBuckets: buckets([]), activeSingleWorkVideoKey: '', videoPreviewVisible: false, visitorKey: '', visitRecordId: 0, visitorProfileToken: '', visitorProfileAuthVisible: false, visitorProfileForm: { nickname: '', avatarPath: '' }, visitorProfileSaving: false, empty: true, underMaintenance: false, showNavigationBack: false, timelineGuideRequested: false, timelineGuideVisible: false, timelineSharePortfolioId: 0, timelineShareRecordEnabled: false, scheduleResults: {}, contactForms: {}, contactSubmitting: {}, contactModalVisible: {}, pendingOpenKey: '', pendingContactKeys: {}, themeMode: 'light', backgroundColor: '#FFFFFF', navigationColor: '#212529', brandLogoUrl: LIGHT_LOGO_URL, portfolioScrollTop: 0, teamPortfolioMenuSwitching: false, teamPortfolioMenuTransitionClass: '' },
   onLoad(options = {}) {
@@ -77,7 +79,6 @@ Page({
     const render = preferredMenuKey
       ? switchTeamPortfolioMenu(normalizedRender, preferredMenuKey)
       : normalizedRender
-    this.syncBackgroundAudio(render.backgroundAudio, true)
     const displayable = !render.underMaintenance && render.components.length > 0
     const activeComponents = Array.isArray(render.activeComponents) ? render.activeComponents : []
     const themeMode = render.themeMode === 'dark' ? 'dark' : 'light'
@@ -99,7 +100,7 @@ Page({
       timelineShareRecordEnabled: Boolean(this.data.timelineSharePortfolioId && displayable)
     }, () => {
       if (this.browserContext) {
-        this.browserContext.setDisplayable(!render.underMaintenance)
+        this.browserContext.setDisplayable(!render.underMaintenance && !this.data.fontOpening && !this.data.loading)
         if (this.visitPageVisible) this.browserContext.show(this)
       }
     })
@@ -181,8 +182,15 @@ Page({
       })
   },
 
-  onShow() { this.visitPageVisible = true; if (this.browserContext) this.browserContext.show(this); this.clearVideoPreview(); this.showBackgroundAudio() },
+  onShow() {
+    this.visitPageVisible = true
+    if (this.browserContext) this.browserContext.show(this)
+    this.clearVideoPreview()
+    this.showBackgroundAudio()
+    if (this.remoteFontPage) this.remoteFontPage.show()
+  },
   onHide() {
+    if (this.remoteFontPage) this.remoteFontPage.hide()
     this.visitPageVisible = false; if (this.browserContext) this.browserContext.hide(this)
     this.hideBackgroundAudio(); this.stopSingleWorkVideos() },
   onUnload() {

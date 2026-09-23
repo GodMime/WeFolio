@@ -1,3 +1,4 @@
+const { portfolioOpeningPageMethods } = require('../utils/portfolio-opening')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { createPortfolioVisitActivity } = require('../utils/visit-activity-page')
@@ -79,8 +80,10 @@ function buildWorkEventMetadata(work) {
 
 Page({
   ...portfolioAudioPageMethods,
+  ...portfolioOpeningPageMethods,
   data: {
     backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
+    loading: false,
     shareCode: '',
     showNavigationBack: false,
     timelineGuideRequested: false,
@@ -147,6 +150,7 @@ Page({
       return
     }
     if (!this.browserContext || this.browserContext.isInvalid()) this.browserContext = createPortfolioVisitActivity(this)
+    this.setData({ loading: true })
     try {
       const response = await openVisitorSession(this.data.shareCode, {
         sourceType: this.visitorSourceType,
@@ -159,13 +163,14 @@ Page({
       if (this.browserContext) this.browserContext.setDisplayable(false)
       this.setData({ timelineGuideVisible: false, timelineShareRecordEnabled: false })
       wx.showToast({ title: error.message || '作品集加载失败', icon: 'none' })
+    } finally {
+      if (!this.visitPageUnloaded) this.setData({ loading: false })
     }
   },
 
   applyVisitorOpenResponse(response, preferredMenuKey = '') {
     const normalized = normalizeVisitorPortfolio(response)
     const portfolio = preferredMenuKey ? switchPortfolioMenu(normalized, preferredMenuKey) : normalized
-    this.syncBackgroundAudio(portfolio.backgroundAudio, true)
     const displayable = !portfolio.underMaintenance && portfolio.components.length > 0
     this.setData({
       portfolio,
@@ -178,7 +183,7 @@ Page({
       )
     }, () => {
       if (this.browserContext) {
-        this.browserContext.setDisplayable(!portfolio.underMaintenance)
+        this.browserContext.setDisplayable(!portfolio.underMaintenance && !this.data.fontOpening && !this.data.loading)
         if (this.singleWorkPageVisible) this.browserContext.show(this)
       }
     })
@@ -374,6 +379,7 @@ Page({
   },
 
   onHide() {
+    if (this.remoteFontPage) this.remoteFontPage.hide()
     if (this.browserContext) this.browserContext.hide(this)
     this.hideBackgroundAudio()
     this.singleWorkPageVisible = false
@@ -385,9 +391,11 @@ Page({
   },
 
   onShow() {
+
     if (this.browserContext) this.browserContext.show(this)
     this.clearVideoPreview()
     this.showBackgroundAudio()
+    if (this.remoteFontPage) this.remoteFontPage.show()
     this.singleWorkPageVisible = true
     if (this.clipboardPromptController) {
       this.clipboardPromptController.resume()
@@ -640,6 +648,10 @@ Page({
         wx.showToast({ title: error.message || '作品打开失败', icon: 'none' })
         return false
       })
+  },
+
+  // 维护遮罩只消费触摸，不关闭或透传到底层页面。
+  handleMaintenanceMaskTouch() {
   },
 
   handleVisitorProfileMaskTap() {

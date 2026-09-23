@@ -164,6 +164,12 @@ for (const [pagePath, load] of [
       createVideoContext() { return { stop() { calls.push('video-stop') } } }
     })
     await load(page, response)
+    assert.equal(calls.filter((call) => call === 'audio-play').length, 0)
+    page.setData({ fontOpening: true })
+    page.onPortfolioFontsReady()
+    assert.equal(calls.filter((call) => call === 'audio-play').length, 0)
+    page.setData({ fontOpening: false })
+    page.onPortfolioFontsReady()
     assert.equal(calls.filter((call) => call === 'audio-play').length, 1)
     events.Play()
     assert.equal(page.data.backgroundAudioPlaying, true)

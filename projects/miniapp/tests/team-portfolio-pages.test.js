@@ -991,7 +991,7 @@ test('team preview and visitor use the personal portfolio content baseline witho
   const listWxss = read('components/member-portfolio-list/member-portfolio-list.wxss')
 
   for (const page of [previewWxml, visitorWxml]) {
-    assert.equal(Array.from(page.matchAll(/class="folio-component"/g)).length, 13)
+    assert.equal(Array.from(page.matchAll(/class="(?:portfolio-font-grid )?folio-component"/g)).length, 13)
   }
 
   for (const pageStyles of [previewWxss, visitorWxss]) {

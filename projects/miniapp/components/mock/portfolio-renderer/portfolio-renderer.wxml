@@ -213,7 +213,7 @@
 </block>
 
 <mock-structured-text-section wx:elif="{{component.componentType === 'TEXT_SECTION' || component.componentType === 'STRUCTURED_TEXT_SECTION'}}" view-model="{{component.viewModel}}" active="{{active}}" />
-<mock-text-grid wx:elif="{{component.componentType === 'TEXT_GRID'}}" view-model="{{component.viewModel}}" bindmeasure="handleGridMeasure" />
+<mock-text-grid class="mock-opening-grid" wx:elif="{{component.componentType === 'TEXT_GRID'}}" view-model="{{component.viewModel}}" bindmeasure="handleGridMeasure" />
 <mock-contact-info wx:elif="{{component.componentType === 'CONTACT_INFO'}}" config="{{component.config}}" copied-field="{{copiedField}}" theme-mode="{{themeMode}}" bindcopy="handleCopy" />
 <mock-hyperlink wx:elif="{{component.componentType === 'HYPERLINK'}}" config="{{component.config}}" work="{{component.work}}" theme-mode="{{themeMode}}" bindhyperlink="handleHyperlink" />
 <mock-video-carousel wx:elif="{{component.componentType === 'VIDEO_CAROUSEL'}}" config="{{component.config}}" works="{{component.works}}" component-key="{{component.componentKey}}" theme-mode="{{themeMode}}" bindworktap="handleWorkTap" />

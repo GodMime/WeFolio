@@ -1,4 +1,5 @@
 const { createRemoteFontSession, collectFontNodes } = require('./portfolio-remote-font-session')
+const { createPortfolioOpening } = require('./portfolio-opening')
 const { request } = require('../../../utils/request.js')
 const { PORTFOLIO_TEXT_SELECTION_OPTIONS, buildPortfolioTextTypography, LEGACY_PERSONAL_FONT_SIZE_RPX, LEGACY_TEAM_FONT_SIZE_RPX } = require('../../../utils/portfolio-text-typography.js')
 
@@ -6,6 +7,9 @@ const { PORTFOLIO_TEXT_SELECTION_OPTIONS, buildPortfolioTextTypography, LEGACY_P
 function installRemoteFontPage(page, { editor = false, team = false } = {}) {
   const originalSetData = page.setData.bind(page)
   let disposed = false
+  let fontFallback = false
+  let openingTicket = 0
+  const opening = editor ? null : createPortfolioOpening(page, { setData: originalSetData, onTimeout() { fontFallback = true; session.dispose() } })
   let catalog = null
   let catalogPromise = null
   let lastSignature = ''
@@ -81,23 +85,36 @@ function installRemoteFontPage(page, { editor = false, team = false } = {}) {
     const index = items.findIndex(item => item.key === page.data.activeMenuKey)
     return index > 0 ? items[index].components || [] : config.components || []
   }
-  const session = createRemoteFontSession(typeof wx === 'undefined' ? {} : wx, publishContext)
+  const session = createRemoteFontSession(typeof wx === 'undefined' ? {} : wx, context => { if (editor) publishContext(context) })
   function refresh() {
     if (disposed) return
     const data = page.data
     const view = data.portfolio || {}
+    if (!editor && view.underMaintenance) {
+      // 维护态立即撤销排队需求，失效在途回调；恢复访问后仍可正常使用已有字体。
+      lastSignature = ''
+      session.load(null, [])
+      if (page.browserContext) page.browserContext.setDisplayable(false)
+      if (page.backgroundAudioPlayer && page.syncBackgroundAudio) page.syncBackgroundAudio(null, false)
+      return
+    }
     const config = editor ? candidateConfig() : view
     const manifest = editor ? data.fontAssets : view.fonts
     const components = editor ? activeComponents(config) : config.activeComponents || config.components || []
     const nodes = collectFontNodes(components)
     if (editor) originalSetData({ hasRemoteFonts: allNodes(config).some(node => !!node.fontId) })
     const signature = JSON.stringify([manifest, config.fonts, nodes, data.activeMenuKey, edit && edit.id])
-    if (signature === lastSignature) { publishContext(session.context()); return }
+    if (signature === lastSignature) { if (editor) publishContext(session.context()); return }
     lastSignature = signature
     const effective = manifest && editor ? { ...manifest, versions: config.fonts || {} } : manifest
-    const loading = session.load(effective, nodes)
-    publishContext(session.context())
-    loading.then(publishContext)
+    const loading = fontFallback ? Promise.resolve({ families: {}, versions: {} }) : session.load(effective, nodes)
+    if (editor) {
+      publishContext(session.context())
+      loading.then(publishContext)
+    } else {
+      const ticket = openingTicket
+      loading.then(context => opening.commit(ticket, { fontContext: context }))
+    }
   }
   function applyCatalog() {
     if (disposed) return null
@@ -124,8 +141,17 @@ function installRemoteFontPage(page, { editor = false, team = false } = {}) {
   }
   function expand() { originalSetData({ moreFontsExpanded: true }); return ensureCatalog() }
   page.setData = function (patch, callback) {
-    originalSetData(patch, callback)
     if (disposed) return
+    if (opening && patch.portfolio) {
+      const view = patch.portfolio
+      const nodes = collectFontNodes(view.activeComponents || view.components || [])
+      const signature = JSON.stringify([view.fonts, view.fonts, nodes, page.data.activeMenuKey, null])
+      if (view.underMaintenance) opening.cancel()
+      else if (signature !== lastSignature) openingTicket = opening.begin(!fontFallback && !view.underMaintenance && nodes.some(node => !!node.fontId))
+    }
+    originalSetData(patch, callback)
+    if (opening && patch.errorMessage) opening.cancel()
+    if (opening && patch.loading === false) opening.notify()
     if (editor && patch.textSectionFontOptions) applyCatalog()
     if (Object.keys(patch).some(key => /^(?:config|portfolio|fontAssets|activeMenuKey|textSectionForm|textSectionTypography|textSectionSheetVisible|newComponentSheetVisible|structuredTextSheetVisible)(?:\.|$)/.test(key))) refresh()
   }
@@ -196,9 +222,10 @@ function installRemoteFontPage(page, { editor = false, team = false } = {}) {
         else page.setData({ config: { ...config, fonts } })
       } })
   }
-  refresh()
-  return { select, editDraft, ensureCatalog, expand, candidateConfig, commit, prepare, repairVersions, dispose() {
+  if (editor) refresh()
+  return { hide() { if (opening) opening.hide() }, show() { if (opening) opening.show() }, select, editDraft, ensureCatalog, expand, candidateConfig, commit, prepare, repairVersions, dispose() {
     disposed = true
+    if (opening) opening.dispose()
     session.dispose()
     page.setData = originalSetData
   } }

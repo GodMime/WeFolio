@@ -662,6 +662,7 @@ test('team asset rejects a compressed file still over 300KB before signing', asy
 
 test('team utility tree only imports approved main-package infrastructure', () => {
   const approved = new Set([
+    'navigation-bar-layout',
     'request.js',
     'session.js',
     'upload-file.js',

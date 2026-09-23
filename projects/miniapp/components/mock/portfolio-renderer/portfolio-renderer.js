@@ -20,6 +20,14 @@ Component({
   observers: {component() {this.setData({imageFailed:false,singleWorkAnimationFailed:false})}},
 
   methods: {
+    waitForFontLayout() {
+      const grid = this.selectComponent('.mock-opening-grid')
+      return grid ? grid.waitForFontLayout() : Promise.resolve()
+    },
+    useNaturalFontLayout() {
+      const grid = this.selectComponent('.mock-opening-grid')
+      return grid ? grid.useNaturalFontLayout() : Promise.resolve()
+    },
     handleCopy(event) { this.triggerEvent('copy',Object.assign({componentKey:this.data.component.componentKey},event.detail || {})) },
     handleHyperlink() { this.triggerEvent('hyperlink',{componentKey:this.data.component.componentKey}) },
     handleGridMeasure(event) { this.triggerEvent('gridmeasure',Object.assign({componentKey:this.data.component.componentKey},event.detail || {})) },

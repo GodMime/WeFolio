@@ -1,3 +1,4 @@
+const { portfolioOpeningPageMethods } = require('../utils/portfolio-opening')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { openWorkDetail } = require('../utils/portfolio-work-detail')
 const { openVideoPlayer } = require('../utils/portfolio-video-player')
@@ -36,6 +37,7 @@ const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 
 Page({
   ...portfolioAudioPageMethods,
+  ...portfolioOpeningPageMethods,
   data: {
     backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
     portfolioId: null,
@@ -85,7 +87,6 @@ Page({
         url: `${TEAM_PORTFOLIO_API_PREFIX}/${this.data.teamPortfolioId}/member-portfolios/${this.data.portfolioId}/published-preview`,
         data: { scope: this.data.teamPreviewScope }
       }).then((response) => {
-        this.syncBackgroundAudio(normalizeVisitorPortfolio(response).backgroundAudio, true)
         this.setData({
           portfolio: normalizeVisitorPortfolio(response),
           loading: false,
@@ -101,7 +102,6 @@ Page({
     const previewPath = this.data.previewScope === PUBLISHED_PREVIEW_SCOPE ? 'published-preview' : 'preview'
     return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}/${previewPath}` })
       .then((response) => {
-        this.syncBackgroundAudio(normalizeVisitorPortfolio(response).backgroundAudio, true)
         this.setData({
           portfolio: normalizeVisitorPortfolio(response),
           loading: false,
@@ -220,6 +220,7 @@ Page({
   },
 
   onHide() {
+    if (this.remoteFontPage) this.remoteFontPage.hide()
     this.hideBackgroundAudio()
     this.stopActiveSingleWorkVideo()
     if (this.clipboardPromptController) {
@@ -228,8 +229,10 @@ Page({
   },
 
   onShow() {
+
     this.clearVideoPreview()
     this.showBackgroundAudio()
+    if (this.remoteFontPage) this.remoteFontPage.show()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.resume()
     }

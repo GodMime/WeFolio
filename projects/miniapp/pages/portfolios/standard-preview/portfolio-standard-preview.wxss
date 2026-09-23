@@ -1,3 +1,4 @@
+@import "../../../styles/portfolio-opening.wxss";
 @import "../../../styles/portfolio-theme.wxss";
 @import "../../../styles/portfolio-menu-transition.wxss";
 

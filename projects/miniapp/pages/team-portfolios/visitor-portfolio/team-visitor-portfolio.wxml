@@ -1,5 +1,6 @@
+<import src="../templates/portfolio-opening.wxml" />
 <navigation-bar title="团队作品集" back="{{showNavigationBack && !timelineGuideVisible}}" color="{{navigationColor}}" background="{{backgroundColor}}" />
-<scroll-view scroll-y class="page-shell theme-{{themeMode}} {{portfolio.bottomNav.enabled ? 'with-bottom-nav' : ''}}" style="background-color:{{backgroundColor}};" scroll-top="{{portfolioScrollTop}}">
+<scroll-view scroll-y="{{!fontOpening}}" class="page-shell theme-{{themeMode}} {{portfolio.bottomNav.enabled ? 'with-bottom-nav' : ''}}" style="background-color:{{backgroundColor}};" scroll-top="{{portfolioScrollTop}}">
   <view wx:if="{{loading}}" class="state">加载中...</view>
   <view wx:elif="{{errorMessage}}" class="state"><text>{{errorMessage}}</text><button bindtap="handleRetry">重新打开</button></view>
   <view wx:elif="{{underMaintenance}}" class="state">该团队作品集维护中</view>
@@ -13,10 +14,10 @@
       <team-divider theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.divider}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
       <team-member-portfolio-grid theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.grid}}" wx:key="componentKey" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" items="{{item.data.items}}" show-member-name="{{item.data.showMemberName}}" bindpreview="handleMemberPortfolio" />
       <team-member-portfolio-list theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.list}}" wx:key="componentKey" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" items="{{item.data.items}}" show-member-name="{{item.data.showMemberName}}" bindpreview="handleMemberPortfolio" />
-      <team-text-section background-video-paused="{{videoPreviewVisible}}" theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.text}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}"  font-context="{{fontContext}}"/>
-      <portfolio-text-grid theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.textGrid}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}"  font-context="{{fontContext}}"/>
+      <team-text-section background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.text}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}"  font-context="{{fontContext}}"/>
+      <portfolio-text-grid theme-mode="{{themeMode}}" class="portfolio-font-grid folio-component" wx:for="{{componentBuckets.textGrid}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}"  font-context="{{fontContext}}"/>
       <portfolio-contact-info theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.contactInfo}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
-      <team-structured-text-section background-video-paused="{{videoPreviewVisible}}" theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.structuredText}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}"  font-context="{{fontContext}}"/>
+      <team-structured-text-section background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.structuredText}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}"  font-context="{{fontContext}}"/>
       <team-schedule-query theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.schedule}}" wx:key="componentKey" id="schedule-{{item.componentKey}}" style="order:{{item.sortOrder}}" share-code="{{shareCode}}" component-key="{{item.componentKey}}" config="{{item.data}}" result="{{scheduleResults[item.componentKey]}}" bindschedulequery="handleScheduleQuery" />
       <team-contact-form theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.contact}}" wx:key="componentKey" id="contact-form-{{item.componentKey}}" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" config="{{item.data}}" form="{{contactForms[item.componentKey]}}" modal-visible="{{contactModalVisible[item.componentKey]}}" submitting="{{contactSubmitting[item.componentKey]}}" bindcontactinput="handleContactInput" bindopenmodal="handleContactOpen" bindclosemodal="handleContactClose" bindsubmit="handleContactSubmit" />
       <team-qr-contact theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.qr}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" config="{{item.data}}" visitor-mode="{{true}}" bindinteract="handleQrInteract" />
@@ -49,3 +50,5 @@
   </view>
 </view>
 <timeline-share-guide visible="{{timelineGuideVisible}}" back="{{showNavigationBack}}" bindback="handleTimelineGuideBack" bindclose="handleCloseTimelineGuide"></timeline-share-guide>
+
+<template is="portfolio-opening" data="{{active: loading || fontOpeningVisible, top: fontOpeningTop, dark: portfolio.themeMode === 'dark', background: portfolio.style.backgroundColor, preview: false}}" />

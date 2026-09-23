@@ -1,7 +1,8 @@
+<import src="../templates/portfolio-opening.wxml" />
 <view class="page-shell visitor-portfolio-page portfolio-theme-{{portfolio.themeMode}}" style="background-color: {{portfolio.style.backgroundColor}}; --portfolio-component-spacing: {{portfolio.style.componentSpacingRpx}}rpx;">
   <navigation-bar title="{{portfolio.title || '个人作品集'}}" back="{{showNavigationBack && !timelineGuideVisible}}" color="{{portfolio.themeMode === 'dark' ? '#f8f9fa' : '#212529'}}" background="{{portfolio.style.backgroundColor}}"></navigation-bar>
 
-  <scroll-view scroll-y scroll-top="{{portfolioScrollTop}}" class="visitor-scroll">
+  <scroll-view scroll-y="{{!fontOpening && !portfolio.underMaintenance}}" scroll-top="{{portfolioScrollTop}}" class="visitor-scroll">
     <view class="portfolio-menu-transition-content {{portfolioMenuTransitionClass}}">
     <view wx:for="{{portfolio.activeComponents}}" wx:key="componentKey" class="folio-component">
       <block wx:if="{{item.componentType === 'CAROUSEL'}}">
@@ -95,12 +96,12 @@
       </block>
 
       <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
-        <portfolio-text-section text-section="{{item.textSection}}" background-video-paused="{{videoPreviewVisible}}" theme-mode="{{portfolio.themeMode}}" font-context="{{fontContext}}"></portfolio-text-section>
+        <portfolio-text-section text-section="{{item.textSection}}" background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" theme-mode="{{portfolio.themeMode}}" font-context="{{fontContext}}"></portfolio-text-section>
       </block>
-      <block wx:elif="{{item.componentType === 'TEXT_GRID'}}"><portfolio-text-grid config="{{item.textGrid}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/></block>
+      <block wx:elif="{{item.componentType === 'TEXT_GRID'}}"><portfolio-text-grid class="portfolio-font-grid" config="{{item.textGrid}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/></block>
         <block wx:elif="{{item.componentType === 'CONTACT_INFO'}}"><portfolio-contact-info config="{{item.contactInfo}}" theme-mode="{{portfolio.themeMode}}" /></block>
         <block wx:elif="{{item.componentType === 'STRUCTURED_TEXT_SECTION'}}">
-        <portfolio-structured-text-section background-video-paused="{{videoPreviewVisible}}" structured-text-section="{{item.structuredTextSection}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/>
+        <portfolio-structured-text-section background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" structured-text-section="{{item.structuredTextSection}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/>
       </block>
 
       <block wx:elif="{{item.componentType === 'DIVIDER'}}">
@@ -184,12 +185,7 @@
     </view>
   </root-portal>
 
-  <view wx:if="{{portfolio.underMaintenance}}" class="maintenance-mask">
-    <view class="maintenance-panel">
-      <view class="maintenance-primary">UNDER MAINTENANCE</view>
-      <view class="maintenance-secondary">维护中</view>
-    </view>
-  </view>
+
 
   <timeline-share-guide
     visible="{{timelineGuideVisible}}"
@@ -205,3 +201,15 @@
     <background-audio-control draggable="{{true}}" anchor-top="{{backgroundAudioTop}}" display-style="{{backgroundAudioResource.displayStyle}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" bindtoggle="handleToggleBackgroundAudio" />
   </view>
 </view>
+
+<template is="portfolio-opening" data="{{active: loading || fontOpeningVisible, top: fontOpeningTop, dark: portfolio.themeMode === 'dark', background: portfolio.style.backgroundColor, preview: false}}" wx:if="{{!portfolio.underMaintenance}}" />
+
+<!-- 维护状态高于页面内所有弹层与字体 loading，并拦截底层触摸。 -->
+<root-portal wx:if="{{portfolio.underMaintenance}}">
+  <view class="maintenance-mask" catchtap="handleMaintenanceMaskTouch" catchtouchmove="handleMaintenanceMaskTouch">
+    <view class="maintenance-panel">
+      <view class="maintenance-primary">UNDER MAINTENANCE</view>
+      <view class="maintenance-secondary">维护中</view>
+    </view>
+  </view>
+</root-portal>

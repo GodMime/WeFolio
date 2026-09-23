@@ -1593,6 +1593,7 @@ test('personal visitor shows timeline guide only after displayable content loads
     assert.equal(page.data.timelineGuideRequested, false)
     assert.equal(page.data.timelineGuideVisible, false)
   } finally {
+    page.onUnload()
     delete global.wx
   }
 })
@@ -1799,6 +1800,7 @@ test('visitor page opens portfolio with wx login code and stores backend visitor
   try {
     await page.onLoad({ shareCode: 'PF001' })
   } finally {
+    page.onUnload()
     delete global.wx
   }
 
@@ -1848,6 +1850,7 @@ test('visitor page opens timeline single-page mode anonymously without wx login'
   try {
     await page.onLoad({ shareCode: 'PF001' })
   } finally {
+    page.onUnload()
     delete global.wx
   }
 
@@ -1894,6 +1897,7 @@ test('visitor page ignores visitor token storage failure while opening portfolio
   try {
     await page.onLoad({ shareCode: 'PF001' })
   } finally {
+    page.onUnload()
     delete global.wx
   }
 
@@ -2043,6 +2047,7 @@ test('visitor page shows profile authorization panel when profile is missing', a
   try {
     await page.onLoad({ shareCode: 'PF001' })
   } finally {
+    page.onUnload()
     delete global.wx
   }
 

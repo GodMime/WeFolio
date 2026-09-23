@@ -1,7 +1,8 @@
+<import src="../templates/portfolio-opening.wxml" />
 <view class="page-shell portfolio-preview-page portfolio-theme-{{portfolio.themeMode}}" style="background-color: {{portfolio.style.backgroundColor}}; --portfolio-component-spacing: {{portfolio.style.componentSpacingRpx}}rpx;">
   <navigation-bar title="{{portfolio.title || '预览'}}" back="{{true}}" color="{{portfolio.themeMode === 'dark' ? '#f8f9fa' : '#212529'}}" background="{{portfolio.style.backgroundColor}}"></navigation-bar>
 
-  <scroll-view scroll-y scroll-top="{{portfolioScrollTop}}" class="preview-scroll">
+  <scroll-view scroll-y="{{!fontOpening}}" scroll-top="{{portfolioScrollTop}}" class="preview-scroll">
     <view class="preview-toolbar">
       <view class="preview-note">预览模式：禁用真实提交，不统计访问，不扣积分。</view>
     </view>
@@ -125,12 +126,12 @@
         </block>
 
         <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
-          <portfolio-text-section text-section="{{item.textSection}}" background-video-paused="{{videoPreviewVisible}}" theme-mode="{{portfolio.themeMode}}" repair-mode="{{true}}" font-context="{{fontContext}}"></portfolio-text-section>
+          <portfolio-text-section text-section="{{item.textSection}}" background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" theme-mode="{{portfolio.themeMode}}" repair-mode="{{true}}" font-context="{{fontContext}}"></portfolio-text-section>
         </block>
-        <block wx:elif="{{item.componentType === 'TEXT_GRID'}}"><portfolio-text-grid config="{{item.textGrid}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/></block>
+        <block wx:elif="{{item.componentType === 'TEXT_GRID'}}"><portfolio-text-grid class="portfolio-font-grid" config="{{item.textGrid}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/></block>
         <block wx:elif="{{item.componentType === 'CONTACT_INFO'}}"><portfolio-contact-info config="{{item.contactInfo}}" theme-mode="{{portfolio.themeMode}}" /></block>
         <block wx:elif="{{item.componentType === 'STRUCTURED_TEXT_SECTION'}}">
-          <portfolio-structured-text-section background-video-paused="{{videoPreviewVisible}}" structured-text-section="{{item.structuredTextSection}}" theme-mode="{{portfolio.themeMode}}" repair-mode="{{true}}"  font-context="{{fontContext}}"/>
+          <portfolio-structured-text-section background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" structured-text-section="{{item.structuredTextSection}}" theme-mode="{{portfolio.themeMode}}" repair-mode="{{true}}"  font-context="{{fontContext}}"/>
         </block>
 
         <block wx:elif="{{item.componentType === 'DIVIDER'}}">
@@ -183,3 +184,5 @@
     <background-audio-control draggable="{{true}}" anchor-top="{{backgroundAudioTop}}" display-style="{{backgroundAudioResource.displayStyle}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" bindtoggle="handleToggleBackgroundAudio" />
   </view>
 </view>
+
+<template is="portfolio-opening" data="{{active: loading || fontOpeningVisible, top: fontOpeningTop, dark: portfolio.themeMode === 'dark', background: portfolio.style.backgroundColor, preview: true}}" />

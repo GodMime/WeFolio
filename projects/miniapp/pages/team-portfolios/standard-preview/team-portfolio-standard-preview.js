@@ -1,3 +1,4 @@
+const { portfolioOpeningPageMethods } = require('../utils/portfolio-opening')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { openWorkDetail } = require('../utils/portfolio-work-detail')
 const { openVideoPlayer } = require('../utils/portfolio-video-player')
@@ -52,6 +53,7 @@ function buckets(items) {
 
 Page({
   ...portfolioAudioPageMethods,
+  ...portfolioOpeningPageMethods,
   data: {
     backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
     portfolioId: 0,
@@ -110,7 +112,6 @@ Page({
     }
   },
   applyPortfolio(portfolio) {
-    this.syncBackgroundAudio(portfolio.backgroundAudio, true)
     const activeComponents = Array.isArray(portfolio.activeComponents)
       ? portfolio.activeComponents
       : []
@@ -225,8 +226,13 @@ Page({
   },
 
   handleVideoCarouselPlay(event) { return this.openVideoPreview(event && event.detail && event.detail.work) },
-  onShow() { this.clearVideoPreview(); this.showBackgroundAudio() },
+  onShow() {
+    this.clearVideoPreview()
+    this.showBackgroundAudio()
+    if (this.remoteFontPage) this.remoteFontPage.show()
+  },
   onHide() {
+    if (this.remoteFontPage) this.remoteFontPage.hide()
     this.hideBackgroundAudio(); this.stopSingleWorkVideos() },
   onUnload() {
     if (this.remoteFontPage) this.remoteFontPage.dispose()
