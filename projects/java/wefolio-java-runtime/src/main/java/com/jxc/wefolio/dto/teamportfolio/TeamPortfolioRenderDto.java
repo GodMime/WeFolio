@@ -5,6 +5,7 @@ import com.jxc.wefolio.dto.BackgroundAudioRenderDto;
 import com.alibaba.fastjson2.JSONObject;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
+import com.jxc.wefolio.dto.PortfolioFontManifestDto;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +15,10 @@ import java.util.List;
  */
 @Data
 public class TeamPortfolioRenderDto {
+
+    /** 当前配置快照的字体资源，保留原 renderData 空值语义。 */
+    private PortfolioFontManifestDto fonts;
+
 
     /** 分享编码 */
     private String shareCode;

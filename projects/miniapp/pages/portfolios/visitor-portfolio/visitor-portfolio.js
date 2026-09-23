@@ -1,3 +1,4 @@
+const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { createPortfolioVisitActivity } = require('../utils/visit-activity-page')
 const { openWorkDetail } = require('../utils/portfolio-work-detail')
@@ -26,7 +27,7 @@ const {
 } = require('../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../utils/visitor-profile')
 const { createClipboardPromptController } = require('../utils/portfolio-hyperlink')
-const { request } = require('../../../utils/request')
+const { request } = require('../../../utils/request.js')
 const {
   SOURCE_TYPE_QR_CODE,
   resolvePersonalShareCode,
@@ -112,6 +113,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.remoteFontPage = installRemoteFontPage(this, { editor: false, team: false })
     this.visitPageUnloaded = false
     this.positionBackgroundAudio()
     this.singleWorkPageVisible = true
@@ -355,6 +357,7 @@ Page({
   },
 
   onUnload() {
+    if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.videoPlayerDisposed = true
     this.visitPageUnloaded = true
     if (this.browserContext) this.browserContext.dispose()

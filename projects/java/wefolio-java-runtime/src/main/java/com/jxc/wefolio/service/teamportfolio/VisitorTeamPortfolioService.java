@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontManifests;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -155,6 +157,9 @@ public class VisitorTeamPortfolioService {
                     PortfolioOpenPerformanceLogger.Phase.RENDER,
                     () -> teamPortfolioRenderService.render(
                             published.portfolio().getPublishedConfigJson(), published.componentContext()));
+            render.setFonts(PortfolioFontManifests.project(PortfolioFontPlan.from(
+                    JSON.parseObject(published.portfolio().getPublishedConfigJson(), TeamPortfolioConfigDto.class)),
+                    published.portfolio().getPublishedFontAssetsJson()));
             VisitActivitySessionTransactionService.OpenResult tracked = request != null && request.getTracking() != null
                     ? trace.measure(PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
                         () -> visitActivitySessionApplicationService.open(published.portfolio(), PortfolioTypeDict.TEAM.getCode(),

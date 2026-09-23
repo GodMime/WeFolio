@@ -380,7 +380,9 @@ test('team text section opens the dedicated personal-style editing sheet', () =>
   assert.match(wxml, /class="pe-sheet-title">编辑文字说明<\/view>/)
   assert.match(wxml, /value="\{\{textSectionForm\.content\}\}"/)
   assert.match(wxml, /wx:for="\{\{textSectionFontOptions\}\}"/)
-  assert.match(wxml, /映期 Folio 字体预览 123/)
+  assert.match(wxml, /item\.sample/)
+  assert.match(wxml, /handleExpandFonts/)
+  assert.match(wxml, /item\.previewImageUrl/)
   assert.match(wxml, /当前设备不可用/)
   assert.match(wxml, /当前设备以系统字体预览/)
   assert.match(wxml, /catchtap="handleTextSectionFontTap"/)
@@ -514,7 +516,7 @@ test('team text section preserves unavailable WeChat font and a custom integer s
   assert.equal(page.data.textSectionForm.fontSizeRpx, 30)
   assert.deepEqual(
     page.data.textSectionFontOptions.map((item) => item.value),
-    ['SYSTEM', 'WECHAT_SANS_SS']
+    ['SYSTEM', 'WECHAT_SANS_SS', 'CORMORANT_GARAMOND', 'MANROPE', 'ALLURA', 'SOURCE_HAN_SERIF_SC', 'ZCOOL_XIAOWEI', 'LXGW_WENKAI']
   )
   assert.equal(
     page.data.textSectionFontOptions.find(

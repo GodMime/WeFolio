@@ -1,8 +1,9 @@
+const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { openWorkDetail } = require('../utils/portfolio-work-detail')
 const { openVideoPlayer } = require('../utils/portfolio-video-player')
 const VIDEO_PLAYER_ROUTE = '/pages/portfolios/video-player/video-player'
 const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
-const { request } = require('../../../utils/request')
+const { request } = require('../../../utils/request.js')
 const { createContactLeadForm } = require('../utils/contact-lead')
 const {
   createActiveContactFormComponent,
@@ -58,6 +59,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.remoteFontPage = installRemoteFontPage(this, { editor: false, team: false })
     this.positionBackgroundAudio()
     const teamPortfolioId = Number(options.teamPortfolioId) || 0
     const teamPreviewScope = teamPortfolioId && options.teamScope === PUBLISHED_PREVIEW_SCOPE
@@ -205,6 +207,7 @@ Page({
   },
 
   onUnload() {
+    if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.videoPlayerDisposed = true
     this.destroyBackgroundAudio()
     clearPortfolioMenuTransitionTimers(this)

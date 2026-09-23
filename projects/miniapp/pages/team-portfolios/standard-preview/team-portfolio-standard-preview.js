@@ -1,3 +1,4 @@
+const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { openWorkDetail } = require('../utils/portfolio-work-detail')
 const { openVideoPlayer } = require('../utils/portfolio-video-player')
 const VIDEO_PLAYER_ROUTE = '/pages/team-portfolios/video-player/video-player'
@@ -75,6 +76,7 @@ Page({
     contactModalVisible: {}
   },
   onLoad(options = {}) {
+    this.remoteFontPage = installRemoteFontPage(this, { editor: false, team: true })
     this.positionBackgroundAudio()
     const portfolioId = Number(options.portfolioId)
     const scope = options.scope === 'published' ? 'published' : 'draft'
@@ -227,6 +229,7 @@ Page({
   onHide() {
     this.hideBackgroundAudio(); this.stopSingleWorkVideos() },
   onUnload() {
+    if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.videoPlayerDisposed = true
     this.destroyBackgroundAudio()
     this.stopSingleWorkVideos()

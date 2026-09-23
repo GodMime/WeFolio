@@ -1,3 +1,4 @@
+const { buildRemoteFontStyle } = require('../../utils/portfolio-component-platform')
 const TEXT_SECTION_MAX_LENGTH = 200
 const TEXT_ALIGNMENTS = Object.freeze(['LEFT', 'CENTER', 'RIGHT'])
 const { buildPortfolioTextLineHeightStyle, isValidPortfolioTextLineHeight, PORTFOLIO_TEXT_LINE_HEIGHT_ERROR } = require('../../utils/portfolio-component-platform')
@@ -71,6 +72,7 @@ Component({
   lifetimes: textBackgroundVideo.lifetimes,
   pageLifetimes: textBackgroundVideo.pageLifetimes,
   properties: {
+    fontContext: { type: Object, value: {} },
     ...textBackgroundVideo.properties,
     themeMode: { type: String, value: 'light' },
     config: { type: Object, value: {} },
@@ -89,6 +91,7 @@ Component({
       })
       this.updatePresentation()
     },
+    fontContext() { this.updatePresentation() },
     repairMode() { this.updatePresentation() }
   },
   methods: {
@@ -101,7 +104,8 @@ Component({
       this.setData({
         normalizedConfig: createDefaultTextSectionConfig(config), background,
         textColorStyle: buildTextColorStyle(config.color),
-        lineHeightStyle: buildPortfolioTextLineHeightStyle(config.lineHeight),
+        fontFamilyStyle: buildRemoteFontStyle(config, this.properties.fontContext),
+        lineHeightStyle: buildPortfolioTextLineHeightStyle(config.lineHeight) + buildRemoteFontStyle(config, this.properties.fontContext),
         frameStyle: buildTextBackgroundFrameStyle(background, this._textBackgroundLayout),
         verticalClass: background.enabled ? `vertical-${verticalAlignment}` : '',
         imageFailed: Boolean(imageFailed),

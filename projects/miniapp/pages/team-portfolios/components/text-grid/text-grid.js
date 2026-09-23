@@ -1,9 +1,9 @@
 const { normalizeTextGrid, validateTextGrid, layoutTextGrid, layoutsEqual, presentTextGrid, gridSpacingStyle } = require('../../utils/portfolio-text-grid')
 const { loadPortfolioFonts } = require('../../utils/portfolio-component-platform')
 Component({
-  properties: { config: { type: Object, value: {} }, themeMode: { type: String, value: 'light' } },
+  properties: { fontContext: { type: Object, value: {} }, config: { type: Object, value: {} }, themeMode: { type: String, value: 'light' } },
   data: { cells: [], measuringCells: [], spacingStyle: '', height: 0, natural: false, error: '' },
-  observers: { 'config, themeMode': function () { this.scheduleLayout() } },
+  observers: { fontContext() { this.scheduleLayout() }, 'config, themeMode': function () { this.scheduleLayout() } },
   lifetimes: {
     attached() { this._alive = true; this.scheduleLayout(); Promise.resolve(loadPortfolioFonts()).then(() => { if (this._alive) this.scheduleLayout() }) },
     detached() { this._alive = false; this._layoutTask = (this._layoutTask || 0) + 1 }
@@ -29,14 +29,14 @@ Component({
         let layout
         try { layout = layoutTextGrid(grid, rect && rect.width, scale) }
         catch (error) { this.setData({ natural: true, error: error.message, cells: this.naturalCells(grid), measuringCells: [] }); return }
-        const cells = presentTextGrid(grid, layout, this.properties.themeMode)
+        const cells = presentTextGrid(grid, layout, this.properties.themeMode, this.properties.fontContext)
         this.setData({ measuringCells: cells, error: '', ...(!this._lastLayout ? { cells, height: layout.height, natural: false } : {}) },
           () => this.measureFrame(task, grid, layout, scale, 0))
       }).exec()
     },
     naturalCells(grid) {
       const layout = { cells: grid.cells.slice().sort((a, b) => a.row - b.row || a.column - b.column).map(cell => ({ ...cell, left: 0, top: 0, width: 0, height: 0 })) }
-      return presentTextGrid(grid, layout, this.properties.themeMode).map((cell, index, cells) => {
+      return presentTextGrid(grid, layout, this.properties.themeMode, this.properties.fontContext).map((cell, index, cells) => {
         // 测量失败后按阅读顺序自然展开，仍尊重原跨行格的最小高度与格间距。
         const minHeight = grid.rowMinHeightsRpx.slice(cell.row, cell.row + cell.rowSpan).reduce((sum, height) => sum + height, 0) + grid.gapRpx * (cell.rowSpan - 1)
         return { ...cell, style: `${cell.style}min-height:${minHeight}rpx;margin-bottom:${index < cells.length - 1 ? grid.gapRpx : 0}rpx;` }
@@ -54,9 +54,10 @@ Component({
           }
           const heights = {}; baseline.cells.forEach((cell, index) => { heights[cell.cellKey] = rects[index].height })
           const layout = layoutTextGrid(grid, baseline.width, scale, heights)
-          const same = layoutsEqual(this._lastLayout, layout) && this._lastGrid === JSON.stringify(grid) && this._lastTheme === this.properties.themeMode
+          const same = this._lastFontRevision === (this.properties.fontContext || {}).revision && layoutsEqual(this._lastLayout, layout) && this._lastGrid === JSON.stringify(grid) && this._lastTheme === this.properties.themeMode
+          this._lastFontRevision = (this.properties.fontContext || {}).revision
           this._lastGrid = JSON.stringify(grid); this._lastTheme = this.properties.themeMode; this._lastLayout = layout
-          if (!same || this.data.natural) this.setData({ cells: presentTextGrid(grid, layout, this.properties.themeMode), height: layout.height, natural: false })
+          if (!same || this.data.natural) this.setData({ cells: presentTextGrid(grid, layout, this.properties.themeMode, this.properties.fontContext), height: layout.height, natural: false })
           this.setData({ measuringCells: [] })
         }).exec()
       })

@@ -345,25 +345,30 @@
           </view>
 
           <view class="form-row">
-            <view class="field-heading"><view class="field-label">字体</view></view>
+            <view class="font-selector-heading">
+              <view class="font-selector-title">字体</view>
+              <button class="font-selector-more" wx:if="{{!moreFontsExpanded}}" bindtap="handleExpandFonts">更多字体</button>
+            </view>
+            <view class="font-selector-message" wx:if="{{fontMessage}}">{{fontMessage}}</view>
             <view class="text-section-font-list">
               <view
                 wx:for="{{textSectionFontOptions}}"
+                wx:if="{{!item.remote || moreFontsExpanded || textSectionForm.fontId === item.value}}"
                 wx:key="value"
-                class="text-section-font-option pe-sheet-choice {{textSectionForm.fontFamily === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
+                class="text-section-font-option pe-sheet-choice {{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
                 data-value="{{item.value}}"
                 catchtap="handleTextSectionFontTap"
                 aria-role="radio"
-                aria-checked="{{textSectionForm.fontFamily === item.value}}"
+                aria-checked="{{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value}}"
                 aria-disabled="{{!item.available}}"
-                aria-label="{{item.label}}，映期 Folio 字体预览 123"
+                aria-label="{{item.label}} {{item.languageLabel}} {{item.sample}}"
               >
                 <view class="text-section-font-copy">
                   <view class="text-section-font-label">{{item.label}}</view>
-                  <view class="text-section-font-sample {{item.fontClass}}">映期 Folio 字体预览 123</view>
-                  <view wx:if="{{!item.available}}" class="text-section-font-hint">当前设备不可用</view>
+                  <view wx:if="{{item.languageLabel}}">{{item.languageLabel}}</view><image wx:if="{{item.previewImageUrl}}" class="font-preview-image" src="{{item.previewImageUrl}}" mode="widthFix" /><view wx:else class="text-section-font-sample {{item.fontClass}}">{{item.sample}}</view>
+                  <view wx:if="{{!item.available}}" class="text-section-font-hint">{{item.remote ? (fontMessage || '展开更多字体后可选择') : '当前设备不可用'}}</view>
                   <view
-                    wx:if="{{textSectionForm.fontFamily === item.value && !item.available}}"
+                    wx:if="{{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value && !item.available}}"
                     class="text-section-font-hint current"
                   >当前设备以系统字体预览</view>
                 </view>
@@ -422,9 +427,9 @@
     </view>
   </view>
 
-  <text-grid-editor background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'TEXT_GRID'}}" config="{{newComponentConfig}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
+  <text-grid-editor font-options="{{textSectionFontOptions}}" font-context="{{fontContext}}" remote-font-available="{{remoteFontAvailable}}" more-fonts-expanded="{{moreFontsExpanded}}" font-edit-session-id="{{fontEditSessionId}}" font-message="{{fontMessage}}" bindfontexpand="handleExpandFonts" bindfontselect="handleRemoteFontSelect" bindfontdraft="handleRemoteFontDraft" background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'TEXT_GRID'}}" config="{{newComponentConfig}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
   <contact-info-editor background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'CONTACT_INFO'}}" config="{{newComponentConfig}}" is-new="{{!newComponentKey}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
-  <team-structured-text-editor visible="{{structuredTextSheetVisible}}" config="{{structuredTextConfig}}" is-new="{{structuredTextIsNew}}" font-options="{{textSectionFontOptions}}" background-options="{{textBackgroundOptions}}" background-loading="{{textBackgroundLoading}}" background-error="{{textBackgroundError}}" background-has-more="{{textBackgroundHasMore}}" background-members="{{textBackgroundMembers}}" background-member-user-id="{{textBackgroundMemberUserId}}" background-members-loading="{{textBackgroundMembersLoading}}" background-resource="{{textBackgroundResource}}" bindconfirm="handleConfirmStructuredText" bindcancel="handleCancelStructuredText" bindbackgroundrequest="handleTextBackgroundRequest" bindbackgroundchange="handleStructuredTextBackgroundChange" />
+  <team-structured-text-editor font-context="{{fontContext}}" remote-font-available="{{remoteFontAvailable}}" more-fonts-expanded="{{moreFontsExpanded}}" font-edit-session-id="{{fontEditSessionId}}" font-message="{{fontMessage}}" bindfontexpand="handleExpandFonts" bindfontselect="handleRemoteFontSelect" bindfontdraft="handleRemoteFontDraft" visible="{{structuredTextSheetVisible}}" config="{{structuredTextConfig}}" is-new="{{structuredTextIsNew}}" font-options="{{textSectionFontOptions}}" background-options="{{textBackgroundOptions}}" background-loading="{{textBackgroundLoading}}" background-error="{{textBackgroundError}}" background-has-more="{{textBackgroundHasMore}}" background-members="{{textBackgroundMembers}}" background-member-user-id="{{textBackgroundMemberUserId}}" background-members-loading="{{textBackgroundMembersLoading}}" background-resource="{{textBackgroundResource}}" bindconfirm="handleConfirmStructuredText" bindcancel="handleCancelStructuredText" bindbackgroundrequest="handleTextBackgroundRequest" bindbackgroundchange="handleStructuredTextBackgroundChange" />
 
   <view class="contact-form-sheet-mask pe-sheet-mask {{contactFormSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseContactFormSheet">
     <view class="contact-form-sheet-panel pe-sheet-panel pe-sheet-size-standard {{contactFormSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
@@ -634,3 +639,5 @@
     <button wx:if="{{showPublishAction}}" class="action-button publish-button pe-page-action-primary {{publishing ? 'pe-action-loading' : ''}}" bindtap="handlePublishTap" loading="{{publishing}}" disabled="{{!canMaintain || saving || publishing || hasInvalidComponents}}">发布</button>
   </view>
 </view>
+
+<view wx:if="{{hasRemoteFonts}}" class="font-controls"><button bindtap="handlePrepareFonts" disabled="{{fontPreparing}}">刷新字体</button><button bindtap="handleRepairFontVersions">修复字体版本</button><text wx:if="{{fontMessage}}">{{fontMessage}}</text></view>

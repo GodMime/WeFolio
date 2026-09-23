@@ -4,12 +4,14 @@ const {
   buildMockPortfolioRenderData,
   buildMockCalendarMonth,
   getMockPortfolioDraft,
+  getMockMenuComponents,
   switchMockPortfolioMenu,
   showMockLoginRequiredToast
 } = require('../utils/mock-experience')
 
 const { createMockAudioController, resolveMockBackgroundAudio } = require('../utils/mock-portfolio-audio')
 const { createMockCopyController, resolveMockHyperlinkTarget, getMockHyperlinkTargetUrl } = require('../utils/mock-portfolio-hyperlink')
+const { createMockFontSession } = require('../utils/mock-portfolio-fonts')
 const { registerMockTextFont } = require('../utils/mock-portfolio-text')
 const { buildMockGridViewModel } = require('../utils/mock-portfolio-text-grid')
 const CONTACT_FORM_COMPONENT_TYPE = 'CONTACT_FORM'
@@ -135,6 +137,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.mockFontSession=createMockFontSession({wxApi:wx,onChange:()=>this.refreshMockFontRender()})
     registerMockTextFont(wx)
     this.demoTarget = options.demoTarget || ''
     this.copyController = createMockCopyController({wxApi:wx,
@@ -165,6 +168,7 @@ Page({
   },
 
   onUnload() {
+    if(this.mockFontSession)this.mockFontSession.destroy()
     if(this.mockAudio) this.mockAudio.destroy()
     if(this.copyController) this.copyController.destroy()
     this.handleCloseVideoPreview()
@@ -178,15 +182,18 @@ Page({
       if (this.demoTarget) {
         const target = resolveMockHyperlinkTarget(this.demoTarget)
         if (!target) throw new Error('演示作品集暂不可用')
-        portfolio = buildMockPortfolioRenderData(target.config)
+        this.mockFontConfig=target.config
+        portfolio = buildMockPortfolioRenderData(target.config,this.mockFontSession && this.mockFontSession.context(target.config.fonts))
       } else {
         const draft = getMockPortfolioDraft()
-        portfolio = draft.renderData
+        this.mockFontConfig=draft.config
+        portfolio = buildMockPortfolioRenderData(draft.config,this.mockFontSession && this.mockFontSession.context(draft.config.fonts))
         if(draft.draftWarning) wx.showToast({title:draft.draftWarning,icon:'none'})
       }
       this.previewLoaded = true
       const resource = resolveMockBackgroundAudio(portfolio.backgroundAudio,MOCK_WORK_LIBRARY.works)
       this.setData({loading:false,errorMessage:'',portfolio,audioResource:resource})
+      if(this.mockFontSession)this.mockFontSession.load({fonts:this.mockFontConfig.fonts,components:getMockMenuComponents(this.mockFontConfig,this.data.portfolio.activeMenuKey)})
       if(this.mockAudio) {
         this.mockAudio.setResource(resource)
         if(!this.audioAttempted && resource) {this.audioAttempted=true;this.mockAudio.play()}
@@ -197,6 +204,19 @@ Page({
         errorMessage: error && error.message ? error.message : '本地预览加载失败'
       })
     }
+  },
+
+  refreshMockFontRender() {
+    if(!this.mockFontConfig || !this.mockFontSession)return
+    const current=this.data.portfolio
+    if(!current)return
+    const rendered=buildMockPortfolioRenderData(this.mockFontConfig,this.mockFontSession.context(this.mockFontConfig.fonts))
+    const components=[...rendered.components,...rendered.bottomNav.items.flatMap(item=>item.components || [])]
+    const byKey=new Map(components.filter(item=>['TEXT_SECTION','STRUCTURED_TEXT_SECTION','TEXT_GRID'].includes(item.componentType)).map(item=>[item.componentKey,item]))
+    // 字体回调只更新文字节点，不覆盖用户刚切换的菜单、作品分组及播放状态。
+    const update=list=>(list || []).map(item=>byKey.has(item.componentKey)?{...item,viewModel:byKey.get(item.componentKey).viewModel,...(item.textSection?{textSection:byKey.get(item.componentKey).textSection}:{})}:item)
+    this.setData({portfolio:{...current,components:update(current.components),activeComponents:update(current.activeComponents),
+      bottomNav:{...current.bottomNav,items:current.bottomNav.items.map(item=>item.components?{...item,components:update(item.components)}:item)}}})
   },
 
   handleRetryPreview() {
@@ -318,6 +338,7 @@ Page({
         poster: ''
       }
     }, () => {
+      if(this.mockFontSession)this.mockFontSession.load({fonts:this.mockFontConfig.fonts,components:getMockMenuComponents(this.mockFontConfig,menuKey)})
       this.setData({ portfolioScrollTop: 0 })
       this.portfolioMenuTransitionTimer = setTimeout(() => {
         this.portfolioMenuTransitionTimer = null
@@ -445,7 +466,7 @@ Page({
     const heights={}
     Object.keys(heightsPx || {}).forEach(key=>{heights[key]=heightsPx[key]*scale})
     try {
-      const viewModel=buildMockGridViewModel(component.config,this.data.portfolio.themeMode,widthPx*scale+2*(component.config.horizontalMarginRpx || 0),heights)
+      const viewModel=buildMockGridViewModel(component.config,this.data.portfolio.themeMode,widthPx*scale+2*(component.config.horizontalMarginRpx || 0),heights,this.mockFontSession && this.mockFontSession.context(this.mockFontConfig && this.mockFontConfig.fonts))
       const activeComponents=this.data.portfolio.activeComponents.map(item=>item.componentKey === componentKey ? Object.assign({},item,{viewModel}) : item)
       this.setData({portfolio:Object.assign({},this.data.portfolio,{activeComponents})})
     } catch(error) { /* 保留可用的初始布局，编辑时显示具体校验提示。 */ }

@@ -34,6 +34,12 @@ public class PortfolioEntity extends BaseEntity {
     /** 草稿完整配置 JSON，维护端读取和保存 */
     private String draftConfigJson;
 
+    /** 草稿字体资源清单，和草稿配置同事务保存。 */
+    private String draftFontAssetsJson;
+
+    /** 发布字体资源清单，仅发布时更新。 */
+    private String publishedFontAssetsJson;
+
     /** 草稿版本号，保存草稿成功后递增 */
     private Integer draftRevision;
 

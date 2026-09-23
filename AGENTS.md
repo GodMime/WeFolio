@@ -137,6 +137,7 @@ service/       业务服务
 │   └── video/                 ← 视频类作品（.mp4/.mov 等）
 ├── protfolio/                 ← 作品集素材（封面/背景/布局快照）
 └── others/                    ← 头像、微信二维码、其它杂项
+    └── fonts/                 ← 按作品集 ID 隔离的字体子集
 ```
 
 **上传路径约定：**
@@ -144,12 +145,15 @@ service/       业务服务
 - 视频作品 → `{uniqueCode}/work/video/{uuid}.{ext}`
 - 头像 → `{uniqueCode}/others/{uuid}.{ext}`
 - 作品集素材 → `{uniqueCode}/protfolio/{uuid}.{ext}`
+- 作品集字体 → `{ownerUniqueCode}/others/fonts/{portfolioId}/{uuid}.woff`；个人使用用户唯一码，团队使用团队唯一码，不使用当前操作者的个人目录。
 
 **实现细节：**
 - 文件夹通过 0 字节空对象（Content-Type: application/x-directory）模拟
 - 注册时 `MiniappAuthService` → `CosService.initUserStorage(uniqueCode)` 一次性创建全部文件夹
 - 初始化失败会阻断注册，`MiniappAuthService` 会抛出业务异常并终止注册流程
 - `CosService.upload(file, folderPrefix)` 用于上传到指定目录
+- 新用户 `initUserStorage` 和新团队 `initTeamStorage` 均创建 `others/fonts/` 的 0 字节目录占位对象；作品集 ID 子目录随首次上传产生，字体目录初始化沿用各自原失败语义。
+- 历史目录复用 `UserStorageFolderRepairService`：用户保留 `work/animation/`、`work/audio/` 并补 `others/fonts/`；同一执行内按独立团队 ID 游标分页，仅补团队 `others/fonts/`，不创建团队 work 目录。只补空目录，不生成或删除字体，也不新增字体 Job。
 
 ## 数据库约定
 

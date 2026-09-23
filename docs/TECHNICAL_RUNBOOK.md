@@ -1,7 +1,7 @@
 # 技术信息与服务配置台账
 
-版本：v0.5
-日期：2026-08-26
+版本：v0.6
+日期：2026-09-21
 维护人：dingchenyong
 
 ## 1. 文档目的
@@ -30,7 +30,7 @@
 | 环境 | 云厂商 | 地域/可用区 | 实例名称 | 公网 IP/域名 | 内网 IP | 系统 | 登录方式 | 开放端口 | 部署目录 | 日志目录 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 生产环境 | 腾讯云 | 待补充 | 老节点（Runtime / Nginx / Job） | `49.235.146.161` | 待确认；Nginx 通过 `127.0.0.1:8090` 访问本机 Runtime | CentOS | `root` SSH 密钥登录，使用本机 `~/.ssh/id_ed25519` | 22 / 80 / 443；本机服务 8090（Runtime）/ 8091（Job） | Runtime：`/root/java`；Job：`/root/java/job` | `LOG_PATH`，未配置时默认为 `./logs` | SSH 密钥登录已验证；`PasswordAuthentication no` 已生效；运行 `wefolio.service`、`wefolio-job.service`；Nginx 配置为 `/etc/nginx/conf.d/myapp.conf` |
-| 生产环境 | 待确认 | 待补充 | 新节点（Runtime） | `124.222.148.233` | `10.0.4.7` | 待补充 | `root` SSH 密钥登录，部署脚本使用 BatchMode | 22；内网 8090（供老节点 Nginx 访问 Runtime） | `/root/java` | `LOG_PATH`，未配置时默认为 `./logs` | 仅运行 `wefolio.service`，不部署 Nginx 和 Job；Runtime JAR 与老节点保持相同 SHA-256 |
+| 生产环境 | 待确认 | 待补充 | 新节点（Runtime） | `124.222.148.233` | `10.0.4.7` | CentOS Linux 7 | `root` SSH 密钥登录，部署脚本使用 BatchMode | 22；内网 8090（供老节点 Nginx 访问 Runtime） | `/root/java` | `LOG_PATH`，未配置时默认为 `./logs` | 仅运行 `wefolio.service`，不部署 Nginx 和 Job；Runtime JAR 与老节点保持相同 SHA-256 |
 
 ### 4.1 当前生产部署拓扑
 
@@ -157,6 +157,114 @@ ORDER BY updated_at ASC;
 2. 另准备一条专用作品，从两个终端同时提交 `PASSED` 与带原因的 `REJECTED`，预期只有第一笔结论成功，另一笔返回结论冲突，数据库最终状态与第一笔一致。
 3. 验收后仅清理专用测试数据并保留脱敏结果记录；不得以 Flyway migration 写入任何测试数据清理 SQL。
 
+### 4.4 作品集字体 Python 运行环境（已安装）
+
+2026-09-21 已在老节点 `49.235.146.161` 和新节点 `124.222.148.233` 安装相同的独立字体工具链。两台实际系统均为 CentOS Linux 7 / x86_64 / glibc 2.17，系统 `/usr/bin/python3` 仍为 3.6.8；新环境没有替换系统 Python 或修改全局 PATH。
+
+| 项目 | 两节点一致的版本或路径 |
+| --- | --- |
+| 环境目录 | `/opt/wefolio/font-runtime` |
+| Python | `3.12.14`；`/opt/wefolio/font-runtime/bin/python` |
+| FontTools | `4.59.0` |
+| HarfBuzz | `14.2.1`；`/opt/wefolio/font-runtime/bin/hb-subset` |
+| zlib / OpenSSL | `1.3.2` / `3.6.4` |
+| 安装工具 | `/opt/wefolio/tools/micromamba-2.9.0`，官方 conda-forge 包经 SHA-256 校验 |
+| 依赖锁文件 | `/opt/wefolio/font-runtime/conda-explicit.lock`，含 66 个固定版本/构建及包校验值 |
+| 环境验收记录 | `/opt/wefolio/font-runtime/environment-verification.json` |
+| 依赖缓存 | `/opt/wefolio/.mamba-font-runtime`，仅本独立环境使用 |
+| 工具链指纹 | `24accdc16a01fe2a62a4aa7d2f079f9b2ed5fab81dfa55cb8155e793372c0b26` |
+
+第二台根据第一台导出的 `@EXPLICIT` 清单安装，两台锁文件中的包 URL/校验值完全一致。规范化包清单 SHA-256 为 `97f9a84bff2eb3ed5e08f3a85d80dca6172f1f3f3eee212125c594c8c2865421`；计算口径为取锁文件中以 `https://` 开头的行、排序、以换行连接且末尾无换行。
+
+已用当时仓库的正式 `subset.py`、源字体和完整许可文件，分别批量生成九个真实字重组合。最终 WOFF 的格式、字重、cmap、nameID 0 原版权、nameID 13 完整许可及源有的 nameID 14 均通过重开校验；两台九份文件 SHA-256 逐项相同，`pip check` 均通过。代表性短语批次生成耗时为老节点 621 ms、新节点 478 ms，仅用于环境验收，未测真实 COS 上传、端到端保存或负载下延迟。临时脚本、源字体副本和 WOFF 已从服务器清理，仅留验收 JSON。
+
+本次未发布 JAR、执行数据库迁移、重启服务、改 systemd 或启用字体功能。两台 Runtime 安装前后 PID 分别保持 `2104` / `18749`，最终本机健康检查均返回 `UP`；第二台健康地址为 `http://10.0.4.7:8090/api/health`。
+
+后续发布字体功能时，Java 应使用以下明确路径，不依赖系统 `python3`。此处是待发布配置说明，本次未写入生产应用配置：
+
+```yaml
+portfolio:
+  fonts:
+    python: /opt/wefolio/font-runtime/bin/python
+    harfbuzz: /opt/wefolio/font-runtime/bin/hb-subset
+    toolchain-hash: 24accdc16a01fe2a62a4aa7d2f079f9b2ed5fab81dfa55cb8155e793372c0b26
+```
+
+`expected-build-id` 还依赖本次发布的源清单、脚本及许可证，必须按最终 JAR 重新计算并通过启动自检后再启用，不能把工具链指纹直接用作构建指纹。运行时不需要激活 Conda，也不需要后台 Python 服务。重建环境使用保留的锁文件；环境已被业务引用后，升级或移除前先完成业务摘流和配置迁移。
+
+### 4.5 最终字体 JAR 双节点隔离验收（2026-09-22）
+
+将同一最终 JAR 临时放到两台服务器，通过独立 main 校验源文件、工具链、许可证及 12 组生成自检；未启动 Spring、连接数据库或 COS，也未替换线上 JAR。每台冷、热两轮均为 `enabled=false, ready=true, selfTestGroups=12`，工具链指纹与 §4.4 一致。
+
+- JAR：127,767,803 字节；SHA-256 `b05a3fe89d4ab7e17bb6e0273c0f8747b12ad4555c2f7d86d1952ff83e8539cd`。
+- 构建指纹：`657bbaae35d6f36318f25289b0023f3e276efbd499b8a58281240570a45d8725`；仅适用于本次最终制品，重新构建后须重新核验。
+- 包内 23 份字体源、清单、脚本及许可资源与源码逐项 SHA-256 相同，未包含 Python 缓存。
+
+| 节点 | 冷自检耗时 / 最大 RSS | 热自检耗时 / 最大 RSS |
+| --- | --- | --- |
+| 49.235.146.161 | 3185 ms / 147380 KiB | 2797 ms / 148740 KiB |
+| 124.222.148.233 | 2516 ms / 162072 KiB | 1820 ms / 157992 KiB |
+
+每节点提取资源 83,602,790 字节。上述耗时是独立启动自检耗时，不是保存接口延迟或容量结论。线上服务 PID/运行状态前后保持一致；本次临时 JAR、工作目录和日志已清理，已安装的 Python 环境保留。详细记录在本地 `docs/design/portfolio-multi-font/final-jar-node-verification.json` 和 `final-jar-resources.json`。Runtime/Job 部署、数据库迁移、历史目录补建和生产字体开关均未执行。
+
+### 4.6 字体修复 v2 冻结与隔离验收（2026-09-22）
+
+§4.5 保留为 v1 历史制品证据。v2 已更新 manifest 样张引用和子集完成协议，必须采用下列新身份，不能复用旧 expected-build-id：
+
+- JAR：127778481 字节；SHA-256 `ca8d215f2dad74a9bf66d805b045622e794e0d20499575422f2c4ff85a332ecb`。
+- manifest SHA-256：`6199ed70803f3c3371f7d26047b306c351c7549b3d3d017309179883f62e8268`；包内 23 份字体源、清单、脚本、许可均与源码逐项匹配，无 Python 缓存。
+- `expected-build-id` / `FONT_TARGET_BUILD_ID`：`b3b75f94f637a46fccaf379a4c1f328a7c872db80c4e254b9fdcee1c2cf660c8`。
+- `FONT_TOOLCHAIN_HASH`：`24accdc16a01fe2a62a4aa7d2f079f9b2ed5fab81dfa55cb8155e793372c0b26`，两节点一致。
+- 同一 JAR 的两节点冷/热四轮自检均为 `enabled=false, ready=true, selfTestGroups=12`；老节点 3136 / 2603 ms，新节点 2545 / 2144 ms。独立 main 不启动 Spring、不连接数据库或 COS。
+- 两台 `wefolio.service` 始终 active，PID 保持 2104 / 18749；本次临时 JAR、提取目录均已清理，线上 JAR 与服务未更改。
+- 本机必验入口 `projects/java/wefolio-java-runtime/scripts/verify-portfolio-fonts.sh`：282 项 Java、18 项 Python、32 个 Shell 函数零失败/零跳过。Runtime 全量 2277 项无失败，13 项非字体可选测试跳过；小程序 2479 项全通过。必验登记、解析脚本属 runtime 工程源码，不读取 `.env` 或真实凭据。
+- 字体进程要求 macOS/Linux 的 POSIX 会话和 `/bin/kill`，运行前建组，异常时停止并确认孤立写入者；本次两台 Linux 自检均覆盖新启动方式。
+
+本轮只完成代码和隔离验收，未部署、迁移、补历史目录、开启生产字体或发小程序包。九处实际界面和完整 iOS/Android 业务链仍待对应版本验收。详细证据在本地 `portfolio-multi-font-repair-results-v2.md`、`final-jar-node-verification-v2.json`、`final-jar-resources-v2.json`。
+
+新 buildId 只影响新子集摘要；旧 READY 资产仍按原 weight/objectKey/URL 复用，不迁移、不重发。清理拒绝的旧目录、缺桶或越界引用仅记录为可能残留；人工处置前核实归属与草稿/发布引用，本轮没有清理历史对象。
+
+### 4.7 Runtime / Job 实际发布与历史目录修复（2026-09-23）
+
+按用户授权，依次执行 Runtime 部署脚本、服务器检查、Job 部署脚本、服务器检查及现有历史目录修复任务。以下是当前线上状态，§4.4—4.6 的未部署描述保留为对应日期的历史记录。
+
+- Runtime：双节点滚动发布成功，耗时 98.6 秒；Nginx 恢复双节点轮询，两节点及正式 HTTPS 健康入口均 UP。两台 JAR SHA-256 均为 `dc5ff4d6bc5986e04c01b4fcac0a26cfec0e50efd562aa20e62a15f17468b235`，127778481 字节。版本 `971336c`，构建时间 `2026-09-23 09:36:55`；该版本号为工作区 Git 基点，包含本次未提交改动，制品身份以 SHA-256 为准。
+- 与 §4.6 冻结包逐项比较，`BOOT-INF/classes/` 和 `BOOT-INF/lib/` 中只有 `version.properties` 不同；应用代码、字体资源和依赖完全一致。字体 buildId / toolchainHash 沿用 §4.6 已验证身份。
+- 发布阶段为 `disabled`：两节点 `enabled=false, ready=false, reasonCodes=[DISABLED]`。脚本已写入 `/root/java/portfolio-fonts.env` 和 `/etc/systemd/system/wefolio.service.d/zzzz-portfolio-fonts.conf`。未开启字体生成、启动自检或另行配置字体告警。
+- Flyway：第一节点从 V58 升到 V59，第二节点确认 V59；只新增作品集草稿/发布字体资源两列。未执行数据删除或回填。
+- Job：老节点 `49.235.146.161` 部署成功，耗时 18.7 秒；旧实例停用返回 `activeTaskCount=0` 后重启。新服务及正式 HTTPS 健康接口均 UP。JAR SHA-256 `74b1d5f38535f16214cb777577dcb1ddb6d1c6d5272b4142066a8032dab7ec5b`，版本 `971336c`，构建时间 `2026-09-23 09:40:10`。发布前 Job 全量测试 308 项，零失败/错误，2 项 COS 远端集成测试跳过。
+- Job 旧 JAR 备份：`/root/java/job/wefolio-java-job.jar.pre-font-20260923`，SHA-256 `ba1eea145af6b7e7f74f59f2bb2ed19cb559e2ccca7fcf994f87f70952b9c435`。
+- 通过服务器本机调用一次 `POST /job-api/user-storage/folders/repair`，密钥只在进程内存读取使用，未输出。执行 ID `8a422e47-bd47-4f11-8a74-79ce6b161fa7`；首次响应显示未确认，随即通过该执行日志确认成功，未重复提交。
+- `09:41:56.834` 目录修复完成：48 个用户，96 个已有目录，48 个新建目录，0 失败；4 个团队，0 个已有字体目录，4 个新建字体目录，0 失败。只补空目录，不处理字体文件。
+- `09:42:33` 最终检查：两 Runtime、Job 健康均 UP，Nginx active。Runtime PID 老/新 `10105` / `9894`，Job PID `11208`。未发布小程序、未处理 HTTPS 证书。
+
+本地操作日志：`/tmp/wefolio-runtime-deploy-20260923.log`、`/tmp/wefolio-job-deploy-20260923.log`、`/tmp/wefolio-job-predeploy-20260923.log`。后续开启字体仍须完成相应阶段准入；本次只完成 disabled 发布。
+
+### 4.8 Runtime prevalidated 发布（2026-09-23 10:08）
+
+用户授权进入预校验阶段后，执行现有 Runtime 部署脚本，`FONT_DEPLOY_PHASE=prevalidated`；target 和 accepted 均使用 §4.6 已独立验收、§4.7 已发布的字体 buildId `b3b75f94f637a46fccaf379a4c1f328a7c872db80c4e254b9fdcee1c2cf660c8`，toolchainHash 不变。
+
+- 双节点滚动发布成功，退出码 0，总耗时 102.6 秒；Nginx 已恢复双节点轮询。
+- 当前运行开关：`PORTFOLIO_FONTS_ENABLED=false`、`PORTFOLIO_FONTS_VALIDATION_ENABLED=true`。两节点 `ready=true`、`reasonCodes=[]`，启动字体环境和生成许可自检通过，但用户请求仍不能生成新子集。
+- 新 JAR SHA-256：`c4088f38ceb63ae1ac4a8f36f3bc04858a6f6cd659888514f42d63d817a1a5f4`，127778481 字节；版本 `971336c`，构建时间 `2026-09-23 10:05:54`。两服务器摘要与本地一致；应用代码/资源/依赖对比 §4.6 冻结包，仅 `version.properties` 不同。
+- 使用 `check-font-nodes.py --allow-disabled` 只读检查，退出码 0，`ok=true, readyNodes=2, requiredReadyNodes=2`，无漂移或故障原因；未发送告警。
+- 最终检查：两 Runtime active/running，PID 老/新 `17298` / `16436`；正式 HTTPS 健康入口 UP，字体 ready=true。Job 仍为 PID `11208`、健康 UP；本次未重发 Job 或重复执行目录修复。
+- 发布日志：`/tmp/wefolio-runtime-prevalidated-20260923.log`。本阶段不等同于 enabled；未启用字体生成，也未发布小程序。
+
+### 4.9 字体启用与部署脚本解耦（2026-09-23 12:33）
+
+按用户最新要求，先用原部署流程完成 enabled 发布，再移除 Runtime 部署脚本中的字体发布流程。§4.7—4.8 的阶段命令保留为历史操作记录，后续发布不再使用 `FONT_DEPLOY_PHASE`、`FONT_TARGET_BUILD_ID`、`FONT_ACCEPTED_BUILD_ID` 等部署变量。
+
+- enabled 双节点滚动发布成功，退出码 0，总耗时 99.1 秒。两节点 `enabled=true, ready=true, reasonCodes=[]`，buildId 均为 `b3b75f94f637a46fccaf379a4c1f328a7c872db80c4e254b9fdcee1c2cf660c8`；独立双节点检查 `ok=true, readyNodes=2`，未发送告警。
+- 当前 Runtime JAR SHA-256 两节点一致：`d87addd6d14fcba20386a646c36fa130f8adbbd67238397ba0f95c96cb5ea21b`。版本 `971336c`，构建时间 `2026-09-23 12:28:27`。对比原验收包的应用代码、资源及依赖，仅 `version.properties` 变化。
+- 老/新 Runtime PID 为 `17354` / `15413`；Nginx 已恢复双节点轮询；正式 HTTPS 健康入口 UP，字体 enabled/ready 均为 true。Job 保持 PID `11208` 且 UP，没有重发或重复目录修复。
+- `deploy.sh` 已移除字体阶段变量、构建身份入参约束、`portfolio-fonts.env` / systemd 写入及字体专用健康校验。删除无调用方的 `scripts/validate-font-health.py`。保留构建一次、SHA-256 核对、JAR 备份、滚动重启、Nginx 切流及服务级健康检查；健康仅解析 `data.status == UP`，拒绝无效 JSON、嵌套假 UP 和网络失败。
+- 后续在 runtime 工程执行 `bash deploy.sh` 即可。脚本不再管理字体配置，也不因字体 ready/buildId 阻断普通后端发布。服务器现有 `/root/java/portfolio-fonts.env` 与 `/etc/systemd/system/wefolio.service.d/zzzz-portfolio-fonts.conf` 保留，当前启用状态持续生效。
+- 应用自身的字体启动自检、构建身份核对、故障锁存和告警能力保持原行为。若将来调整字体源/清单/脚本/工具链，需要独立核验并更新两台服务器的 `PORTFOLIO_FONTS_EXPECTED_BUILD_ID`、`PORTFOLIO_FONTS_TOOLCHAIN_HASH` 等配置；普通部署不会自动更新这些值。`scripts/check-font-nodes.py` 保留为独立运维检查工具。
+- 部署回归 30 项全部通过；更新后的完整必验 Java 337 项、Python 18 项、Shell 30 个函数，零失败、零错误、零跳过。报告 `target/font-verification/run-jpdh4n0e/`。已用简化脚本在无字体参数时执行生产只读 `preflight`，退出码 0；没有为验证脚本而重复重启线上服务。
+
+日志：`/tmp/wefolio-runtime-enabled-20260923.log`、`/tmp/wefolio-deploy-simplified-tests-20260923.log`、`/tmp/wefolio-font-gate-deploy-decoupled-20260923.log`。小程序发包与完整真机业务验收尚未执行。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |
@@ -197,6 +305,22 @@ Redis 只保存原码索引、生成锁和限流信息；索引到期后优先�
 - 小程序失败日志标签为 `portfolio-miniapp-code-save-failed`，记录 `getSetting` / `saveImageToPhotosAlbum` / `openSetting` 阶段、脱敏错误及数字错误码。失败不写分享记录，仍可预览本地图片。
 - 2026-09-18 的 iPhone 截图报错来自旧后端头像校验；当日排查发现线上两台 JAR 均未包含此前兼容修复。最终方案移除了生成原码对头像 URL、MIME、大小和 ETag 的硬依赖，头像只作为可选展示资料交给前端。此修复需发布 Runtime，接口和环境变量不变；新版生成接口不再产生“头像读取失败”业务错误。前端开启头像后的下载/绘制故障仍须按具体资源排查，不可仅凭终端类型判断原因。
 - 官方依据：[隐私授权开发指引](https://developers.weixin.qq.com/miniprogram/dev/framework/user-privacy/PrivacyAuthorize.html)、[隐私类型与接口对应关系](https://developers.weixin.qq.com/miniprogram/dev/framework/user-privacy/miniprogram-intro.html)。
+
+### 6.2 作品集字体静态素材发布（2026-09-22）
+
+Mock 体验版九份物理字重 WOFF 与六张样张 PNG 已发布至 `https://cdn2.we-folio.dingchenyong.top/demo/portfolio-fonts/{fontId}/{fontVersion}/{sha256}.{woff|png}`。固定语料包括体验版作品集、默认文字组件、内链演示页和选择器样张。各最终 WOFF 使用正式许可校验器复核原版权、OFL 全文及源已有许可链接；发布后逐个 GET 核验 SHA-256、`font/woff` 和 `Access-Control-Allow-Origin: *`；PNG 核验摘要及 `image/png`。本地记录在 `design/portfolio-multi-font/mock-static/publication.json`，素材共 416,635 字节。
+
+CDN 响应头已新增九个 WOFF 的精确路径规则，并追加仅匹配 WOFF 文件后缀的 CORS 规则（`Access-Control-Allow-Origin: *`），覆盖后续个人/团队 UUID 字体子集路径；保留原有规则，图片和视频响应不变。已用不在九个精确路径中的 WOFF 验证后缀规则生效。未修改 COS 全桶权限或 CORS、未部署 Runtime/Job JAR、未执行迁移或历史目录修复、未开启线上字体生成。微信合法下载域名与正式 iOS/Android 页面业务链仍需上线前实机验收。
+
+字体告警已确定复用现有飞书机器人，使用独立 `PORTFOLIO_FONTS_ALERT_*` 配置；本轮只实现代码及本地 HTTP 验证，未修改生产机器人配置或发送群测试消息。节点数量/构建漂移脚本供现有监控设施调用，不新增字体生成、重试或清理任务。
+
+### 6.3 字体样张 v2（2026-09-22）
+
+六张新 PNG 已上传 COS；三张中文样张统一“以光为笔，记录心动”，三张英文复用原字节。PNG 改用自身 SHA-256 命名，与同款 400 字重 WOFF 摘要解耦；旧图片对象保留，九份 WOFF 内容与地址未变。
+
+HTTPS GET 核验因 CDN 证书过期未通过。**用户已明确本轮不处理 HTTPS 证书问题**；未关闭证书校验，发布记录保持 `published=false` / `cdnVerified=false`。该项不计作 CDN 验收成功。
+
+正式样张引用须随包含上述 buildId 的 Runtime 包生效；Mock sampleUrl 与四处模板修复须随小程序包发布并被采用后生效。两条生效链均未发布，不能用 COS 上传成功代替客户端生效。§6.2 是此前地址的历史证据，新地址状态以本节及本地 `design/portfolio-multi-font/mock-static/publication.json` 为准。
 
 ## 7. 大模型服务
 
@@ -293,3 +417,12 @@ Redis 只保存原码索引、生成锁和限流信息；索引到期后优先�
 | 2026-09-18 | Codex | 增加作品集小程序码 COS 目录、手机合成、环境变量及 CDN/真机验收要求 | Runtime 双节点、COS/CDN、微信小程序 | 尚未执行线上配置变更；应用回滚不应删除既有作品集素材 |
 | 2026-06-19 | 待补充 | 服务器1 启用 SSH 密钥登录并关闭密码登录 | SSH 登录方式 | 服务器备份文件：`/etc/ssh/sshd_config.bak-20260619-before-disable-passwordauth`；恢复后执行 `sshd -t` 并重载 `sshd` |
 | 2026-06-19 | 待补充 | 初始化技术信息与服务配置台账 | 文档模板 | 不涉及 |
+| 2026-09-21 | Codex | 两台 Runtime 服务器安装独立 Python 3.12.14、FontTools 4.59.0、HarfBuzz 14.2.1；固定 66 个依赖并完成九份 WOFF 一致性验收 | `/opt/wefolio/font-runtime`；系统 Python、现有应用进程与配置未改动 | 本次尚未被应用引用，可移除新环境；后续接入后须先迁移应用配置。锁文件可用于重建 |
+
+| 2026-09-22 | Codex | 发布九份 Mock 字体和六张样张，增加 WOFF CORS；最终 JAR 双节点隔离自检通过 | CDN 静态对象及 WOFF 响应头；未部署 Runtime/Job 或迁移数据库 | 可移除本次新增的字体 CORS 规则；已被客户端引用的不可变静态对象不应直接删除；隔离验收临时文件已清理 |
+
+| 2026-09-23 | Codex | 按授权完成 Runtime 双节点 disabled 滚动发布、V59 迁移、Job 单节点发布及历史目录补建；三服务健康 UP | Runtime 双节点、Job、Nginx、数据库新增列及 52 个 COS 空目录 | Runtime 脚本保留旧 JAR；Job 保留 pre-font-20260923 备份。恢复应用前检查配置兼容；保留新增数据库列和已补空目录 |
+
+| 2026-09-23 | Codex | Runtime 双节点进入 prevalidated 阶段，启动字体自检通过，ready=true、enabled=false；恢复双节点轮询 | Runtime 双节点及字体自检工作目录 | 如需停用自检，按 disabled 阶段滚动发布；保留现有字体资源和数据库列 |
+
+| 2026-09-23 | Codex | 两 Runtime 字体已 enabled 且 ready；按用户要求移除部署脚本字体阶段和配置写入，普通发布仅检查服务级健康 | Runtime 双节点、部署脚本及测试；现有字体配置保留 | 字体开关由服务器独立配置；部署脚本保留原 JAR 备份和切流保障 |

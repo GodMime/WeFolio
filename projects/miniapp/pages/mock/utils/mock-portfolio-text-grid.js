@@ -78,12 +78,15 @@ function resizeMockGrid(raw,rows,columns) {
   for(let row=0;row<rows;row++) for(let column=0;column<columns;column++) if(!cells.some(cell=>cell.row<=row&&row<cell.row+cell.rowSpan&&cell.column<=column&&column<cell.column+cell.columnSpan)) cells.push(createMockGridCell(row,column))
   return requireValid({...value,rows,columns,cells:cells.sort(order),columnWeights:Array.from({length:columns},(_,i)=>value.columnWeights[i]||1),rowMinHeightsRpx:Array.from({length:rows},(_,i)=>value.rowMinHeightsRpx[i]||180)})
 }
-function createMockGridHistory(initial) {
-  let current=copy(requireValid(initial)),history=[]
-  return {get:()=>copy(current),size:()=>history.length,apply(next){requireValid(next);history.push(current);history=history.slice(-MAX_HISTORY);current=copy(next);return copy(current)},undo(){if(history.length)current=history.pop();return copy(current)},clear(){history=[]}}
+/** 网格撤销条目同时保存页面根版本快照，不把根表放进组件配置。 */
+function createMockGridHistory(initial,initialFonts={}) {
+  let current={config:copy(requireValid(initial)),fonts:copy(initialFonts)},history=[]
+  return {get:()=>copy(current.config),getFonts:()=>copy(current.fonts),size:()=>history.length,
+    apply(next,fonts=current.fonts){requireValid(next);history.push(current);history=history.slice(-MAX_HISTORY);current={config:copy(next),fonts:copy(fonts)};return copy(current.config)},
+    undo(){if(history.length)current=history.pop();return copy(current.config)},clear(){history=[]}}
 }
 /** 宽度与测量高度统一以 rpx 输入，跨行格补足各行高度避免裁切。 */
-function buildMockGridViewModel(raw,themeMode='light',widthRpx=686,measuredHeights={}) {
+function buildMockGridViewModel(raw,themeMode='light',widthRpx=686,measuredHeights={},fontContext={}) {
   const value=normalizeMockTextGrid(requireValid(raw)),gap=value.gapRpx
   const width=widthRpx-value.horizontalMarginRpx*2
   const sum=(list,start,count)=>list.slice(start,start+count).reduce((a,b)=>a+b,0)+gap*(count-1)
@@ -99,6 +102,6 @@ function buildMockGridViewModel(raw,themeMode='light',widthRpx=686,measuredHeigh
   const channels=background.slice(1).match(/../g).map(part=>parseInt(part,16))
   const textTheme=(channels[0]*299+channels[1]*587+channels[2]*114)/1000<128?'dark':'light'
   const border=value.cellBorderColor==='AUTO'?(themeMode==='dark'?'#45464A':'#D7DADD'):value.cellBorderColor
-  return {height:sum(heights,0,value.rows),spacingStyle:`padding:${value.verticalMarginRpx}rpx ${value.horizontalMarginRpx}rpx;`,cells:value.cells.map(cell=>({...cell,style:`position:absolute;left:${cell.column?sum(widths,0,cell.column)+gap:0}rpx;top:${cell.row?sum(heights,0,cell.row)+gap:0}rpx;width:${sum(widths,cell.column,cell.columnSpan)}rpx;height:${sum(heights,cell.row,cell.rowSpan)}rpx;padding:${value.cellPaddingRpx}rpx;border-radius:${value.cellRadiusRpx}rpx;background:${background};border:${value.cellBorder?value.cellBorderWidthRpx:0}rpx solid ${border};justify-content:${{TOP:'flex-start',CENTER:'center',BOTTOM:'flex-end'}[cell.verticalAlignment]};`,blocks:cell.blocks.map(block=>({...block,style:`text-align:${block.alignment.toLowerCase()};padding-top:${block.marginTopRpx}rpx;padding-bottom:${block.marginBottomRpx}rpx;`,lineStyle:validLineHeight(block.lineHeight)?`font-size:${Math.max(...block.runs.map(run=>run.fontSizeRpx))}rpx;line-height:${block.lineHeight};`:'',runs:block.runs.map(run=>({...run,fontClass:run.fontFamily==='WECHAT_SANS_SS'?'font-wechat-sans-ss':'',style:mockTextStyle({...run,alignment:block.alignment,lineHeight:block.lineHeight},textTheme)}))}))}))}
+  return {height:sum(heights,0,value.rows),spacingStyle:`padding:${value.verticalMarginRpx}rpx ${value.horizontalMarginRpx}rpx;`,cells:value.cells.map(cell=>({...cell,style:`position:absolute;left:${cell.column?sum(widths,0,cell.column)+gap:0}rpx;top:${cell.row?sum(heights,0,cell.row)+gap:0}rpx;width:${sum(widths,cell.column,cell.columnSpan)}rpx;height:${sum(heights,cell.row,cell.rowSpan)}rpx;padding:${value.cellPaddingRpx}rpx;border-radius:${value.cellRadiusRpx}rpx;background:${background};border:${value.cellBorder?value.cellBorderWidthRpx:0}rpx solid ${border};justify-content:${{TOP:'flex-start',CENTER:'center',BOTTOM:'flex-end'}[cell.verticalAlignment]};`,blocks:cell.blocks.map(block=>({...block,style:`text-align:${block.alignment.toLowerCase()};padding-top:${block.marginTopRpx}rpx;padding-bottom:${block.marginBottomRpx}rpx;`,lineStyle:validLineHeight(block.lineHeight)?`font-size:${Math.max(...block.runs.map(run=>run.fontSizeRpx))}rpx;line-height:${block.lineHeight};`:'',runs:block.runs.map(run=>({...run,fontClass:!run.fontId&&run.fontFamily==='WECHAT_SANS_SS'?'font-wechat-sans-ss':'',style:mockTextStyle({...run,alignment:block.alignment,lineHeight:block.lineHeight},textTheme,fontContext)}))}))}))}
 }
 module.exports={createMockGridRun,createMockGridBlock,createMockGridCell,createMockTextGrid,normalizeMockTextGrid,validateMockTextGrid,mergeMockGridCells,splitMockGridCell,resizeMockGrid,createMockGridHistory,buildMockGridViewModel}

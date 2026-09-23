@@ -109,7 +109,7 @@ class TeamPortfolioFoundationTest {
     @Test
     void dtosShouldExposeOnlyTeamPortfolioFields() {
         assertFields(TeamPortfolioConfigDto.class,
-                "schemaVersion", "editorSchemaRevision", "share", "style", "backgroundAudio", "components", "bottomNav");
+                "schemaVersion", "editorSchemaRevision", "share", "style", "backgroundAudio", "components", "bottomNav", "fonts", "fontsProvided");
         assertFieldType(TeamPortfolioConfigDto.class, "backgroundAudio", BackgroundAudioConfigDto.class);
         assertFields(BackgroundAudioConfigDto.class, "enabled", "workId", "displayStyle");
         assertFieldType(TeamPortfolioConfigDto.class, "schemaVersion", String.class);
@@ -147,7 +147,7 @@ class TeamPortfolioFoundationTest {
         assertFieldType(TeamPortfolioConfigDto.ComponentEnvelope.class, "config", JSONObject.class);
 
         assertFields(TeamPortfolioRenderDto.class, "shareCode", "portfolioId", "teamId", "teamName", "title",
-                "share", "preview", "underMaintenance", "visitRecordId", "style", "backgroundAudio", "components", "bottomNav");
+                "share", "preview", "underMaintenance", "visitRecordId", "style", "backgroundAudio", "components", "bottomNav", "fonts");
         assertFieldType(TeamPortfolioRenderDto.class, "backgroundAudio", BackgroundAudioRenderDto.class);
         assertFieldType(TeamPortfolioRenderDto.class, "shareCode", String.class);
         assertFieldType(TeamPortfolioRenderDto.class, "portfolioId", Long.class);

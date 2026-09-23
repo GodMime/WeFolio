@@ -1,6 +1,11 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontSavedFlowAssertions;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -37,6 +42,30 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class PortfolioConfigValidatorTest {
+
+    /** 真实规范化器跨三类文字和多菜单保存/发布后，字体计划与 READY 原引用稳定。 */
+    @Test void remoteFontsSurviveRealDraftAndPublishNormalization() throws Exception {
+        var inputJson = JSON.parseObject(Files.readString(Path.of("src/test/resources/portfolio-font-legacy-goldens.json")))
+                .getJSONObject("requests").getJSONObject("portfolios").getJSONObject("untouched")
+                .getJSONObject("request").getJSONObject("config");
+        inputJson.getJSONObject("share").put("title", "字体回归作品集");
+        var components = inputJson.getJSONArray("components");
+        inputJson.put("bottomNav", JSONObject.of("enabled", true, "items", List.of(
+                JSONObject.of("key", "nav_home", "title", "首页"),
+                JSONObject.of("key", "nav_more", "title", "更多", "components", List.of(components.remove(2))))));
+        inputJson.put("fonts", JSONObject.of("ALLURA", JSONObject.of("fontVersion", "gf-809e4d8b8d7e-r1")));
+        var input = inputJson.to(PortfolioConfigDto.class);
+        PortfolioFontConfigSupport.nodes(input).values().forEach(node -> node.put("fontFamily", "SYSTEM"));
+
+        var saved = JSON.parseObject(JSON.toJSONString(validator().normalizeForDraft(7L, input, null)), PortfolioConfigDto.class);
+        var before = PortfolioFontPlan.from(saved);
+        assertThat(PortfolioFontConfigSupport.nodes(saved)).hasSize(3);
+        var published = validator().normalizeForDraft(7L, saved, null);
+        validator().validateForPublish(7L, published);
+        var after = PortfolioFontPlan.from(published);
+        assertThat(after).isEqualTo(before);
+        PortfolioFontSavedFlowAssertions.assertReadyReuse(before, after);
+    }
 
     /** 联系信息边框经过草稿序列化、发布及旧版编辑跨菜单移动后仍保留完整设置。 */
     @Test

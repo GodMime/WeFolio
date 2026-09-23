@@ -145,6 +145,10 @@ V3__add_user_isolation_fields.sql  # wf_work_tag/wf_visit_event/wf_portfolio_sha
 
 > **⚠️ Flyway 铁律**：已提交到 Git 的 migration 文件绝对不可修改。Flyway 通过 checksum 校验已执行的脚本，任何改动都会导致启动失败。所有数据库变更必须通过新增 V4、V5… 文件实现。**禁止在 migration 中写入"重置/清理"类破坏性数据操作**（如 `DELETE` 全表、`UPDATE` 清零余额/流水）；数据重置与清理只能在对应环境手工执行并留痕，不得以 Flyway migration 形式进入迁移链。
 
+## COS 字体存储
+
+作品集字体统一使用 `{ownerUniqueCode}/others/fonts/{portfolioId}/{uuid}.woff`，个人取用户唯一码，团队取团队唯一码。新用户/团队初始化 `others/fonts/` 空目录；历史空目录补建复用现有 Job，字体生成及删除仍在 runtime 同步用例内。修改字体存储或初始化逻辑时，遵守本目录 [AGENTS.md 的 COS 存储约定](AGENTS.md#cos-存储约定)。
+
 ## 编码规范
 
 ### 注释

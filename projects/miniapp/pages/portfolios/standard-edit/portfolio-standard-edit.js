@@ -1,7 +1,8 @@
+const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { normalizeTextGrid, validateTextGrid } = require('../utils/portfolio-text-grid')
 const { normalizeContactInfo, validateContactInfo } = require('../utils/portfolio-contact-info')
 const { portfolioAudioPageMethods, AUDIO_STYLE_OPTIONS, normalizeAudioResource } = require('../utils/portfolio-audio-player')
-const { request } = require('../../../utils/request')
+const { request } = require('../../../utils/request.js')
 const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('../utils/portfolio-text-color')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../../utils/session')
 const { noop } = require('../../../utils/noop')
@@ -115,7 +116,8 @@ const {
 } = require('../utils/portfolio-text-sections')
 const {
   LEGACY_PERSONAL_FONT_SIZE_RPX,
-  PORTFOLIO_TEXT_FONT_OPTIONS,
+  PORTFOLIO_TEXT_SELECTION_OPTIONS: PORTFOLIO_TEXT_FONT_OPTIONS,
+  applyPortfolioFontSelection,
   buildPortfolioTextFontSizeOptions,
   buildPortfolioTextTypography,
   LEGACY_TEXT_SECTION_LINE_HEIGHT,
@@ -124,7 +126,7 @@ const {
   parsePortfolioTextLineHeightInput,
   stepPortfolioTextLineHeight,
   buildPortfolioTextLineHeightEditor
-} = require('../../../utils/portfolio-text-typography')
+} = require('../../../utils/portfolio-text-typography.js')
 const {
   getPortfolioFontCapability,
   isPortfolioFontAvailable,
@@ -904,6 +906,7 @@ function buildTextSectionForm(config = {}) {
     content: normalized.content || '',
     color: normalized.color,
     alignment: normalized.alignment || TEXT_SECTION_ALIGNMENTS.LEFT,
+    ...(Object.prototype.hasOwnProperty.call(config, 'fontId') ? { fontId: config.fontId } : {}),
     fontFamily: normalized.fontFamily,
     fontSizeRpx: normalized.fontSizeRpx,
     ...(Object.prototype.hasOwnProperty.call(config, 'lineHeight') ? { lineHeight: config.lineHeight } : {})
@@ -915,7 +918,7 @@ function buildTextSectionFontOptions(
 ) {
   return PORTFOLIO_TEXT_FONT_OPTIONS.map((item) =>
     Object.assign({}, item, {
-      available: isPortfolioFontAvailable(item.value, capability)
+      available: item.remote ? false : isPortfolioFontAvailable(item.value, capability)
     })
   )
 }
@@ -1204,6 +1207,11 @@ function updateShareCoverUrlInConfig(config = {}, coverUrl = '') {
 }
 
 Page({
+  handleRemoteFontDraft(event) { if (this.remoteFontPage) this.remoteFontPage.editDraft(event.detail) },
+  handleRemoteFontSelect(event) { if (this.remoteFontPage) this.remoteFontPage.select(event.detail.fontId, event.detail.sessionId) },
+  handleExpandFonts() { if (this.remoteFontPage) return this.remoteFontPage.expand() },
+  handlePrepareFonts() { if (this.remoteFontPage) this.remoteFontPage.prepare() },
+  handleRepairFontVersions() { if (this.remoteFontPage) this.remoteFontPage.repairVersions() },
   ...portfolioAudioPageMethods,
   componentWorkRequestSeq: 0,
   singleWorkSummaryRequestSeq: 0,
@@ -1362,6 +1370,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.remoteFontPage = installRemoteFontPage(this, { editor: true, team: false })
     this.setData({ portfolioId: options.portfolioId || null })
     this.loadPortfolioFontCapability()
     return this.bootstrap()
@@ -1394,6 +1403,7 @@ Page({
     }
     return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}` })
       .then((response) => {
+        this.setData({ fontAssets: response.fontAssets || null })
         const config = normalizePortfolioConfig(response.config || {})
         this.setData(Object.assign({
           draftRevision: response.draftRevision || 0,
@@ -2310,12 +2320,13 @@ Page({
     const option = this.data.textSectionFontOptions.find(
       (item) => item.value === value
     )
-    if (!option || !option.available) return
+    if (!option || !option.available) { wx.showToast({ title: option && option.remote ? (this.data.fontMessage || '字体暂不可用，当前使用系统字体') : '当前设备暂不支持此字体', icon: 'none' }); return }
     const textSectionForm = Object.assign(
       {},
       this.data.textSectionForm,
-      { fontFamily: value }
+      applyPortfolioFontSelection(value)
     )
+    if (this.remoteFontPage) this.remoteFontPage.select(textSectionForm.fontId)
     this.setData({
       textSectionForm,
       textSectionTypography: buildPortfolioTextTypography(
@@ -2396,7 +2407,7 @@ Page({
     })
     config = replaceMenuComponentList(config, this.data.activeMenuKey, components)
     this.resetTextBackgroundSession()
-    this.applyEditorConfig(config, this.data.activeMenuKey, {
+    this.applyEditorConfig(this.remoteFontPage ? this.remoteFontPage.commit(config) : config, this.data.activeMenuKey, {
       textSectionSheetVisible: false,
       textSectionEditingComponentKey: '',
       ...buildTextSectionEditorState()
@@ -2427,7 +2438,7 @@ Page({
     }
     if (!key) { config = addComponent(config, type, menuKey); key = getMenuComponentList(config, menuKey).slice(-1)[0].componentKey }
     const components = getMenuComponentList(config, menuKey).map(item => item.componentKey === key ? { ...item, config: value } : item)
-    this.applyEditorConfig(replaceMenuComponentList(config, menuKey, components), menuKey, { newComponentSheetVisible: false, newComponentKey: '', newComponentConfig: {} })
+    this.applyEditorConfig(this.remoteFontPage ? this.remoteFontPage.commit(replaceMenuComponentList(config, menuKey, components)) : replaceMenuComponentList(config, menuKey, components), menuKey, { newComponentSheetVisible: false, newComponentKey: '', newComponentConfig: {} })
   },
 
   openStructuredTextSheet(componentKey = '') {
@@ -2464,7 +2475,7 @@ Page({
     const components = getMenuComponentList(config, menuKey).map(item => item.componentKey === key
       ? Object.assign({}, item, { config: form }) : item)
     this.resetTextBackgroundSession()
-    this.applyEditorConfig(replaceMenuComponentList(config, menuKey, components), menuKey, {
+    this.applyEditorConfig(this.remoteFontPage ? this.remoteFontPage.commit(replaceMenuComponentList(config, menuKey, components)) : replaceMenuComponentList(config, menuKey, components), menuKey, {
       structuredTextSheetVisible: false, structuredTextEditingComponentKey: '', structuredTextConfig: {}
     })
   },
@@ -2500,6 +2511,7 @@ Page({
   onShow() { this.showBackgroundAudio() },
   onHide() { this.hideBackgroundAudio() },
   onUnload() {
+    if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.destroyBackgroundAudio()
     this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
     this.textBackgroundRequestSeq = (this.textBackgroundRequestSeq || 0) + 1
@@ -4173,6 +4185,7 @@ Page({
       }, buildPublicationStatusState(response.publicationStatus || this.data.publicationStatus)))
       // 成功仅确认已发送的快照；期间产生的新编辑仍留在本页，由用户再次保存后才返回列表。
       const editorChanged = stableEditorConfigJson(buildDraftPayload(this.data.config).config) !== stableEditorConfigJson(pending.payload.config)
+      if (!editorChanged) this.setData({ fontAssets: response.fontAssets || null })
       if (options.showToast !== false) {
         wx.showToast({ title: editorChanged ? UNSAVED_EDITOR_CHANGES_MESSAGE : '草稿已保存', icon: editorChanged ? 'none' : 'success' })
       }

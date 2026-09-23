@@ -163,6 +163,8 @@ class VisitorPortfolioHyperlinkIntegrationTest {
         jdbcTemplate.execute("DROP TABLE IF EXISTS wf_portfolio");
         jdbcTemplate.execute("""
                 CREATE TABLE wf_portfolio (
+                    draft_font_assets_json CLOB,
+                    published_font_assets_json CLOB,
                   id BIGINT PRIMARY KEY,
                   share_code VARCHAR(32),
                   owner_type VARCHAR(16) NOT NULL,

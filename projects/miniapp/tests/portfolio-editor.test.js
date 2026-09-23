@@ -1786,7 +1786,7 @@ test('tapping text section component saves typography only after confirmation', 
   ])
   assert.deepEqual(
     page.data.textSectionFontOptions.map((item) => item.value),
-    ['SYSTEM', 'WECHAT_SANS_SS']
+    ['SYSTEM', 'WECHAT_SANS_SS', 'CORMORANT_GARAMOND', 'MANROPE', 'ALLURA', 'SOURCE_HAN_SERIF_SC', 'ZCOOL_XIAOWEI', 'LXGW_WENKAI']
   )
 
   page.data.textSectionFontOptions = page.data.textSectionFontOptions.map((item) =>

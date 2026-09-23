@@ -233,11 +233,21 @@ mv -f \"\${uploading}\" \"\${formal}\""
 # === 从 Nginx 所在服务器检查节点健康，避免依赖开发机访问内网 ===
 check_health_once() {
     local health_url="$1"
-    local remote_command
+    local body
 
-    remote_command="body=\$(curl --silent --show-error --fail --max-time 2 '${health_url}') || exit 1
-printf '%s' \"\${body}\" | grep -Eq '\"status\"[[:space:]]*:[[:space:]]*\"UP\"'"
-    ssh_exec "${NGINX_SERVER}" "${remote_command}"
+    body="$(ssh_exec "${NGINX_SERVER}" "curl --silent --show-error --fail --max-time 2 '${health_url}'")" || return 1
+    # 仅检查服务级健康状态，不能把任意嵌套的 UP 当作整个服务健康。
+    printf '%s' "${body}" | python3 -c '
+import json
+import sys
+try:
+    body = json.load(sys.stdin)
+    data = body.get("data") if isinstance(body, dict) else None
+    healthy = isinstance(data, dict) and data.get("status") == "UP"
+except (ValueError, TypeError):
+    healthy = False
+sys.exit(0 if healthy else 1)
+'
 }
 
 wait_for_health() {
@@ -347,6 +357,9 @@ rolling_deploy() {
         echo "[失败] 新节点发布失败，Nginx 保持 old_only" >&2
         return 1
     }
+
+    check_health_once "${OLD_HEALTH_URL}" || return 1
+    check_health_once "${NEW_HEALTH_URL}" || return 1
 
     run_timed_step "Nginx 切流 round_robin（${NGINX_SERVER#*@}）" switch_nginx_mode "round_robin" || {
         echo "[失败] 无法恢复双节点轮询，Nginx 已恢复 old_only" >&2

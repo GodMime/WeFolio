@@ -1,0 +1,67 @@
+{
+  "fontId": "SOURCE_HAN_SERIF_SC",
+  "intendedLanguageLabel": "只适合中文",
+  "purpose": "供服务端生成按作品集文字裁剪的字体子集；不能让小程序直接下载全量源字体。",
+  "repositoryUrl": "https://github.com/adobe-fonts/source-han-serif",
+  "commit": "7889f11bf31170b5d092a083b357c8c8130f89e0",
+  "license": "SIL Open Font License 1.1",
+  "files": [
+    {
+      "file": "SourceHanSerifSC-Regular.otf",
+      "originalFilename": "SourceHanSerifSC-Regular.otf",
+      "role": "source-font",
+      "sourceUrl": "https://raw.githubusercontent.com/adobe-fonts/source-han-serif/7889f11bf31170b5d092a083b357c8c8130f89e0/OTF/SimplifiedChinese/SourceHanSerifSC-Regular.otf",
+      "bytes": 24543332,
+      "sha256": "78aa7a328fd974df2d688c8a9fd74a33d8334dfa84ab24d9d11efb2ffc464117",
+      "fontMetadata": {
+        "sfntSignature": "4f54544f",
+        "familyName": "Source Han Serif SC",
+        "subfamilyName": "Regular",
+        "fullName": "Source Han Serif SC",
+        "fontVersion": "Version 2.003;hotconv 1.1.1;makeotfexe 2.6.0",
+        "postScriptName": "SourceHanSerifSC-Regular",
+        "weightClass": 400,
+        "glyphCount": 65535
+      },
+      "githubBlobSha": "cb41635674be23029e98469f729eded6ebc54611",
+      "verifiedBlobApiUrl": "https://api.github.com/repos/adobe-fonts/source-han-serif/git/blobs/cb41635674be23029e98469f729eded6ebc54611"
+    },
+    {
+      "file": "SourceHanSerifSC-Bold.otf",
+      "originalFilename": "SourceHanSerifSC-Bold.otf",
+      "role": "source-font",
+      "sourceUrl": "https://raw.githubusercontent.com/adobe-fonts/source-han-serif/7889f11bf31170b5d092a083b357c8c8130f89e0/OTF/SimplifiedChinese/SourceHanSerifSC-Bold.otf",
+      "bytes": 25521732,
+      "sha256": "706b8c0de2deff6cbc0c87e2cdedfd33a78b7ffd76cebb4549012f197ba611fe",
+      "fontMetadata": {
+        "sfntSignature": "4f54544f",
+        "familyName": "Source Han Serif SC",
+        "subfamilyName": "Bold",
+        "fullName": "Source Han Serif SC Bold",
+        "fontVersion": "Version 2.003;hotconv 1.1.1;makeotfexe 2.6.0",
+        "postScriptName": "SourceHanSerifSC-Bold",
+        "weightClass": 700,
+        "glyphCount": 65535
+      },
+      "githubBlobSha": "d5b31b1d3b9b32b2f2232dd51cf303688303b000",
+      "verifiedBlobApiUrl": "https://api.github.com/repos/adobe-fonts/source-han-serif/git/blobs/d5b31b1d3b9b32b2f2232dd51cf303688303b000"
+    },
+    {
+      "file": "LICENSE.txt",
+      "originalFilename": "LICENSE.txt",
+      "role": "license",
+      "sourceUrl": "https://raw.githubusercontent.com/adobe-fonts/source-han-serif/7889f11bf31170b5d092a083b357c8c8130f89e0/LICENSE.txt",
+      "bytes": 4463,
+      "sha256": "9ff5bb567e1b92c801fc1069e5fbf992ff8efccacb9db94e5959a5b3ba9bb903",
+      "githubBlobSha": "07235a78b936958799812313565ba0d03e7cd7dd",
+      "verifiedBlobApiUrl": "https://api.github.com/repos/adobe-fonts/source-han-serif/git/blobs/07235a78b936958799812313565ba0d03e7cd7dd"
+    }
+  ],
+  "upstreamRelease": "2.003R",
+  "releaseUrl": "https://github.com/adobe-fonts/source-han-serif/releases/tag/2.003R",
+  "fontScope": "官方 SimplifiedChinese 目录中的 SC 本地化完整字形源字体；客户端仅加载按文字生成的子集。",
+  "supportedWeights": [
+    400,
+    700
+  ]
+}

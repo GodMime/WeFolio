@@ -57,6 +57,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CosService {
 
+    /** 用户和团队字体目录，作品集 ID 子目录随上传产生。 */
+    private static final String FONT_STORAGE_FOLDER = "/others/fonts/";
+
     /** Java AWT 无头模式配置键 */
     private static final String JAVA_AWT_HEADLESS_PROPERTY = "java.awt.headless";
 
@@ -382,8 +385,10 @@ public class CosService {
      *     image/     ← 图片类作品
      *     video/     ← 视频类作品
      *     animation/ ← 动图类作品
+     *     audio/     ← 音频类作品
      *   protfolio/   ← 作品集额外素材
      *   others/      ← 头像等其它素材
+     *     fonts/     ← 作品集字体，作品集 ID 子目录随首次上传产生
      * </pre>
      * 通过创建键名为路径的空对象来模拟文件夹。
      *
@@ -398,7 +403,8 @@ public class CosService {
                 uniqueCode + "/work/animation/",
                 uniqueCode + "/work/audio/",
                 uniqueCode + "/protfolio/",
-                uniqueCode + "/others/"
+                uniqueCode + "/others/",
+                uniqueCode + FONT_STORAGE_FOLDER
         );
 
         for (String folder : folders) {
@@ -431,6 +437,7 @@ public class CosService {
      * {uniqueCode}/
      *   protfolio/   ← 团队作品集额外素材
      *   others/      ← 团队图标、二维码等其它素材
+     *     fonts/     ← 团队作品集字体，作品集 ID 子目录随首次上传产生
      * </pre>
      * 团队目录不包含 work 目录，团队作品引用成员个人作品或团队作品集素材。
      *
@@ -441,7 +448,8 @@ public class CosService {
         List<String> folders = List.of(
                 uniqueCode + "/",
                 uniqueCode + "/others/",
-                uniqueCode + "/protfolio/"
+                uniqueCode + "/protfolio/",
+                uniqueCode + FONT_STORAGE_FOLDER
         );
 
         for (String folder : folders) {

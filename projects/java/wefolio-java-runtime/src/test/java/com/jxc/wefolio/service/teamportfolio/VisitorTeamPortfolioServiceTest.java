@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontSavedFlowAssertions;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
@@ -296,6 +298,9 @@ class VisitorTeamPortfolioServiceTest {
     @Test
     void openUsesSharedVisitorInfrastructureAndIndependentTeamVisitWithoutPoints() {
         VisitorServiceContext context = publishedContext();
+        var portfolio = portfolio();
+        PortfolioFontSavedFlowAssertions.withPublishedFont(portfolio);
+        when(context.portfolioMapper.selectOne(any())).thenReturn(portfolio);
         VisitorEntity visitor = visitor();
         VisitorService.VisitorSession session = new VisitorService.VisitorSession(visitor, true);
         VisitorTeamPortfolioOpenRequest request = new VisitorTeamPortfolioOpenRequest();
@@ -306,7 +311,7 @@ class VisitorTeamPortfolioServiceTest {
         TeamPortfolioRenderDto render = new TeamPortfolioRenderDto();
         when(context.visitorService.resolveForOpen(
                 eq("wx-code"), isNull(), eq("TEAM:41"), any())).thenReturn(session);
-        when(context.visitService.recordOpen(portfolio(), VISITOR_ID, VISITOR_KEY,
+        when(context.visitService.recordOpen(portfolio, VISITOR_ID, VISITOR_KEY,
                 "WECHAT_SHARE_CARD", "open-1")).thenReturn(record);
         when(context.tokenService.issueToken(VISITOR_ID, VISITOR_KEY))
                 .thenReturn(new VisitorAuthTokenService.VisitorLoginToken("Bearer", "login-token", 7200L));
@@ -320,6 +325,7 @@ class VisitorTeamPortfolioServiceTest {
         assertThat(response.getTeamId()).isEqualTo(TEAM_ID);
         assertThat(response.getVisitRecordId()).isEqualTo(record.getId());
         assertThat(response.getRenderData()).isSameAs(render);
+        PortfolioFontSavedFlowAssertions.assertPublishedVisitorFonts(render.getFonts());
         assertThat(response.getRenderData().getVisitRecordId()).isEqualTo(record.getId());
         assertThat(response.getToken()).isEqualTo("login-token");
         assertThat(response.getVisitorProfileToken()).isEqualTo("profile-token");
@@ -331,7 +337,7 @@ class VisitorTeamPortfolioServiceTest {
                 eq("wx-code"), isNull(), eq("TEAM:41"), any());
         order.verify(context.renderService).render(any(), any());
         order.verify(context.visitService).recordOpen(
-                portfolio(), VISITOR_ID, VISITOR_KEY, "WECHAT_SHARE_CARD", "open-1");
+                portfolio, VISITOR_ID, VISITOR_KEY, "WECHAT_SHARE_CARD", "open-1");
     }
 
     /**
@@ -690,7 +696,7 @@ class VisitorTeamPortfolioServiceTest {
         VisitRecordEntityMapper recordMapper = mock(VisitRecordEntityMapper.class);
         TeamScheduleQueryRecordEntityMapper scheduleRecordMapper = mock(TeamScheduleQueryRecordEntityMapper.class);
         TeamContactFormComponentService contactService = mock(TeamContactFormComponentService.class);
-        MineTeamPortfolioService service = new MineTeamPortfolioService(
+        MineTeamPortfolioService service = new MineTeamPortfolioService(mock(PortfolioFontService.class),
                 properties,
                 mock(PortfolioEntityMapper.class),
                 mock(com.jxc.wefolio.mapper.PortfolioHistoryEntityMapper.class),

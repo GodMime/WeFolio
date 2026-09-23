@@ -204,7 +204,10 @@ if (!hasLocalToken()) {
 图片作品：{uniqueCode}/work/image/{uuid}.{ext}
 视频作品：{uniqueCode}/work/video/{uuid}.{ext}
 作品集素材：{uniqueCode}/protfolio/{uuid}.{ext}
+作品集字体：{ownerUniqueCode}/others/fonts/{portfolioId}/{uuid}.woff
 ```
+
+字体 ownerUniqueCode 由后端按作品集所属个人或团队确定，不取操作者个人目录；初始化和历史空目录补建遵守仓库根 COS 规则。小程序只使用后端返回的字体 URL。
 
 不要在小程序端拼最终 COS key；小程序只上传文件或提交后端返回的公开 URL。
 

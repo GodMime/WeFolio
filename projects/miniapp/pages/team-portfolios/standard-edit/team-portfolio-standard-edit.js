@@ -1,3 +1,4 @@
+const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { normalizeTextGrid, validateTextGrid } = require('../utils/portfolio-text-grid')
 const { normalizeContactInfo, validateContactInfo } = require('../utils/portfolio-contact-info')
 const { portfolioAudioPageMethods, AUDIO_STYLE_OPTIONS, normalizeAudioResource } = require('../utils/portfolio-audio-player')
@@ -49,7 +50,8 @@ const {
   LEGACY_TEAM_FONT_SIZE_RPX,
   NEW_COMPONENT_FONT_SIZE_RPX,
   PORTFOLIO_TEXT_FONT_FAMILIES,
-  PORTFOLIO_TEXT_FONT_OPTIONS,
+  PORTFOLIO_TEXT_SELECTION_OPTIONS: PORTFOLIO_TEXT_FONT_OPTIONS,
+  applyPortfolioFontSelection,
   buildPortfolioTextFontSizeOptions,
   buildPortfolioTextTypography,
   LEGACY_TEXT_SECTION_LINE_HEIGHT,
@@ -373,6 +375,7 @@ function buildTextSectionForm(config = {}) {
     content: String(config.content || '').trim(),
     color: normalizeTextColor(config.color),
     alignment: TEXT_SECTION_ALIGNMENT_OPTIONS.some((item) => item.value === alignment) ? alignment : TEXT_SECTION_ALIGNMENTS.LEFT,
+    ...(Object.prototype.hasOwnProperty.call(config, 'fontId') ? { fontId: config.fontId } : {}),
     fontFamily: typography.fontFamily,
     fontSizeRpx: typography.fontSizeRpx,
     ...(Object.prototype.hasOwnProperty.call(config, 'lineHeight') ? { lineHeight: config.lineHeight } : {}),
@@ -387,7 +390,7 @@ function buildTextSectionFontOptions(
 ) {
   return PORTFOLIO_TEXT_FONT_OPTIONS.map((item) =>
     Object.assign({}, item, {
-      available: isPortfolioFontAvailable(item.value, capability)
+      available: item.remote ? false : isPortfolioFontAvailable(item.value, capability)
     })
   )
 }
@@ -448,7 +451,7 @@ function updateDividerConfig(config = {}, componentKey, dividerConfig = {}) {
 }
 function updateTextSectionConfig(config = {}, componentKey, textSectionConfig = {}) {
   const form = buildTextSectionForm(textSectionConfig)
-  const saved = Object.assign({ content: form.content, color: form.color, alignment: form.alignment, fontFamily: form.fontFamily, fontSizeRpx: form.fontSizeRpx }, finalizeTextBackground(form, { team: true }))
+  const saved = Object.assign({ ...(Object.prototype.hasOwnProperty.call(form, 'fontId') ? { fontId: form.fontId } : {}), content: form.content, color: form.color, alignment: form.alignment, fontFamily: form.fontFamily, fontSizeRpx: form.fontSizeRpx }, finalizeTextBackground(form, { team: true }))
   if (Object.prototype.hasOwnProperty.call(form, 'lineHeight')) saved.lineHeight = form.lineHeight
   return updateTeamComponent(config, componentKey, (component) => {
     if (component.componentType !== 'TEXT_SECTION') return component
@@ -498,6 +501,11 @@ function buckets(components) {
 }
 
 Page({
+  handleRemoteFontDraft(event) { if (this.remoteFontPage) this.remoteFontPage.editDraft(event.detail) },
+  handleRemoteFontSelect(event) { if (this.remoteFontPage) this.remoteFontPage.select(event.detail.fontId, event.detail.sessionId) },
+  handleExpandFonts() { if (this.remoteFontPage) return this.remoteFontPage.expand() },
+  handlePrepareFonts() { if (this.remoteFontPage) this.remoteFontPage.prepare() },
+  handleRepairFontVersions() { if (this.remoteFontPage) this.remoteFontPage.repairVersions() },
   ...portfolioAudioPageMethods,
   teamVideoRequestSeq: 0,
   teamVideoMembersRequestSeq: 0,
@@ -509,6 +517,7 @@ Page({
     backgroundAudioSelected: null,
     portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, singleWorkRowSummaryMap: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', structuredTextSheetVisible: false, structuredTextEditingComponentKey: '', structuredTextIsNew: false, structuredTextConfig: { blocks: [] }, textBackgroundOptions: [], textBackgroundLoading: false, textBackgroundError: '', textBackgroundHasMore: false, textBackgroundMembers: [], textBackgroundMemberUserId: 0, textBackgroundMembersLoading: false, textBackgroundResource: {}, textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', ...buildDividerEditorState(), componentEditorVisible: false, componentEditorLayoutType: '', activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, teamVideoTitle: '视频作品', teamVideoTitleCount: 4, teamVideoShowComponentTitle: true, teamVideoSettingsCollapsed: false, teamVideoShowTitle: true, teamVideoShowSwipeHint: true, teamVideoMembers: [], teamVideoSelectedMemberUserId: 0, teamVideoCandidates: [], teamVideoWorkOptions: [], teamVideoSelectedItems: [], teamVideoKeyword: '', teamVideoPage: 1, teamVideoPageSize: TEAM_VIDEO_PAGE_SIZE, teamVideoHasMore: false, teamVideoMembersLoading: false, teamVideoWorksLoading: false, teamVideoLoadingMore: false, teamVideoErrorText: '', teamVideoEditingNewComponent: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '', ...buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) },
   onLoad(options = {}) {
+    this.remoteFontPage = installRemoteFontPage(this, { editor: true, team: true })
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
     this.loadPortfolioFontCapability()
@@ -564,6 +573,7 @@ Page({
       }
       this.setData(Object.assign({
         teamId: detail.ownerId,
+        fontAssets: detail.fontAssets || null,
         teamSnapshot,
         canMaintain: true,
         publicationStatus: detail.publicationStatus,
@@ -580,6 +590,7 @@ Page({
   onShow() { this.showBackgroundAudio(); if (this.data.openingLibrary) this.setData({ openingLibrary: false }) },
   onHide() { this.hideBackgroundAudio() },
   onUnload() {
+    if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.destroyBackgroundAudio()
     this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
     this.textBackgroundSession = (Number(this.textBackgroundSession) || 0) + 1
@@ -974,7 +985,7 @@ Page({
     }
     if (found < 0) components.push({ componentKey, componentType: type, config: value, enabled: true, sortOrder: (components.length + 1) * 1000 })
     else components[found] = { ...components[found], config: value }
-    this.clearPending(); this.updateConfig(replaceTeamMenuComponentList(this.data.config, menuKey, components))
+    this.clearPending(); this.updateConfig(this.remoteFontPage ? this.remoteFontPage.commit(replaceTeamMenuComponentList(this.data.config, menuKey, components)) : replaceTeamMenuComponentList(this.data.config, menuKey, components))
     const componentValidation = { ...this.data.componentValidation, [componentKey]: true }
     this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some(key => componentValidation[key] === false) })
     this.handleCancelNewComponent()
@@ -1010,7 +1021,7 @@ Page({
       pageConfig = updateTeamComponent(this.data.config, componentKey, component => Object.assign({}, component, { config }))
     }
     this.clearPending()
-    this.updateConfig(pageConfig)
+    this.updateConfig(this.remoteFontPage ? this.remoteFontPage.commit(pageConfig) : pageConfig)
     const componentValidation = Object.assign({}, this.data.componentValidation, { [componentKey]: true })
     this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some(key => componentValidation[key] === false) })
     this.handleCancelStructuredText()
@@ -1207,12 +1218,13 @@ Page({
     const option = this.data.textSectionFontOptions.find(
       (item) => item.value === value
     )
-    if (!option || !option.available) return
+    if (!option || !option.available) { wx.showToast({ title: option && option.remote ? (this.data.fontMessage || '字体暂不可用，当前使用系统字体') : '当前设备暂不支持此字体', icon: 'none' }); return }
     const textSectionForm = Object.assign(
       {},
       this.data.textSectionForm,
-      { fontFamily: value }
+      applyPortfolioFontSelection(value)
     )
+    if (this.remoteFontPage) this.remoteFontPage.select(textSectionForm.fontId)
     this.setData({
       textSectionForm,
       textSectionTypography: buildPortfolioTextTypography(
@@ -1273,7 +1285,7 @@ Page({
     const config = updateTextSectionConfig(this.data.config, componentKey, form)
     const componentValidation = Object.assign({}, this.data.componentValidation, { [componentKey]: true })
     this.clearPending()
-    this.updateConfig(config)
+    this.updateConfig(this.remoteFontPage ? this.remoteFontPage.commit(config) : config)
     this.setData({ componentValidation, hasInvalidComponents: Object.keys(componentValidation).some((key) => componentValidation[key] === false) })
     this.handleCloseTextSectionSheet()
   },
@@ -2161,6 +2173,7 @@ Page({
       const idempotencyKey = this.data.pendingDraftKey || makeIdempotencyKey('team-draft')
       if (!this.data.pendingDraftKey) this.setData({ pendingDraftKey: idempotencyKey })
       const result = await saveTeamPortfolioDraft(request, portfolioId, uploadedConfig, clientRevision, idempotencyKey)
+      if (JSON.stringify(this.data.config) === JSON.stringify(uploadedConfig)) this.setData({ fontAssets: result.fontAssets || null })
       const draftRevision = Number(result && result.draftRevision) || clientRevision
       const config = result && result.config ? normalizeTeamPortfolioConfig(result.config) : uploadedConfig
       publicationStatus = (result && result.publicationStatus) || publicationStatus

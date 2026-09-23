@@ -1,6 +1,7 @@
 package com.jxc.wefolio.job.repo;
 
 import com.jxc.wefolio.job.model.UserStorageFolderRepairModels.UserStorageUser;
+import com.jxc.wefolio.job.model.UserStorageFolderRepairModels.TeamStorageTeam;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -41,4 +42,21 @@ public class UserStorageFolderRepairRepository {
                 rs.getString("unique_code")
         ), ACTIVE_STATUS, afterUserId, limit);
     }
+
+    /** 按独立团队 ID 游标读取有效未删除团队，不读取作品集内容。 */
+    public List<TeamStorageTeam> findActiveTeamsAfter(long afterTeamId, int limit) {
+        String sql = """
+                SELECT id, unique_code
+                FROM wf_team
+                WHERE status = ?
+                  AND deleted = 0
+                  AND id > ?
+                ORDER BY id
+                LIMIT ?
+                """;
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new TeamStorageTeam(
+                rs.getLong("id"), rs.getString("unique_code")
+        ), ACTIVE_STATUS, afterTeamId, limit);
+    }
+
 }

@@ -191,6 +191,7 @@ Spring `@Transactional` 依赖 AOP 代理，同类自调用不会触发事务。
 │   └── video/
 ├── protfolio/
 └── others/
+    └── fonts/
 ```
 
 上传路径约定：
@@ -199,8 +200,12 @@ Spring `@Transactional` 依赖 AOP 代理，同类自调用不会触发事务。
 - 视频作品：`{uniqueCode}/work/video/{uuid}.{ext}`
 - 头像：`{uniqueCode}/others/{uuid}.{ext}`
 - 作品集素材：`{uniqueCode}/protfolio/{uuid}.{ext}`
+- 作品集字体 → `{ownerUniqueCode}/others/fonts/{portfolioId}/{uuid}.woff`；个人使用用户唯一码，团队使用团队唯一码，不使用当前操作者的个人目录。
 
 目录通过 0 字节空对象模拟，`Content-Type` 为 `application/x-directory`。注册时 `MiniappAuthService` 调用 `CosService.initUserStorage(uniqueCode)` 初始化，失败应阻断注册流程。
+
+- 新用户 `initUserStorage` 和新团队 `initTeamStorage` 均创建 `others/fonts/` 的 0 字节目录占位对象；作品集 ID 子目录随首次上传产生，字体目录初始化沿用各自原失败语义。
+- 历史目录复用 `UserStorageFolderRepairService`：用户保留 `work/animation/`、`work/audio/` 并补 `others/fonts/`；同一执行内按独立团队 ID 游标分页，仅补团队 `others/fonts/`，不创建团队 work 目录。只补空目录，不生成或删除字体，也不新增字体 Job。
 
 ## 编码规范
 

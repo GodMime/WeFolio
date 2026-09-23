@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -15,6 +16,24 @@ import java.util.List;
  */
 @Mapper
 public interface PortfolioEntityMapper extends BaseMapper<PortfolioEntity> {
+
+    /** 所有字体接入与释放共同持有的作品集行锁。 */
+    @Select("SELECT * FROM wf_portfolio WHERE id = #{id} AND deleted = 0 FOR UPDATE")
+    @Options(timeout = 5)
+    PortfolioEntity lockById(@Param("id") Long id);
+
+    /** 显式覆盖草稿字体清单，支持写入 SQL NULL。 */
+    @Update("UPDATE wf_portfolio SET draft_font_assets_json = #{json} WHERE id = #{id} AND deleted = 0")
+    int updateDraftFontAssets(@Param("id") Long id, @Param("json") String json);
+
+    /** 显式覆盖发布字体清单，支持写入 SQL NULL。 */
+    @Update("UPDATE wf_portfolio SET published_font_assets_json = #{json} WHERE id = #{id} AND deleted = 0")
+    int updatePublishedFontAssets(@Param("id") Long id, @Param("json") String json);
+
+    /** 删除作品集时清空两个字体快照，不影响历史逻辑配置。 */
+    @Update("UPDATE wf_portfolio SET draft_font_assets_json = NULL, published_font_assets_json = NULL WHERE id = #{id} AND deleted = 0")
+    int clearFontAssets(@Param("id") Long id);
+
 
     /** 当前用户有效标准个人作品集有序行锁 SQL。 */
     String LOCK_ACTIVE_STANDARD_PERSONAL_SQL = """

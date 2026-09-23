@@ -500,7 +500,7 @@ test('creates a standard team portfolio only through the explicit team endpoint'
   assert.deepEqual(calls, [{
     url: '/api/mine/teams/8/portfolios/standard',
     method: 'POST',
-    data: { config: { schemaVersion: 'standard-team-v1' } }
+    data: { config: { schemaVersion: 'standard-team-v1' }, clientCapabilities: { portfolioRemoteFont: 1 } }
   }])
 })
 

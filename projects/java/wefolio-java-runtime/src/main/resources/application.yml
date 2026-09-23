@@ -123,3 +123,22 @@ portfolio:
   miniapp-code:
     env-version: ${PORTFOLIO_MINIAPP_CODE_ENV_VERSION:release}
     check-path: ${PORTFOLIO_MINIAPP_CODE_CHECK_PATH:true}
+  # 字体默认关闭；预校验通过并完成双节点准入后再开放。
+  fonts:
+    enabled: ${PORTFOLIO_FONTS_ENABLED:false}
+    validation-enabled: ${PORTFOLIO_FONTS_VALIDATION_ENABLED:false}
+    cleanup-enabled: ${PORTFOLIO_FONTS_CLEANUP_ENABLED:true}
+    prepare-budget-ms: ${PORTFOLIO_FONTS_PREPARE_BUDGET_MS:2000}
+    delete-budget-ms: ${PORTFOLIO_FONTS_DELETE_BUDGET_MS:1000}
+    concurrency: ${PORTFOLIO_FONTS_CONCURRENCY:2}
+    max-output-bytes: ${PORTFOLIO_FONTS_MAX_OUTPUT_BYTES:8388608}
+    directory: ${PORTFOLIO_FONTS_DIRECTORY:${java.io.tmpdir}/wefolio-fonts}
+    python: ${PORTFOLIO_FONTS_PYTHON:python3}
+    harfbuzz: ${PORTFOLIO_FONTS_HARFBUZZ:hb-subset}
+    toolchain-hash: ${PORTFOLIO_FONTS_TOOLCHAIN_HASH:}
+    expected-build-id: ${PORTFOLIO_FONTS_EXPECTED_BUILD_ID:}
+    alert:
+      enabled: ${PORTFOLIO_FONTS_ALERT_ENABLED:false}
+      webhook-url: ${PORTFOLIO_FONTS_ALERT_WEBHOOK_URL:}
+      webhook-secret: ${PORTFOLIO_FONTS_ALERT_WEBHOOK_SECRET:}
+      node-id: ${PORTFOLIO_FONTS_ALERT_NODE_ID:runtime}

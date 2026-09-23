@@ -1,4 +1,4 @@
-const { request } = require('../../../utils/request')
+const { request } = require('../../../utils/request.js')
 
 const API_PREFIXES = { USER: '/api/mine/portfolios', TEAM: '/api/mine/team-portfolios' }
 const PAGE_URL = '/pages/portfolios/share-code/portfolio-share-code'

@@ -1,27 +1,42 @@
+const { PORTFOLIO_TEXT_SELECTION_OPTIONS, applyPortfolioFontSelection, buildRemoteFontStyle } = require('../../../utils/portfolio-text-typography')
 const clone=value=>JSON.parse(JSON.stringify(value||{}))
-const CHOICES={fontFamily:['SYSTEM','WECHAT_SANS_SS'],fontWeight:['NORMAL','BOLD'],alignment:['LEFT','CENTER','RIGHT'],verticalAlignment:['TOP','CENTER','BOTTOM']}
+const CHOICES={fontFamily:PORTFOLIO_TEXT_SELECTION_OPTIONS.map(item=>item.value),fontWeight:['NORMAL','BOLD'],alignment:['LEFT','CENTER','RIGHT'],verticalAlignment:['TOP','CENTER','BOTTOM']}
 const OPTION_LABELS={SYSTEM:'系统默认',WECHAT_SANS_SS:'微信字体',NORMAL:'常规 400',BOLD:'粗体 700',LEFT:'左',CENTER:'中',RIGHT:'右',TOP:'顶',BOTTOM:'底'}
+PORTFOLIO_TEXT_SELECTION_OPTIONS.forEach(item => { OPTION_LABELS[item.value] = item.label + (item.languageLabel ? '（' + item.languageLabel + '）' : '') })
 const CHOICE_LABELS=Object.fromEntries(Object.entries(CHOICES).map(([field,values])=>[field,values.map(value=>OPTION_LABELS[value])]))
 const OPTION_INDEXES=Object.fromEntries(Object.values(CHOICES).flatMap(values=>values.map((value,index)=>[value,index])))
 const TEXT_FIELDS=['text','color','cellBackground','cellBorderColor']
 const STEP_FIELDS={fontSizeRpx:{min:10,max:96},marginTopRpx:{min:0,max:128},marginBottomRpx:{min:0,max:128},gapRpx:{min:0,max:48},cellPaddingRpx:{min:0,max:48},cellRadiusRpx:{min:0,max:48},horizontalMarginRpx:{min:0,max:96},verticalMarginRpx:{min:0,max:96},cellBorderWidthRpx:{min:1,max:12},rowMinHeightsRpx:{min:80,max:600},lineHeight:{min:0.5,max:3}}
 Component({
-  properties:{config:{type:Object,value:{}},error:{type:String,value:''},undoCount:{type:Number,value:0},previewViewModel:{type:Object,value:{cells:[]}},fontAvailability:{type:Object,value:{SYSTEM:true,WECHAT_SANS_SS:false}}},
-  data:{draft:{cells:[]},tab:'layout',focusedCellIndex:0,focusedBlockIndex:0,focusedRunIndex:0,focusedCell:null,focusedBlock:null,focusedRun:null,fontOptions:[],selectedKeys:[],selectedMap:{},choiceLabels:CHOICE_LABELS,optionLabels:OPTION_LABELS,optionIndexes:OPTION_INDEXES},
+  properties:{fontContext:{type:Object,value:{}},fontChoices:{type:Array,value:[]},config:{type:Object,value:{}},error:{type:String,value:''},undoCount:{type:Number,value:0},previewViewModel:{type:Object,value:{cells:[]}},fontAvailability:{type:Object,value:{SYSTEM:true,WECHAT_SANS_SS:false}}},
+  data:{draft:{cells:[]},tab:'layout',focusedCellIndex:0,focusedBlockIndex:0,focusedRunIndex:0,focusedCell:null,focusedBlock:null,focusedRun:null,fontOptions:[],fontsExpanded:false,selectedKeys:[],selectedMap:{},choiceLabels:CHOICE_LABELS,optionLabels:OPTION_LABELS,optionIndexes:OPTION_INDEXES},
   observers:{config(value){
     const draft=clone(value),existingKeys=new Set((draft.cells||[]).map(cell=>cell.cellKey))
     // 合并、缩放和撤销后只保留仍存在的选择，避免隐藏旧键阻断后续编辑。
     const selectedKeys=(this.data.selectedKeys||[]).filter(key=>existingKeys.has(key))
     this.refreshFocus(draft,this.data.focusedCellIndex,this.data.focusedBlockIndex,this.data.focusedRunIndex,{selectedKeys,selectedMap:Object.fromEntries(selectedKeys.map(key=>[key,true]))})
-  },fontAvailability(value){this.refreshFontOptions(value)}},
+  },fontAvailability(value){this.refreshFontOptions(value)},fontChoices(){this.refreshFontOptions(this.data.fontAvailability)},fontContext(){this.refreshFontOptions(this.data.fontAvailability)}},
   methods:{
-    refreshFontOptions(value={}){this.setData({fontOptions:CHOICES.fontFamily.map(font=>({value:font,label:OPTION_LABELS[font],available:font==='SYSTEM'||value[font]===true}))})},
+    refreshFontOptions(value={}){
+      const selected=this.data.focusedRun||{},current=selected.fontId||selected.fontFamily
+      const source=this.data.fontChoices&&this.data.fontChoices.length?this.data.fontChoices.slice():PORTFOLIO_TEXT_SELECTION_OPTIONS.map(item=>({...item,available:item.value==='SYSTEM'||value[item.value]===true}))
+      if(selected.fontId && !source.some(item=>item.value===current))source.push({value:current,label:current,remote:true,available:false,hint:'字体标识不可用，当前使用系统字体'})
+      this.setData({currentFontStyle:buildRemoteFontStyle(selected,this.data.fontContext),currentFontRepairable:Boolean(selected.fontId && source.some(item=>item.value===selected.fontId && item.repairable)),fontOptions:source.filter(item=>this.data.fontsExpanded||!item.remote||item.value===current).map(item=>{
+        if(!item.remote || item.value!==current || !item.available)return {...item}
+        const loadState=item.loadStates && item.loadStates[selected.fontWeight==='BOLD'?700:400] || item.loadState
+        const hint=!item.versionValid?'字体版本不可用，当前使用系统字体':loadState==='failed'?'字体加载失败，当前使用系统字体':loadState==='loading'?'字体加载中，当前使用系统字体':''
+        return {...item,loadState,hint}
+      })})
+    },
+    handleMoreFonts(){this.setData({fontsExpanded:!this.data.fontsExpanded});this.refreshFontOptions(this.data.fontAvailability)},
+    handleRepairFont(event){this.triggerEvent('fontrepair',{fontId:event.currentTarget.dataset.value})},
+    handleSampleError(event){const value=event.currentTarget.dataset.value;this.setData({fontOptions:this.data.fontOptions.map(item=>item.value===value?{...item,sampleUrl:''}:item)})},
     refreshFocus(draft,cellIndex=this.data.focusedCellIndex,blockIndex=this.data.focusedBlockIndex,runIndex=this.data.focusedRunIndex,extra={}){
       const cells=Array.isArray(draft.cells)?draft.cells:[],focusedCellIndex=cells.length?Math.max(0,Math.min(Number(cellIndex)||0,cells.length-1)):0
       const focusedCell=cells[focusedCellIndex]||null,blocks=focusedCell&&Array.isArray(focusedCell.blocks)?focusedCell.blocks:[]
       const focusedBlockIndex=blocks.length?Math.max(0,Math.min(Number(blockIndex)||0,blocks.length-1)):0,focusedBlock=blocks[focusedBlockIndex]||null
       const runs=focusedBlock&&Array.isArray(focusedBlock.runs)?focusedBlock.runs:[],focusedRunIndex=runs.length?Math.max(0,Math.min(Number(runIndex)||0,runs.length-1)):0
-      this.setData({draft,focusedCellIndex,focusedBlockIndex,focusedRunIndex,focusedCell,focusedBlock,focusedRun:runs[focusedRunIndex]||null,...extra})
+      this.setData({draft,focusedCellIndex,focusedBlockIndex,focusedRunIndex,focusedCell,focusedBlock,focusedRun:runs[focusedRunIndex]||null,...extra});this.refreshFontOptions(this.data.fontAvailability)
     },
     emitChange(draft){this.refreshFocus(draft);this.triggerEvent('configchange',{config:clone(draft)})},
     handleTab(event){const tab=event.currentTarget.dataset.value;if(!['layout','content','appearance'].includes(tab)||tab===this.data.tab)return;this.setData({tab});this.triggerEvent('tabchange',{tab})},
@@ -31,7 +46,7 @@ Component({
     handleFontTap(event){
       const value=event.currentTarget.dataset.value,option=this.data.fontOptions.find(item=>item.value===value)
       if(!option||!option.available||!this.data.focusedRun)return
-      const draft=clone(this.data.draft);draft.cells[this.data.focusedCellIndex].blocks[this.data.focusedBlockIndex].runs[this.data.focusedRunIndex].fontFamily=value;this.emitChange(draft)
+      this.triggerEvent('fontselect',{fontId:option.remote?value:null,previousFontId:this.data.focusedRun.fontId});const draft=clone(this.data.draft);Object.assign(draft.cells[this.data.focusedCellIndex].blocks[this.data.focusedBlockIndex].runs[this.data.focusedRunIndex],applyPortfolioFontSelection(value));this.emitChange(draft)
     },
     handleRunColor(event){if(!this.data.focusedRun)return;const draft=clone(this.data.draft);draft.cells[this.data.focusedCellIndex].blocks[this.data.focusedBlockIndex].runs[this.data.focusedRunIndex].color=event.detail.color;this.emitChange(draft)},
     handleGridColor(event){const field=event.currentTarget.dataset.field;if(!['cellBackground','cellBorderColor'].includes(field))return;this.emitChange({...clone(this.data.draft),[field]:event.detail.color})},
@@ -66,7 +81,7 @@ Component({
       let target=draft.cells[Number(cellIndex)]
       if(blockIndex!==undefined)target=target.blocks[Number(blockIndex)]
       if(runIndex!==undefined)target=target.runs[Number(runIndex)]
-      target[field]=CHOICES[field][Number(event.detail.value)]
+      if(field==='fontFamily'){this.refreshFocus(draft,Number(cellIndex),Number(blockIndex),Number(runIndex));this.handleFontTap({currentTarget:{dataset:{value:CHOICES[field][Number(event.detail.value)]}}});return}else target[field]=CHOICES[field][Number(event.detail.value)]
       this.emitChange(draft)
     },
     handleBorder(event){this.emitChange({...clone(this.data.draft),cellBorder:event.detail.value})},

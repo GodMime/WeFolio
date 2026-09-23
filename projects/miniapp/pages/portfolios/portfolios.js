@@ -1,5 +1,5 @@
 const { buildPortfolioMiniappCodePath } = require('./utils/portfolio-miniapp-code')
-const { request } = require('../../utils/request')
+const { request } = require('../../utils/request.js')
 const { normalizeId } = require('../../utils/id')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { buildPublishPayload } = require('./utils/portfolios')

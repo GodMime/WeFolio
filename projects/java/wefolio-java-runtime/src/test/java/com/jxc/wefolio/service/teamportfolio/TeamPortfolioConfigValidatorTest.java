@@ -4,6 +4,11 @@ import java.util.Map;
 import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
 
 import com.alibaba.fastjson2.JSON;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontSavedFlowAssertions;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
@@ -45,6 +50,35 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class TeamPortfolioConfigValidatorTest {
+
+    /** 真实规范化器跨三类文字和多菜单保存/发布后，字体计划与 READY 原引用稳定。 */
+    @Test void remoteFontsSurviveRealDraftAndPublishNormalization() throws Exception {
+        var inputJson = JSON.parseObject(Files.readString(Path.of("src/test/resources/portfolio-font-legacy-goldens.json")))
+                .getJSONObject("requests").getJSONObject("team-portfolios").getJSONObject("untouched")
+                .getJSONObject("request").getJSONObject("config");
+        inputJson.getJSONObject("share").put("title", "字体回归作品集");
+        var components = inputJson.getJSONArray("components");
+        inputJson.put("bottomNav", JSONObject.of("enabled", true, "items", List.of(
+                JSONObject.of("key", "nav_home", "title", "首页"),
+                JSONObject.of("key", "nav_more", "title", "更多", "components", List.of(components.remove(2))))));
+        inputJson.put("fonts", JSONObject.of("ALLURA", JSONObject.of("fontVersion", "gf-809e4d8b8d7e-r1")));
+        var input = inputJson.to(TeamPortfolioConfigDto.class);
+        PortfolioFontConfigSupport.nodes(input).values().forEach(node -> node.put("fontFamily", "SYSTEM"));
+        var context = new TeamPortfolioComponentContext(11L, 22L, 1);
+        var backgrounds = new TeamTextBackgroundSupport(null, null, null, null);
+        var validator = new TeamPortfolioConfigValidator(teamProfileValidator, carouselValidator, singleWorkValidator,
+                dividerValidator, gridValidator, listValidator, new TeamTextSectionComponentValidator(backgrounds),
+                scheduleValidator, contactValidator, qrValidator, videoCarouselValidator,
+                new TeamStructuredTextSectionComponentValidator(backgrounds));
+        var saved = JSON.parseObject(JSON.toJSONString(validator.normalizeForDraft(input, null, context)), TeamPortfolioConfigDto.class);
+        var before = PortfolioFontPlan.from(saved);
+        assertThat(PortfolioFontConfigSupport.nodes(saved)).hasSize(3);
+        var published = validator.validateForPublish(saved, context);
+
+        var after = PortfolioFontPlan.from(published);
+        assertThat(after).isEqualTo(before);
+        PortfolioFontSavedFlowAssertions.assertReadyReuse(before, after);
+    }
 
     /** 团队联系信息边框经过草稿序列化、发布及旧版跨菜单移动后完整保留。 */
     @Test

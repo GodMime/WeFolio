@@ -21,6 +21,9 @@ public class TeamTextSectionComponentConfig {
     /** 正文字体。 */
     private String fontFamily;
 
+    /** 正文远程字体选择。 */
+    private String fontId;
+
     /** 正文字号，单位 rpx，取值为 10 至 96 的整数。 */
     private Integer fontSizeRpx;
 

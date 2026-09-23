@@ -129,6 +129,7 @@ function normalizeTeamBottomNavigation(bottomNav = {}) {
 function normalizeTeamPortfolioConfig(payload = {}) {
   const share = payload.share && typeof payload.share === 'object' ? payload.share : {}
   return {
+    ...(payload.fonts && typeof payload.fonts === 'object' ? { fonts: JSON.parse(JSON.stringify(payload.fonts)) } : {}),
     schemaVersion: text(payload.schemaVersion) || STANDARD_TEAM_SCHEMA_VERSION,
     editorSchemaRevision: normalizeTeamEditorSchemaRevision(
       payload.editorSchemaRevision
@@ -641,6 +642,7 @@ function normalizeTeamPortfolioDetail(payload = {}) {
     publicationStatus: text(payload.publicationStatus),
     draftRevision: nonNegativeInteger(payload.draftRevision),
     publishedRevision: nonNegativeInteger(payload.publishedRevision),
+    fontAssets: payload.fontAssets || null,
     config: normalizeTeamPortfolioConfig(payload.config),
     renderData: payload.renderData && typeof payload.renderData === 'object' ? payload.renderData : null
   }
@@ -663,7 +665,7 @@ function saveTeamPortfolioDraft(requestFn = request, portfolioId, config, client
   return requestFn({
     url: teamPortfolioEndpoint(portfolioId, '/draft'),
     method: 'POST',
-    data: { config, clientRevision: nonNegativeInteger(clientRevision), idempotencyKey: normalizedIdempotencyKey }
+    data: { config, clientCapabilities: { portfolioRemoteFont: 1 }, clientRevision: nonNegativeInteger(clientRevision), idempotencyKey: normalizedIdempotencyKey }
   })
 }
 

@@ -1,0 +1,67 @@
+{
+  "fontId": "LXGW_WENKAI",
+  "displayName": "霞鹜文楷",
+  "languageUsage": "只适合中文",
+  "fontVersion": "v1.522",
+  "upstreamRepository": "https://github.com/lxgw/LxgwWenKai",
+  "releaseTag": "v1.522",
+  "releaseUrl": "https://github.com/lxgw/LxgwWenKai/releases/tag/v1.522",
+  "releasePublishedAt": "2026-03-17T15:15:14Z",
+  "sourceCommit": "e8b5b48b79f19f29aa68b0a178eab3472ea9f7e8",
+  "downloadedAt": "2026-09-15T06:01:58.280861+00:00",
+  "availableWeights": [
+    400
+  ],
+  "upstreamAvailableStyles": [
+    "Light",
+    "Regular",
+    "Medium"
+  ],
+  "nativeBoldAvailable": false,
+  "boldPolicy": "官方该版本没有 Bold 700；本目录仅提供 Regular 400。需要粗体效果时由渲染端合成；不要把 Medium 500 声明为 700。",
+  "usage": "完整源字体用于服务端按作品集字符生成字体子集，不用于小程序全量下载。",
+  "files": [
+    {
+      "fileName": "LXGWWenKai-Regular.ttf",
+      "originalFileName": "LXGWWenKai-Regular.ttf",
+      "role": "source-font",
+      "format": "TTF",
+      "style": "Regular",
+      "weight": 400,
+      "sourceUrl": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/e8b5b48b79f19f29aa68b0a178eab3472ea9f7e8/fonts/TTF/LXGWWenKai-Regular.ttf",
+      "releaseAssetUrl": "https://github.com/lxgw/LxgwWenKai/releases/download/v1.522/LXGWWenKai-Regular.ttf",
+      "downloadUrl": "https://api.github.com/repos/lxgw/LxgwWenKai/git/blobs/3e050e87caa5ce47f9c873079183e31f88fb8ce5",
+      "downloadEncoding": "base64 (GitHub Git blob API)",
+      "gitBlobSha": "3e050e87caa5ce47f9c873079183e31f88fb8ce5",
+      "bytes": 25575676,
+      "sha256": "39ad71264b588165b469e35e6afb162a378dacd1f95348160240ba9038ac3009",
+      "officialReleaseSha256": "39ad71264b588165b469e35e6afb162a378dacd1f95348160240ba9038ac3009",
+      "officialReleaseSha256Verified": true,
+      "metadata": {
+        "family": "LXGW WenKai",
+        "subfamily": "Regular",
+        "version": "Version 1.522; March 17, 2026",
+        "postscriptName": "LXGWWenKai-Regular",
+        "usWeightClass": 400,
+        "glyphCount": 46867
+      }
+    },
+    {
+      "fileName": "OFL.txt",
+      "originalFileName": "OFL.txt",
+      "role": "license",
+      "license": "SIL Open Font License 1.1",
+      "spdxId": "OFL-1.1",
+      "sourceUrl": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/e8b5b48b79f19f29aa68b0a178eab3472ea9f7e8/OFL.txt",
+      "gitBlobSha": "f170b5c5fcf7f8b59ce9268d1169b22cbc211bf3",
+      "bytes": 4448,
+      "sha256": "c38b1994a5e48ac30ac7d1da7d0409fd8fd8127dfe28a13d6e787d5b1ef34a5e"
+    }
+  ],
+  "verification": {
+    "gitBlobChecksumsVerified": true,
+    "fontTableBoundsVerified": true,
+    "fontIdentityAndWeightVerified": true,
+    "licenseCopyrightAndTextVerified": true
+  }
+}

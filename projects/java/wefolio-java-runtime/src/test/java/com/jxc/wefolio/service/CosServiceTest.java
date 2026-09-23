@@ -559,7 +559,7 @@ class CosServiceTest {
     // ── storage init ───────────────────────────────────────
 
     @Test
-    void initUserStorageShouldIncludeAnimationFolderWithoutDependingOnFolderCount() {
+    void initUserStorageShouldPreserveExactFolderSet() {
         COSClient cosClient = mock(COSClient.class);
         when(transferManager.getCOSClient()).thenReturn(cosClient);
 
@@ -569,7 +569,9 @@ class CosServiceTest {
         verify(cosClient, atLeastOnce()).putObject(captor.capture());
         assertThat(captor.getAllValues())
                 .extracting(PutObjectRequest::getKey)
-                .contains("WFA3B1E7A2/work/animation/", "WFA3B1E7A2/work/audio/");
+                .containsExactlyInAnyOrder("WFA3B1E7A2/", "WFA3B1E7A2/work/", "WFA3B1E7A2/work/image/",
+                        "WFA3B1E7A2/work/video/", "WFA3B1E7A2/work/animation/", "WFA3B1E7A2/work/audio/",
+                        "WFA3B1E7A2/protfolio/", "WFA3B1E7A2/others/", "WFA3B1E7A2/others/fonts/");
         assertThat(captor.getAllValues()).allSatisfy(request -> {
             assertThat(request.getMetadata().getContentLength()).isZero();
             assertThat(request.getMetadata().getContentType())
@@ -585,11 +587,11 @@ class CosServiceTest {
         cosService.initTeamStorage("TM2048");
 
         ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
-        verify(cosClient, times(3)).putObject(captor.capture());
+        verify(cosClient, times(4)).putObject(captor.capture());
         List<String> keys = captor.getAllValues().stream()
                 .map(PutObjectRequest::getKey)
                 .toList();
-        assertThat(keys).containsExactly("TM2048/", "TM2048/others/", "TM2048/protfolio/");
+        assertThat(keys).containsExactly("TM2048/", "TM2048/others/", "TM2048/protfolio/", "TM2048/others/fonts/");
         assertThat(keys).noneMatch(key -> key.contains("/work/"));
         assertThat(captor.getAllValues())
                 .allSatisfy(request -> assertThat(request.getMetadata().getContentType())

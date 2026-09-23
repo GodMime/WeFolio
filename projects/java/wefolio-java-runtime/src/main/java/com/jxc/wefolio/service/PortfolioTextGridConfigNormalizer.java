@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
 import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.PortfolioTextAlignmentDict;
@@ -178,6 +179,9 @@ public final class PortfolioTextGridConfigNormalizer {
                     Object font = fallback(run, FONT_FAMILY, PortfolioTextFontFamilyDict.SYSTEM.getCode());
                     if (!(font instanceof String fontName) || PortfolioTextFontFamilyDict.fromCode(fontName) == null) { throw invalid(); }
                     normalizedRun.put(FONT_FAMILY, font);
+                    if (run.get(PortfolioFontConfigSupport.FONT_ID) instanceof String fontId) {
+                        normalizedRun.put(PortfolioFontConfigSupport.FONT_ID, fontId);
+                    }
                     normalizedRun.put(FONT_SIZE_RPX, integer(run, FONT_SIZE_RPX, 28,
                             PortfolioTextTypographyConstants.FONT_SIZE_MIN_RPX,
                             PortfolioTextTypographyConstants.FONT_SIZE_MAX_RPX));

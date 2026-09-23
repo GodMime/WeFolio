@@ -10,6 +10,7 @@ Component({
   lifetimes: textBackgroundVideo.lifetimes,
   pageLifetimes: textBackgroundVideo.pageLifetimes,
   properties: {
+    fontContext: { type: Object, value: {} },
     ...textBackgroundVideo.properties,
     config: { type: Object, value: {} },
     themeMode: { type: String, value: 'light' },
@@ -24,7 +25,7 @@ Component({
     showRepairHint: false
   },
   observers: { ...textBackgroundVideo.observers,
-    'config, themeMode, repairMode'() { this.updatePresentation() }
+    fontContext() { this.updatePresentation() }, 'config, themeMode, repairMode'() { this.updatePresentation() }
   },
   methods: {
     ...textBackgroundVideo.methods,
@@ -33,7 +34,7 @@ Component({
       const background = buildTextBackgroundPresentation(config)
       const imageFailed = this.data.background.imageUrl === background.imageUrl && this.data.imageFailed
       this.setData({
-        blocks: buildStructuredTextPresentation(config, this.properties.themeMode).blocks.map(block => ({
+        blocks: buildStructuredTextPresentation(config, this.properties.themeMode, this.properties.fontContext).blocks.map(block => ({
           ...block,
           // 列表允许相同文案，展示键不能使用文案本身。
           listItems: block.type === 'LIST' && Array.isArray(block.items)

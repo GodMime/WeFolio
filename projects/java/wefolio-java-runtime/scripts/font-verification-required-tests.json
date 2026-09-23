@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "javaTests": [
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontFinalLicenseTest",
+      "requiredMethods": [
+        "rejectsMutatedFinalWoffBeforeUploadAndKeepsSelection"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontReadinessTest",
+      "requiredMethods": [
+        "disabledNodeReportsBuildIdentityWithoutLaunchingTools",
+        "missingToolDoesNotPreventRuntimeStartup",
+        "malformedManifestDegradesAtInitialization",
+        "concurrentFaultsAndBrokenAlertDoNotReopenOrBreakTheNode",
+        "realPrevalidationAndRuntimeFaultsStayLatchedUntilExplicitReinitialization"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontStorageTest",
+      "requiredMethods": [
+        "successfulUploadUsesOneSignedRequest",
+        "putAndDeleteErrorsNeverRetryOrFollowRedirects",
+        "connectionLossNeverRetriesEitherMethod",
+        "onlyExplicitMissingObjectIsSuccessfulDeletion",
+        "stalledResponseTimesOutOnceForBothMethods",
+        "cancellationAbortsIoAndDoesNotPoisonIndependentDeletion"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontCompletionContractTest",
+      "requiredMethods": [
+        "preservesCompletedGroupAfterNonZeroExit",
+        "rejectsMissingTruncatedOrMismatchedCompletionRecords",
+        "filtersLicenseRequestToCompletedGroups",
+        "rejectsIncompleteLicenseResponse",
+        "rejectsOnlyInvalidLicenseGroupWhenEnvironmentHealthy",
+        "distinguishesSingleAndTotalOutputLimits",
+        "discardsLateResultsAfterBudgetExpiry"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontFailureEvidenceTest",
+      "requiredMethods": [
+        "collectsFreshEvidenceBeforeRecoveringCompletedGroups",
+        "latchesEnvironmentFailureBeforeAnyPendingUpload",
+        "keepsOrdinaryProcessFailureRequestScoped",
+        "reportsIncompleteEvidenceWithoutExtendingDeadline",
+        "stopsPendingUploadsAfterConcurrentLatch",
+        "retainsReusedAndRegisteredAssetsAfterLatch",
+        "stopsOrphanedWritersBeforeRecoveringCompletedGroups"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontWeightCompatibilityTest",
+      "requiredMethods": [
+        "matchesLegacyWeightsAndFacesForEveryExistingVersion",
+        "preservesSubsetHashAtFixedBuildId",
+        "preservesHistoricalAndUnknownVersionMappings"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontServiceReuseTest",
+      "requiredMethods": [
+        "reusesStoredAssetAcrossPrepareAcceptAndPublish",
+        "reusesStoredAssetAcrossBuildChange",
+        "rejectsMissingBucketWithoutLosingSelection",
+        "damagedDraftDoesNotHideValidPublishedAssets",
+        "refusesInvalidPrefixAndSiblingObjects",
+        "reportsExactCleanupCategoryCounts",
+        "reportsCleanupDeadlineExpiredWithoutDeleting"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupportTest",
+      "requiredMethods": [
+        "legacySavePreservesSelection",
+        "explicitNullClearsButOmissionPreserves",
+        "legacySwitchToWechatSurvivesPersistedNormalization",
+        "fingerprintPreservesRootPresence",
+        "capabilityOnlyUsesLegacyButExplicitNullUsesFontDomain",
+        "realLegacySerializerVariantsPreserveAllTextKindsAndNewNullClears",
+        "nodePresenceChangesFingerprintForEveryOwnerAndTextKind"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontVersionFlowTest",
+      "requiredMethods": [
+        "unknownVersionSurvivesSaveAndPublishButNotAnotherPlan",
+        "missingVersionSurvivesSaveAndPublishButNotAnotherPlan"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.portfoliofont.PortfolioFontPlanTest",
+      "requiredMethods": [
+        "preservesV1GoldenPlanAndDemandHashes",
+        "groupsContentAsCodepoints"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.PortfolioConfigValidatorTest",
+      "requiredMethods": [
+        "remoteFontsSurviveRealDraftAndPublishNormalization"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.teamportfolio.TeamPortfolioConfigValidatorTest",
+      "requiredMethods": [
+        "remoteFontsSurviveRealDraftAndPublishNormalization"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.MinePortfolioServiceTest",
+      "requiredMethods": [
+        "fontPrefixesUsePersonalOwnerAcrossPrepareSavePublishDelete"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.teamportfolio.MineTeamPortfolioServiceTest",
+      "requiredMethods": [
+        "fontPrefixesUseTeamOwnerAcrossPrepareSavePublishDelete"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.CosServiceTest",
+      "requiredMethods": [
+        "initUserStorageShouldPreserveExactFolderSet",
+        "initTeamStorageShouldCreateTeamFolders"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.VisitorPortfolioServiceTest",
+      "requiredMethods": [
+        "openPortfolioShouldCreateGlobalVisitorRecordAndNotExposeOpenidOrVisitorId"
+      ]
+    },
+    {
+      "class": "com.jxc.wefolio.service.teamportfolio.VisitorTeamPortfolioServiceTest",
+      "requiredMethods": [
+        "openUsesSharedVisitorInfrastructureAndIndependentTeamVisitWithoutPoints"
+      ]
+    }
+  ],
+  "pythonTests": [
+    {
+      "module": "test_font_license",
+      "class": "FinalWoffLicenseTest",
+      "requiredMethods": [
+        "test_all_physical_faces_keep_full_license_after_reopening",
+        "test_missing_truncated_or_replaced_legal_records_are_rejected",
+        "test_unreadable_and_non_woff_outputs_are_rejected",
+        "test_one_group_failure_does_not_discard_other_validated_output"
+      ]
+    },
+    {
+      "module": "test_font_nodes",
+      "class": "FontNodesMonitorTest",
+      "requiredMethods": [
+        "test_two_matching_nodes_are_healthy_and_do_not_notify",
+        "test_build_drift_and_insufficient_nodes_are_reported_without_auto_actions",
+        "test_minimum_ready_nodes_and_explicit_prevalidation_mode",
+        "test_errors_redirects_and_timeouts_do_not_retry",
+        "test_explicit_notification_is_signed_once_with_independent_secret",
+        "test_no_fallback_credentials_and_failed_notification_is_not_retried",
+        "test_non_http_notification_address_is_rejected_without_outputting_secret",
+        "test_malformed_diagnostics_do_not_leak_response_content"
+      ]
+    },
+    {
+      "module": "test_font_completion",
+      "class": "CompletionRecordProtocolTest",
+      "requiredMethods": [
+        "test_publishes_record_before_batch_finishes",
+        "test_requires_atomic_complete_record"
+      ]
+    },
+    {
+      "module": "test_font_verification_gate",
+      "class": "FontVerificationGateTest",
+      "requiredMethods": [
+        "test_missing_or_empty_registry_fails",
+        "test_missing_required_class_or_method_fails",
+        "test_java_or_python_skip_fails",
+        "test_stale_reports_and_shell_failure_fail"
+      ]
+    }
+  ],
+  "shellTests": [
+    {
+      "script": "src/test/scripts/deploy_rolling_test.sh",
+      "requiredFunctions": [
+        "test_source_does_not_execute_deployment",
+        "test_timed_step_reports_success_duration_with_server_ip",
+        "test_timed_step_reports_failure_duration_and_preserves_status",
+        "test_round_robin_renderer_only_changes_runtime_upstream",
+        "test_single_node_modes_only_drain_the_deploying_node",
+        "test_renderer_rejects_incomplete_runtime_upstream",
+        "test_switch_nginx_mode_uploads_the_rendered_candidate",
+        "test_nginx_validation_failure_restores_previous_config",
+        "test_nginx_reload_failure_restores_previous_config",
+        "test_remote_install_keeps_exactly_one_previous_jar_backup",
+        "test_remote_checksum_failure_preserves_formal_jar_without_backup",
+        "test_health_polling_starts_after_three_seconds",
+        "test_health_polling_stops_at_thirty_second_deadline",
+        "test_deploy_node_installs_restarts_once_and_then_checks_health",
+        "test_deploy_node_health_failure_does_not_restart_or_restore_again",
+        "test_deploy_node_checksum_failure_never_restarts_service",
+        "test_deploy_node_reports_timed_substeps_with_server_ip",
+        "test_build_artifact_packages_once_and_records_sha256",
+        "test_preflight_validates_nginx_and_both_nodes_before_switching",
+        "test_preflight_fails_when_either_node_is_unhealthy",
+        "test_rolling_deploy_uses_the_required_success_sequence",
+        "test_old_node_failure_stays_on_new_only",
+        "test_new_node_failure_stays_on_old_only",
+        "test_rolling_deploy_reports_major_step_durations_with_server_ips",
+        "test_main_reports_total_duration_when_rolling_deploy_fails",
+        "test_main_enters_the_rolling_deploy_state_machine",
+        "test_final_health_failure_stops_round_robin",
+        "test_health_json_validation_rejects_nested_up",
+        "test_health_check_is_independent_of_font_configuration",
+        "test_health_check_rejects_invalid_response_and_transport_failure"
+      ]
+    }
+  ]
+}

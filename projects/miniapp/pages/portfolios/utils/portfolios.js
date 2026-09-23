@@ -9,7 +9,7 @@ const {
   normalizePortfolioTextFontSizeRpx,
   isValidPortfolioTextLineHeight,
   PORTFOLIO_TEXT_LINE_HEIGHT_ERROR
-} = require('../../../utils/portfolio-text-typography')
+} = require('../../../utils/portfolio-text-typography.js')
 
 const SCHEMA_VERSION = 'standard-personal-v1'
 const EDITOR_SCHEMA_REVISION = 14
@@ -425,6 +425,7 @@ function normalizeTextSectionConfig(raw = {}) {
     color: normalizeTextColor(raw && raw.color),
     content: trimText(raw && raw.content),
     alignment: normalizeTextSectionAlignment(raw && raw.alignment),
+    ...(Object.prototype.hasOwnProperty.call(raw, 'fontId') ? { fontId: raw.fontId } : {}),
     fontFamily: normalizePortfolioTextFontFamily(raw && raw.fontFamily),
     fontSizeRpx: normalizePortfolioTextFontSizeRpx(
       raw && raw.fontSizeRpx,
@@ -638,6 +639,7 @@ function normalizeBottomNavConfig(raw = {}) {
 
 function normalizePortfolioConfig(raw = {}) {
   return {
+    ...(raw.fonts && typeof raw.fonts === 'object' ? { fonts: JSON.parse(JSON.stringify(raw.fonts)) } : {}),
     schemaVersion: trimText(raw.schemaVersion) || SCHEMA_VERSION,
     editorSchemaRevision: EDITOR_SCHEMA_REVISION,
     share: normalizeShare(raw.share || {}),
@@ -1143,6 +1145,7 @@ function updateComponentTextSectionConfig(config, componentKey, textSectionConfi
   if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'color')) {
     nextTextSectionConfig.color = normalizeTextColor(textSectionConfig.color)
   }
+  if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'fontId')) nextTextSectionConfig.fontId = textSectionConfig.fontId
   if (Object.prototype.hasOwnProperty.call(textSectionConfig, 'fontFamily')) {
     nextTextSectionConfig.fontFamily =
       normalizePortfolioTextFontFamily(textSectionConfig.fontFamily)
@@ -1331,6 +1334,7 @@ function reorderComponent(config, fromIndex, toIndex, menuKey = '') {
 
 function buildDraftPayload(config, clientRevision, idempotencyKey) {
   return {
+    clientCapabilities: { portfolioRemoteFont: 1 },
     config,
     clientRevision,
     idempotencyKey

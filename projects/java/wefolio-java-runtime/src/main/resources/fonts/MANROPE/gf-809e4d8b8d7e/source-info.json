@@ -1,0 +1,40 @@
+{
+  "fontId": "MANROPE",
+  "family": "Manrope",
+  "fontVersion": "gf-809e4d8b8d7e",
+  "sourceRepository": "https://github.com/google/fonts",
+  "upstreamCommit": "809e4d8b8d7e9364a914909bb777679606c178b8",
+  "license": "OFL-1.1",
+  "languageLabel": "只适合英文",
+  "purpose": "服务端字体子集生成用完整源文件",
+  "files": [
+    {
+      "fontId": "MANROPE",
+      "family": "Manrope",
+      "fontVersion": "gf-809e4d8b8d7e",
+      "upstreamCommit": "809e4d8b8d7e9364a914909bb777679606c178b8",
+      "sourceUrl": "https://raw.githubusercontent.com/google/fonts/809e4d8b8d7e9364a914909bb777679606c178b8/ofl/manrope/Manrope%5Bwght%5D.ttf",
+      "originalFilename": "Manrope[wght].ttf",
+      "localFilename": "Manrope-Variable.ttf",
+      "expectedBytes": 165420,
+      "gitBlobSha": "23dcf5e05a97f19a3567d40ebb3765580a4325f7",
+      "bytes": 165420,
+      "sha256": "d0639be45d0af36e798172419d7bd173c4bd4f29e2b76cbb69db1d11bf8b0a40",
+      "downloadApiUrl": "https://api.github.com/repos/google/fonts/git/blobs/23dcf5e05a97f19a3567d40ebb3765580a4325f7"
+    },
+    {
+      "fontId": "MANROPE",
+      "family": "Manrope",
+      "fontVersion": "gf-809e4d8b8d7e",
+      "upstreamCommit": "809e4d8b8d7e9364a914909bb777679606c178b8",
+      "sourceUrl": "https://raw.githubusercontent.com/google/fonts/809e4d8b8d7e9364a914909bb777679606c178b8/ofl/manrope/OFL.txt",
+      "originalFilename": "OFL.txt",
+      "localFilename": "OFL.txt",
+      "expectedBytes": 4384,
+      "gitBlobSha": "472064afc4b8dec9079fab03b8ffafb617a1b2d8",
+      "bytes": 4384,
+      "sha256": "e01b637272e0cbdfb240184dd98ea5cc671556d9894dae2668d92ab2c906787c",
+      "downloadApiUrl": "https://api.github.com/repos/google/fonts/git/blobs/472064afc4b8dec9079fab03b8ffafb617a1b2d8"
+    }
+  ]
+}

@@ -1463,3 +1463,12 @@
 .team-video-editor-settings .style-thumbnail.portrait view {
   background: var(--pe-color-text-strong, #495057);
 }
+
+.font-preview-image { width: 240rpx; max-width: 100%; }
+
+/* 字体入口与标题同排，并显式声明按钮尺寸，避免全局重置后贴住样张。 */
+.font-selector-heading { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; min-height: 72rpx; margin: 24rpx 0 16rpx; }
+.font-selector-title { min-width: 0; color: var(--pe-color-text-primary, #212529); font-size: 28rpx; font-weight: 600; line-height: 1.5; }
+.font-selector-heading .font-selector-more { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: auto; min-width: 144rpx; min-height: 72rpx; box-sizing: border-box; margin: 0; padding: 16rpx 24rpx; border: 1rpx solid var(--pe-color-border, #E9ECEF); border-radius: 999rpx; background: var(--pe-color-page, #F5F6F7); color: var(--pe-color-text-strong, #495057); font-size: 24rpx; font-weight: 500; line-height: 1.5; white-space: nowrap; }
+.font-selector-more::after { border: 0; }
+.font-selector-message { margin: 0 0 16rpx; color: var(--pe-color-text-secondary, #868E96); font-size: 22rpx; line-height: 1.5; overflow-wrap: break-word; }

@@ -1,5 +1,11 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.dto.PortfolioFontManifestDto;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontWrite;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontManifests;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
@@ -85,6 +91,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class MinePortfolioService {
+
+    /** 字体同步准备、锁内认领与提交后一次性清理。 */
+    private final PortfolioFontService portfolioFontService;
+
 
     /** 未携带能力版本的旧客户端按 revision 2 处理。 */
     private static final int COMPONENT_LIBRARY_LEGACY_REVISION = 2;
@@ -457,6 +467,30 @@ public class MinePortfolioService {
         return buildDetail(portfolio, parseConfig(portfolio.getDraftConfigJson()));
     }
 
+    /** 同步刷新候选字体；仅返回本次产物，不隐式保存或赋予后续请求认领权。 */
+    public PortfolioFontManifestDto prepareFonts(Long portfolioId, MinePortfolioDraftSaveRequest request) {
+        PortfolioFontWrite write = portfolioPublishTransactionService.execute(() -> {
+            PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+            if (request == null || request.getConfig() == null) {
+                throw new BusinessException(PortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
+            }
+            PortfolioConfigDto previous = parseConfig(portfolio.getDraftConfigJson());
+            PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(
+                    AuthContextHolder.requireUserId(), request.getConfig(), previous);
+            PortfolioFontConfigSupport.merge(normalized, request.getConfig(), previous,
+                    request.getClientCapabilities() != null && request.getClientCapabilities().supportsRemoteFonts());
+            PortfolioFontWrite context = new PortfolioFontWrite();
+            context.snapshot = portfolio;
+            context.plan = PortfolioFontPlan.from(normalized);
+            return context;
+        });
+        String prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(
+                AuthContextHolder.requireUserId()), portfolioId);
+        var response = portfolioFontService.prepare(write.snapshot, write.plan, prefix).response();
+        requireOwnedStandardPersonal(portfolioId);
+        return response;
+    }
+
     /**
      * 保存草稿。
      *
@@ -464,8 +498,22 @@ public class MinePortfolioService {
      * @param request 保存请求
      * @return 作品集详情
      */
-    @Transactional(rollbackFor = Exception.class)
     public MinePortfolioDetailResponse saveDraft(Long portfolioId, MinePortfolioDraftSaveRequest request) {
+        PortfolioFontWrite write = new PortfolioFontWrite();
+        MinePortfolioDetailResponse result = portfolioPublishTransactionService.execute(
+                () -> saveDraftInTransaction(portfolioId, request, write));
+        if (write.snapshot == null) { return result; }
+        write.prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(
+                AuthContextHolder.requireUserId()), portfolioId);
+        write.prepared = portfolioFontService.prepare(write.snapshot, write.plan, write.prefix);
+        result = portfolioPublishTransactionService.execute(() -> saveDraftInTransaction(portfolioId, request, write));
+        portfolioFontService.cleanup(write.released, write.prefix);
+        return result;
+    }
+
+    /** 两次短事务共用相同校验顺序；首次仅预检，字体 I/O 位于两事务之间。 */
+    private MinePortfolioDetailResponse saveDraftInTransaction(Long portfolioId,
+            MinePortfolioDraftSaveRequest request, PortfolioFontWrite write) {
         Long userId = AuthContextHolder.requireUserId();
         if (request == null || request.getConfig() == null) {
             throw new BusinessException(PortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
@@ -479,11 +527,17 @@ public class MinePortfolioService {
                 portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
         PortfolioEntity portfolio = graph.source();
         String requestHash = hasDraftIdempotencyKey(request)
-                ? sha256(toJson(sortJsonKeys(JSON.parse(toJson(request))))) : null;
+                ? sha256(PortfolioFontConfigSupport.hasFontIntent(request)
+                        ? PortfolioFontConfigSupport.fingerprint(request)
+                        : toJson(sortJsonKeys(PortfolioFontConfigSupport.legacyRequest(request)))) : null;
         if (restoreSavedDraft(portfolio, request, requestHash)) {
             return buildDetail(portfolio, parseConfig(portfolio.getDraftConfigJson()));
         }
         if (request.getClientRevision() != null && !request.getClientRevision().equals(safeInt(portfolio.getDraftRevision()))) {
+            throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+        }
+        if (write.prepared != null && !Objects.equals(
+                write.prepared.revision(), portfolio.getCurrentRevision())) {
             throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
         }
         PortfolioConfigDto oldDraftConfig = parseConfig(portfolio.getDraftConfigJson());
@@ -493,6 +547,8 @@ public class MinePortfolioService {
                 request.getConfig(),
                 oldDraftConfig
         );
+        PortfolioFontConfigSupport.merge(normalized, request.getConfig(), oldDraftConfig,
+                request.getClientCapabilities() != null && request.getClientCapabilities().supportsRemoteFonts());
         List<PortfolioReferenceEntity> draftReferences = portfolioConfigValidator.buildReferences(
                 portfolio.getId(),
                 userId,
@@ -505,6 +561,16 @@ public class MinePortfolioService {
                 draftReferences,
                 normalized
         );
+        PortfolioFontPlan fontPlan = PortfolioFontPlan.from(normalized);
+        if (write.capture(portfolio, fontPlan)) { return null; }
+        if (write.prepared != null) {
+            String assets;
+            try { assets = portfolioFontService.accept(portfolio, fontPlan, write.prepared); }
+            catch (PortfolioFontService.PlanConflict conflict) { throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE); }
+            write.changed(portfolio, assets, portfolio.getPublishedFontAssetsJson());
+            portfolioEntityMapper.updateDraftFontAssets(portfolioId, assets);
+            portfolio.setDraftFontAssetsJson(assets);
+        }
         List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
                 userId,
                 portfolio.getId(),
@@ -571,6 +637,8 @@ public class MinePortfolioService {
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         MinePortfolioDetailResponse response = buildDetail(portfolio, config);
         response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
+        response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config), portfolio.getPublishedFontAssetsJson()));
+        response.getRenderData().setFonts(response.getFontAssets());
         return response;
     }
 
@@ -585,6 +653,8 @@ public class MinePortfolioService {
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         MinePortfolioDetailResponse response = buildDetail(portfolio, config);
         response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
+        response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config), portfolio.getPublishedFontAssetsJson()));
+        response.getRenderData().setFonts(response.getFontAssets());
         return response;
     }
 
@@ -680,9 +750,13 @@ public class MinePortfolioService {
                 1,
                 idempotencyKey
         );
-        return portfolioPublishTransactionService.execute(
-                () -> publishInTransaction(portfolioId, request, userId)
-        );
+        PortfolioFontWrite write = new PortfolioFontWrite();
+        MinePortfolioDetailResponse response = portfolioPublishTransactionService.execute(
+                () -> publishInTransaction(portfolioId, request, userId, write));
+        if (!write.released.isEmpty()) {
+            portfolioFontService.cleanup(write.released, write.prefix);
+        }
+        return response;
     }
 
     /**
@@ -696,7 +770,8 @@ public class MinePortfolioService {
     private MinePortfolioDetailResponse publishInTransaction(
             Long portfolioId,
             MinePortfolioPublishRequest request,
-            Long userId
+            Long userId,
+            PortfolioFontWrite write
     ) {
         PortfolioHyperlinkGraphService.LockedGraph graph =
                 portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
@@ -732,6 +807,14 @@ public class MinePortfolioService {
         String configJson = toJson(normalized);
         String hash = sha256(configJson);
         LocalDateTime now = LocalDateTime.now();
+        if (portfolio.getDraftFontAssetsJson() != null || portfolio.getPublishedFontAssetsJson() != null
+                || !PortfolioFontPlan.from(normalized).groups().isEmpty()) {
+            write.prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(userId), portfolioId);
+            String assets = portfolioFontService.publish(portfolio, PortfolioFontPlan.from(normalized));
+            write.changed(portfolio, portfolio.getDraftFontAssetsJson(), assets);
+            portfolioEntityMapper.updatePublishedFontAssets(portfolioId, assets);
+            portfolio.setPublishedFontAssetsJson(assets);
+        }
         portfolio.setPublishedConfigJson(configJson);
         portfolio.setPublishedRevision(nextPublishedRevision);
         portfolio.setPublishedContentHash(hash);
@@ -818,16 +901,17 @@ public class MinePortfolioService {
      *
      * @param portfolioId 作品集 ID
      */
-    @Transactional(rollbackFor = Exception.class)
     public void deletePortfolio(Long portfolioId) {
-        portfolioReferenceMutex.execute(() -> {
-            deletePortfolioLocked(portfolioId);
+        PortfolioFontWrite write = new PortfolioFontWrite();
+        portfolioPublishTransactionService.execute(() -> portfolioReferenceMutex.execute(() -> {
+            deletePortfolioLocked(portfolioId, write);
             return null;
-        });
+        }));
+        if (!write.released.isEmpty()) { portfolioFontService.cleanup(write.released, write.prefix); }
     }
 
     /** 在作品集引用互斥区间内删除标准个人作品集。 */
-    private void deletePortfolioLocked(Long portfolioId) {
+    private void deletePortfolioLocked(Long portfolioId, PortfolioFontWrite write) {
         Long userId = AuthContextHolder.requireUserId();
         // 非标准模板沿用维护能力不可用提示，避免图锁过滤后降级为“作品集不存在”。
         requireOwnedStandardPersonal(portfolioId);
@@ -836,6 +920,11 @@ public class MinePortfolioService {
         PortfolioEntity portfolio = graph.source();
         teamPortfolioReferenceGuardService.assertPersonalPortfolioNotReferenced(portfolio.getId());
         portfolioHyperlinkGraphService.assertNoIncomingLinks(graph, portfolio.getId());
+        if (portfolio.getDraftFontAssetsJson() != null || portfolio.getPublishedFontAssetsJson() != null) {
+            write.changed(portfolio, null, null);
+            write.prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(userId), portfolioId);
+            portfolioEntityMapper.clearFontAssets(portfolioId);
+        }
         List<String> deletedObjectKeys = resolveDeletedPortfolioAssetObjectKeys(userId, portfolio);
         portfolioReferenceEntityMapper.delete(
                 Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
@@ -1063,6 +1152,8 @@ public class MinePortfolioService {
         response.setDraftRevision(safeInt(portfolio.getDraftRevision()));
         response.setPublishedRevision(safeInt(portfolio.getPublishedRevision()));
         response.setConfig(config);
+        response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config),
+                portfolio.getDraftFontAssetsJson(), portfolio.getPublishedFontAssetsJson()));
         return response;
     }
 

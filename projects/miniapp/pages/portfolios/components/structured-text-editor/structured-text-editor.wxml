@@ -52,13 +52,16 @@
             <view class="structured-label">内容</view>
             <block wx:if="{{blockDraft.block.type === 'LIST'}}">
               <view wx:for="{{listRows}}" wx:for-item="line" wx:key="key" class="structured-list-row">
-                <text>{{line.index + 1}}.</text><textarea value="{{line.content}}" maxlength="-1" auto-height data-index="{{line.index}}" bindinput="handleListInput" placeholder="填写列表条目" /><view data-index="{{line.index}}" bindtap="handleDeleteListItem" aria-role="button" aria-label="删除条目">删除</view>
+                <text>{{line.index + 1}}.</text><textarea style="{{blockFontStyle}}" value="{{line.content}}" maxlength="-1" auto-height data-index="{{line.index}}" bindinput="handleListInput" placeholder="填写列表条目" /><view data-index="{{line.index}}" bindtap="handleDeleteListItem" aria-role="button" aria-label="删除条目">删除</view>
               </view>
               <button class="structured-add" bindtap="handleAddListItem" disabled="{{blockDraft.block.items.length >= 10}}">＋ 添加条目（最多 10 条）</button>
             </block>
-            <textarea wx:else class="structured-textarea" value="{{blockDraft.block.content}}" maxlength="-1" data-field="content" bindinput="handleBlockInput" placeholder="填写文字，支持换行" />
-            <view class="structured-label">字体</view>
-            <view class="structured-options"><view wx:for="{{fonts}}" wx:key="value" class="structured-option font-option {{blockDraft.block.fontFamily === item.value ? 'selected' : ''}} {{!item.available ? 'disabled' : ''}}" data-field="fontFamily" data-value="{{item.value}}" bindtap="handleBlockOption" aria-disabled="{{!item.available}}"><view>{{item.label}}</view><view class="{{item.fontClass}}">映期 Folio 字体预览 123</view><view wx:if="{{!item.available}}" class="structured-meta">{{blockDraft.block.fontFamily === item.value ? '已保存字体保留，当前设备以系统字体预览' : '当前设备不可用'}}</view></view></view>
+            <textarea wx:else style="{{blockFontStyle}}" class="structured-textarea" value="{{blockDraft.block.content}}" maxlength="-1" data-field="content" bindinput="handleBlockInput" placeholder="填写文字，支持换行" />
+            <view class="font-selector-heading">
+              <view class="font-selector-title">字体</view>
+              <button class="font-selector-more" wx:if="{{!moreFontsExpanded}}" bindtap="handleExpandFonts">更多字体</button>
+            </view><view class="font-selector-message" wx:if="{{fontMessage}}">{{fontMessage}}</view>
+            <view class="structured-options"><view wx:for="{{fonts}}" wx:if="{{!item.remote || moreFontsExpanded || blockDraft.block.fontId === item.value}}" wx:key="value" class="structured-option font-option {{(blockDraft.block.fontId || blockDraft.block.fontFamily) === item.value ? 'selected' : ''}} {{!item.available ? 'disabled' : ''}}" data-field="fontFamily" data-value="{{item.value}}" bindtap="handleBlockOption" aria-role="radio" aria-checked="{{(blockDraft.block.fontId || blockDraft.block.fontFamily) === item.value}}" aria-label="{{item.label}} {{item.languageLabel}}" aria-disabled="{{!item.available}}"><view>{{item.label}}</view><view wx:if="{{item.languageLabel}}">{{item.languageLabel}}</view><image wx:if="{{item.previewImageUrl}}" class="font-preview-image" src="{{item.previewImageUrl}}" mode="widthFix" /><view wx:else class="{{item.fontClass}}">{{item.sample}}</view><view wx:if="{{!item.available}}" class="structured-meta">{{(blockDraft.block.fontId || blockDraft.block.fontFamily) === item.value ? '已保存字体保留，当前设备以系统字体预览' : (item.remote ? (fontMessage || '展开更多字体后可选择') : '当前设备不可用')}}</view></view></view>
             <view class="structured-spacing-row structured-font-size">
               <text>字号</text>
               <view class="structured-stepper">

@@ -1,0 +1,255 @@
+{
+  "formatVersion": 1,
+  "preparedOn": "2026-09-15",
+  "purpose": "SERVER_SUBSETTING_SOURCE",
+  "cosBaseUrl": null,
+  "fontCount": 6,
+  "fontFileCount": 7,
+  "totalFontBytes": 83562160,
+  "fonts": [
+    {
+      "fontId": "CORMORANT_GARAMOND",
+      "displayName": "Cormorant Garamond",
+      "language": "en",
+      "languageLabel": "只适合英文",
+      "sourceRevisionDirectory": "gf-809e4d8b8d7e",
+      "sourceInfoPath": "CORMORANT_GARAMOND/gf-809e4d8b8d7e/source-info.json",
+      "license": "OFL-1.1",
+      "licensePaths": [
+        "CORMORANT_GARAMOND/gf-809e4d8b8d7e/OFL.txt"
+      ],
+      "normal": {
+        "relativePath": "CORMORANT_GARAMOND/gf-809e4d8b8d7e/CormorantGaramond-Variable.ttf",
+        "instantiateAxes": {
+          "wght": 400
+        }
+      },
+      "bold": {
+        "relativePath": "CORMORANT_GARAMOND/gf-809e4d8b8d7e/CormorantGaramond-Variable.ttf",
+        "instantiateAxes": {
+          "wght": 700
+        }
+      },
+      "sourceFiles": [
+        {
+          "relativePath": "CORMORANT_GARAMOND/gf-809e4d8b8d7e/CormorantGaramond-Variable.ttf",
+          "format": "TTF",
+          "contentType": "font/ttf",
+          "bytes": 1195560,
+          "sha256": "b20b7d9626dd956b2c5e558692ad328b1f19e3275e2782db4fa07670d83f35e0",
+          "upstreamFontVersion": "Version 4.001",
+          "weightClass": 300,
+          "variationAxes": [
+            {
+              "tag": "wght",
+              "min": 300.0,
+              "default": 300.0,
+              "max": 700.0
+            }
+          ],
+          "cosUrl": null
+        }
+      ],
+      "fontVersion": "gf-809e4d8b8d7e-r1",
+      "sample": "Timeless Moments",
+      "previewImageUrl": "https://cdn2.we-folio.dingchenyong.top/demo/portfolio-fonts/CORMORANT_GARAMOND/gf-809e4d8b8d7e-r1/5a587f5e25230ff6514d8bbe3572dd759e71e7cc82bfb172e1c0923c935c2f48.png"
+    },
+    {
+      "fontId": "MANROPE",
+      "displayName": "Manrope",
+      "language": "en",
+      "languageLabel": "只适合英文",
+      "sourceRevisionDirectory": "gf-809e4d8b8d7e",
+      "sourceInfoPath": "MANROPE/gf-809e4d8b8d7e/source-info.json",
+      "license": "OFL-1.1",
+      "licensePaths": [
+        "MANROPE/gf-809e4d8b8d7e/OFL.txt"
+      ],
+      "normal": {
+        "relativePath": "MANROPE/gf-809e4d8b8d7e/Manrope-Variable.ttf",
+        "instantiateAxes": {
+          "wght": 400
+        }
+      },
+      "bold": {
+        "relativePath": "MANROPE/gf-809e4d8b8d7e/Manrope-Variable.ttf",
+        "instantiateAxes": {
+          "wght": 700
+        }
+      },
+      "sourceFiles": [
+        {
+          "relativePath": "MANROPE/gf-809e4d8b8d7e/Manrope-Variable.ttf",
+          "format": "TTF",
+          "contentType": "font/ttf",
+          "bytes": 165420,
+          "sha256": "d0639be45d0af36e798172419d7bd173c4bd4f29e2b76cbb69db1d11bf8b0a40",
+          "upstreamFontVersion": "Version 4.504",
+          "weightClass": 200,
+          "variationAxes": [
+            {
+              "tag": "wght",
+              "min": 200.0,
+              "default": 200.0,
+              "max": 800.0
+            }
+          ],
+          "cosUrl": null
+        }
+      ],
+      "fontVersion": "gf-809e4d8b8d7e-r1",
+      "sample": "Timeless Moments",
+      "previewImageUrl": "https://cdn2.we-folio.dingchenyong.top/demo/portfolio-fonts/MANROPE/gf-809e4d8b8d7e-r1/2e0c0e58f306c6d39c41b6d4ac482853d829ae4f62857d3a882a943386bc8df7.png"
+    },
+    {
+      "fontId": "ALLURA",
+      "displayName": "Allura",
+      "language": "en",
+      "languageLabel": "只适合英文",
+      "sourceRevisionDirectory": "gf-809e4d8b8d7e",
+      "sourceInfoPath": "ALLURA/gf-809e4d8b8d7e/source-info.json",
+      "license": "OFL-1.1",
+      "licensePaths": [
+        "ALLURA/gf-809e4d8b8d7e/OFL.txt"
+      ],
+      "normal": {
+        "relativePath": "ALLURA/gf-809e4d8b8d7e/Allura-Regular.ttf"
+      },
+      "bold": {
+        "mode": "SYNTHETIC_FROM_NORMAL",
+        "note": "本次官方源文件无700字重；由渲染端合成并在实现时真机验证。"
+      },
+      "sourceFiles": [
+        {
+          "relativePath": "ALLURA/gf-809e4d8b8d7e/Allura-Regular.ttf",
+          "format": "TTF",
+          "contentType": "font/ttf",
+          "bytes": 246632,
+          "sha256": "9c142b2e515832c0dfc4ff8b8ea18f40314943bf937b72e2b23c4661bac14cc6",
+          "upstreamFontVersion": "Version 1.110",
+          "weightClass": 400,
+          "variationAxes": [],
+          "cosUrl": null
+        }
+      ],
+      "fontVersion": "gf-809e4d8b8d7e-r1",
+      "sample": "Timeless Moments",
+      "previewImageUrl": "https://cdn2.we-folio.dingchenyong.top/demo/portfolio-fonts/ALLURA/gf-809e4d8b8d7e-r1/993b384d49e97bfe1cbce526933e01f1915ba986c7a3b62dd519f9b14d5bc83d.png"
+    },
+    {
+      "fontId": "SOURCE_HAN_SERIF_SC",
+      "displayName": "思源宋体",
+      "language": "zh-Hans",
+      "languageLabel": "只适合中文",
+      "sourceRevisionDirectory": "2.003R",
+      "sourceInfoPath": "SOURCE_HAN_SERIF_SC/2.003R/source-info.json",
+      "license": "OFL-1.1",
+      "licensePaths": [
+        "SOURCE_HAN_SERIF_SC/2.003R/LICENSE.txt"
+      ],
+      "normal": {
+        "relativePath": "SOURCE_HAN_SERIF_SC/2.003R/SourceHanSerifSC-Regular.otf"
+      },
+      "bold": {
+        "relativePath": "SOURCE_HAN_SERIF_SC/2.003R/SourceHanSerifSC-Bold.otf"
+      },
+      "sourceFiles": [
+        {
+          "relativePath": "SOURCE_HAN_SERIF_SC/2.003R/SourceHanSerifSC-Bold.otf",
+          "format": "OTF",
+          "contentType": "font/otf",
+          "bytes": 25521732,
+          "sha256": "706b8c0de2deff6cbc0c87e2cdedfd33a78b7ffd76cebb4549012f197ba611fe",
+          "upstreamFontVersion": "Version 2.003;hotconv 1.1.1;makeotfexe 2.6.0",
+          "weightClass": 700,
+          "variationAxes": [],
+          "cosUrl": null
+        },
+        {
+          "relativePath": "SOURCE_HAN_SERIF_SC/2.003R/SourceHanSerifSC-Regular.otf",
+          "format": "OTF",
+          "contentType": "font/otf",
+          "bytes": 24543332,
+          "sha256": "78aa7a328fd974df2d688c8a9fd74a33d8334dfa84ab24d9d11efb2ffc464117",
+          "upstreamFontVersion": "Version 2.003;hotconv 1.1.1;makeotfexe 2.6.0",
+          "weightClass": 400,
+          "variationAxes": [],
+          "cosUrl": null
+        }
+      ],
+      "fontVersion": "2.003R-r1",
+      "sample": "以光为笔，记录心动",
+      "previewImageUrl": "https://cdn2.we-folio.dingchenyong.top/demo/portfolio-fonts/SOURCE_HAN_SERIF_SC/2.003R-r1/be6c865ed8d18bcf10f78ee241cf58d09ea8291329f15bd593726028c009db07.png"
+    },
+    {
+      "fontId": "ZCOOL_XIAOWEI",
+      "displayName": "站酷小薇体",
+      "language": "zh-Hans",
+      "languageLabel": "只适合中文",
+      "sourceRevisionDirectory": "d427686494a8",
+      "sourceInfoPath": "ZCOOL_XIAOWEI/d427686494a8/source-info.json",
+      "license": "OFL-1.1",
+      "licensePaths": [
+        "ZCOOL_XIAOWEI/d427686494a8/OFL.txt"
+      ],
+      "normal": {
+        "relativePath": "ZCOOL_XIAOWEI/d427686494a8/ZCOOLXiaoWei-Regular.ttf"
+      },
+      "bold": {
+        "mode": "SYNTHETIC_FROM_NORMAL",
+        "note": "本次官方源文件无700字重；由渲染端合成并在实现时真机验证。"
+      },
+      "sourceFiles": [
+        {
+          "relativePath": "ZCOOL_XIAOWEI/d427686494a8/ZCOOLXiaoWei-Regular.ttf",
+          "format": "TTF",
+          "contentType": "font/ttf",
+          "bytes": 6313808,
+          "sha256": "a42b620140f493db42f741351dfbf343c0936d58588ee8004b8b2a218d997ff1",
+          "upstreamFontVersion": "Version 1.000",
+          "weightClass": 400,
+          "variationAxes": [],
+          "cosUrl": null
+        }
+      ],
+      "fontVersion": "d427686494a8-r1",
+      "sample": "以光为笔，记录心动",
+      "previewImageUrl": "https://cdn2.we-folio.dingchenyong.top/demo/portfolio-fonts/ZCOOL_XIAOWEI/d427686494a8-r1/4367a975d81e434362dd2df8a93bbb4c73f0785376ce7c9eabc9287dfc9f1406.png"
+    },
+    {
+      "fontId": "LXGW_WENKAI",
+      "displayName": "霞鹜文楷",
+      "language": "zh-Hans",
+      "languageLabel": "只适合中文",
+      "sourceRevisionDirectory": "v1.522",
+      "sourceInfoPath": "LXGW_WENKAI/v1.522/source-info.json",
+      "license": "OFL-1.1",
+      "licensePaths": [
+        "LXGW_WENKAI/v1.522/OFL.txt"
+      ],
+      "normal": {
+        "relativePath": "LXGW_WENKAI/v1.522/LXGWWenKai-Regular.ttf"
+      },
+      "bold": {
+        "mode": "SYNTHETIC_FROM_NORMAL",
+        "note": "本次官方源文件无700字重；由渲染端合成并在实现时真机验证。"
+      },
+      "sourceFiles": [
+        {
+          "relativePath": "LXGW_WENKAI/v1.522/LXGWWenKai-Regular.ttf",
+          "format": "TTF",
+          "contentType": "font/ttf",
+          "bytes": 25575676,
+          "sha256": "39ad71264b588165b469e35e6afb162a378dacd1f95348160240ba9038ac3009",
+          "upstreamFontVersion": "Version 1.522; March 17, 2026",
+          "weightClass": 400,
+          "variationAxes": [],
+          "cosUrl": null
+        }
+      ],
+      "fontVersion": "v1.522-r1",
+      "sample": "以光为笔，记录心动",
+      "previewImageUrl": "https://cdn2.we-folio.dingchenyong.top/demo/portfolio-fonts/LXGW_WENKAI/v1.522-r1/51464801e89634b51e1a60bab2420a31ea95e44bf50a2ce43ba1478c6b71efb4.png"
+    }
+  ]
+}

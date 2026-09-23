@@ -85,6 +85,45 @@ function loadPreviewPage(fakeRequest, wxOverrides = {}) {
   })
 }
 
+for (const renderer of ['webview', 'skyline']) {
+  test(`草稿预览在 ${renderer} 中注册已保存字体并传递到结构化正文`, async () => {
+    const version = 'gf-809e4d8b8d7e-r1'
+    const calls = []
+    const requests = []
+    const page = loadPreviewPage(async options => {
+      requests.push(options.url)
+      return { renderData: { preview: true, fonts: {
+        versions: { ALLURA: { fontVersion: version } },
+        assets: [{ assetId: 'saved-allura', fontId: 'ALLURA', fontVersion: version,
+          fontWeight: 400, status: 'READY', url: 'https://fonts.example/saved.woff' }]
+      }, components: [{ componentKey: 'body', componentType: 'STRUCTURED_TEXT_SECTION',
+        structuredTextSection: { blocks: [{ blockKey: 'paragraph', type: 'PARAGRAPH',
+          content: 'PROFILE', fontId: 'ALLURA', fontWeight: 'NORMAL' }] } }] } }
+    })
+    const previousWx = global.wx
+    global.wx = { getAppBaseInfo: () => ({ SDKVersion: '3.17.3' }), loadFontFace(options) {
+      calls.push(options)
+      // 当前开发工具显式 scopes 会卡住注册；3.7.9 起默认覆盖两种渲染器。
+      if (options.scopes) options.fail({ errMsg: 'explicit scopes registration failed' })
+      else options.success()
+    } }
+    try {
+      await page.onLoad({ portfolioId: '88' })
+      await flushPromises()
+      assert.deepEqual(requests, ['/api/mine/portfolios/88/preview'])
+      assert.equal(calls.length, 1)
+      const { buildStructuredTextPresentation } = require('../pages/portfolios/utils/portfolio-text-sections')
+      const config = page.data.portfolio.activeComponents[0].structuredTextSection
+      const rendered = buildStructuredTextPresentation(config, 'light', page.data.fontContext)
+      assert.ok(rendered.blocks[0].style.includes(`font-family: "${calls[0].family}"`))
+      assert.deepEqual(page.data.fontContext.failed, [])
+    } finally {
+      page.onUnload()
+      global.wx = previousWx
+    }
+  })
+}
+
 test('preview video carousel opens a dedicated video page without events and handles missing or failed video', async () => {
   const toasts = [], requests = [], previews = []
   const page = loadPreviewPage((options) => { requests.push(options); return Promise.resolve({}) })

@@ -79,6 +79,71 @@ const PORTFOLIO_TEXT_FONT_OPTIONS = Object.freeze([
   })
 ])
 
+// UI 目录独立于历史 fontFamily 枚举，远程选择只写 fontId。
+const PORTFOLIO_FONT_PHYSICAL_WEIGHTS = Object.freeze({
+  "CORMORANT_GARAMOND:gf-809e4d8b8d7e-r1": {
+    "400": 400,
+    "700": 700
+  },
+  "MANROPE:gf-809e4d8b8d7e-r1": {
+    "400": 400,
+    "700": 700
+  },
+  "ALLURA:gf-809e4d8b8d7e-r1": {
+    "400": 400,
+    "700": 400
+  },
+  "SOURCE_HAN_SERIF_SC:2.003R-r1": {
+    "400": 400,
+    "700": 700
+  },
+  "ZCOOL_XIAOWEI:d427686494a8-r1": {
+    "400": 400,
+    "700": 400
+  },
+  "LXGW_WENKAI:v1.522-r1": {
+    "400": 400,
+    "700": 400
+  }
+})
+
+/** 固定版本决定物理字重，未知版本不借用最新目录定义。 */
+function resolvePortfolioFontWeight(fontId, fontVersion, requestedWeight) {
+  const weights = PORTFOLIO_FONT_PHYSICAL_WEIGHTS[`${fontId}:${fontVersion}`]
+  return weights && weights[requestedWeight] || requestedWeight
+}
+
+const PORTFOLIO_REMOTE_FONT_OPTIONS = Object.freeze([
+  ['CORMORANT_GARAMOND', 'Cormorant Garamond', '只适合英文'],
+  ['MANROPE', 'Manrope', '只适合英文'],
+  ['ALLURA', 'Allura', '只适合英文'],
+  ['SOURCE_HAN_SERIF_SC', '思源宋体', '只适合中文'],
+  ['ZCOOL_XIAOWEI', '站酷小薇体', '只适合中文'],
+  ['LXGW_WENKAI', '霞鹜文楷', '只适合中文']
+].map(([value, label, languageLabel]) => Object.freeze({
+  value, label, languageLabel, remote: true, fontClass: 'font-system',
+  sample: languageLabel === '只适合英文' ? 'Timeless Moments' : '以光为笔，记录心动'
+})))
+const PORTFOLIO_TEXT_SELECTION_OPTIONS = Object.freeze([...PORTFOLIO_TEXT_FONT_OPTIONS, ...PORTFOLIO_REMOTE_FONT_OPTIONS])
+
+function applyPortfolioFontSelection(value) {
+  return PORTFOLIO_REMOTE_FONT_OPTIONS.some(option => option.value === value)
+    ? { fontId: value, fontFamily: 'SYSTEM' }
+    : { fontId: null, fontFamily: normalizePortfolioTextFontFamily(value) }
+}
+
+/** family 仅来自当前页面已成功注册的映射，未就绪始终回退系统字体。 */
+function buildRemoteFontStyle(node, context = {}) {
+  if (!node || !node.fontId) return ''
+  const version = context.versions && context.versions[node.fontId]
+  const weight = node.fontWeight === 'BOLD' ? 700 : 400
+  const families = context.families || {}
+  const prefix = version ? `${node.fontId}:${version.fontVersion}:` : ''
+  const family = families[prefix + resolvePortfolioFontWeight(node.fontId, version && version.fontVersion, weight)]
+  return family && /^WF_[a-zA-Z0-9_]+$/.test(family)
+    ? `font-family: "${family}", sans-serif;` : 'font-family: sans-serif;'
+}
+
 const PORTFOLIO_TEXT_FONT_SIZE_OPTIONS = Object.freeze(
   PORTFOLIO_TEXT_FONT_SIZE_VALUES.map((value) => Object.freeze({
     value,
@@ -111,9 +176,10 @@ function normalizePortfolioTextFontSizeRpx(
 
 function buildPortfolioTextTypography(
   raw = {},
-  fallbackSizeRpx = LEGACY_PERSONAL_FONT_SIZE_RPX
+  fallbackSizeRpx = LEGACY_PERSONAL_FONT_SIZE_RPX,
+  fontContext = {}
 ) {
-  const fontFamily = normalizePortfolioTextFontFamily(raw && raw.fontFamily)
+  const fontFamily = raw && raw.fontId ? PORTFOLIO_TEXT_FONT_FAMILIES.SYSTEM : normalizePortfolioTextFontFamily(raw && raw.fontFamily)
   const fontSizeRpx = normalizePortfolioTextFontSizeRpx(
     raw && raw.fontSizeRpx,
     fallbackSizeRpx
@@ -122,7 +188,7 @@ function buildPortfolioTextTypography(
     fontFamily,
     fontSizeRpx,
     fontClass: PORTFOLIO_TEXT_FONT_CLASS_MAP[fontFamily],
-    fontSizeStyle: `font-size: ${fontSizeRpx}rpx;`,
+    fontSizeStyle: `font-size: ${fontSizeRpx}rpx;` + buildRemoteFontStyle(raw, fontContext),
     ...(isValidPortfolioTextLineHeight(raw && raw.lineHeight)
       ? { lineHeightStyle: buildPortfolioTextLineHeightStyle(raw.lineHeight) } : {})
   }
@@ -145,6 +211,9 @@ function buildPortfolioTextFontSizeOptions(currentSizeRpx) {
 }
 
 module.exports = {
+  PORTFOLIO_FONT_PHYSICAL_WEIGHTS,
+  resolvePortfolioFontWeight,
+  PORTFOLIO_REMOTE_FONT_OPTIONS, PORTFOLIO_TEXT_SELECTION_OPTIONS, applyPortfolioFontSelection, buildRemoteFontStyle,
   LEGACY_TEXT_SECTION_LINE_HEIGHT,
   PORTFOLIO_TEXT_LINE_HEIGHT_MIN,
   PORTFOLIO_TEXT_LINE_HEIGHT_MAX,

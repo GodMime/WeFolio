@@ -1,0 +1,40 @@
+{
+  "fontId": "ALLURA",
+  "family": "Allura",
+  "fontVersion": "gf-809e4d8b8d7e",
+  "sourceRepository": "https://github.com/google/fonts",
+  "upstreamCommit": "809e4d8b8d7e9364a914909bb777679606c178b8",
+  "license": "OFL-1.1",
+  "languageLabel": "只适合英文",
+  "purpose": "服务端字体子集生成用完整源文件",
+  "files": [
+    {
+      "fontId": "ALLURA",
+      "family": "Allura",
+      "fontVersion": "gf-809e4d8b8d7e",
+      "upstreamCommit": "809e4d8b8d7e9364a914909bb777679606c178b8",
+      "sourceUrl": "https://raw.githubusercontent.com/google/fonts/809e4d8b8d7e9364a914909bb777679606c178b8/ofl/allura/Allura-Regular.ttf",
+      "originalFilename": "Allura-Regular.ttf",
+      "localFilename": "Allura-Regular.ttf",
+      "expectedBytes": 246632,
+      "gitBlobSha": "dd197a26fb5d836bedb73aead3c6fc6f4c9ca864",
+      "bytes": 246632,
+      "sha256": "9c142b2e515832c0dfc4ff8b8ea18f40314943bf937b72e2b23c4661bac14cc6",
+      "downloadApiUrl": "https://api.github.com/repos/google/fonts/git/blobs/dd197a26fb5d836bedb73aead3c6fc6f4c9ca864"
+    },
+    {
+      "fontId": "ALLURA",
+      "family": "Allura",
+      "fontVersion": "gf-809e4d8b8d7e",
+      "upstreamCommit": "809e4d8b8d7e9364a914909bb777679606c178b8",
+      "sourceUrl": "https://raw.githubusercontent.com/google/fonts/809e4d8b8d7e9364a914909bb777679606c178b8/ofl/allura/OFL.txt",
+      "originalFilename": "OFL.txt",
+      "localFilename": "OFL.txt",
+      "expectedBytes": 4478,
+      "gitBlobSha": "e5f81cefd10af098bb6739e165d30a4a85455629",
+      "bytes": 4478,
+      "sha256": "c8cb4c94a558b6cb82ac5dc981a73a0b8aee35a5c52c8a7832fc0280c289ad49",
+      "downloadApiUrl": "https://api.github.com/repos/google/fonts/git/blobs/e5f81cefd10af098bb6739e165d30a4a85455629"
+    }
+  ]
+}

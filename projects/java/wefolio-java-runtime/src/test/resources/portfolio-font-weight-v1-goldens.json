@@ -1,0 +1,113 @@
+{
+  "buildId": "fixed-v1-build",
+  "cases": [
+    {
+      "fontId": "CORMORANT_GARAMOND",
+      "fontVersion": "gf-809e4d8b8d7e-r1",
+      "requested": 400,
+      "physical": 400,
+      "face": "CORMORANT_GARAMOND/gf-809e4d8b8d7e/CormorantGaramond-Variable.ttf",
+      "demandHash": "c87781f03b4c889f173b24327da4c43710046985dd94309f98af26a75df86627",
+      "subsetHash": "29c8bcca089c7564951c01e8cc8f881726b9382b923518746090a283f7f333a9"
+    },
+    {
+      "fontId": "CORMORANT_GARAMOND",
+      "fontVersion": "gf-809e4d8b8d7e-r1",
+      "requested": 700,
+      "physical": 700,
+      "face": "CORMORANT_GARAMOND/gf-809e4d8b8d7e/CormorantGaramond-Variable.ttf",
+      "demandHash": "aac9c11b2d06b805527ff81e321c9d794b5f24160281d8303088e54cbb9c59eb",
+      "subsetHash": "e12a873f0bd6e3dad41e886786ac44a631ece997961d57625256732dc71d5a2f"
+    },
+    {
+      "fontId": "MANROPE",
+      "fontVersion": "gf-809e4d8b8d7e-r1",
+      "requested": 400,
+      "physical": 400,
+      "face": "MANROPE/gf-809e4d8b8d7e/Manrope-Variable.ttf",
+      "demandHash": "7f0ad33b3b8c7a393bcd8a5d225576b2aff6611136b638bbd0607c6115741665",
+      "subsetHash": "1044ecb064c2f0bbc382223a5014c34dbb68e31b9af7dd03b571f27c4dbd3e55"
+    },
+    {
+      "fontId": "MANROPE",
+      "fontVersion": "gf-809e4d8b8d7e-r1",
+      "requested": 700,
+      "physical": 700,
+      "face": "MANROPE/gf-809e4d8b8d7e/Manrope-Variable.ttf",
+      "demandHash": "273ca1da4b74ac83f23f8ebf5d10a2fddbe836a06d83fbd7b91dc0a28cb73cb7",
+      "subsetHash": "203c572f202c61222e917829fd0bdf6504379c0cc4df8e454cccdb48b7b4b65d"
+    },
+    {
+      "fontId": "ALLURA",
+      "fontVersion": "gf-809e4d8b8d7e-r1",
+      "requested": 400,
+      "physical": 400,
+      "face": "ALLURA/gf-809e4d8b8d7e/Allura-Regular.ttf",
+      "demandHash": "15279f975b61e15c3e7805869460a1086d61e71cfdbad8af3eb394ec6464acb8",
+      "subsetHash": "a7253d38093cc3f892588afdc559b528b3ae2381a5d251c072d72b8d1865e9e0"
+    },
+    {
+      "fontId": "ALLURA",
+      "fontVersion": "gf-809e4d8b8d7e-r1",
+      "requested": 700,
+      "physical": 400,
+      "face": "ALLURA/gf-809e4d8b8d7e/Allura-Regular.ttf",
+      "demandHash": "ec588a4a915c24e31612ee1ee2a33f66bb89c8b23ea8db0e11739f3df3534e28",
+      "subsetHash": "4bc04f5262bcdf0554023e8fabf59c34211066402449d59a633eb619925d1a4a"
+    },
+    {
+      "fontId": "SOURCE_HAN_SERIF_SC",
+      "fontVersion": "2.003R-r1",
+      "requested": 400,
+      "physical": 400,
+      "face": "SOURCE_HAN_SERIF_SC/2.003R/SourceHanSerifSC-Regular.otf",
+      "demandHash": "7c158f4567d467a372dfab0e685c6618d8006ac4be4cc08cf7f74f317e4b5fde",
+      "subsetHash": "0b6e6129977312b04610dd729400fdd1a86539675a8c49fe77ff6ebbbd96e494"
+    },
+    {
+      "fontId": "SOURCE_HAN_SERIF_SC",
+      "fontVersion": "2.003R-r1",
+      "requested": 700,
+      "physical": 700,
+      "face": "SOURCE_HAN_SERIF_SC/2.003R/SourceHanSerifSC-Bold.otf",
+      "demandHash": "7bbf679d0610e480051d03240ddc2c94ce41aa0d2e24124fe60720096aa6b6fa",
+      "subsetHash": "d6e3406efaaceb23a5261f35100598355d56d66b7978ae198abccb457c50e61b"
+    },
+    {
+      "fontId": "ZCOOL_XIAOWEI",
+      "fontVersion": "d427686494a8-r1",
+      "requested": 400,
+      "physical": 400,
+      "face": "ZCOOL_XIAOWEI/d427686494a8/ZCOOLXiaoWei-Regular.ttf",
+      "demandHash": "a798b495d7a3190d7ae535a43f5e136af62192a88ccba354a90857a49b667a96",
+      "subsetHash": "c590de7e83d976c22084769de595e55291e4c7814903d75dc1be3f840879a8b2"
+    },
+    {
+      "fontId": "ZCOOL_XIAOWEI",
+      "fontVersion": "d427686494a8-r1",
+      "requested": 700,
+      "physical": 400,
+      "face": "ZCOOL_XIAOWEI/d427686494a8/ZCOOLXiaoWei-Regular.ttf",
+      "demandHash": "5c7dff2640ad9f0a1aac946ef6fff538274e3fb49fe56de7f55c58fce6ec9afb",
+      "subsetHash": "e24b205bc9838bc2b87ff72e7d905dfc32c9947ec712f18203743ba79914c043"
+    },
+    {
+      "fontId": "LXGW_WENKAI",
+      "fontVersion": "v1.522-r1",
+      "requested": 400,
+      "physical": 400,
+      "face": "LXGW_WENKAI/v1.522/LXGWWenKai-Regular.ttf",
+      "demandHash": "a559e6778a893ae5184d56ceb3a9d6ead3295269e0ad4debd00ad33268259821",
+      "subsetHash": "2b24bcdef06f9cbab9dd20820ef363239ceb5ad3c2adee766baf4c5d7784e476"
+    },
+    {
+      "fontId": "LXGW_WENKAI",
+      "fontVersion": "v1.522-r1",
+      "requested": 700,
+      "physical": 400,
+      "face": "LXGW_WENKAI/v1.522/LXGWWenKai-Regular.ttf",
+      "demandHash": "90a1e7f38383586a1e89030ba44d21957f0300d725e65a8873ba2ee276ca6ef4",
+      "subsetHash": "c1d5c48863dfc6d98ac26165070095fb981354f73fd551030334beb1ff89e068"
+    }
+  ]
+}

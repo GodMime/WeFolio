@@ -75,6 +75,10 @@ GET /job-api/version
 
 这些接口用于部署探活和构建版本确认。`/job-api` 来自全局 servlet context path，Controller 方法只维护自身业务路径。
 
+## 历史 COS 字体目录补建
+
+复用现有 `UserStorageFolderRepairService` 及原运维触发入口，只创建缺失的 0 字节目录占位对象。用户保留 `work/animation/`、`work/audio/` 并补 `others/fonts/`；同一执行追加独立团队 ID 游标分页，使用团队唯一码，仅补 `others/fonts/`，不建团队 work 目录。原用户统计保持含义，团队独立计数。字体生成、上传和删除由 runtime 同步用例处理，本任务不读取或修改字体资源两列，不新增字体 Job。
+
 ## 编码规范
 
 - Java 注释和 Javadoc 必须使用中文。

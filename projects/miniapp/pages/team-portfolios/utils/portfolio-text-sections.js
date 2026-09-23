@@ -1,5 +1,5 @@
 // 两个分包各自维护本地副本，通过同一组行为测试保持一致，避免跨分包引用。
-const { isValidPortfolioTextLineHeight, buildPortfolioTextLineHeightStyle,
+const { buildRemoteFontStyle, isValidPortfolioTextLineHeight, buildPortfolioTextLineHeightStyle,
   PORTFOLIO_TEXT_LINE_HEIGHT_ERROR } = require('../../../utils/portfolio-text-typography.js')
 const SPACER_LINE_HEIGHT_ERROR = '留白区块不能设置行高'
 const BLOCK_PRESETS = {
@@ -32,7 +32,7 @@ const AUTO_COLOR = 'AUTO'
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 const BLOCK_SPACING_FIELDS = ['marginTopRpx', 'marginBottomRpx']
 const BLOCK_BASE_FIELDS = ['blockKey', 'type', ...BLOCK_SPACING_FIELDS]
-const TEXT_STYLE_FIELDS = ['fontFamily', 'fontSizeRpx', 'lineHeight', 'fontWeight', 'color', 'alignment']
+const TEXT_STYLE_FIELDS = ['fontId', 'fontFamily', 'fontSizeRpx', 'lineHeight', 'fontWeight', 'color', 'alignment']
 
 /** 编辑状态必须独立复制，避免嵌套列表和展示资源污染原始页面配置。 */
 function copy(value) {
@@ -282,7 +282,7 @@ function switchBlockEditType(draft, type) {
 }
 
 /** 只对派生样式使用安全默认值，保留原字段供编辑器提示修正。 */
-function buildStructuredTextPresentation(config = {}, themeMode) {
+function buildStructuredTextPresentation(config = {}, themeMode, fontContext = {}) {
   const source = isObject(config) ? config : {}
   const foreground = source.backgroundEnabled === true || themeMode === 'DARK' || themeMode === 'dark'
     ? DARK_TEXT_COLOR : LIGHT_TEXT_COLOR
@@ -302,10 +302,10 @@ function buildStructuredTextPresentation(config = {}, themeMode) {
         ? block.fontSizeRpx : (hasOwn(BLOCK_PRESETS, block.type) ? BLOCK_PRESETS[block.type] : BLOCK_PRESETS.PARAGRAPH)[0]
       const alignment = ALIGNMENTS.includes(block.alignment) ? block.alignment.toLowerCase() : 'left'
       const weight = block.fontWeight === 'BOLD' ? 700 : 400
-      const fontClass = hasOwn(FONT_CLASSES, block.fontFamily) ? FONT_CLASSES[block.fontFamily] : FONT_CLASSES.SYSTEM
+      const fontClass = !block.fontId && hasOwn(FONT_CLASSES, block.fontFamily) ? FONT_CLASSES[block.fontFamily] : FONT_CLASSES.SYSTEM
       return {
         ...block, displayColor, fontClass, lineHeightStyle: buildPortfolioTextLineHeightStyle(block.lineHeight),
-        style: spacing + 'font-size:' + fontSize + 'rpx;font-weight:' + weight + ';color:' + displayColor + ';text-align:' + alignment + ';'
+        style: buildRemoteFontStyle(block, fontContext) + spacing + 'font-size:' + fontSize + 'rpx;font-weight:' + weight + ';color:' + displayColor + ';text-align:' + alignment + ';'
       }
     })
   }

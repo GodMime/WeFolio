@@ -1,3 +1,4 @@
+const { PORTFOLIO_TEXT_SELECTION_OPTIONS, applyPortfolioFontSelection } = require('../../utils/portfolio-component-platform')
 const { MAX_TEXT, MIN_FONT_SIZE, MAX_FONT_SIZE, DEFAULT_LINE_HEIGHT, normalizeTextGrid, validateTextGrid, countGridText, mergeCells, splitCell, resizeGrid, createGridHistory, createBlock, createRun, layoutTextGrid, resolveTextGridBorderColor, gridContentWidth } = require('../../utils/portfolio-text-grid')
 const { getPortfolioFontCapability, isPortfolioFontAvailable } = require('../../utils/portfolio-component-platform')
 const { PORTFOLIO_TEXT_LINE_HEIGHT_STEP, PORTFOLIO_TEXT_LINE_HEIGHT_ERROR, isValidPortfolioTextLineHeight, parsePortfolioTextLineHeightInput, stepPortfolioTextLineHeight, buildPortfolioTextLineHeightEditor } = require('../../utils/portfolio-component-platform')
@@ -25,19 +26,32 @@ function findSplitCell(draft, selectedKeys) {
   return cell && (cell.rowSpan > 1 || cell.columnSpan > 1) ? cell : null
 }
 Component({
-  properties: { visible: { type: Boolean, value: false }, config: { type: Object, value: {} }, themeMode: { type: String, value: 'light' }, backgroundColor: { type: String, value: '#FFFFFF' } },
+  properties: {
+    fontContext: { type: Object, value: {} },
+    moreFontsExpanded: { type: Boolean, value: false },
+    fontEditSessionId: { type: Number, value: 0 },
+    fontMessage: { type: String, value: '' },
+    fontOptions: { type: Array, value: [] },
+    remoteFontAvailable: { type: Boolean, value: false }, visible: { type: Boolean, value: false }, config: { type: Object, value: {} }, themeMode: { type: String, value: 'light' }, backgroundColor: { type: String, value: '#FFFFFF' } },
   data: { draft: {}, tab: 'layout', scrollTop: 0, previewThemeMode: 'light', selectedKeys: [], cell: {}, block: {}, run: {}, cellIndex: 0, blockIndex: 0, runIndex: 0,
     cells: [], count: 0, undoCount: 0, hasInvalidDraft: false, lineHeightEditor: buildPortfolioTextLineHeightEditor(undefined, DEFAULT_LINE_HEIGHT), canSplitCell: false, borderColor: '#D7DADD', inputRenderKeys: [0], rpxStep: RPX_STEP, rpxFields: RPX_FIELDS, error: '', tabs: [{ value: 'layout', label: '布局' }, { value: 'content', label: '内容' }, { value: 'appearance', label: '外观' }],
-    fonts: [{ value: 'SYSTEM', label: '系统字体' }, { value: 'WECHAT_SANS_SS', label: '微信字体' }],
+    fonts: PORTFOLIO_TEXT_SELECTION_OPTIONS.map(item => ({ ...item, available: item.value === 'SYSTEM' })),
     weights: [{ value: 'NORMAL', label: '常规 400' }, { value: 'BOLD', label: '粗体 700' }],
     alignments: [{ value: 'LEFT', label: '左' }, { value: 'CENTER', label: '中' }, { value: 'RIGHT', label: '右' }],
     verticals: [{ value: 'TOP', label: '顶' }, { value: 'CENTER', label: '中' }, { value: 'BOTTOM', label: '底' }],
     appearance: [{ field: 'gapRpx', label: '格子间距' }, { field: 'cellPaddingRpx', label: '格子内边距' }, { field: 'cellRadiusRpx', label: '圆角' }],
     outerSpacing: [{ field: 'horizontalMarginRpx', label: '左右留白' }, { field: 'verticalMarginRpx', label: '上下留白' }]
   },
-  observers: { visible(value) { if (value) { this._history = createGridHistory(normalizeTextGrid(this.properties.config)); this.setData({ tab: 'layout', selectedKeys: [], cellIndex: 0, blockIndex: 0, runIndex: 0, error: '', previewThemeMode: this.previewThemeMode() }); this.refresh(this._history.get()); this.resetScroll() } else this.clearHistory() } },
+  observers: {
+    draft(value) { if (this.properties.visible) this.triggerEvent('fontdraft', { componentType: 'TEXT_GRID', config: value, sessionId: this.properties.fontEditSessionId, historyKey: this._history && this._history.key(), operation: this.fontUndo ? 'undo' : 'edit' }) },
+    fontOptions(options) { if (options && options.length) this.setData({ fonts: clone(options) }) },
+    remoteFontAvailable(value) {
+      this.setData({ fonts: ((this.properties.fontOptions || []).length ? this.properties.fontOptions : PORTFOLIO_TEXT_SELECTION_OPTIONS).map(item => ({ ...item,
+        available: item.remote ? item.available === true && value : isPortfolioFontAvailable(item.value, getPortfolioFontCapability()) })) })
+    }, visible(value) { if (value) { this._history = createGridHistory(normalizeTextGrid(this.properties.config)); this.setData({ tab: 'layout', selectedKeys: [], cellIndex: 0, blockIndex: 0, runIndex: 0, error: '', previewThemeMode: this.previewThemeMode() }); this.refresh(this._history.get()); this.resetScroll() } else this.clearHistory() } },
   lifetimes: { detached() { this.clearHistory() } },
   methods: {
+    handleExpandFonts() { this.triggerEvent('fontexpand') },
     noop() {},
     previewThemeMode() { const color = this.properties.backgroundColor || '#FFFFFF'; const channels = [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16)); return channels[0] * 0.299 + channels[1] * 0.587 + channels[2] * 0.114 < 128 ? 'dark' : 'light' },
     refresh(draft) {
@@ -104,7 +118,9 @@ Component({
     handleUndo() {
       if (!this._history) return
       // 非法输入尚未进入合法历史，第一次撤销先恢复最后一次合法内容。
+      this.fontUndo = true
       this.refresh(validateTextGrid(this.data.draft) ? this._history.get() : this._history.undo())
+      this.fontUndo = false
       this.setData({ error: '' })
     },
     handleArray(event) { const draft = clone(this.data.draft); draft[event.currentTarget.dataset.field][Number(event.currentTarget.dataset.index)] = Number(event.detail.value); this.apply(draft) },
@@ -172,8 +188,11 @@ Component({
       const target = dataset.scope === 'cell' ? cell : dataset.scope === 'block' ? cell.blocks[this.data.blockIndex] : cell.blocks[this.data.blockIndex].runs[this.data.runIndex]
       let value = dataset.value === undefined ? event.detail.value : dataset.value
       if (['fontSizeRpx', 'marginTopRpx', 'marginBottomRpx'].includes(dataset.field)) value = Number(value)
-      if (dataset.field === 'fontFamily' && !isPortfolioFontAvailable(value, getPortfolioFontCapability())) { this.setData({ error: '当前设备暂不支持此字体' }); return }
-      target[dataset.field] = value
+      if (dataset.field === 'fontFamily' && ((PORTFOLIO_TEXT_SELECTION_OPTIONS.find(item => item.value === value) || {}).remote ? !(this.data.fonts.find(item => item.value === value) || {}).available : !isPortfolioFontAvailable(value, getPortfolioFontCapability()))) { this.setData({ error: (PORTFOLIO_TEXT_SELECTION_OPTIONS.find(item => item.value === value) || {}).remote ? (this.properties.fontMessage || '字体暂不可用，当前使用系统字体') : '当前设备暂不支持此字体' }); return }
+      if (dataset.field === 'fontFamily') {
+        Object.assign(target, applyPortfolioFontSelection(value))
+        this.triggerEvent('fontselect', { fontId: target.fontId, sessionId: this.properties.fontEditSessionId })
+      } else target[dataset.field] = value
       if (dataset.field === 'text' && countGridText(draft) > MAX_TEXT) {
         // 超长输入保留在当前面板中供用户删改，既不截断，也不保存成旧文字。
         this.refresh(draft); this.setData({ error: '文字网格最多 2000 字，请删减后完成' }); return

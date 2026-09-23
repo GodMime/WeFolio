@@ -1,3 +1,4 @@
+const { buildRemoteFontStyle } = require('../../../utils/portfolio-text-typography')
 // Mock 文字规则独立维护；仅接受本地作品数据，不访问正式业务模块。
 const BLOCK_TYPES = ['EYEBROW', 'TITLE', 'PARAGRAPH', 'LIST', 'HINT', 'SPACER']
 const FONT_FAMILIES = ['SYSTEM', 'WECHAT_SANS_SS']
@@ -91,17 +92,17 @@ function validateMockStructuredTextConfig(config,works) {
   return validateMockTextBackground(value,works,{structured:true})
 }
 /** 行距缺省时不生成 CSS，保留旧版样式语义。 */
-function mockTextStyle(value,themeMode='light') {
-  return `font-size:${value.fontSizeRpx}rpx;color:${value.color==='AUTO' ? themeMode==='dark'?'#F8F9FA':'#212529':value.color};text-align:${String(value.alignment||'LEFT').toLowerCase()};${value.fontWeight ? `font-weight:${value.fontWeight==='BOLD'?700:400};`:''}${validLineHeight(value.lineHeight)?`line-height:${value.lineHeight};`:''}`
+function mockTextStyle(value,themeMode='light',fontContext={}) {
+  return buildRemoteFontStyle(value,fontContext) + `font-size:${value.fontSizeRpx}rpx;color:${value.color==='AUTO' ? themeMode==='dark'?'#F8F9FA':'#212529':value.color};text-align:${String(value.alignment||'LEFT').toLowerCase()};${value.fontWeight ? `font-weight:${value.fontWeight==='BOLD'?700:400};`:''}${validLineHeight(value.lineHeight)?`line-height:${value.lineHeight};`:''}`
 }
-function buildMockTextViewModel(config,works=[],{structured=false,themeMode='light'}={}) {
+function buildMockTextViewModel(config,works=[],{structured=false,themeMode='light',fontContext={}}={}) {
   const value = structured ? normalizeMockStructuredTextConfig(config) : normalizeMockSimpleTextConfig(config)
   const background = value.backgroundEnabled ? works.find(item=>String(item.id||item.workId)===String(value.backgroundWorkId) && BACKGROUND_TYPES.includes(item.mediaType)) : null
   const blocks = structured ? value.blocks : [{...value,type:'PARAGRAPH',blockKey:'simple',marginTopRpx:0,marginBottomRpx:0}]
   const frameHeight = background && Number(background.width) > 0 && Number(background.height) > 0
     ? 750 * Number(background.height) / Number(background.width) : 0
   const displayTheme = background ? 'dark' : themeMode
-  return {simpleText:!structured,title:structured?'':value.title||'',background:background ? {...copy(background),isVideo:background.mediaType==='VIDEO'} : null,treatment:value.backgroundTreatment,verticalAlignment:value.verticalAlignment||'TOP',frameStyle:frameHeight>0?`min-height:${frameHeight}rpx;`:'',blocks:(Array.isArray(blocks)?blocks:[]).map(block=>({...copy(block),fontClass:block.fontFamily==='WECHAT_SANS_SS'?'font-wechat-sans-ss':'',style:`margin-top:${block.marginTopRpx}rpx;margin-bottom:${block.marginBottomRpx}rpx;${block.type==='SPACER'?`height:${block.heightRpx}rpx;`:mockTextStyle(block,displayTheme)}`}))}
+  return {simpleText:!structured,title:structured?'':value.title||'',background:background ? {...copy(background),isVideo:background.mediaType==='VIDEO'} : null,treatment:value.backgroundTreatment,verticalAlignment:value.verticalAlignment||'TOP',frameStyle:frameHeight>0?`min-height:${frameHeight}rpx;`:'',blocks:(Array.isArray(blocks)?blocks:[]).map(block=>({...copy(block),fontClass:!block.fontId&&block.fontFamily==='WECHAT_SANS_SS'?'font-wechat-sans-ss':'',style:`margin-top:${block.marginTopRpx}rpx;margin-bottom:${block.marginBottomRpx}rpx;${block.type==='SPACER'?`height:${block.heightRpx}rpx;`:mockTextStyle(block,displayTheme,fontContext)}`}))}
 }
 const MOCK_WECHAT_FONT_FAMILY = 'WeFolioWechatSansSS'
 const MOCK_WECHAT_FONT_SOURCE = 'WeChatSansSS'

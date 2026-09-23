@@ -95,12 +95,12 @@
       </block>
 
       <block wx:elif="{{item.componentType === 'TEXT_SECTION'}}">
-        <portfolio-text-section text-section="{{item.textSection}}" background-video-paused="{{videoPreviewVisible}}" theme-mode="{{portfolio.themeMode}}"></portfolio-text-section>
+        <portfolio-text-section text-section="{{item.textSection}}" background-video-paused="{{videoPreviewVisible}}" theme-mode="{{portfolio.themeMode}}" font-context="{{fontContext}}"></portfolio-text-section>
       </block>
-      <block wx:elif="{{item.componentType === 'TEXT_GRID'}}"><portfolio-text-grid config="{{item.textGrid}}" theme-mode="{{portfolio.themeMode}}" /></block>
+      <block wx:elif="{{item.componentType === 'TEXT_GRID'}}"><portfolio-text-grid config="{{item.textGrid}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/></block>
         <block wx:elif="{{item.componentType === 'CONTACT_INFO'}}"><portfolio-contact-info config="{{item.contactInfo}}" theme-mode="{{portfolio.themeMode}}" /></block>
         <block wx:elif="{{item.componentType === 'STRUCTURED_TEXT_SECTION'}}">
-        <portfolio-structured-text-section background-video-paused="{{videoPreviewVisible}}" structured-text-section="{{item.structuredTextSection}}" theme-mode="{{portfolio.themeMode}}" />
+        <portfolio-structured-text-section background-video-paused="{{videoPreviewVisible}}" structured-text-section="{{item.structuredTextSection}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/>
       </block>
 
       <block wx:elif="{{item.componentType === 'DIVIDER'}}">
