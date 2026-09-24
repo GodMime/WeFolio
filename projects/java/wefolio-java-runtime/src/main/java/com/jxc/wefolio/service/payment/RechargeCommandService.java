@@ -3,7 +3,6 @@ package com.jxc.wefolio.service.payment;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
-import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
 import com.jxc.wefolio.dict.RechargePackageStatusDict;
 import com.jxc.wefolio.dict.UserStatusDict;
@@ -325,18 +324,11 @@ public class RechargeCommandService {
      * 查询维护者服务端保存的微信 openid。
      */
     private String requireWechatOpenId(Long userId) {
-        UserAuthEntity auth = userAuthEntityMapper.selectOne(
-                Wrappers.lambdaQuery(UserAuthEntity.class)
-                        .eq(UserAuthEntity::getUserId, userId)
-                        .eq(UserAuthEntity::getAuthType, AuthTypeDict.WECHAT_MINI_APP.getCode())
-                        .eq(UserAuthEntity::getStatus, UserStatusDict.ACTIVE.getCode())
-                        .isNotNull(UserAuthEntity::getOpenId)
-                        .last("LIMIT 1")
-        );
+        UserAuthEntity auth = WechatPaymentIdentity.findUnique(userAuthEntityMapper, userId);
         if (auth == null || auth.getOpenId() == null || auth.getOpenId().isBlank()) {
             throw new BusinessException(RechargeMessage.WECHAT_IDENTITY_MISSING_MESSAGE);
         }
-        return auth.getOpenId().strip();
+        return auth.getOpenId();
     }
 
     /**
@@ -398,7 +390,8 @@ public class RechargeCommandService {
     /** 获取当前有效维护者微信会话。 */
     private MaintainerWechatSession requireWechatSession(Long userId) {
         MaintainerWechatSession session = maintainerWechatSessionService.findAvailableSession(userId);
-        if (session == null) {
+        UserAuthEntity auth = WechatPaymentIdentity.findUnique(userAuthEntityMapper, userId);
+        if (!WechatPaymentIdentity.matchesSession(userId, auth, session)) {
             throw new BusinessException("微信会话已失效，请刷新后重试");
         }
         return session;

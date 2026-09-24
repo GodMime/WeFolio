@@ -45,6 +45,20 @@ class AuthTokenServiceTest {
     @Mock
     private UserEntityMapper userEntityMapper;
 
+    /** 即使旧 token 已命中本地缓存，启用撤销截止配置后也必须重新校验。 */
+    @Test
+    void cutoffMustBeCheckedOnCachedMaintainerToken() {
+        LocalCacheService cache = new LocalCacheService(new LocalCacheProperties());
+        cache.put("auth:token:old", 8L, Duration.ofMinutes(10));
+        when(miniappAuthService.hasMaintainerTokenCutoff(8L)).thenReturn(true);
+        when(miniappAuthService.resolveAuthToken("Bearer old"))
+                .thenThrow(new InvalidAuthTokenException("expired"));
+        AuthTokenService service = new AuthTokenService(miniappAuthService, userEntityMapper, cache, lockExecutor);
+        assertThat(service.resolveAuthenticatedUserId("Bearer old")).isEmpty();
+        verify(miniappAuthService).resolveAuthToken("Bearer old");
+        verify(userEntityMapper, never()).selectById(8L);
+    }
+
     @Test
     void resolvesUserIdFromCacheWithoutQueryingDatabase() {
         LocalCacheService cacheService = new LocalCacheService(new LocalCacheProperties());

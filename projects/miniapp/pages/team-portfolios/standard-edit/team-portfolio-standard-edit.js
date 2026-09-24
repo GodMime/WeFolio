@@ -461,7 +461,49 @@ function updateTextSectionConfig(config = {}, componentKey, textSectionConfig = 
     return Object.assign({}, component, { config: Object.assign(previous, saved) })
   })
 }
-function isUncertainFailure(error) { return !error || !Number(error.statusCode) || Number(error.statusCode) >= 500 }
+/** 对象字段顺序不影响快照比较，组件与菜单顺序仍保留。 */
+function stableEditorConfigJson(config) {
+  return JSON.stringify(config, (key, value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+    return Object.keys(value).sort().reduce((sorted, field) => {
+      sorted[field] = value[field]
+      return sorted
+    }, Object.create(null))
+  })
+}
+
+/** 上传结果仅回填仍对应原素材的字段，不覆盖新编辑或已删除的组件。 */
+function mergeUploadedAssets(current, before, uploaded) {
+  let next = JSON.parse(JSON.stringify(current))
+  if (next.share && before.share && uploaded.share && next.share.coverUrl === before.share.coverUrl) {
+    next.share.coverUrl = uploaded.share.coverUrl
+  }
+  for (const { component } of visitTeamPortfolioComponents(before)) {
+    const original = component.config || {}
+    const result = findTeamPortfolioComponent(uploaded, component.componentKey)
+    const currentLocation = findTeamPortfolioComponent(next, component.componentKey)
+    if (!result || !currentLocation) continue
+    next = updateTeamComponent(next, component.componentKey, (live) => {
+      if (live.componentType !== component.componentType) return live
+      const config = Object.assign({}, live.config)
+      if (component.componentType === 'QR_CONTACT' && config.qrUrl === original.qrUrl
+        && config.qrUrlSource === original.qrUrlSource) {
+        config.qrUrl = result.component.config.qrUrl
+      }
+      if (component.componentType === 'TEAM_PROFILE' && config.team && original.team
+        && config.team.avatarUrl === original.team.avatarUrl) {
+        config.team = Object.assign({}, config.team, { avatarUrl: result.component.config.team.avatarUrl })
+      }
+      return Object.assign({}, live, { config })
+    })
+  }
+  return next
+}
+
+const UNSAVED_EDITOR_CHANGES_MESSAGE = '草稿已保存，当前修改尚未保存'
+const PUBLISHED_WITH_CHANGES_MESSAGE = '已发布，当前修改尚未保存'
+
+function isUncertainFailure(error) { return !error || !Number(error.statusCode) || Number(error.statusCode) === 408 || Number(error.statusCode) >= 500 }
 function serverBusinessMessage(error, fallbackMessage) {
   const statusCode = Number(error && error.statusCode)
   const message = String(error && error.message || '').trim()
@@ -699,7 +741,10 @@ Page({
     })
     this.refreshComponentList(singleWorkRowSummaryMap)
   },
-  clearPending() { this.setData({ pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0 }) },
+  clearPending() {
+    // 未知结果必须保留原快照与幂等键，新编辑在恢复后另行保存。
+    if (!this.pendingDraftSave && !this.pendingPublishSnapshot) this.setData({ pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0 })
+  },
   noop() {},
   syncActiveComponent(config = this.data.config, componentKey = this.data.activeComponentKey) { const location = findTeamPortfolioComponent(config, componentKey); const activeComponent = location ? location.component : { config: {} }; this.setData({ activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {} }) },
   handleOpenComponentSheet() { if (!this.data.canMaintain) return; const allComponents = visitTeamPortfolioComponents(this.data.config).map((item) => item.component); this.setData({ componentSheetVisible: true, revealedComponentKey: '', componentOptions: buildComponentOptions(allComponents) }) },
@@ -2127,9 +2172,8 @@ Page({
         requestFn: request
       })
       normalized = updateTeamComponent(normalized, component.componentKey, (current) => Object.assign({}, current, {
-        config: { qrUrlSource: TEAM_QR_CONTACT_SOURCE_CUSTOM, qrUrl: uploadedUrl }
+        config: Object.assign({}, component.config, { qrUrlSource: TEAM_QR_CONTACT_SOURCE_CUSTOM, qrUrl: uploadedUrl })
       }))
-      this.updateConfig(normalized)
     }
     return normalized
   },
@@ -2146,6 +2190,7 @@ Page({
       wx.showToast({ title: TEAM_PORTFOLIO_TITLE_REQUIRED_MESSAGE, icon: 'none' })
       return null
     }
+    const editorSnapshot = JSON.parse(JSON.stringify(this.data.config))
     this.setData({ saving: true })
     let failureStage = 'create'
     try {
@@ -2154,7 +2199,7 @@ Page({
       let clientRevision = this.data.draftRevision
       let publicationStatus = this.data.publicationStatus
       if (isNew) {
-        const created = await createStandardTeamPortfolio(request, this.data.teamId, buildServerSafeTeamPortfolioConfig(this.data.config))
+        const created = await createStandardTeamPortfolio(request, this.data.teamId, buildServerSafeTeamPortfolioConfig(editorSnapshot))
         portfolioId = Number(created && created.portfolioId) || 0
         if (!portfolioId) throw new Error('团队作品集创建失败')
         clientRevision = Number(created && created.draftRevision) || 0
@@ -2162,31 +2207,44 @@ Page({
         this.setData(Object.assign({ portfolioId, draftRevision: clientRevision, publicationStatus }, buildPublicationState(publicationStatus)))
       }
       if (!portfolioId) throw new Error('团队作品集创建失败')
-      failureStage = 'upload'
-      const coverUploadedConfig = await this.uploadLocalShareCover(portfolioId, this.data.config)
-      this.updateConfig(coverUploadedConfig)
-      const profileUploadedConfig = await this.uploadLocalTeamProfileAvatars(portfolioId, coverUploadedConfig)
-      this.updateConfig(profileUploadedConfig)
-      const uploadedConfig = await this.uploadLocalQrContacts(portfolioId, profileUploadedConfig)
-      this.updateConfig(uploadedConfig)
+      if (!this.pendingDraftSave) {
+        failureStage = 'upload'
+        const coverUploadedConfig = await this.uploadLocalShareCover(portfolioId, editorSnapshot)
+        this.updateConfig(mergeUploadedAssets(this.data.config, editorSnapshot, coverUploadedConfig))
+        const profileUploadedConfig = await this.uploadLocalTeamProfileAvatars(portfolioId, coverUploadedConfig)
+        this.updateConfig(mergeUploadedAssets(this.data.config, coverUploadedConfig, profileUploadedConfig))
+        const uploadedConfig = await this.uploadLocalQrContacts(portfolioId, profileUploadedConfig)
+        this.updateConfig(mergeUploadedAssets(this.data.config, profileUploadedConfig, uploadedConfig))
+        this.pendingDraftSave = {
+          portfolioId, clientRevision, config: JSON.parse(JSON.stringify(uploadedConfig)),
+          idempotencyKey: makeIdempotencyKey('team-draft')
+        }
+        this.setData({ pendingDraftKey: this.pendingDraftSave.idempotencyKey })
+      }
       failureStage = 'save'
-      const idempotencyKey = this.data.pendingDraftKey || makeIdempotencyKey('team-draft')
-      if (!this.data.pendingDraftKey) this.setData({ pendingDraftKey: idempotencyKey })
-      const result = await saveTeamPortfolioDraft(request, portfolioId, uploadedConfig, clientRevision, idempotencyKey)
-      if (JSON.stringify(this.data.config) === JSON.stringify(uploadedConfig)) this.setData({ fontAssets: result.fontAssets || null })
-      const draftRevision = Number(result && result.draftRevision) || clientRevision
-      const config = result && result.config ? normalizeTeamPortfolioConfig(result.config) : uploadedConfig
+      const pending = this.pendingDraftSave
+      const result = await saveTeamPortfolioDraft(request, pending.portfolioId, pending.config, pending.clientRevision, pending.idempotencyKey)
+      const editorChanged = stableEditorConfigJson(this.data.config) !== stableEditorConfigJson(pending.config)
+      const draftRevision = Number(result && result.draftRevision) || pending.clientRevision
+      const config = result && result.config ? normalizeTeamPortfolioConfig(result.config) : pending.config
       publicationStatus = (result && result.publicationStatus) || publicationStatus
+      this.pendingDraftSave = null
       this.setData(Object.assign({ portfolioId, draftRevision, publicationStatus, pendingDraftKey: '' }, buildPublicationState(publicationStatus)))
-      this.updateConfig(config)
-      return result
+      if (!editorChanged) {
+        this.updateConfig(config)
+        this.setData({ fontAssets: result.fontAssets || null })
+      } else {
+        wx.showToast({ title: UNSAVED_EDITOR_CHANGES_MESSAGE, icon: 'none' })
+      }
+      return Object.assign({}, result, { editorChanged })
     } catch (error) {
       if (handleTeamMaintainerAuthError(error)) return null
       if (showTeamPortfolioUnavailableToast(error)) {
+        this.pendingDraftSave = null
         this.setData({ pendingDraftKey: '' })
         return null
       }
-      if (!isUncertainFailure(error)) this.setData({ pendingDraftKey: '' })
+      if (!isUncertainFailure(error)) { this.pendingDraftSave = null; this.setData({ pendingDraftKey: '' }) }
       wx.showToast({
         title: failureStage === 'upload'
           ? '素材上传失败，请重试'
@@ -2198,7 +2256,7 @@ Page({
   },
   async handleSaveTap() {
     const saved = await this.saveDraft()
-    if (saved) this.returnToPortfolioList()
+    if (saved && !saved.editorChanged) this.returnToPortfolioList()
   },
   returnToPortfolioList() {
     const delta = resolvePortfolioListBackDelta()
@@ -2206,8 +2264,14 @@ Page({
     wx.redirectTo({ url: TEAM_PORTFOLIOS_COMPAT_PAGE_URL })
   },
   handlePreviewTap() { if (!this.data.portfolioId) return; wx.navigateTo({ url: `/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=${this.data.portfolioId}&scope=draft` }) },
+  finishPublishedSnapshot() {
+    const editorChanged = this.pendingPublishSnapshot !== stableEditorConfigJson(this.data.config)
+    this.pendingPublishSnapshot = null
+    wx.showToast({ title: editorChanged ? PUBLISHED_WITH_CHANGES_MESSAGE : '已发布', icon: editorChanged ? 'none' : 'success' })
+    if (!editorChanged) this.returnToPortfolioList()
+  },
   async handlePublishTap() {
-    if (this.data.publishing || !this.data.canMaintain) return
+    if (this.data.publishing || this.data.saving || !this.data.canMaintain) return
     const validation = validateTeamPortfolioForPublish(this.data.config)
     if (!validation.valid) {
       if (validation.menuKey) this.setData({ activeMenuKey: validation.menuKey })
@@ -2229,27 +2293,27 @@ Page({
         const result = await publishTeamPortfolio(request, this.data.portfolioId, this.data.pendingPublishRevision, this.data.pendingPublishKey)
         const publicationStatus = result.publicationStatus || 'PUBLISHED'
         this.setData(Object.assign({ publicationStatus, publishedRevision: Number(result.publishedRevision) || this.data.publishedRevision, pendingPublishKey: '', pendingPublishRevision: 0 }, buildPublicationState(publicationStatus)))
-        wx.showToast({ title: '已发布', icon: 'success' })
-        this.returnToPortfolioList()
+        this.finishPublishedSnapshot()
         return
       }
       const saved = await this.saveDraft(true)
-      if (!saved) return
+      if (!saved || saved.editorChanged) return
       const revision = Number(saved.draftRevision) || this.data.draftRevision
       const key = makeIdempotencyKey('team-publish')
+      this.pendingPublishSnapshot = stableEditorConfigJson(this.data.config)
       this.setData({ pendingPublishKey: key, pendingPublishRevision: revision })
       const result = await publishTeamPortfolio(request, this.data.portfolioId, revision, key)
       const publicationStatus = result.publicationStatus || 'PUBLISHED'
       this.setData(Object.assign({ publicationStatus, publishedRevision: Number(result.publishedRevision) || this.data.publishedRevision, pendingPublishKey: '', pendingPublishRevision: 0 }, buildPublicationState(publicationStatus)))
-      wx.showToast({ title: '已发布', icon: 'success' })
-      this.returnToPortfolioList()
+      this.finishPublishedSnapshot()
     } catch (error) {
       if (handleTeamMaintainerAuthError(error)) return
       if (showTeamPortfolioUnavailableToast(error)) {
+        this.pendingPublishSnapshot = null
         this.setData({ pendingPublishKey: '', pendingPublishRevision: 0 })
         return
       }
-      if (!isUncertainFailure(error)) this.setData({ pendingPublishKey: '', pendingPublishRevision: 0 })
+      if (!isUncertainFailure(error)) { this.pendingPublishSnapshot = null; this.setData({ pendingPublishKey: '', pendingPublishRevision: 0 }) }
       wx.showToast({
         title: serverBusinessMessage(error, '发布失败，请重试'),
         icon: 'none'

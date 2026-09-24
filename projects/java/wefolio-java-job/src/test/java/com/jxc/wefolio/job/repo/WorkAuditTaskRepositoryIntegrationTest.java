@@ -43,6 +43,22 @@ class WorkAuditTaskRepositoryIntegrationTest {
         assertThat(repository.claimVideoQuery(101L, "query-owner", NOW.plusMinutes(10), NOW.plusMinutes(15), 120)).isTrue();
     }
 
+    /** 第 120 次查询在新租约内不能被另一领取者回收，原 PASS 结果仍能写入。 */
+    @Test
+    void finalQueryMustRemainOwnedUntilItsFreshLeaseExpires() {
+        LocalDateTime claimNow = LocalDateTime.now();
+        LocalDateTime cutoff = claimNow.minusSeconds(400);
+        insertWork(99L, "AUDITING", 1, 0L);
+        insertVideoTask(999L, 99L, "SUBMITTED", 1, 119, cutoff.minusSeconds(1), 1);
+        assertThat(repository.findQueryableVideoTasks(1, 120, cutoff)).hasSize(1);
+        assertThat(repository.claimVideoQuery(999L, "current-query", claimNow, claimNow.plusSeconds(300), 120)).isTrue();
+        assertThat(repository.claimExhaustedExpiredVideoQuery(999L, "other-instance", claimNow.plusSeconds(1),
+                claimNow.plusSeconds(301), 120)).isFalse();
+        assertThat(repository.markVideoSuccess(999L, "current-query", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, "{}")).isTrue();
+        assertThat(taskValue(999L, "audit_result", String.class)).isEqualTo(AuditResultDict.PASS.getCode());
+    }
+
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 13, 12, 0);
 
     private JdbcTemplate jdbcTemplate;

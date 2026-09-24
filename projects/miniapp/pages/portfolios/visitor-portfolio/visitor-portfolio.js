@@ -78,6 +78,8 @@ function buildWorkEventMetadata(work) {
   return workTitle ? { [WORK_TITLE_METADATA_KEY]: workTitle } : null
 }
 
+const SOURCE_TYPE_TEAM_PORTFOLIO = 'TEAM_PORTFOLIO'
+
 Page({
   ...portfolioAudioPageMethods,
   ...portfolioOpeningPageMethods,
@@ -124,9 +126,10 @@ Page({
     const shareCode = resolvePersonalShareCode(options)
     const showNavigationBack = hasPreviousPage()
     const timelineGuideRequested = options.shareGuide === TIMELINE_SHARE_GUIDE_VALUE
-    this.visitorSourceType = options.sourceType === SOURCE_TYPE_PERSONAL_PORTFOLIO
-      ? SOURCE_TYPE_PERSONAL_PORTFOLIO
-      : options.scene && !options.shareCode ? SOURCE_TYPE_QR_CODE : SOURCE_TYPE_WECHAT_SHARE_CARD
+    this.visitorSourceType = [SOURCE_TYPE_PERSONAL_PORTFOLIO, SOURCE_TYPE_TEAM_PORTFOLIO, SOURCE_TYPE_QR_CODE, SOURCE_TYPE_WECHAT_SHARE_CARD].includes(options.sourceType)
+      ? options.sourceType
+      : String(options.fromTeamPortfolio) === '1' ? SOURCE_TYPE_TEAM_PORTFOLIO
+        : options.scene && !options.shareCode ? SOURCE_TYPE_QR_CODE : SOURCE_TYPE_WECHAT_SHARE_CARD
     this.anonymousSessionId = isWechatTimelineSinglePage()
       ? createAnonymousSessionId()
       : ''

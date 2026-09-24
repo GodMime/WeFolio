@@ -21,7 +21,7 @@ const WORK_DETAIL_ROUTE = '/pages/team-portfolios/work-detail/team-portfolio-wor
 const MEDIA_TYPE_IMAGE = 'IMAGE'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
 const PERSONAL_VISITOR_URL = '/pages' + '/portfolios/visitor-portfolio/visitor-portfolio'
-const PERSONAL_VISITOR_TEAM_SOURCE_QUERY = 'fromTeamPortfolio=1'
+const PERSONAL_VISITOR_TEAM_SOURCE_QUERY = 'fromTeamPortfolio=1&sourceType=TEAM_PORTFOLIO'
 const TIMELINE_SHARE_GUIDE_VALUE = 'timeline'
 const SHARE_MENU_ITEMS = Object.freeze(['shareAppMessage', 'shareTimeline'])
 const SHARE_CHANNEL_WECHAT_TIMELINE = 'WECHAT_TIMELINE'

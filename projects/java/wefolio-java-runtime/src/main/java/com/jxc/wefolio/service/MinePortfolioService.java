@@ -501,12 +501,12 @@ public class MinePortfolioService {
     public MinePortfolioDetailResponse saveDraft(Long portfolioId, MinePortfolioDraftSaveRequest request) {
         PortfolioFontWrite write = new PortfolioFontWrite();
         MinePortfolioDetailResponse result = portfolioPublishTransactionService.execute(
-                () -> saveDraftInTransaction(portfolioId, request, write));
+                () -> portfolioReferenceMutex.execute(() -> saveDraftInTransaction(portfolioId, request, write)));
         if (write.snapshot == null) { return result; }
         write.prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(
                 AuthContextHolder.requireUserId()), portfolioId);
         write.prepared = portfolioFontService.prepare(write.snapshot, write.plan, write.prefix);
-        result = portfolioPublishTransactionService.execute(() -> saveDraftInTransaction(portfolioId, request, write));
+        result = portfolioPublishTransactionService.execute(() -> portfolioReferenceMutex.execute(() -> saveDraftInTransaction(portfolioId, request, write)));
         portfolioFontService.cleanup(write.released, write.prefix);
         return result;
     }
@@ -752,7 +752,7 @@ public class MinePortfolioService {
         );
         PortfolioFontWrite write = new PortfolioFontWrite();
         MinePortfolioDetailResponse response = portfolioPublishTransactionService.execute(
-                () -> publishInTransaction(portfolioId, request, userId, write));
+                () -> portfolioReferenceMutex.execute(() -> publishInTransaction(portfolioId, request, userId, write)));
         if (!write.released.isEmpty()) {
             portfolioFontService.cleanup(write.released, write.prefix);
         }

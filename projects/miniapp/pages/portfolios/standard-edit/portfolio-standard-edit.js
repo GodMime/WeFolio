@@ -4466,27 +4466,17 @@ Page({
       if (!confirmed) {
         return
       }
+      if (this.pendingPublish) return this.submitPublishSnapshot()
       return this.ensureDraftPortfolio().then((portfolioId) => {
-        return this.saveEditorDraft(portfolioId, {
-          showToast: false,
-          returnToList: false
-        })
+        return this.saveEditorDraft(portfolioId, { showToast: false, returnToList: false })
           .then((savedDraft) => {
             if (savedDraft.editorChanged) throw new Error(UNSAVED_EDITOR_CHANGES_MESSAGE)
-            return request({
-              url: `${PORTFOLIO_API_PREFIX}/${portfolioId}/publish`,
-              method: 'POST',
-              data: buildPublishPayload(this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
-            })
-          })
-          .then((response = {}) => {
-            this.setData(Object.assign({
-              portfolioId: response.portfolioId || portfolioId,
-              draftRevision: response.draftRevision || this.data.draftRevision,
-              publishedRevision: response.publishedRevision || this.data.publishedRevision
-            }, buildPublicationStatusState(response.publicationStatus || PUBLICATION_STATUS_PUBLISHED)))
-            wx.showToast({ title: '已发布', icon: 'success' })
-            this.returnToPortfolioList()
+            this.pendingPublish = {
+              portfolioId,
+              snapshot: stableEditorConfigJson(buildDraftPayload(this.data.config).config),
+              payload: buildPublishPayload(this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
+            }
+            return this.submitPublishSnapshot()
           })
       })
     }).catch((error) => {
@@ -4510,6 +4500,29 @@ Page({
         }
       }
       wx.showToast({ title: message, icon: 'none' })
+    })
+  },
+
+  /** 结果未知时保留旧发布快照，重试成功只确认该快照。 */
+  submitPublishSnapshot() {
+    const pending = this.pendingPublish
+    return request({
+      url: `${PORTFOLIO_API_PREFIX}/${pending.portfolioId}/publish`, method: 'POST',
+      data: clonePlainObject(pending.payload)
+    }).then((response = {}) => {
+      const editorChanged = pending.snapshot !== stableEditorConfigJson(buildDraftPayload(this.data.config).config)
+      this.pendingPublish = null
+      this.setData(Object.assign({
+        portfolioId: response.portfolioId || pending.portfolioId,
+        draftRevision: response.draftRevision || this.data.draftRevision,
+        publishedRevision: response.publishedRevision || this.data.publishedRevision
+      }, buildPublicationStatusState(response.publicationStatus || PUBLICATION_STATUS_PUBLISHED)))
+      wx.showToast({ title: editorChanged ? '已发布，当前修改尚未保存' : '已发布', icon: editorChanged ? 'none' : 'success' })
+      if (!editorChanged) this.returnToPortfolioList()
+    }).catch((error) => {
+      const status = Number(error && error.statusCode)
+      if (status >= 400 && status < 500 && status !== 408) this.pendingPublish = null
+      throw error
     })
   },
 

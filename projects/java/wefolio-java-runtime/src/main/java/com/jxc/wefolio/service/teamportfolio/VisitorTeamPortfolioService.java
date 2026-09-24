@@ -67,6 +67,9 @@ public class VisitorTeamPortfolioService {
     private static final String POINT_BALANCE_NON_POSITIVE = "POINT_BALANCE_NON_POSITIVE";
 
     /** 查询单条作品集限制。 */
+    private static final String QUERY_LIMIT_ONE_FOR_UPDATE = "LIMIT 1 FOR UPDATE";
+
+    /** 普通只读查询的单条限制。 */
     private static final String QUERY_LIMIT_ONE = "LIMIT 1";
 
     /** 统一不可访问提示。 */
@@ -288,13 +291,15 @@ public class VisitorTeamPortfolioService {
             String shareCode,
             TeamContactLeadSubmitRequest request
     ) {
-        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode);
+        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode, true);
         VisitorContext visitor = requireVisitorContext();
         TeamContactFormComponentService.SubmitResult result =
                 teamContactFormComponentService.submit(published.portfolio().getShareCode(), request, visitor);
-        teamPortfolioVisitService.recordContactLeadSubmitted(
-                published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(),
-                result.leadId(), request == null ? null : request.getIdempotencyKey());
+        if (result.created()) {
+            teamPortfolioVisitService.recordContactLeadSubmitted(
+                    published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(),
+                    result.leadId(), request == null ? null : request.getIdempotencyKey());
+        }
         return result;
     }
 
@@ -302,6 +307,11 @@ public class VisitorTeamPortfolioService {
      * 在读取配置前通过 SQL 与 Java 双重校验发布身份和有效团队。
      */
     PublishedPortfolio requirePublishedTeamPortfolio(String shareCode) {
+        return requirePublishedTeamPortfolio(shareCode, false);
+    }
+
+    /** 留资入口在任何业务快照读取前先锁住作品集。 */
+    private PublishedPortfolio requirePublishedTeamPortfolio(String shareCode, boolean lock) {
         if (!teamPortfolioProperties.isEnabled()) {
             throw new BusinessException(TeamPortfolioMessage.FEATURE_DISABLED);
         }
@@ -317,7 +327,7 @@ public class VisitorTeamPortfolioService {
                                 PortfolioPublicationStatusDict.PUBLISHED.getCode())
                         .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
                         .eq(PortfolioEntity::getDeleted, 0L)
-                        .last(QUERY_LIMIT_ONE));
+                        .last(lock ? QUERY_LIMIT_ONE_FOR_UPDATE : QUERY_LIMIT_ONE));
         if (!isPublishedTeamPortfolio(portfolio, normalizedShareCode)) {
             throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
         }

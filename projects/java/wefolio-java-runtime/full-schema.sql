@@ -1,3 +1,4 @@
+-- 本文件同步 V60 迁移后的结构；历史测试用户保持原样，不建立微信 userId 反向唯一索引。
 -- WeFolio 数据库全量 DDL 快照（仅供数据结构分析，不执行）
 -- 整理日期：2026-09-24
 -- 来源：用户提供的全量建表 DDL，保留原始字段、索引、约束、注释及表选项。
@@ -882,7 +883,7 @@ CREATE TABLE `wf_user` (
   `wechat_qr_update_count` int NOT NULL DEFAULT '0' COMMENT '当月微信二维码变更次数',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_unique_code` (`unique_code`,`deleted`),
-  UNIQUE KEY `uk_user_phone_number` (`phone_number`,`deleted`),
+  KEY `idx_user_phone_number` (`phone_number`,`deleted`),
   KEY `idx_user_status_created` (`status`,`created_at`),
   CONSTRAINT `chk_user_status` CHECK ((`status` in (_ascii'ACTIVE',_ascii'DISABLED')))
 ) ENGINE=InnoDB AUTO_INCREMENT=49 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='用户';
@@ -893,7 +894,7 @@ CREATE TABLE `wf_user_auth` (
   `auth_type` varchar(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'WECHAT_MINI_APP PHONE_OTP PHONE_PASSWORD',
   `identifier_hash` char(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '身份标识HMAC摘要',
   `identifier_ciphertext` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '身份标识密文',
-  `open_id` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '微信 openid 明文，仅服务端用于维护者本人访问识别',
+  `open_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL COMMENT '微信 openid 明文，仅服务端用于维护者本人访问识别',
   `union_identifier_hash` char(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'unionid HMAC摘要',
   `union_identifier_ciphertext` varchar(512) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'unionid密文',
   `credential_hash` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '密码摘要',
@@ -904,6 +905,7 @@ CREATE TABLE `wf_user_auth` (
   `deleted` bigint unsigned NOT NULL DEFAULT '0' COMMENT '逻辑删除：0未删除，已删除时为主键ID',
   `version` int unsigned NOT NULL DEFAULT '0' COMMENT '乐观锁版本号',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_auth_type_open_id` (`auth_type`,`open_id`,`deleted`),
   UNIQUE KEY `uk_auth_type_identifier` (`auth_type`,`identifier_hash`,`deleted`),
   UNIQUE KEY `uk_auth_union_identifier` (`union_identifier_hash`,`deleted`),
   KEY `idx_auth_user` (`user_id`,`status`),
@@ -1016,7 +1018,7 @@ CREATE TABLE `wf_visit_record` (
 
 CREATE TABLE `wf_visitor` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `openid` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '微信 openid 明文',
+  `openid` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL COMMENT '微信 openid 明文',
   `unionid` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '微信 unionid',
   `visitor_key` char(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '服务端生成的匿名访客稳定 key',
   `nickname` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '访客授权昵称',

@@ -4,6 +4,11 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.dict.MaintainerWechatSessionStatusDict;
 import com.jxc.wefolio.entity.MaintainerWechatSessionEntity;
 import com.jxc.wefolio.mapper.MaintainerWechatSessionEntityMapper;
+import com.jxc.wefolio.mapper.UserAuthEntityMapper;
+import com.jxc.wefolio.entity.UserAuthEntity;
+import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.message.MiniappAuthMessage;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -20,6 +25,9 @@ public class MaintainerWechatSessionService {
 
     /** 维护者微信会话 Mapper。 */
     private final MaintainerWechatSessionEntityMapper maintainerWechatSessionEntityMapper;
+
+    /** 校验会话只能保存到用户唯一微信认证。 */
+    private final UserAuthEntityMapper userAuthEntityMapper;
 
     /** 会话密钥加密器。 */
     private final SessionKeyCipher sessionKeyCipher;
@@ -38,6 +46,10 @@ public class MaintainerWechatSessionService {
         if (userId == null || authId == null || sessionKey == null || sessionKey.isBlank()
                 || clientIp == null || clientIp.isBlank()) {
             throw new IllegalArgumentException("维护者微信会话身份、密钥和客户端 IP 不能为空");
+        }
+        UserAuthEntity auth = WechatPaymentIdentity.findUnique(userAuthEntityMapper, userId);
+        if (auth == null || !Objects.equals(authId, auth.getId())) {
+            throw new BusinessException(MiniappAuthMessage.WECHAT_ACCOUNT_INVALID_MESSAGE);
         }
         LocalDateTime now = LocalDateTime.now();
         int updated = maintainerWechatSessionEntityMapper.upsertAvailable(
@@ -69,7 +81,10 @@ public class MaintainerWechatSessionService {
                                 MaintainerWechatSessionStatusDict.AVAILABLE.getCode())
                         .last("LIMIT 1")
         );
-        if (entity == null || entity.getLastUserIp() == null || entity.getLastUserIp().isBlank()) {
+        UserAuthEntity auth = WechatPaymentIdentity.findUnique(userAuthEntityMapper, userId);
+        if (entity == null || auth == null || !Objects.equals(userId, entity.getUserId())
+                || !Objects.equals(auth.getId(), entity.getAuthId())
+                || entity.getLastUserIp() == null || entity.getLastUserIp().isBlank()) {
             return null;
         }
         return new MaintainerWechatSession(

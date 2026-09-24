@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.service.teamportfolio.PortfolioReferenceMutex;
 import com.jxc.wefolio.common.lock.DistributedLockExecutor;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
@@ -336,6 +337,9 @@ public class MineWorkService {
 
     /** 作品资料保存互斥，持有到提交或回滚完成。 */
     private final DistributedLockExecutor distributedLockExecutor;
+
+    /** 作品删除、封面共享及作品集引用写入共用互斥。 */
+    private final PortfolioReferenceMutex portfolioReferenceMutex;
 
     /**
      * 分页查询我的作品。
@@ -973,8 +977,8 @@ public class MineWorkService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MineWorkDetailResponse updateWork(Long workId, MineWorkUpdateRequest request) {
-        return distributedLockExecutor.executeFairUntilTransactionCompletion(
-                WORK_UPDATE_LOCK_PREFIX + workId, () -> updateWorkUnderLock(workId, request));
+        return portfolioReferenceMutex.execute(() -> distributedLockExecutor.executeFairUntilTransactionCompletion(
+                WORK_UPDATE_LOCK_PREFIX + workId, () -> updateWorkUnderLock(workId, request)));
     }
 
     /** 在读取作品前取得互斥，避免并发请求使用过期的封面和上传任务状态。 */
@@ -1228,6 +1232,14 @@ public class MineWorkService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteWork(Long workId) {
+        portfolioReferenceMutex.execute(() -> {
+            deleteWorkUnderReferenceLock(workId);
+            return null;
+        });
+    }
+
+    /** 在引用互斥区间内重新校验并删除作品。 */
+    private void deleteWorkUnderReferenceLock(Long workId) {
         WorkEntity work = requireOwnedWork(workId);
         long referenceCount = findWorkReferences(work.getId()).size();
         String blockedReason = workDeleteBlockedReason(work, referenceCount);
@@ -1245,6 +1257,11 @@ public class MineWorkService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MineWorkBatchDeleteResponse deleteWorks(MineWorkBatchDeleteRequest request) {
+        return portfolioReferenceMutex.execute(() -> deleteWorksUnderReferenceLock(request));
+    }
+
+    /** 在引用互斥区间内保留批量删除的部分成功语义。 */
+    private MineWorkBatchDeleteResponse deleteWorksUnderReferenceLock(MineWorkBatchDeleteRequest request) {
         Long userId = AuthContextHolder.requireUserId();
         List<Long> workIds = normalizeWorkIds(request == null ? null : request.getWorkIds());
         if (workIds.isEmpty()) {

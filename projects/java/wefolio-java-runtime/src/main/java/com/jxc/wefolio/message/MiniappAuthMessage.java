@@ -5,6 +5,10 @@ package com.jxc.wefolio.message;
  */
 public interface MiniappAuthMessage {
 
+    /** 微信认证停用、归属冲突或资料失效。 */
+    String WECHAT_ACCOUNT_INVALID_MESSAGE = "微信账号状态异常";
+
+
     /** 微信登录凭证为空提示 */
     String WECHAT_LOGIN_CODE_REQUIRED_MESSAGE = "微信登录凭证不能为空";
 

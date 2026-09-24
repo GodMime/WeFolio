@@ -2,6 +2,7 @@ package com.jxc.wefolio.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.entity.UserAuthEntity;
+import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +23,9 @@ public class OwnerSelfVisitService {
 
     /** 用户登录身份 openid 列名 */
     private static final String COLUMN_OPEN_ID = "open_id";
+
+    /** 用户认证类型列名 */
+    private static final String COLUMN_AUTH_TYPE = "auth_type";
 
     /** 用户登录身份 Mapper */
     private final UserAuthEntityMapper userAuthEntityMapper;
@@ -46,10 +50,11 @@ public class OwnerSelfVisitService {
         if (ownerId == null || !hasText(visitorOpenId)) {
             return false;
         }
-        String normalizedOpenId = visitorOpenId.strip();
+        String normalizedOpenId = visitorOpenId;
         UserAuthEntity auth = userAuthEntityMapper.selectOne(
                 Wrappers.<UserAuthEntity>query()
                         .eq(COLUMN_OPEN_ID, normalizedOpenId)
+                        .eq(COLUMN_AUTH_TYPE, AuthTypeDict.WECHAT_MINI_APP.getCode())
                         .last(SQL_SINGLE_LIMIT_CLAUSE)
         );
         if (auth == null || !Objects.equals(auth.getOpenId(), normalizedOpenId)

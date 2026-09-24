@@ -364,7 +364,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param lockOwner 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 锁过期时间
      * @param maxAttempts 最大查询次数
      * @return 是否 claim 成功
@@ -406,7 +406,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大提交尝试次数
      * @return 是否领取成功
@@ -437,7 +437,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大提交尝试次数
      * @return 是否领取成功
@@ -465,7 +465,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大查询次数
      * @return 是否领取成功
@@ -493,7 +493,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大尝试次数
      * @return 是否领取成功
@@ -524,7 +524,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大尝试次数
      * @return 是否领取成功

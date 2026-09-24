@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.payment;
 
+import java.util.List;
+import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
 import com.jxc.wefolio.dict.RechargePackageStatusDict;
@@ -155,7 +157,7 @@ class RechargeCommandServiceTest {
         ArgumentCaptor<LocalDateTime> expiry = ArgumentCaptor.forClass(LocalDateTime.class);
         InOrder sequence = inOrder(users, auths, packages, points, sessions, transactions, signer);
         sequence.verify(users).selectById(USER_ID);
-        sequence.verify(auths).selectOne(any());
+        sequence.verify(auths).selectList(any());
         sequence.verify(packages).selectOne(any());
         sequence.verify(points).ensureAccount(USER_ID);
         sequence.verify(sessions).findAvailableSession(USER_ID);
@@ -220,9 +222,13 @@ class RechargeCommandServiceTest {
         user.setStatus(UserStatusDict.ACTIVE.getCode());
         when(users.selectById(USER_ID)).thenReturn(user);
         UserAuthEntity auth = new UserAuthEntity();
+        auth.setId(2L);
+        auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
         auth.setUserId(USER_ID);
         auth.setOpenId(OPEN_ID);
-        when(auths.selectOne(any())).thenReturn(auth);
+        when(auths.selectList(any())).thenReturn(List.of(auth));
         when(packages.selectOne(any())).thenReturn(rechargePackage);
         when(points.ensureAccount(USER_ID)).thenReturn(account);
     }

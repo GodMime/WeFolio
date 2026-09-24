@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service.payment;
 
+import java.util.List;
+import com.jxc.wefolio.dict.UserStatusDict;
+import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.dict.PointDebitTaskStatusDict;
 import com.jxc.wefolio.dict.PointGiftOrderStatusDict;
@@ -78,9 +81,12 @@ class PaymentBalanceConfirmationIntegrationTest {
         UserAuthEntity auth = new UserAuthEntity();
         auth.setId(51L);
         auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
+        auth.setId(51L);
+        auth.setUserId(7L);
         auth.setOpenId("openid-test");
-        when(auths.selectById(51L)).thenReturn(auth);
-        when(auths.selectOne(any())).thenReturn(auth);
+        when(auths.selectList(any())).thenReturn(List.of(auth));
         when(sessions.findAvailableSession(7L)).thenReturn(session());
     }
 
@@ -324,8 +330,8 @@ class PaymentBalanceConfirmationIntegrationTest {
                 0, null, WechatVirtualPaymentErrorType.SUCCESS, 90L, 0L, 3L, null, 0L, 0L, 200));
         debitTransactions.markFailure(23L, "first-token", failure(WechatVirtualPaymentErrorType.TRANSIENT));
         dueDebit();
-        UserAuthEntity originalAuth = auths.selectById(51L);
-        when(auths.selectById(51L)).thenReturn(null);
+        UserAuthEntity originalAuth = auths.selectList(any()).getFirst();
+        when(auths.selectList(any())).thenReturn(List.of());
 
         debitProcessor.process(23L);
 
@@ -333,7 +339,7 @@ class PaymentBalanceConfirmationIntegrationTest {
         assertThat(debitTasks.selectById(23L).getLastErrorCode()).isEqualTo(WechatVirtualPaymentErrorType.SUCCESS.name());
         assertThat(debitTasks.selectById(23L).getActiveFlag()).isEqualTo(1);
         verify(client, never()).queryUserBalance(any());
-        when(auths.selectById(51L)).thenReturn(originalAuth);
+        when(auths.selectList(any())).thenReturn(List.of(originalAuth));
         when(client.queryUserBalance(any())).thenReturn(balance(90L, 27L));
         assertThat(debitTransactions.resetForManualRetry(23L)).isTrue();
         debitProcessor.process(23L);
@@ -350,15 +356,15 @@ class PaymentBalanceConfirmationIntegrationTest {
         giftTransactions.recordDuplicateSuccess(17L, "first-token");
         giftTransactions.markFailure(17L, "first-token", failure(WechatVirtualPaymentErrorType.TRANSIENT));
         dueGift();
-        UserAuthEntity originalAuth = auths.selectById(51L);
-        when(auths.selectOne(any())).thenReturn(null);
+        UserAuthEntity originalAuth = auths.selectList(any()).getFirst();
+        when(auths.selectList(any())).thenReturn(List.of());
 
         giftProcessor.process(17L);
 
         assertThat(gifts.selectById(17L).getStatus()).isEqualTo(PointGiftOrderStatusDict.FAILED.getCode());
         assertThat(gifts.selectById(17L).getLastErrorCode()).isEqualTo(WechatVirtualPaymentErrorType.DUPLICATE_SUCCESS.name());
         verify(client, never()).queryUserBalance(any());
-        when(auths.selectOne(any())).thenReturn(originalAuth);
+        when(auths.selectList(any())).thenReturn(List.of(originalAuth));
         when(client.queryUserBalance(any())).thenReturn(balance(120L, 20L));
         assertThat(giftTransactions.resetForManualRetry(17L)).isTrue();
         giftProcessor.process(17L);

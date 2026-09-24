@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.service.teamportfolio.LocalPortfolioReferenceMutex;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -3119,7 +3120,7 @@ class MineWorkServiceTest {
                 contentLimitService,
                 mineWorkAuditService,
                 new WorkUploadTaskExpirationService(workUploadTaskEntityMapper),
-                workUpdateLock);
+                workUpdateLock, new LocalPortfolioReferenceMutex());
     }
 
     private MineWorkUploadCompleteRequest.CompleteItem completeItem(Long taskId) {

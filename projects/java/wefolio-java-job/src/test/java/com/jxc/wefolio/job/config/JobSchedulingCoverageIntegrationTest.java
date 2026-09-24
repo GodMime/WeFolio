@@ -1,5 +1,6 @@
 package com.jxc.wefolio.job.config;
 
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import com.jxc.wefolio.job.WefolioJavaJobApplication;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.support.AopUtils;
@@ -47,6 +48,8 @@ class JobSchedulingCoverageIntegrationTest {
                 .peek(this::assertProtectedScheduler)
                 .count();
 
+        applicationContext.getBeansOfType(ThreadPoolTaskScheduler.class)
+                .values().forEach(scheduler -> assertThat(scheduler).isInstanceOf(JobLifecycleTaskScheduler.class));
         assertThat(scheduledMethodCount).isEqualTo(6);
         assertThat(scheduledTaskRegistry.scheduledTasks()).hasSize(6);
     }

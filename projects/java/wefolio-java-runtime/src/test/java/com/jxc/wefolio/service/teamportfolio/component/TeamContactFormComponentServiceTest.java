@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service.teamportfolio.component;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
@@ -506,7 +507,6 @@ class TeamContactFormComponentServiceTest {
         DuplicateKeyException conflict = new DuplicateKeyException("duplicate");
         when(portfolioEntityMapper.selectOne(any())).thenReturn(teamPortfolio());
         when(visitRecordEntityMapper.selectById(VISIT_RECORD_ID)).thenReturn(visitRecord());
-        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class))).thenThrow(conflict);
         when(contactLeadEntityMapper.selectOne(any())).thenReturn(existingDuplicate());
 
         TeamContactFormComponentService.SubmitResult result = service().submit(SHARE_CODE, request(), visitor());
@@ -519,6 +519,30 @@ class TeamContactFormComponentServiceTest {
                 .contains("idempotency_key", "owner_type", "owner_id", "portfolio_id", "limit 1 for update");
         assertThat(wrapper.getParamNameValuePairs().values()).containsExactlyInAnyOrder(
                 "lead-1", PortfolioOwnerTypeDict.TEAM.getCode(), TEAM_ID, PORTFOLIO_ID);
+    }
+
+    /** 随机加密后的历史联系方式仍按明文精确去重，且返回标志不进入 HTTP。 */
+    @Test
+    void encryptedHistoricalContentShouldBeReusedWithoutPublishingCreatedFlag() throws Exception {
+        var request = request();
+        TeamContactLeadCryptoService crypto = new TeamContactLeadCryptoService(encryption());
+        ContactLeadEntity existing = existingDuplicate();
+        existing.setContactName(request.getContactName());
+        existing.setPhoneCiphertext(crypto.encryptPhone(request.getPhone()));
+        existing.setWechatCiphertext(crypto.encryptWechat(request.getWechat()));
+        existing.setDesiredSchedule(request.getDesiredSchedule());
+        existing.setNeeds(request.getNeeds());
+        request.setIdempotencyKey("new-content-key");
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(teamPortfolio());
+        when(visitRecordEntityMapper.selectById(VISIT_RECORD_ID)).thenReturn(visitRecord());
+        when(contactLeadEntityMapper.findContentCandidatesForUpdate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(existing));
+        var result = service().submit(SHARE_CODE, request, visitor());
+        assertThat(result.leadId()).isEqualTo(LEAD_ID);
+        assertThat(result.created()).isFalse();
+        verify(contactLeadEntityMapper, never()).insert(any(ContactLeadEntity.class));
+        String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(result);
+        assertThat(json).contains("leadId", "submittedAt").doesNotContain("created");
     }
 
     /**

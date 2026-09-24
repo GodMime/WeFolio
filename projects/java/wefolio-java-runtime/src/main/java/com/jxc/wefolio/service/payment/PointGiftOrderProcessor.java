@@ -1,7 +1,5 @@
 package com.jxc.wefolio.service.payment;
 
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.dict.PointGiftOrderStatusDict;
 import com.jxc.wefolio.entity.PointGiftOrderEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
@@ -21,8 +19,6 @@ import java.time.Instant;
 @Service
 @RequiredArgsConstructor
 public class PointGiftOrderProcessor {
-
-    private static final String ACTIVE_AUTH_STATUS = "ACTIVE";
 
     private final PointGiftOrderTransactionService transactionService;
     private final WechatVirtualPaymentClient wechatVirtualPaymentClient;
@@ -131,7 +127,9 @@ public class PointGiftOrderProcessor {
             WechatVirtualPaymentResult duplicate
     ) {
         MaintainerWechatSession session = sessionService.findAvailableSession(order.getUserId());
-        if (session == null || session.sessionKey() == null || session.sessionKey().isBlank()
+        UserAuthEntity auth = WechatPaymentIdentity.findUnique(userAuthEntityMapper, order.getUserId());
+        if (!WechatPaymentIdentity.matchesSession(order.getUserId(), auth, session)
+                || !openid.equals(auth.getOpenId()) || session.sessionKey() == null || session.sessionKey().isBlank()
                 || session.clientIp() == null || session.clientIp().isBlank()) {
             return failure(WechatVirtualPaymentErrorType.SESSION_INVALID,
                     WechatVirtualPaymentMessage.DUPLICATE_GIFT_SESSION_REQUIRED_MESSAGE);
@@ -158,13 +156,7 @@ public class PointGiftOrderProcessor {
 
     /** 查询用户当前有效微信 openid。 */
     private String findWechatOpenid(Long userId) {
-        UserAuthEntity auth = userAuthEntityMapper.selectOne(
-                Wrappers.lambdaQuery(UserAuthEntity.class)
-                        .eq(UserAuthEntity::getUserId, userId)
-                        .eq(UserAuthEntity::getAuthType, AuthTypeDict.WECHAT_MINI_APP.getCode())
-                        .eq(UserAuthEntity::getStatus, ACTIVE_AUTH_STATUS)
-                        .isNotNull(UserAuthEntity::getOpenId)
-                        .last("LIMIT 1"));
+        UserAuthEntity auth = WechatPaymentIdentity.findUnique(userAuthEntityMapper, userId);
         return auth == null ? null : auth.getOpenId();
     }
 

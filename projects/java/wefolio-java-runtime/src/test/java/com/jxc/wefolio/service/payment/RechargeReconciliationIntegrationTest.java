@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.payment;
 
+import com.jxc.wefolio.dict.UserStatusDict;
+import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.dto.PointMutationResponse;
 import com.jxc.wefolio.dict.PointGiftOrderStatusDict;
@@ -102,8 +104,12 @@ class RechargeReconciliationIntegrationTest {
                         'CLOSED', 'WECHAT_VIRTUAL_PAYMENT')
                 """);
         UserAuthEntity auth = new UserAuthEntity();
+        auth.setId(1L);
+        auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
         auth.setOpenId("openid");
-        when(auths.selectOne(any())).thenReturn(auth);
+        when(auths.selectList(any())).thenReturn(List.of(auth));
         when(sessions.findAvailableSession(7L)).thenReturn(new MaintainerWechatSession(7L, 1L, "session", 1L, "127.0.0.1"));
         when(client.queryOrder(any())).thenAnswer(i -> {
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();

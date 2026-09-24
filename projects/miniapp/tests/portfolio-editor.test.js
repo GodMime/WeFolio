@@ -4649,3 +4649,27 @@ test('removing first navigation menu warns about legacy display and promotes the
   assert.equal(page.data.config.bottomNav.items[0].key, 'nav_works')
   assert.equal(page.data.activeMenuKey, 'nav_works')
 })
+
+test('personal publish response preserves later edits and uncertain retry uses the original key', async () => {
+  const first = deferred()
+  const calls = []
+  const navigations = []
+  const toasts = []
+  const page = loadPortfolioEditorPage((options) => {
+    calls.push(JSON.parse(JSON.stringify(options)))
+    if (calls.length === 1) return first.promise
+    return Promise.resolve({ portfolioId: 88, draftRevision: 5, publishedRevision: 6, publicationStatus: 'PUBLISHED' })
+  }, { redirectTo(value) { navigations.push(value) }, navigateBack(value) { navigations.push(value) }, showToast(value) { toasts.push(value) } })
+  page.data.portfolioId = 88
+  page.data.draftRevision = 5
+  page.pendingPublish = { portfolioId: 88, snapshot: JSON.stringify({}), payload: { draftRevision: 5, idempotencyKey: 'original-publish-key' } }
+  const pending = page.submitPublishSnapshot()
+  page.data.config.share.title = '发布等待期间新编辑'
+  first.reject(new Error('timeout'))
+  await assert.rejects(pending, /timeout/)
+  await page.submitPublishSnapshot()
+  assert.deepEqual(calls[1].data, calls[0].data)
+  assert.equal(page.data.config.share.title, '发布等待期间新编辑')
+  assert.deepEqual(navigations, [])
+  assert.equal(toasts.at(-1).title, '已发布，当前修改尚未保存')
+})

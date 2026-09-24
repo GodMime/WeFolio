@@ -68,7 +68,7 @@ public class AuthTokenService {
 
         String cacheKey = buildCacheKey(token);
         Optional<Long> cachedUserId = cacheService.get(cacheKey, Long.class);
-        if (cachedUserId.isPresent()) {
+        if (cachedUserId.isPresent() && !miniappAuthService.hasMaintainerTokenCutoff(cachedUserId.get())) {
             return cachedUserId;
         }
 

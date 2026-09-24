@@ -1,7 +1,5 @@
 package com.jxc.wefolio.service.payment;
 
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PointAccountEntityMapper;
@@ -9,7 +7,6 @@ import com.jxc.wefolio.message.PointMessage;
 import com.jxc.wefolio.service.point.UserPointMutex;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import com.jxc.wefolio.dict.UserStatusDict;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
 import com.jxc.wefolio.mapper.UserAuthEntityMapper;
@@ -81,7 +78,7 @@ public class WechatAuthoritativeBalanceSyncService {
                 referenceNo, userId, accountId);
         MaintainerWechatSession session = sessionService.findAvailableSession(userId);
         UserAuthEntity auth = findWechatAuth(userId);
-        if (session == null || auth == null || auth.getOpenId() == null || auth.getOpenId().isBlank()) {
+        if (!WechatPaymentIdentity.matchesSession(userId, auth, session)) {
             log.info("微信虚拟支付业务完成 operation=同步权威余额 referenceNo={} userId={} "
                             + "localStatus=SKIPPED reason=MISSING_SESSION_OR_IDENTITY",
                     referenceNo, userId);
@@ -127,13 +124,6 @@ public class WechatAuthoritativeBalanceSyncService {
 
     /** 查询用户有效微信身份。 */
     private UserAuthEntity findWechatAuth(Long userId) {
-        return userAuthEntityMapper.selectOne(
-                Wrappers.lambdaQuery(UserAuthEntity.class)
-                        .eq(UserAuthEntity::getUserId, userId)
-                        .eq(UserAuthEntity::getAuthType, AuthTypeDict.WECHAT_MINI_APP.getCode())
-                        .eq(UserAuthEntity::getStatus, UserStatusDict.ACTIVE.getCode())
-                        .isNotNull(UserAuthEntity::getOpenId)
-                        .last("LIMIT 1")
-        );
+        return WechatPaymentIdentity.findUnique(userAuthEntityMapper, userId);
     }
 }

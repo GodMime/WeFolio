@@ -1,6 +1,8 @@
 package com.jxc.wefolio.service.teamportfolio.component.contactform;
 
 import com.alibaba.fastjson2.JSON;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.jxc.wefolio.common.ContactLeadContent;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -34,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -218,7 +221,7 @@ public class TeamContactFormComponentService {
                         .eq(PortfolioEntity::getSchemaVersion,
                                 TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1)
                         .eq(PortfolioEntity::getPublicationStatus, PortfolioPublicationStatusDict.PUBLISHED.getCode())
-                        .last(QUERY_LIMIT_ONE)
+                        .last(QUERY_LIMIT_ONE_FOR_UPDATE)
         );
         if (!isPublishedTeamPortfolio(portfolio, normalizedShareCode)) {
             throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
@@ -230,7 +233,22 @@ public class TeamContactFormComponentService {
         if (!isOwnedVisitRecord(visitRecord, portfolio, visitorIdentity)) {
             throw new BusinessException(VISIT_RECORD_INVALID_MESSAGE);
         }
-        LocalDateTime now = LocalDateTime.now();
+        ContactLeadEntity existing = findExistingLeadForUpdate(portfolio, normalizedRequest.idempotencyKey());
+        if (isSameIdempotencyLead(existing, portfolio, normalizedRequest.idempotencyKey())) {
+            return new SubmitResult(existing.getId(), existing.getSubmittedAt(), false);
+        }
+        ContactLeadContent content = new ContactLeadContent(normalizedRequest.contactName(),
+                normalizedRequest.phone(), normalizedRequest.wechat(),
+                normalizedRequest.desiredSchedule(), normalizedRequest.needs());
+        for (ContactLeadEntity candidate : contactLeadEntityMapper.findContentCandidatesForUpdate(
+                portfolio.getId(), portfolio.getOwnerType(), portfolio.getOwnerId(),
+                content.contactName(), content.desiredSchedule(), content.needs())) {
+            if (content.matches(candidate, contactLeadCryptoService.decryptPhone(candidate.getPhoneCiphertext()),
+                    contactLeadCryptoService.decryptWechat(candidate.getWechatCiphertext()))) {
+                return new SubmitResult(candidate.getId(), candidate.getSubmittedAt(), false);
+            }
+        }
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
         ContactLeadEntity lead = new ContactLeadEntity();
         lead.setPortfolioId(portfolio.getId());
         lead.setPortfolioTitleSnapshot(resolvePortfolioTitle(portfolio));
@@ -257,10 +275,10 @@ public class TeamContactFormComponentService {
                 throw new BusinessException(PERSISTENCE_FAILED_MESSAGE);
             }
         } catch (DuplicateKeyException exception) {
-            ContactLeadEntity existing = findExistingLeadForUpdate(
+            ContactLeadEntity raced = findExistingLeadForUpdate(
                     portfolio, normalizedRequest.idempotencyKey());
-            if (isSameIdempotencyLead(existing, portfolio, normalizedRequest.idempotencyKey())) {
-                return new SubmitResult(existing.getId(), existing.getSubmittedAt());
+            if (isSameIdempotencyLead(raced, portfolio, normalizedRequest.idempotencyKey())) {
+                return new SubmitResult(raced.getId(), raced.getSubmittedAt(), false);
             }
             throw exception;
         }
@@ -727,6 +745,10 @@ public class TeamContactFormComponentService {
      * @param leadId 线索 ID
      * @param submittedAt 提交时间
      */
-    public record SubmitResult(Long leadId, LocalDateTime submittedAt) {
+    public record SubmitResult(Long leadId, LocalDateTime submittedAt, @JsonIgnore boolean created) {
+        /** 保留新建成功调用方式；内部创建标志不进入 HTTP 响应。 */
+        public SubmitResult(Long leadId, LocalDateTime submittedAt) {
+            this(leadId, submittedAt, true);
+        }
     }
 }

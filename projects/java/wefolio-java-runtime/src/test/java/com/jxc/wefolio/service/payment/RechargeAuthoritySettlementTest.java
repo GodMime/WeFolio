@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service.payment;
 
+import java.util.List;
+import com.jxc.wefolio.dict.UserStatusDict;
+import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
 import com.jxc.wefolio.dto.RechargeOrderSyncResponse;
@@ -78,8 +81,12 @@ class RechargeAuthoritySettlementTest {
         order.setStatus(RechargeOrderStatusDict.CLOSED.getCode());
         when(rechargeOrderEntityMapper.selectOne(any())).thenReturn(order);
         UserAuthEntity auth = new UserAuthEntity();
+        auth.setId(2L);
+        auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
         auth.setOpenId("openid");
-        lenient().when(userAuthEntityMapper.selectOne(any())).thenReturn(auth);
+        lenient().when(userAuthEntityMapper.selectList(any())).thenReturn(List.of(auth));
         lenient().when(maintainerWechatSessionService.findAvailableSession(7L))
                 .thenReturn(new MaintainerWechatSession(7L, 2L, "session", 1L, "127.0.0.1"));
         paid = new WechatVirtualPaymentResult(0, null, WechatVirtualPaymentErrorType.SUCCESS,

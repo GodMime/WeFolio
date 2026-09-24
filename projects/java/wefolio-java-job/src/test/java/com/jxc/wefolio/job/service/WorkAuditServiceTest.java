@@ -20,6 +20,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,6 +41,53 @@ import static org.mockito.Mockito.when;
  * 作品审核服务编排测试。
  */
 class WorkAuditServiceTest {
+
+    /** 扫描后即使经历长耗时，后续领取仍使用完整的新租约。 */
+    @Test
+    void laterVideoClaimsShouldUseFreshTimeAndKeepScanCutoff() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 9, 24, 12, 0);
+        Clock clock = mock(Clock.class);
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
+        when(clock.instant()).thenReturn(cutoff.toInstant(ZoneOffset.UTC),
+                cutoff.plusSeconds(400).toInstant(ZoneOffset.UTC));
+        WorkAuditTaskRepository tasks = mock(WorkAuditTaskRepository.class);
+        when(tasks.findQueryableVideoTasks(2, 120, cutoff))
+                .thenReturn(List.of(videoTask(1L, 1L, 1), videoTask(2L, 2L, 1)));
+        WorkAuditService service = new WorkAuditService(mock(WorkAuditWorkRepository.class), tasks,
+                mock(WorkAuditClaimTransactionService.class), mock(TencentCiAuditClient.class), properties());
+        service.setClock(clock);
+        service.queryPendingVideoResults(2, cutoff);
+        verify(tasks).claimVideoQuery(eq(1L), anyString(), eq(cutoff), eq(cutoff.plusSeconds(300)), eq(120));
+        verify(tasks).claimVideoQuery(eq(2L), anyString(), eq(cutoff.plusSeconds(400)),
+                eq(cutoff.plusSeconds(700)), eq(120));
+    }
+
+
+
+    /** 所有过期恢复入口都不能把扫描水位当成本次领取时间。 */
+    @Test
+    void allRecoveryClaimsShouldStartFreshLeasesAfterSlowScan() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 9, 24, 12, 0);
+        LocalDateTime claim = cutoff.plusSeconds(400);
+        WorkAuditTaskRepository tasks = mock(WorkAuditTaskRepository.class);
+        WorkAuditTaskEntity task = videoTask(1L, 1L, 1);
+        when(tasks.findExhaustedExpiredVideoSubmitTasks(1, 3, cutoff)).thenReturn(List.of(task));
+        when(tasks.findRetryableExpiredVideoSubmitTasks(1, 3, cutoff)).thenReturn(List.of(task));
+        when(tasks.findExhaustedExpiredVideoQueryTasks(1, 120, cutoff)).thenReturn(List.of(task));
+        when(tasks.findExhaustedExpiredImageTasks(1, 3, cutoff)).thenReturn(List.of(task));
+        when(tasks.findRetryableExpiredImageTasks(1, 3, cutoff)).thenReturn(List.of(task));
+        WorkAuditService service = new WorkAuditService(mock(WorkAuditWorkRepository.class), tasks,
+                mock(WorkAuditClaimTransactionService.class), mock(TencentCiAuditClient.class), properties());
+        service.setClock(Clock.fixed(claim.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
+        service.recoverExpiredVideoSubmissions(1, cutoff);
+        service.recoverExhaustedVideoQueries(1, cutoff);
+        service.auditPendingImages(1, cutoff);
+        verify(tasks).claimExpiredVideoSubmit(eq(1L), anyString(), eq(claim), eq(claim.plusSeconds(300)), eq(3));
+        verify(tasks).claimExhaustedExpiredVideoSubmit(eq(1L), anyString(), eq(claim), eq(claim.plusSeconds(300)), eq(3));
+        verify(tasks).claimExhaustedExpiredVideoQuery(eq(1L), anyString(), eq(claim), eq(claim.plusSeconds(300)), eq(120));
+        verify(tasks).claimExpiredImageTask(eq(1L), anyString(), eq(claim), eq(claim.plusSeconds(300)), eq(3));
+        verify(tasks).claimExhaustedExpiredImageTask(eq(1L), anyString(), eq(claim), eq(claim.plusSeconds(300)), eq(3));
+    }
 
     /** 音频走既有异步审核编排，但不能误用视频云接口。 */
     @Test
@@ -463,6 +512,7 @@ class WorkAuditServiceTest {
                 eq(501L), eq(51L), eq(1), anyString(), eq("recovered-job"), eq("{}"))).thenReturn(true);
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         int remaining = service.recoverExpiredVideoSubmissions(2, now);
 
@@ -496,6 +546,7 @@ class WorkAuditServiceTest {
                 null, null, null, false, false, "{}"));
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         int remaining = service.recoverExpiredVideoSubmissions(2, now);
 
@@ -517,6 +568,7 @@ class WorkAuditServiceTest {
                 eq(521L), anyString(), eq(now), eq(now.plusMinutes(5)), eq(3))).thenReturn(true);
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         int remaining = service.recoverExpiredVideoSubmissions(2, now);
 
@@ -547,6 +599,7 @@ class WorkAuditServiceTest {
                 eq(542L), anyString(), eq(now), eq(now.plusMinutes(5)), eq(3))).thenReturn(true);
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         List<String> messages = captureLogMessages(() -> service.recoverExpiredVideoSubmissions(2, now));
 
@@ -586,6 +639,7 @@ class WorkAuditServiceTest {
                         null, null, null, false, false, "{}"));
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         int remaining = service.recoverExpiredVideoSubmissions(2, now);
         service.submitPendingVideoAudits(remaining);
@@ -732,6 +786,7 @@ class WorkAuditServiceTest {
                 .thenReturn(true);
         WorkAuditService service = new WorkAuditService(
                 workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         service.auditPendingImages(2, now);
 
@@ -762,6 +817,7 @@ class WorkAuditServiceTest {
                 eq(511L), eq(61L), eq(1), anyString(), anyString(), eq(null), anyString())).thenReturn(true);
         WorkAuditService service = new WorkAuditService(
                 workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         service.auditPendingImages(1, now);
 
@@ -786,6 +842,7 @@ class WorkAuditServiceTest {
                 eq(521L), anyString(), eq(now), eq(now.plusMinutes(5)), eq(3))).thenReturn(false);
         WorkAuditService service = new WorkAuditService(
                 workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         service.auditPendingImages(1, now);
 
@@ -905,6 +962,7 @@ class WorkAuditServiceTest {
                 eq(601L), eq(91L), eq(1), anyString(), eq("Running"), eq("{}"))).thenReturn(true);
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         service.queryPendingVideoResults(10, now);
 
@@ -933,6 +991,7 @@ class WorkAuditServiceTest {
                 eq(611L), anyString(), eq(now), eq(now.plusMinutes(5)), eq(120))).thenReturn(true);
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         service.recoverExhaustedVideoQueries(10, now);
 
@@ -964,6 +1023,7 @@ class WorkAuditServiceTest {
                 eq(632L), anyString(), eq(now), eq(now.plusMinutes(5)), eq(120))).thenReturn(true);
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         List<String> messages = captureLogMessages(() -> service.recoverExhaustedVideoQueries(2, now));
 
@@ -986,6 +1046,7 @@ class WorkAuditServiceTest {
         when(taskRepository.findQueryableVideoTasks(10, 120, now)).thenReturn(List.of(task));
         WorkAuditService service =
                 new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties());
+        service.setClock(Clock.fixed(now.toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         service.queryPendingVideoResults(10, now);
 

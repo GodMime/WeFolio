@@ -24,10 +24,9 @@ public class VirtualPaymentSchedulingConfig {
      */
     @Bean(name = DEFAULT_TASK_SCHEDULER_BEAN_NAME)
     public ThreadPoolTaskScheduler taskScheduler(JobSchedulingTaskDecorator taskDecorator) {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        ThreadPoolTaskScheduler scheduler = new JobLifecycleTaskScheduler(taskDecorator);
         scheduler.setPoolSize(1);
         scheduler.setThreadNamePrefix("scheduling-");
-        scheduler.setTaskDecorator(taskDecorator);
         return scheduler;
     }
 
@@ -39,10 +38,9 @@ public class VirtualPaymentSchedulingConfig {
      */
     @Bean(name = TASK_SCHEDULER_BEAN_NAME)
     public ThreadPoolTaskScheduler virtualPaymentTaskScheduler(JobSchedulingTaskDecorator taskDecorator) {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        ThreadPoolTaskScheduler scheduler = new JobLifecycleTaskScheduler(taskDecorator);
         scheduler.setPoolSize(2);
         scheduler.setThreadNamePrefix("virtual-payment-scheduler-");
-        scheduler.setTaskDecorator(taskDecorator);
         return scheduler;
     }
 }

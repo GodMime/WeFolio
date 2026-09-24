@@ -44,6 +44,17 @@ public class EncryptedAuthTokenService {
     /** 认证令牌配置 */
     private final AuthTokenProperties authTokenProperties;
 
+    /** 指定用户命中认证缓存时仍须重新校验令牌签发时间。 */
+    public boolean hasMaintainerCutoff(Long userId) {
+        return authTokenProperties.getMaintainerInvalidThroughEpochSeconds().containsKey(userId);
+    }
+
+    /** 仅撤销指定用户截止秒及以前的维护者令牌，不影响访客令牌。 */
+    public boolean isMaintainerRevoked(Long userId, long issuedAtEpochSeconds) {
+        Long cutoff = authTokenProperties.getMaintainerInvalidThroughEpochSeconds().get(userId);
+        return cutoff != null && issuedAtEpochSeconds <= cutoff;
+    }
+
     /**
      * 加密 payload 并拼接业务令牌前缀。
      *

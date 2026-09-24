@@ -16,10 +16,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -94,6 +96,14 @@ public class WorkAuditService {
 
     private final AnimationFrameCosService animationFrameCosService;
 
+    /** 本服务专用时钟，默认使用系统时区，可在包内测试注入。 */
+    private Clock clock = Clock.systemDefaultZone();
+
+    /** 注入确定性审核时钟，不影响其他业务时钟。 */
+    void setClock(Clock clock) {
+        this.clock = Objects.requireNonNull(clock);
+    }
+
     /**
      * 创建完整的作品审核编排服务。
      */
@@ -145,14 +155,14 @@ public class WorkAuditService {
                 properties.getImageMaxAttempts(), properties.getMaxAuditAnimationPerRun(),
                 properties.getAnimationMaxAttempts(), properties.getVideoQueryMaxAttempts());
         try {
-            LocalDateTime roundNow = LocalDateTime.now();
-            logAuditBacklogSummary(roundNow);
+            LocalDateTime scanCutoff = LocalDateTime.now(clock);
+            logAuditBacklogSummary(scanCutoff);
             int remainingVideoSubmitCapacity = recoverExpiredVideoSubmissions(
-                    properties.getMaxSubmitVideoPerRun(), roundNow);
-            recoverExhaustedVideoQueries(properties.getMaxQueryVideoPerRun(), roundNow);
-            queryPendingVideoResults(properties.getMaxQueryVideoPerRun(), roundNow);
+                    properties.getMaxSubmitVideoPerRun(), scanCutoff);
+            recoverExhaustedVideoQueries(properties.getMaxQueryVideoPerRun(), scanCutoff);
+            queryPendingVideoResults(properties.getMaxQueryVideoPerRun(), scanCutoff);
             submitPendingVideoAudits(remainingVideoSubmitCapacity);
-            auditPendingImages(properties.getMaxAuditImagePerRun(), roundNow);
+            auditPendingImages(properties.getMaxAuditImagePerRun(), scanCutoff);
             auditPendingAnimations(properties.getMaxAuditAnimationPerRun());
             queryAllPendingVideoResults(properties.getMaxQueryVideoPerRun());
         } finally {
@@ -167,18 +177,18 @@ public class WorkAuditService {
      * @param limit 查询数量上限
      */
     public void queryPendingVideoResults(int limit) {
-        queryPendingVideoResults(limit, LocalDateTime.now());
+        queryPendingVideoResults(limit, LocalDateTime.now(clock));
     }
 
     /**
-     * 使用本轮统一时间查询可执行的视频审核任务。
+     * 使用固定扫描水位查询可执行的视频审核任务。
      *
      * @param limit 查询数量上限
-     * @param now 本轮统一时间
+     * @param now 本轮扫描截止时间，不作为领取时间
      */
     void queryPendingVideoResults(int limit, LocalDateTime now) {
         taskRepository.findQueryableVideoTasks(limit, properties.getVideoQueryMaxAttempts(), now)
-                .forEach(task -> queryOneVideoResult(task, now));
+                .forEach(this::queryOneVideoResult);
     }
 
     /**
@@ -194,7 +204,7 @@ public class WorkAuditService {
      * 先终态回收达到上限的提交任务，再重领仍可重提的过期任务。
      *
      * @param limit 本轮视频提交容量
-     * @param now 本轮统一时间
+     * @param now 本轮扫描截止时间，不作为领取时间
      * @return 新视频可使用的剩余提交容量
      */
     int recoverExpiredVideoSubmissions(int limit, LocalDateTime now) {
@@ -205,20 +215,24 @@ public class WorkAuditService {
                 Math.max(limit, 0), properties.getVideoSubmitMaxAttempts(), now);
         for (WorkAuditTaskEntity task : exhaustedTasks) {
             String claimToken = newClaimToken();
+            LocalDateTime claimNow = LocalDateTime.now(clock);
+            LocalDateTime previousLockedUntil = task.getLockedUntil();
             if (!taskRepository.claimExhaustedExpiredVideoSubmit(
-                    task.getId(), claimToken, now, lockedUntil(now),
+                    task.getId(), claimToken, claimNow, lockedUntil(claimNow),
                     properties.getVideoSubmitMaxAttempts())) {
-                logVideoSubmitTerminalRecoverySkipped(task, TASK_CLAIM_NOT_ACQUIRED_REASON);
+                logVideoSubmitTerminalRecoverySkipped(task, previousLockedUntil, TASK_CLAIM_NOT_ACQUIRED_REASON);
                 continue;
             }
             task.setLockedBy(claimToken);
+            task.setLockedUntil(lockedUntil(claimNow));
+            task.setUpdatedAt(claimNow);
             boolean updated = claimTransactionService.markVideoTaskFailedAndUpdateWorkFailed(
                     task.getId(), task.getWorkId(), task.getAuditRound(), claimToken,
                     VIDEO_SUBMIT_INTERRUPTED_ERROR, null, VIDEO_SUBMIT_RECOVERY_LIMIT_REASON);
             if (updated) {
                 terminalRecovered++;
             } else {
-                logVideoSubmitTerminalRecoverySkipped(task, CLAIM_OR_ROUND_STALE_REASON);
+                logVideoSubmitTerminalRecoverySkipped(task, previousLockedUntil, CLAIM_OR_ROUND_STALE_REASON);
             }
         }
 
@@ -229,8 +243,9 @@ public class WorkAuditService {
                 break;
             }
             String claimToken = newClaimToken();
+            LocalDateTime claimNow = LocalDateTime.now(clock);
             if (!taskRepository.claimExpiredVideoSubmit(
-                    task.getId(), claimToken, now, lockedUntil(now),
+                    task.getId(), claimToken, claimNow, lockedUntil(claimNow),
                     properties.getVideoSubmitMaxAttempts())) {
                 log.info("视频提交恢复跳过: workId={}, taskId={}, auditRound={}, attemptCount={}, "
                                 + "maxAttempts={}, 原锁过期时间={}, reason={}",
@@ -240,6 +255,9 @@ public class WorkAuditService {
                 continue;
             }
             task.setLockedBy(claimToken);
+            task.setLockedUntil(lockedUntil(claimNow));
+            task.setUpdatedAt(claimNow);
+            task.setStartedAt(claimNow);
             task.setAttemptCount(nullToZero(task.getAttemptCount()) + 1);
             submitClaimedVideoTask(task);
             remainingCapacity--;
@@ -254,7 +272,7 @@ public class WorkAuditService {
      * 回收达到查询次数上限且租约已过期的视频任务。
      *
      * @param limit 回收数量上限
-     * @param now 本轮统一时间
+     * @param now 本轮扫描截止时间，不作为领取时间
      */
     void recoverExhaustedVideoQueries(int limit, LocalDateTime now) {
         int recovered = 0;
@@ -262,13 +280,17 @@ public class WorkAuditService {
                 Math.max(limit, 0), properties.getVideoQueryMaxAttempts(), now);
         for (WorkAuditTaskEntity task : tasks) {
             String claimToken = newClaimToken();
+            LocalDateTime claimNow = LocalDateTime.now(clock);
+            LocalDateTime previousLockedUntil = task.getLockedUntil();
             if (!taskRepository.claimExhaustedExpiredVideoQuery(
-                    task.getId(), claimToken, now, lockedUntil(now),
+                    task.getId(), claimToken, claimNow, lockedUntil(claimNow),
                     properties.getVideoQueryMaxAttempts())) {
-                logVideoQueryTerminalRecoverySkipped(task, TASK_CLAIM_NOT_ACQUIRED_REASON);
+                logVideoQueryTerminalRecoverySkipped(task, previousLockedUntil, TASK_CLAIM_NOT_ACQUIRED_REASON);
                 continue;
             }
             task.setLockedBy(claimToken);
+            task.setLockedUntil(lockedUntil(claimNow));
+            task.setUpdatedAt(claimNow);
             boolean updated = claimTransactionService.markVideoTaskFailedAndUpdateWorkFailed(
                     task.getId(), task.getWorkId(), task.getAuditRound(), claimToken,
                     VIDEO_QUERY_LIMIT_ERROR, null,
@@ -276,7 +298,7 @@ public class WorkAuditService {
             if (updated) {
                 recovered++;
             } else {
-                logVideoQueryTerminalRecoverySkipped(task, CLAIM_OR_ROUND_STALE_REASON);
+                logVideoQueryTerminalRecoverySkipped(task, previousLockedUntil, CLAIM_OR_ROUND_STALE_REASON);
             }
         }
         log.info("视频查询终态回收本轮统计: 回收数={}, 每轮上限={}", recovered, limit);
@@ -288,14 +310,14 @@ public class WorkAuditService {
      * @param limit 审核数量上限
      */
     public void auditPendingImages(int limit) {
-        auditPendingImages(limit, LocalDateTime.now());
+        auditPendingImages(limit, LocalDateTime.now(clock));
     }
 
     /**
      * 先回收达到上限的过期任务，再恢复可重试任务，最后处理新的待审核图片。
      *
      * @param limit 本轮图片远端审核容量
-     * @param now 本轮统一时间
+     * @param now 本轮扫描截止时间，不作为领取时间
      */
     void auditPendingImages(int limit, LocalDateTime now) {
         int remainingCapacity = Math.max(limit, 0);
@@ -310,8 +332,9 @@ public class WorkAuditService {
                 break;
             }
             String claimToken = newClaimToken();
+            LocalDateTime claimNow = LocalDateTime.now(clock);
             if (!taskRepository.claimExpiredImageTask(
-                    task.getId(), claimToken, now, lockedUntil(now), properties.getImageMaxAttempts())) {
+                    task.getId(), claimToken, claimNow, lockedUntil(claimNow), properties.getImageMaxAttempts())) {
                 log.info("图片审核恢复跳过: workId={}, taskId={}, auditRound={}, attemptCount={}, "
                                 + "maxAttempts={}, 原锁过期时间={}, reason={}",
                         task.getWorkId(), task.getId(), task.getAuditRound(), task.getAttemptCount(),
@@ -319,8 +342,9 @@ public class WorkAuditService {
                 continue;
             }
             task.setLockedBy(claimToken);
-            task.setLockedUntil(lockedUntil(now));
-            task.setStartedAt(now);
+            task.setLockedUntil(lockedUntil(claimNow));
+            task.setUpdatedAt(claimNow);
+            task.setStartedAt(claimNow);
             task.setAttemptCount(nullToZero(task.getAttemptCount()) + 1);
             executeImageTask(task);
             remainingCapacity--;
@@ -350,14 +374,17 @@ public class WorkAuditService {
                 Math.max(limit, 0), properties.getImageMaxAttempts(), now);
         for (WorkAuditTaskEntity task : tasks) {
             String claimToken = newClaimToken();
+            LocalDateTime claimNow = LocalDateTime.now(clock);
             if (!taskRepository.claimExhaustedExpiredImageTask(
-                    task.getId(), claimToken, now, lockedUntil(now), properties.getImageMaxAttempts())) {
+                    task.getId(), claimToken, claimNow, lockedUntil(claimNow), properties.getImageMaxAttempts())) {
                 log.info("图片审核终态回收跳过: workId={}, taskId={}, auditRound={}, attemptCount={}, reason={}",
                         task.getWorkId(), task.getId(), task.getAuditRound(), task.getAttemptCount(),
                         TASK_CLAIM_NOT_ACQUIRED_REASON);
                 continue;
             }
             task.setLockedBy(claimToken);
+            task.setLockedUntil(lockedUntil(claimNow));
+            task.setUpdatedAt(claimNow);
             if (claimTransactionService.markImageTaskFailedAndUpdateWorkFailed(
                     task.getId(), task.getWorkId(), task.getAuditRound(), claimToken,
                     IMAGE_AUDIT_INTERRUPTED_ERROR, null, IMAGE_AUDIT_RECOVERY_LIMIT_REASON)) {
@@ -382,7 +409,7 @@ public class WorkAuditService {
         int newTasks = 0;
         int recoveredTasks = recoverExhaustedAnimationTasks(remainingCapacity);
         List<WorkAuditTaskEntity> runnableTasks = taskRepository.findRunnableAnimationTasks(
-                remainingCapacity, properties.getAnimationMaxAttempts(), LocalDateTime.now());
+                remainingCapacity, properties.getAnimationMaxAttempts(), LocalDateTime.now(clock));
         for (WorkAuditTaskEntity task : runnableTasks) {
             if (remainingCapacity == 0) {
                 break;
@@ -467,7 +494,7 @@ public class WorkAuditService {
     private int recoverExhaustedAnimationTasks(int limit) {
         int recovered = 0;
         List<WorkAuditTaskEntity> tasks = taskRepository.findExhaustedExpiredAnimationTasks(
-                Math.max(limit, 0), properties.getAnimationMaxAttempts(), LocalDateTime.now());
+                Math.max(limit, 0), properties.getAnimationMaxAttempts(), LocalDateTime.now(clock));
         for (WorkAuditTaskEntity task : tasks) {
             String claimToken = newClaimToken();
             if (!taskRepository.claimExhaustedAnimationTask(
@@ -720,11 +747,12 @@ public class WorkAuditService {
                 task.getWorkId(), task.getId(), task.getAuditRound());
     }
 
-    private void queryOneVideoResult(WorkAuditTaskEntity task, LocalDateTime now) {
+    private void queryOneVideoResult(WorkAuditTaskEntity task) {
+        LocalDateTime claimNow = LocalDateTime.now(clock);
         int nextQueryCount = nullToZero(task.getQueryCount()) + 1;
         String claimToken = newClaimToken();
-        if (!taskRepository.claimVideoQuery(task.getId(), claimToken, now,
-                lockedUntil(now), properties.getVideoQueryMaxAttempts())) {
+        if (!taskRepository.claimVideoQuery(task.getId(), claimToken, claimNow,
+                lockedUntil(claimNow), properties.getVideoQueryMaxAttempts())) {
             log.info("视频审核结果查询跳过: workId={}, taskId={}, objectKey={}, ciJobId={}, queryCount={}, maxQueryCount={}, "
                             + "reason={}",
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(),
@@ -732,6 +760,9 @@ public class WorkAuditService {
             return;
         }
         task.setLockedBy(claimToken);
+        task.setLockedUntil(lockedUntil(claimNow));
+        task.setLastQueryAt(claimNow);
+        task.setUpdatedAt(claimNow);
         log.info("开始查询视频审核结果: workId={}, taskId={}, objectKey={}, ciJobId={}, queryCountBefore={}, "
                         + "queryCountAfterClaim={}, maxQueryCount={}",
                 task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), task.getQueryCount(),
@@ -930,26 +961,28 @@ public class WorkAuditService {
      * 记录达到视频提交重试上限的任务未能完成终态回收。
      *
      * @param task 审核任务
+     * @param previousLockedUntil 领取前的租约截止时间
      * @param reason 跳过原因
      */
-    private void logVideoSubmitTerminalRecoverySkipped(WorkAuditTaskEntity task, String reason) {
+    private void logVideoSubmitTerminalRecoverySkipped(WorkAuditTaskEntity task, LocalDateTime previousLockedUntil, String reason) {
         log.info("视频提交终态回收跳过: workId={}, taskId={}, auditRound={}, attemptCount={}, "
                         + "maxAttempts={}, 原锁过期时间={}, reason={}",
                 task.getWorkId(), task.getId(), task.getAuditRound(), task.getAttemptCount(),
-                properties.getVideoSubmitMaxAttempts(), task.getLockedUntil(), reason);
+                properties.getVideoSubmitMaxAttempts(), previousLockedUntil, reason);
     }
 
     /**
      * 记录达到视频查询上限的任务未能完成终态回收。
      *
      * @param task 审核任务
+     * @param previousLockedUntil 领取前的租约截止时间
      * @param reason 跳过原因
      */
-    private void logVideoQueryTerminalRecoverySkipped(WorkAuditTaskEntity task, String reason) {
+    private void logVideoQueryTerminalRecoverySkipped(WorkAuditTaskEntity task, LocalDateTime previousLockedUntil, String reason) {
         log.info("视频查询终态回收跳过: workId={}, taskId={}, auditRound={}, queryCount={}, "
                         + "maxQueryCount={}, 原锁过期时间={}, reason={}",
                 task.getWorkId(), task.getId(), task.getAuditRound(), task.getQueryCount(),
-                properties.getVideoQueryMaxAttempts(), task.getLockedUntil(), reason);
+                properties.getVideoQueryMaxAttempts(), previousLockedUntil, reason);
     }
 
     /**
@@ -1011,7 +1044,7 @@ public class WorkAuditService {
         task.setAuditResult(AuditResultDict.UNKNOWN.getCode());
         task.setAttemptCount(1);
         task.setQueryCount(0);
-        task.setStartedAt(LocalDateTime.now());
+        task.setStartedAt(LocalDateTime.now(clock));
         task.setLockedBy(properties.getLockOwnerPrefix());
         task.setLockedUntil(lockedUntil());
         return task;
@@ -1036,7 +1069,7 @@ public class WorkAuditService {
     }
 
     private LocalDateTime lockedUntil() {
-        return LocalDateTime.now().plusSeconds(properties.getTaskLockSeconds());
+        return LocalDateTime.now(clock).plusSeconds(properties.getTaskLockSeconds());
     }
 
     /**

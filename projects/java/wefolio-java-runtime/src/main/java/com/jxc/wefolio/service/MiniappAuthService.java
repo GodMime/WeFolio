@@ -74,6 +74,10 @@ public class MiniappAuthService {
     /** HMAC 算法 */
     private static final String HMAC_SHA256 = "HmacSHA256";
 
+    /** 稳定身份及旧摘要唯一索引名称。 */
+    private static final String OPENID_UNIQUE_KEY = "uk_auth_type_open_id";
+    private static final String IDENTIFIER_UNIQUE_KEY = "uk_auth_type_identifier";
+
     /** 用户资料 Mapper */
     private final UserEntityMapper userEntityMapper;
 
@@ -114,6 +118,11 @@ public class MiniappAuthService {
      * @param expiresAt 令牌服务端过期时间
      */
     public record ResolvedAuthToken(Long userId, Instant expiresAt) {
+    }
+
+    /** 有撤销截止配置的用户不能直接使用旧的认证缓存。 */
+    public boolean hasMaintainerTokenCutoff(Long userId) {
+        return encryptedAuthTokenService.hasMaintainerCutoff(userId);
     }
 
     /**
@@ -186,6 +195,9 @@ public class MiniappAuthService {
         if (userId <= 0 || issuedAtEpochSeconds <= 0) {
             throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_PARSE_FAILED_MESSAGE);
         }
+        if (encryptedAuthTokenService.isMaintainerRevoked(userId, issuedAtEpochSeconds)) {
+            throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_EXPIRED_MESSAGE);
+        }
         Instant expiresAt = Instant.ofEpochSecond(issuedAtEpochSeconds).plusSeconds(MAINTAINER_EXPIRES_IN_SECONDS);
         if (!expiresAt.isAfter(Instant.now())) {
             throw new InvalidAuthTokenException(MiniappAuthMessage.TOKEN_EXPIRED_MESSAGE);
@@ -256,46 +268,37 @@ public class MiniappAuthService {
         WechatSessionResponse session = wechatMiniappClient.exchangeCode(request.getCode());
         String openId = normalizeRequiredOpenId(session.getOpenid());
         String openidHash = digestIdentifier(openId);
-        UserAuthEntity auth = findActiveAuth(WECHAT_AUTH_TYPE, openidHash);
+        UserAuthEntity auth = findWechatAuth(openId, openidHash);
 
         UserEntity user;
         if (auth == null) {
             WechatPhoneNumberResponse.PhoneInfo phoneInfo =
                     wechatMiniappClient.exchangePhoneCode(requirePhoneCode(request));
             String openpid = exchangePluginOpenpidIfPresent(request.getPluginLoginCode());
-            user = findActiveUserByPhone(phoneInfo.getPhoneNumber());
-            if (user == null) {
-                String uniqueCode = generateUniqueCode();
-                // COS 文件夹初始化在前，失败直接抛异常，不污染数据库
-                cosService.initUserStorage(uniqueCode);
-                // 注册前端头像为本地临时路径时无法由服务端读取，后续由已登录上传接口写回 COS 地址
-                String originalAvatarUrl = request.getAvatarUrl();
-                request.setAvatarUrl(resolveAvatarUrl(request.getAvatarUrl(), uniqueCode, ""));
-                try {
-                    user = userRegistrationService.createWechatMaintainerUser(
-                            uniqueCode,
-                            request,
-                            phoneInfo,
-                            openpid,
-                            openidHash,
-                            openId,
-                            digestIdentifierIfPresent(session.getUnionid())
-                    );
-                } catch (DuplicateKeyException e) {
-                    request.setAvatarUrl(originalAvatarUrl);
-                    user = bindExistingPhoneUserAfterRegistrationConflict(
-                            request,
-                            session,
-                            phoneInfo,
-                            openpid,
-                            openidHash,
-                            openId,
-                            e
-                    );
+            String uniqueCode = generateUniqueCode();
+            cosService.initUserStorage(uniqueCode);
+            String originalAvatarUrl = request.getAvatarUrl();
+            request.setAvatarUrl(resolveAvatarUrl(originalAvatarUrl, uniqueCode, ""));
+            try {
+                user = userRegistrationService.createWechatMaintainerUser(
+                        uniqueCode, request, phoneInfo, openpid, openidHash, openId,
+                        digestIdentifierIfPresent(session.getUnionid()));
+            } catch (DuplicateKeyException exception) {
+                request.setAvatarUrl(originalAvatarUrl);
+                // 注册事务已经回滚，只能恢复本次相同 openid 的并发注册结果。
+                if (!isWechatIdentityConflict(exception)) {
+                    throw exception;
                 }
-            } else {
-                updateWechatRegistrationProfile(user, request, phoneInfo, openpid);
-                createWechatAuth(user, session, openidHash, openId);
+                UserAuthEntity existingAuth = findWechatAuth(openId, openidHash);
+                if (existingAuth == null) {
+                    throw exception;
+                }
+                user = userEntityMapper.selectById(existingAuth.getUserId());
+                if (user == null || !UserStatusDict.ACTIVE.getCode().equals(user.getStatus())) {
+                    throw new BusinessException(MiniappAuthMessage.WECHAT_ACCOUNT_INVALID_MESSAGE);
+                }
+                updateLoginTime(user, existingAuth, openId);
+                ensureUserStorage(user);
             }
         } else {
             user = userEntityMapper.selectById(auth.getUserId());
@@ -308,7 +311,7 @@ public class MiniappAuthService {
             ensureUserStorage(user);
         }
 
-        saveMaintainerWechatSessionIfEnabled(user.getId(), openidHash, session, clientIp);
+        saveMaintainerWechatSessionIfEnabled(user.getId(), openId, openidHash, session, clientIp);
         return buildMaintainerLoginResponse(user.getId());
     }
 
@@ -327,7 +330,7 @@ public class MiniappAuthService {
         WechatSessionResponse session = wechatMiniappClient.exchangeCode(request.getCode());
         String openId = normalizeRequiredOpenId(session.getOpenid());
         String openidHash = digestIdentifier(openId);
-        UserAuthEntity auth = findActiveAuth(WECHAT_AUTH_TYPE, openidHash);
+        UserAuthEntity auth = findWechatAuth(openId, openidHash);
         MaintainerWechatLoginPrecheckResponse response = new MaintainerWechatLoginPrecheckResponse();
         response.setPhoneAuthorizationRequired(auth == null);
         return response;
@@ -351,7 +354,7 @@ public class MiniappAuthService {
         WechatSessionResponse session = wechatMiniappClient.exchangeCode(request.getCode());
         String openId = normalizeRequiredOpenId(session.getOpenid());
         String openidHash = digestIdentifier(openId);
-        UserAuthEntity auth = findActiveAuth(WECHAT_AUTH_TYPE, openidHash);
+        UserAuthEntity auth = findWechatAuth(openId, openidHash);
         if (auth == null || !Objects.equals(auth.getUserId(), userId)) {
             throw new BusinessException("微信身份与当前维护者不一致，请重新登录");
         }
@@ -365,6 +368,7 @@ public class MiniappAuthService {
     /** 登录成功后在虚拟支付启用时保存维护者微信会话。 */
     private void saveMaintainerWechatSessionIfEnabled(
             Long userId,
+            String openId,
             String openidHash,
             WechatSessionResponse session,
             String clientIp
@@ -372,7 +376,7 @@ public class MiniappAuthService {
         if (maintainerWechatSessionService == null) {
             return;
         }
-        UserAuthEntity auth = findActiveAuth(WECHAT_AUTH_TYPE, openidHash);
+        UserAuthEntity auth = findWechatAuth(openId, openidHash);
         if (auth == null || !Objects.equals(auth.getUserId(), userId)) {
             throw new BusinessException("微信身份保存失败，请重新登录");
         }
@@ -388,36 +392,16 @@ public class MiniappAuthService {
         return clientIp.strip();
     }
 
-    /**
-     * 处理手机号并发首次注册冲突。
-     * <p>数据库唯一索引会阻止重复用户；冲突后重新读取已有手机号用户，并复用普通“手机号已存在”分支完成微信身份绑定。</p>
-     *
-     * @param request 维护者微信登录请求
-     * @param session 微信会话
-     * @param phoneInfo 微信手机号信息
-     * @param openpid 插件用户 openpid
-     * @param openidHash openid 摘要
-     * @param openId 微信 openid 明文，仅服务端用于本人访问识别
-     * @param cause 数据库唯一键异常
-     * @return 已存在的用户实体
-     */
-    private UserEntity bindExistingPhoneUserAfterRegistrationConflict(
-            MaintainerWechatLoginRequest request,
-            WechatSessionResponse session,
-            WechatPhoneNumberResponse.PhoneInfo phoneInfo,
-            String openpid,
-            String openidHash,
-            String openId,
-            DuplicateKeyException cause
-    ) {
-        log.warn("手机号并发注册冲突，尝试复用已存在用户: phoneLast4={}", last4(phoneInfo.getPhoneNumber()));
-        UserEntity existingUser = findActiveUserByPhone(phoneInfo.getPhoneNumber());
-        if (existingUser == null) {
-            throw new BusinessException(MiniappAuthMessage.PHONE_REGISTRATION_CONFLICT_MESSAGE, cause);
+    /** 只对明确的微信身份唯一键冲突执行同身份回读。 */
+    private boolean isWechatIdentityConflict(DuplicateKeyException exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            String message = cause.getMessage();
+            if (message != null && (message.contains(OPENID_UNIQUE_KEY)
+                    || message.contains(IDENTIFIER_UNIQUE_KEY))) {
+                return true;
+            }
         }
-        updateWechatRegistrationProfile(existingUser, request, phoneInfo, openpid);
-        createWechatAuth(existingUser, session, openidHash, openId);
-        return existingUser;
+        return false;
     }
 
     /**
@@ -463,79 +447,6 @@ public class MiniappAuthService {
         }
         log.info("跳过远程头像地址，等待已登录上传接口写入 COS: uniqueCode={}", uniqueCode);
         return defaultString(fallbackUrl, "");
-    }
-
-    /**
-     * 更新微信注册资料
-     *
-     * @param user 用户实体
-     * @param request 维护者微信登录请求
-     * @param phoneInfo 微信手机号信息
-     * @param openpid 插件用户 openpid
-     */
-    private void updateWechatRegistrationProfile(
-            UserEntity user,
-            MaintainerWechatLoginRequest request,
-            WechatPhoneNumberResponse.PhoneInfo phoneInfo,
-            String openpid
-    ) {
-        LocalDateTime now = LocalDateTime.now();
-        String nickname = defaultString(request.getNickname(), user.getNickname());
-        String avatarUrl = resolveAvatarUrl(request.getAvatarUrl(), user.getUniqueCode(), user.getAvatarUrl());
-        user.setNickname(nickname);
-
-        // 头像地址变更时校验每月更新次数限制（跨月自动重置）
-        String currentAvatarUrl = defaultString(user.getAvatarUrl(), "");
-        if (!avatarUrl.equals(currentAvatarUrl)) {
-            int currentCount = user.getAvatarUpdateCount() != null ? user.getAvatarUpdateCount() : 0;
-            LocalDateTime lastUpdate = user.getLastAvatarUpdatedAt();
-            boolean newMonth = lastUpdate == null
-                    || lastUpdate.getYear() != now.getYear()
-                    || lastUpdate.getMonthValue() != now.getMonthValue();
-            int newCount = newMonth ? 1 : currentCount + 1;
-            if (newCount > UserEntity.AVATAR_MONTHLY_MAX_COUNT) {
-                throw new BusinessException("当月头像更新次数已达上限（" + UserEntity.AVATAR_MONTHLY_MAX_COUNT + "次），请下月再试");
-            }
-            user.setLastAvatarUpdatedAt(now);
-            user.setAvatarUpdateCount(newCount);
-        }
-        user.setAvatarUrl(avatarUrl);
-
-        user.setPhoneNumber(phoneInfo.getPhoneNumber());
-        user.setPhoneCountryCode(defaultString(phoneInfo.getCountryCode(), ""));
-        user.setPhoneLast4(last4(phoneInfo.getPhoneNumber()));
-        user.setPhoneBoundAt(user.getPhoneBoundAt() == null ? now : user.getPhoneBoundAt());
-        if (openpid != null && !openpid.isBlank()) {
-            user.setWechatOpenpid(openpid);
-        }
-        user.setLastLoginAt(now);
-        userEntityMapper.updateById(user);
-    }
-
-    /**
-     * 创建微信登录身份绑定
-     *
-     * @param user 用户实体
-     * @param session 微信会话
-     * @param openidHash openid 摘要
-     * @param openId 微信 openid 明文，仅服务端用于本人访问识别
-     */
-    private void createWechatAuth(UserEntity user, WechatSessionResponse session, String openidHash, String openId) {
-        LocalDateTime now = LocalDateTime.now();
-        UserAuthEntity auth = new UserAuthEntity();
-        auth.setUserId(user.getId());
-        auth.setAuthType(WECHAT_AUTH_TYPE);
-        auth.setIdentifierHash(openidHash);
-        auth.setIdentifierCiphertext("WECHAT_OPENID_BOUND");
-        auth.setOpenId(openId);
-        String unionidHash = digestIdentifierIfPresent(session.getUnionid());
-        if (unionidHash != null) {
-            auth.setUnionIdentifierHash(unionidHash);
-            auth.setUnionIdentifierCiphertext("WECHAT_UNIONID_BOUND");
-        }
-        auth.setStatus(UserStatusDict.ACTIVE.getCode());
-        auth.setLastAuthenticatedAt(now);
-        userAuthEntityMapper.insert(auth);
     }
 
     /**
@@ -628,39 +539,23 @@ public class MiniappAuthService {
         return lowerValue.startsWith("http://") || lowerValue.startsWith("https://");
     }
 
-    /**
-     * 查找激活的登录身份
-     *
-     * @param authType 登录类型
-     * @param identifierHash 身份摘要
-     * @return 登录身份实体
-     */
-    private UserAuthEntity findActiveAuth(String authType, String identifierHash) {
-        return userAuthEntityMapper.selectOne(
+    /** 优先按稳定原始身份查询，摘要仅兼容尚未保存原始 openid 的旧认证。 */
+    private UserAuthEntity findWechatAuth(String openId, String identifierHash) {
+        UserAuthEntity auth = userAuthEntityMapper.selectOne(
                 Wrappers.lambdaQuery(UserAuthEntity.class)
-                        .eq(UserAuthEntity::getAuthType, authType)
-                        .eq(UserAuthEntity::getIdentifierHash, identifierHash)
-                        .eq(UserAuthEntity::getStatus, UserStatusDict.ACTIVE.getCode())
-                        .last("LIMIT 1")
-        );
-    }
-
-    /**
-     * 按手机号查找激活用户
-     *
-     * @param phoneNumber 手机号
-     * @return 用户实体
-     */
-    private UserEntity findActiveUserByPhone(String phoneNumber) {
-        if (phoneNumber == null || phoneNumber.isBlank()) {
-            return null;
+                        .eq(UserAuthEntity::getAuthType, WECHAT_AUTH_TYPE)
+                        .eq(UserAuthEntity::getOpenId, openId));
+        if (auth == null) {
+            auth = userAuthEntityMapper.selectOne(Wrappers.lambdaQuery(UserAuthEntity.class)
+                    .eq(UserAuthEntity::getAuthType, WECHAT_AUTH_TYPE)
+                    .eq(UserAuthEntity::getIdentifierHash, identifierHash));
         }
-        return userEntityMapper.selectOne(
-                Wrappers.lambdaQuery(UserEntity.class)
-                        .eq(UserEntity::getPhoneNumber, phoneNumber)
-                        .eq(UserEntity::getStatus, UserStatusDict.ACTIVE.getCode())
-                        .last("LIMIT 1")
-        );
+        if (auth != null && ((auth.getOpenId() != null && !auth.getOpenId().isBlank()
+                && !openId.equals(auth.getOpenId())) || !UserStatusDict.ACTIVE.getCode().equals(auth.getStatus())
+                || !WECHAT_AUTH_TYPE.equals(auth.getAuthType()))) {
+            throw new BusinessException(MiniappAuthMessage.WECHAT_ACCOUNT_INVALID_MESSAGE);
+        }
+        return auth;
     }
 
     /**
@@ -680,13 +575,13 @@ public class MiniappAuthService {
      * 规范化微信 openid。
      *
      * @param openId 微信会话 openid
-     * @return 去除首尾空白后的 openid
+     * @return 保留原始字节语义的 openid
      */
     private String normalizeRequiredOpenId(String openId) {
         if (openId == null || openId.isBlank()) {
             throw new BusinessException("微信身份标识不能为空");
         }
-        return openId.strip();
+        return openId;
     }
 
     /**

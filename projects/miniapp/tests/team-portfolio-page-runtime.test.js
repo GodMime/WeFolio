@@ -2424,7 +2424,134 @@ test('team visitor opens a member portfolio with the team source flag', () => {
       detail: { portfolioId: 7, shareCode: 'PF 001' }
     })
     assert.deepEqual(navigations, [{
-      url: '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001&fromTeamPortfolio=1'
+      url: '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001&fromTeamPortfolio=1&sourceType=TEAM_PORTFOLIO'
     }])
+  } finally { page.cleanup() }
+})
+
+for (const stage of ['create', 'upload', 'save', 'publish']) {
+  test(`team editor preserves edits made during ${stage} and stays on page`, async () => {
+    let release
+    const waiting = new Promise((resolve) => { release = resolve })
+    let entered
+    const reached = new Promise((resolve) => { entered = resolve })
+    const navigations = []
+    const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+      if (options.url.includes('/portfolios/standard')) {
+        if (stage === 'create') { entered(); await waiting }
+        return { portfolioId: 41, draftRevision: 1, config: options.data.config }
+      }
+      if (options.url.endsWith('/draft')) {
+        if (stage === 'save') { entered(); await waiting }
+        return { draftRevision: 2, config: options.data.config }
+      }
+      if (options.url.endsWith('/publish')) {
+        if (stage === 'publish') { entered(); await waiting }
+        return { publishedRevision: 1, publicationStatus: 'PUBLISHED' }
+      }
+      throw new Error(`unexpected ${options.url}`)
+    }, { redirectTo(options) { navigations.push(options) }, navigateBack(options) { navigations.push(options) } })
+    page.setData({ teamId: 3, canMaintain: true, portfolioId: stage === 'create' ? 0 : 41,
+      config: validTeamEditorConfig() })
+    if (stage === 'upload') page.uploadLocalShareCover = async (id, config) => { entered(); await waiting; return config }
+    try {
+      const pending = stage === 'publish' ? page.handlePublishTap() : page.handleSaveTap()
+      await reached
+      page.updateConfig(Object.assign({}, page.data.config, { share: Object.assign({}, page.data.config.share, { title: '等待期间的新标题' }) }))
+      release()
+      await pending
+      assert.equal(page.data.config.share.title, '等待期间的新标题')
+      assert.deepEqual(navigations, [])
+      assert.equal(page.data.draftRevision, 2)
+      if (stage === 'publish') assert.equal(page.data.publishedRevision, 1)
+    } finally { release(); page.cleanup() }
+  })
+}
+
+test('team draft uncertain retry keeps its original snapshot and key after new edits', async () => {
+  const requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options.data))
+    if (requests.length === 1) throw new Error('timeout')
+    return { draftRevision: 2, config: options.data.config }
+  })
+  page.setData({ teamId: 3, canMaintain: true, portfolioId: 41, config: validTeamEditorConfig() })
+  try {
+    await page.saveDraft()
+    page.updateConfig(Object.assign({}, page.data.config, { share: { title: '新编辑' } }))
+    page.clearPending()
+    const result = await page.saveDraft()
+    assert.deepEqual(requests[1], requests[0])
+    assert.equal(result.editorChanged, true)
+    assert.equal(page.data.config.share.title, '新编辑')
+  } finally { page.cleanup() }
+})
+
+for (const change of ['delete', 'reorder', 'replace']) {
+  test(`team asset completion preserves secondary menu ${change}`, async () => {
+    let release
+    const waiting = new Promise((resolve) => { release = resolve })
+    let entered
+    const reached = new Promise((resolve) => { entered = resolve })
+    const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => ({
+      draftRevision: 2, config: options.data.config
+    }))
+    const qr = (key, order) => ({ componentKey: key, componentType: 'QR_CONTACT', sortOrder: order,
+      enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: `wxfile://${key}.jpg` } })
+    page.setData({ teamId: 3, portfolioId: 41, canMaintain: true })
+    page.updateConfig(validTeamEditorConfig({ bottomNav: { enabled: true, items: [
+      { key: 'home', title: '首页' },
+      { key: 'contact', title: '联系', components: [qr('first', 1000), qr('second', 2000)] }
+    ] } }))
+    page.uploadLocalQrContacts = async (id, config) => {
+      entered()
+      await waiting
+      const uploaded = clone(config)
+      uploaded.bottomNav.items[1].components.forEach((item) => { item.config.qrUrl = `https://cdn.example/${item.componentKey}.jpg` })
+      return uploaded
+    }
+    try {
+      const pending = page.saveDraft()
+      await reached
+      const current = clone(page.data.config)
+      const items = current.bottomNav.items[1].components
+      if (change === 'delete') items.splice(0, 1)
+      if (change === 'reorder') { items.reverse(); items.forEach((item, index) => { item.sortOrder = (index + 1) * 1000 }) }
+      if (change === 'replace') items[0].config.qrUrl = 'wxfile://replacement.jpg'
+      page.updateConfig(current)
+      release()
+      const result = await pending
+      const saved = page.data.config.bottomNav.items[1].components
+      assert.equal(result.editorChanged, true)
+      if (change === 'delete') assert.deepEqual(saved.map((item) => item.componentKey), ['second'])
+      if (change === 'reorder') assert.deepEqual(saved.map((item) => item.componentKey), ['second', 'first'])
+      if (change === 'replace') assert.equal(saved[0].config.qrUrl, 'wxfile://replacement.jpg')
+      assert.equal(saved.find((item) => item.componentKey === 'second').config.qrUrl, 'https://cdn.example/second.jpg')
+    } finally { release(); page.cleanup() }
+  })
+}
+
+test('team uncertain publish retries the original revision and key without overwriting edits', async () => {
+  const publications = []
+  let drafts = 0
+  const navigations = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url.endsWith('/draft')) { drafts++; return { draftRevision: 2, config: options.data.config } }
+    publications.push(clone(options.data))
+    if (publications.length === 1) throw new Error('timeout')
+    return { publishedRevision: 1, publicationStatus: 'PUBLISHED' }
+  }, { redirectTo(value) { navigations.push(value) }, navigateBack(value) { navigations.push(value) } })
+  page.setData({ teamId: 3, portfolioId: 41, canMaintain: true })
+  page.updateConfig(validTeamEditorConfig())
+  try {
+    await page.handlePublishTap()
+    page.updateConfig(Object.assign({}, page.data.config, { share: { title: '发布后继续编辑' } }))
+    page.clearPending()
+    await page.handlePublishTap()
+    assert.equal(drafts, 1)
+    assert.equal(publications.length, 2)
+    assert.deepEqual(publications[1], publications[0])
+    assert.equal(page.data.config.share.title, '发布后继续编辑')
+    assert.deepEqual(navigations, [])
   } finally { page.cleanup() }
 })
