@@ -98,6 +98,7 @@ Flyway 规则：
 
 - 已提交或已执行的 migration 绝对不要修改。
 - 数据库变更必须新增 `V{version}__{description}.sql`。
+- 模块根目录的 [`full-schema.sql`](full-schema.sql) 是仅供分析、不执行的全量 DDL，不参与 Flyway。每次数据库结构变更必须按根目录 [AGENTS.md 的数据库约定](../../../AGENTS.md#数据库约定)，同步维护新增的增量 migration 与该 SQL 中的完整建表定义，并核对迁移后的结构一致。
 - 新增唯一索引时确认是否需要包含 `deleted`。
 - 新增枚举值域时同步 SQL 约束、`dict` 字典类、实体字段注释和测试。
 - **禁止在 migration 中写入"重置/清理"类破坏性数据操作**（如 `DELETE` 全表、`UPDATE` 清零余额/流水）；数据重置与清理只能在对应环境手工执行并留痕，不得以 Flyway migration 形式进入迁移链。

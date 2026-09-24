@@ -132,6 +132,8 @@ resources/
 
 ## 数据迁移
 
+全量结构分析 SQL 位于模块根目录 [`full-schema.sql`](full-schema.sql)（仓库路径：`projects/java/wefolio-java-runtime/full-schema.sql`），不执行、不参与 Flyway。每次数据库结构变更必须按根目录 [AGENTS.md 的数据库约定](../../../AGENTS.md#数据库约定)，同步维护新增的增量 migration 与该文件中的完整建表定义，并核对迁移后的结构一致。
+
 ```bash
 # Flyway 在启动时自动执行 db/migration/ 下的 SQL
 # 命名格式：V{version}__{description}.sql
