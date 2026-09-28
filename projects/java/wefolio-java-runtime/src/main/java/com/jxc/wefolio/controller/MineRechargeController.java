@@ -45,7 +45,7 @@ public class MineRechargeController {
     /**
      * 创建充值订单。
      *
-     * @param request 仅包含套餐 ID 的请求
+     * @param request 套餐 ID 及可选的当前设备微信登录凭证
      * @return 小程序调起支付参数
      */
     @PostMapping("/api/mine/recharges/orders")

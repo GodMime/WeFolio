@@ -112,6 +112,9 @@ public class RechargeCommandService {
     /** 退款记账后补查余额，失败保留失效标记。 */
     private final WechatAuthoritativeBalanceSyncService balanceSyncService;
 
+    /** 为新版客户端直接取得本次支付设备的会话密钥。 */
+    private final RechargeWechatSessionService rechargeWechatSessionService;
+
     /**
      * 创建充值订单并取得小程序调起支付参数。
      *
@@ -127,17 +130,19 @@ public class RechargeCommandService {
             throw new BusinessException(RechargeMessage.PACKAGE_ID_REQUIRED_MESSAGE);
         }
         requireActiveUser(userId);
-        String openId = requireWechatOpenId(userId);
+        requireWechatOpenId(userId);
         RechargePackageEntity rechargePackage = requireActivePackage(
                 request.getPackageId(), LocalDateTime.now());
         PointAccountEntity account = pointService.ensureAccount(userId);
-        MaintainerWechatSession session = requireWechatSession(userId);
+        String sessionKey = request.getCode() == null
+                ? requireWechatSession(userId).sessionKey()
+                : rechargeWechatSessionService.refreshForPayment(userId, request.getCode());
         LocalDateTime expireAt = LocalDateTime.now(SHANGHAI_ZONE)
                 .plusMinutes(ORDER_EXPIRE_MINUTES);
         RechargeOrderEntity order = transactionService.createPendingOrder(
                 userId, account, rechargePackage, expireAt);
         String signData = buildSignData(order);
-        CreateRechargeOrderResponse response = buildCreateResponse(order, signData, session.sessionKey());
+        CreateRechargeOrderResponse response = buildCreateResponse(order, signData, sessionKey);
         log.info("微信虚拟支付业务完成 operation=创建充值订单 referenceNo={} userId={} "
                         + "localStatus={} amountFen={} points={}",
                 order.getMerchantOrderNo(), userId, order.getStatus(), order.getAmountFen(),

@@ -45,6 +45,7 @@ function loadRechargePage(fakeRequest, wxOverrides = {}) {
   let definition
   global.Page = (value) => { definition = value }
   global.wx = Object.assign({
+    login(options) { options.success({ code: 'current-device-code' }) },
     navigateTo() {},
     redirectTo() {},
     showToast() {}
@@ -116,7 +117,7 @@ test('creates order, invokes WeChat payment, syncs paid result and refreshes bal
     ['POST', '/api/mine/recharges/orders/WFR20260717120000123456789012/sync'],
     ['GET', '/api/mine/recharges']
   ])
-  assert.deepEqual(requests[0].data, { packageId: 3 })
+  assert.deepEqual(requests[0].data, { packageId: 3, code: 'current-device-code' })
   assert.equal(page.data.paying, false)
   assert.equal(page.data.syncing, false)
   assert.ok(toasts.includes('充值成功，积分已到账'))
@@ -250,6 +251,127 @@ test('keeps payment lock while virtual payment session refresh retry is in fligh
   assert.equal(page.data.paying, true)
   completeRetriedPayment()
   await paymentPromise
+  assert.equal(page.data.paying, false)
+  assert.equal(page.data.syncing, false)
+})
+
+for (const failure of [{ errCode: -15005 }, { err_code: '-15007' }]) {
+  test(`支付签名或会话失效只重试一次且每单使用新 code ${JSON.stringify(failure)}`, async () => {
+    const requests = []
+    const toasts = []
+    let loginCount = 0
+    let paymentCount = 0
+    const page = loadRechargePage((options) => {
+      requests.push(options)
+      return Promise.resolve({ merchantOrderNo: `order-${requests.length}` })
+    }, {
+      login(options) { options.success({ code: `device-code-${++loginCount}` }) },
+      requestVirtualPayment(options) {
+        paymentCount += 1
+        options.fail(Object.assign({ errMsg: 'requestVirtualPayment:fail SIGNATURE_INVALID' }, failure))
+      },
+      showToast(options) { toasts.push(options.title) }
+    })
+    page.data.rechargeData.selectedPackageId = 3
+
+    await page.handlePay()
+
+    assert.equal(loginCount, 2)
+    assert.equal(paymentCount, 2)
+    assert.deepEqual(requests.map(item => item.data), [
+      { packageId: 3, code: 'device-code-1' },
+      { packageId: 3, code: 'device-code-2' }
+    ])
+    assert.equal(toasts.length, 1)
+    assert.equal(page.data.paying, false)
+  })
+}
+
+test('获取支付 code 期间锁住按钮，登录失败不建单也不调支付', async () => {
+  const requests = []
+  let loginCallbacks
+  let paymentCount = 0
+  const page = loadRechargePage(options => { requests.push(options) }, {
+    login(options) { loginCallbacks = options },
+    requestVirtualPayment() { paymentCount += 1 }
+  })
+  page.data.rechargeData.selectedPackageId = 3
+  const paying = page.handlePay()
+  assert.equal(page.data.paying, true)
+  await page.handlePay()
+  loginCallbacks.fail({ errMsg: 'login:fail' })
+  await paying
+  assert.equal(requests.length, 0)
+  assert.equal(paymentCount, 0)
+  assert.equal(page.data.paying, false)
+})
+
+test('应用签名错误不按用户会话错误重试', async () => {
+  let loginCount = 0
+  let paymentCount = 0
+  const page = loadRechargePage(() => Promise.resolve({ merchantOrderNo: 'order-app-signature' }), {
+    login(options) { loginCount += 1; options.success({ code: 'device-code' }) },
+    requestVirtualPayment(options) { paymentCount += 1; options.fail({ errCode: -15006 }) }
+  })
+  page.data.rechargeData.selectedPackageId = 3
+  await page.handlePay()
+  assert.equal(loginCount, 1)
+  assert.equal(paymentCount, 1)
+})
+
+test('重试获取新 code 期间持续锁定，失败后恢复按钮且不产生第二笔订单', async () => {
+  const requests = []
+  const toasts = []
+  let loginCount = 0
+  let retryLogin
+  const page = loadRechargePage(options => {
+    requests.push(options)
+    return Promise.resolve({ merchantOrderNo: 'failed-order' })
+  }, {
+    login(options) {
+      loginCount += 1
+      if (loginCount === 1) options.success({ code: 'first-code' })
+      else retryLogin = options
+    },
+    requestVirtualPayment(options) { options.fail({ errCode: -15005 }) },
+    showToast(options) { toasts.push(options.title) }
+  })
+  page.data.rechargeData.selectedPackageId = 3
+  const paying = page.handlePay()
+  await flushPromises()
+  assert.equal(page.data.paying, true)
+  await page.handlePay()
+  assert.equal(loginCount, 2)
+  retryLogin.fail({ errMsg: 'login:fail' })
+  await paying
+  assert.equal(requests.length, 1)
+  assert.equal(toasts.length, 1)
+  assert.equal(page.data.paying, false)
+})
+
+test('签名失败后新单支付成功，仅同步新订单且不重复发起支付', async () => {
+  const requests = []
+  let loginCount = 0
+  let paymentCount = 0
+  const page = loadRechargePage(options => {
+    requests.push(options)
+    return Promise.resolve(options.url.endsWith('/sync')
+      ? { status: 'PENDING', confirmed: false }
+      : { merchantOrderNo: `order-${loginCount}` })
+  }, {
+    login(options) { options.success({ code: `code-${++loginCount}` }) },
+    requestVirtualPayment(options) {
+      paymentCount += 1
+      if (paymentCount === 1) options.fail({ errCode: -15005 })
+      else options.success()
+    }
+  })
+  page.data.rechargeData.selectedPackageId = 3
+  await page.handlePay()
+  assert.deepEqual(requests.map(item => item.url), [
+    '/api/mine/recharges/orders', '/api/mine/recharges/orders', '/api/mine/recharges/orders/order-2/sync'
+  ])
+  assert.equal(paymentCount, 2)
   assert.equal(page.data.paying, false)
   assert.equal(page.data.syncing, false)
 })

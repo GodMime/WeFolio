@@ -1,6 +1,7 @@
 package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.MaintainerAccess;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -22,12 +23,33 @@ import org.springframework.web.bind.annotation.PostMapping;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 /**
  * 虚拟支付充值维护者接口测试。
  */
 @ExtendWith(MockitoExtension.class)
 class RechargeControllerTest {
+
+    /** 新旧建单请求均可解析，code 保持可选，控制器原样委派并保留响应包装。 */
+    @Test
+    void createOrderShouldAcceptLegacyAndDeviceCodePayloads() throws Exception {
+        ObjectMapper json = new ObjectMapper();
+        MineRechargeController controller = new MineRechargeController(rechargeQueryService, rechargeCommandService);
+        CreateRechargeOrderRequest legacy = json.readValue("{\"packageId\":3}", CreateRechargeOrderRequest.class);
+        CreateRechargeOrderRequest current = json.readValue(
+                "{\"packageId\":3,\"code\":\"current-device-code\"}", CreateRechargeOrderRequest.class);
+        CreateRechargeOrderResponse response = new CreateRechargeOrderResponse();
+        when(rechargeCommandService.createOrder(7L, legacy)).thenReturn(response);
+        when(rechargeCommandService.createOrder(7L, current)).thenReturn(response);
+
+        assertThat(legacy.getCode()).isNull();
+        assertThat(current.getCode()).isEqualTo("current-device-code");
+        assertThat(controller.createOrder(legacy).getData()).isSameAs(response);
+        assertThat(controller.createOrder(current).getData()).isSameAs(response);
+        verify(rechargeCommandService).createOrder(7L, legacy);
+        verify(rechargeCommandService).createOrder(7L, current);
+    }
 
     /** 充值查询服务模拟。 */
     @Mock
