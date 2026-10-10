@@ -28,7 +28,8 @@ class JobSchedulingCoverageIntegrationTest {
             "",
             VirtualPaymentSchedulingConfig.DEFAULT_TASK_SCHEDULER_BEAN_NAME,
             VirtualPaymentSchedulingConfig.TASK_SCHEDULER_BEAN_NAME,
-            FeedbackUploadCleanupSchedulingConfig.TASK_SCHEDULER_BEAN_NAME
+            FeedbackUploadCleanupSchedulingConfig.TASK_SCHEDULER_BEAN_NAME,
+            PortfolioAiSchedulingConfig.SCHEDULER
     );
 
     @Autowired
@@ -38,7 +39,7 @@ class JobSchedulingCoverageIntegrationTest {
     private JobScheduledTaskRegistry scheduledTaskRegistry;
 
     @Test
-    void shouldRegisterAllSixScheduledMethodsInProtectedSchedulers() {
+    void shouldRegisterAllEightScheduledMethodsInProtectedSchedulers() {
         long scheduledMethodCount = Arrays.stream(applicationContext.getBeanDefinitionNames())
                 .map(applicationContext::getBean)
                 .map(AopUtils::getTargetClass)
@@ -50,8 +51,8 @@ class JobSchedulingCoverageIntegrationTest {
 
         applicationContext.getBeansOfType(ThreadPoolTaskScheduler.class)
                 .values().forEach(scheduler -> assertThat(scheduler).isInstanceOf(JobLifecycleTaskScheduler.class));
-        assertThat(scheduledMethodCount).isEqualTo(6);
-        assertThat(scheduledTaskRegistry.scheduledTasks()).hasSize(6);
+        assertThat(scheduledMethodCount).isEqualTo(8);
+        assertThat(scheduledTaskRegistry.scheduledTasks()).hasSize(8);
     }
 
     private void assertProtectedScheduler(ScheduledMethod scheduledMethod) {

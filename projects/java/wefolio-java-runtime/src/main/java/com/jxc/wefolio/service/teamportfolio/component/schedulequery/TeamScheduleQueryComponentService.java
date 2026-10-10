@@ -297,9 +297,22 @@ public class TeamScheduleQueryComponentService {
             VisitorContext visitor,
             PublishedQueryRecordContext recordContext
     ) {
+        return queryPublished(portfolio, portfolioConfig, request, visitor, recordContext, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级入口显式选择模板后复用查档和记录流程。 */
+    @Transactional(rollbackFor = Exception.class)
+    public TeamPortfolioScheduleQueryResponse queryPublished(
+            PortfolioEntity portfolio,
+            TeamPortfolioConfigDto portfolioConfig,
+            TeamPortfolioScheduleQueryRequest request,
+            VisitorContext visitor,
+            PublishedQueryRecordContext recordContext,
+            String templateType
+    ) {
         TeamPortfolioConfigDto.ComponentEnvelope component = requirePreviewComponent(
                 portfolioConfig, request == null ? null : request.getComponentKey());
-        return queryPublished(portfolio, component.getConfig(), request, visitor, recordContext);
+        return queryPublished(portfolio, component.getConfig(), request, visitor, recordContext, templateType);
     }
 
     /**
@@ -320,7 +333,20 @@ public class TeamScheduleQueryComponentService {
             VisitorContext visitor,
             PublishedQueryRecordContext recordContext
     ) {
-        String portfolioTitle = validatePublishedContext(portfolio, visitor, recordContext);
+        return queryPublished(portfolio, normalizedConfig, request, visitor, recordContext, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级入口显式选择模板后复用查档和记录流程。 */
+    @Transactional(rollbackFor = Exception.class)
+    public TeamPortfolioScheduleQueryResponse queryPublished(
+            PortfolioEntity portfolio,
+            JSONObject normalizedConfig,
+            TeamPortfolioScheduleQueryRequest request,
+            VisitorContext visitor,
+            PublishedQueryRecordContext recordContext,
+            String templateType
+    ) {
+        String portfolioTitle = validatePublishedContext(portfolio, visitor, recordContext, templateType);
         int revision = portfolio.getPublishedRevision();
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(portfolio.getOwnerId(), portfolio.getId(), revision);
         JSONObject renderedConfig = validateQuery(context, normalizedConfig, request, true);
@@ -337,12 +363,12 @@ public class TeamScheduleQueryComponentService {
     private String validatePublishedContext(
             PortfolioEntity portfolio,
             VisitorContext visitor,
-            PublishedQueryRecordContext recordContext
+            PublishedQueryRecordContext recordContext, String templateType
     ) {
         if (portfolio == null || portfolio.getId() == null || portfolio.getId() <= 0
                 || portfolio.getOwnerId() == null || portfolio.getOwnerId() <= 0
                 || !PortfolioOwnerTypeDict.TEAM.getCode().equals(portfolio.getOwnerType())
-                || !PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                || !templateType.equals(portfolio.getTemplateType())
                 || !PortfolioStatusDict.ACTIVE.getCode().equals(portfolio.getStatus())
                 || !TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(portfolio.getSchemaVersion())
                 || !PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())

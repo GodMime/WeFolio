@@ -32,13 +32,13 @@ function safeDiagnosticMessage(value) {
 function normalizeTarget(options = {}) {
   const portfolioId = Number(options.portfolioId)
   return API_PREFIXES[options.ownerType] && Number.isSafeInteger(portfolioId) && portfolioId > 0
-    ? { ownerType: options.ownerType, portfolioId }
+    ? { ownerType: options.ownerType, portfolioId, ...(options.templateType === 'ADVANCED' ? { templateType: 'ADVANCED' } : {}) }
     : null
 }
 
-function buildPortfolioMiniappCodePath(ownerType, portfolioId) {
-  const target = normalizeTarget({ ownerType, portfolioId })
-  return target ? `${PAGE_URL}?ownerType=${target.ownerType}&portfolioId=${target.portfolioId}` : ''
+function buildPortfolioMiniappCodePath(ownerType, portfolioId, templateType) {
+  const target = normalizeTarget({ ownerType, portfolioId, templateType })
+  return target ? `${PAGE_URL}?ownerType=${target.ownerType}&portfolioId=${target.portfolioId}${target.templateType === 'ADVANCED' ? '&templateType=ADVANCED' : ''}` : ''
 }
 
 // 每个页面持有独立生命周期，避免返回设置、预览或旧请求覆盖当前作品集。
@@ -91,7 +91,7 @@ function createPortfolioMiniappCodeController(options = {}) {
     }
   }
   const toast = title => wxApi.showToast({ title, icon: 'none' })
-  const apiPath = () => `${API_PREFIXES[target.ownerType]}/${target.portfolioId}`
+  const apiPath = () => `${target.templateType === 'ADVANCED' ? '/api/mine/advanced-portfolios' : API_PREFIXES[target.ownerType]}/${target.portfolioId}`
   const failGeneration = error => {
     change({ status: 'error', codeUrl: '', tempFilePath: '', displayFilePath: '', errorMessage: error.message || '小程序码生成失败，请稍后重试' })
     if (error.authRequired && options.onAuthRequired) options.onAuthRequired(error.message)

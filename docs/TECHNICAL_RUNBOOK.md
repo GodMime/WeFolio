@@ -265,6 +265,51 @@ portfolio:
 
 日志：`/tmp/wefolio-runtime-enabled-20260923.log`、`/tmp/wefolio-deploy-simplified-tests-20260923.log`、`/tmp/wefolio-font-gate-deploy-decoupled-20260923.log`。小程序发包与完整真机业务验收尚未执行。
 
+### 4.10 高级作品集后端发布（2026-10-09 12:49—12:55）
+
+按用户授权，依次执行 Runtime 发布脚本、服务器检查脚本、Job 发布脚本，最后再次检查服务器及正式 HTTPS 入口。发布时间均为上海时间；本次从当前未提交工作区构建，版本字段仍是 HEAD `0bf1880`，需结合构建时间及 JAR 摘要识别实际制品。
+
+| 服务 | 节点 | 构建时间 | JAR SHA-256 | 最终 PID |
+| --- | --- | --- | --- | --- |
+| Runtime | 老节点 `49.235.146.161`、新节点 `124.222.148.233` | `2026-10-09 12:49:32` | `e1296269795899f2209053bf0a872a75488b3a0b17ceccb40a973ecf98e60d3c` | `23224` / `3581` |
+| Job | 老节点 `49.235.146.161` | `2026-10-09 12:53:40` | `4d6cf9307ff416e41bf079a5ee1fc589f61813aa903cfe23425b44090ba573c6` | `24761` |
+
+- Runtime 双节点滚动发布退出码 0，耗时 100.1 秒，两个远端 JAR 与本地摘要相同，Nginx 已恢复 round-robin 且 active。
+- 老节点启动日志确认 Flyway 从 V60 成功执行 V61，新节点启动确认当前 V61；迁移前零数据守卫未阻断。V61 已实际执行，此后禁止修改该脚本。
+- Job 发布前额外保存 `/root/java/job/wefolio-java-job.jar.backup-advanced-20261009125324`，原包 SHA-256 为 `cd7ade5f2c47ab590f3bc4435441308b8bdaa5eb9415020a51933c6179adbfbb`。旧调度停用时 `activeTaskCount=0`，随后发布退出码 0、耗时 18.2 秒。Runtime 旧包由脚本保留在两节点 `/root/java/wefolio-java-runtime.jar.backup`。
+- 用户预先配置的 `WEFOLIO_AI_ENABLED=true` 已进入两台 Runtime 和 Job 实际进程；Job API Key 非空，老节点 Runtime/Job 的模型根地址相同。未输出凭据，未变更服务器环境配置；Runtime SQL 调试日志开关未设置，沿默认 false。
+- 发布前后两次 `scripts/server-status.sh` 均退出 0。最终三服务均 active、健康 UP，两台 Runtime 字体 enabled/ready 均为 true；按脚本规则扫描的最近 24 小时错误日志匹配数均为 0。
+- 正式 HTTPS `/api/health`、`/api/version`、`/job-api/health`、`/job-api/version` 均验证成功，构建时间与上述一致。
+
+本次未发布小程序、未提交 Git，也未主动创建真实 AI 任务或完成模型/小程序端到端验收。应用恢复前须核查新产生的高级数据与 V61 表结构兼容性，不自动回退数据库。
+
+本地日志：`/private/tmp/wefolio-runtime-deploy-20261009.log`、`/private/tmp/wefolio-server-status-after-runtime-20261009.log`、`/private/tmp/wefolio-job-deploy-20261009.log`、`/private/tmp/wefolio-server-status-final-20261009.log`。服务器检查日志仅保留错误数量及异常类型，不记录业务错误原文。
+
+### 4.11 高级作品集 AI 模式清理后端发布（2026-10-10）
+
+按用户授权，依次执行 Runtime 发布脚本、Job 发布脚本和 `scripts/server-status.sh`，再独立核对线上制品及正式 HTTPS 入口。以下时间均为上海时间；本次从未提交工作区构建，版本字段仍为 HEAD `0bf1880`，实际制品以构建时间和 SHA-256 识别。
+
+| 服务 | 发布脚本开始 | 构建时间 | JAR SHA-256 | 最终 PID / 启动时间 |
+| --- | --- | --- | --- | --- |
+| Runtime 双节点 | `2026-10-10 09:05:54` | `2026-10-10 09:05:56` | `bd348187df409be8e08f189e4d34c8b118b4c4ddacd5661ee79294dde5d81fb8` | 老节点 `8075` / `09:06:40`；新节点 `13370` / `09:07:23` |
+| Job 老节点 | `2026-10-10 09:09:13` | `2026-10-10 09:09:14` | `0a6da49b363366389bae07d13ef0bef9a241a38b4b787098a041a9e855992a53` | `9196` / `09:09:31` |
+
+- Runtime 双节点滚动发布退出码 0，总耗时 105.804 秒；两个远端 JAR 摘要均与本地相同。Nginx active，Runtime upstream 的两个 server 均无 `down` 标记，已移除临时 `least_conn` 并恢复默认 round-robin。
+- Job 发布退出码 0，总耗时 18.621 秒。发布前已额外保存远端旧包 `/root/java/job/wefolio-java-job.jar.backup-20261010-before-release`，旧包 SHA-256 为 `4d6cf9307ff416e41bf079a5ee1fc589f61813aa903cfe23425b44090ba573c6`；停用旧调度时 `activeTaskCount=0`，随后重启成功。
+- `scripts/server-status.sh` 退出码 0，两个 Runtime 与 Job 均 active、健康 UP；两台 Runtime 的字体 enabled/ready 均为 true。
+- 按脚本规则扫描最近 24 小时错误日志：两个 Runtime 各匹配 2 条，仅为 `2026-10-09 16:10:08` / `16:10:36` 的 `GlobalExceptionHandler` 与 `BusinessException` 历史记录；本次发布后未检出新的匹配，Job 匹配 0 条。保留的检查日志已过滤业务错误原文。
+- 独立检查确认线上 JAR SHA-256、版本与构建时间均匹配本地制品；正式 HTTPS `/api/health`、`/api/version`、`/job-api/health`、`/job-api/version` 四个入口均验证成功。Job 包内仅保留 `CREATE`、`MODIFY_PAGE`、`system`、`retry` 提示词及当前契约，没有已取消模式的旧模板。
+
+| 检查指标 | 老节点 `49.235.146.161` | 新节点 `124.222.148.233` |
+| --- | --- | --- |
+| CPU 使用率 | 0.8% | 1.7% |
+| 内存使用率 | 35.8% | 33.3% |
+| 磁盘使用率 | 19% | 11% |
+
+本次未修改服务器环境配置、未新增数据库迁移，既有已执行 V61 未修改；未发布小程序、未调用真实 AI、未提交 Git。恢复应用前仍须核查当前高级数据与 V61 表结构兼容性，不自动回退数据库。
+
+本地证据：`/private/tmp/wefolio-runtime-deploy-20261010.log`、`/private/tmp/wefolio-job-deploy-20261010.log`、`/private/tmp/wefolio-server-status-20261010.log`、`/private/tmp/wefolio-new-node-verification-20261010.json`。敏感输出未保留，服务器错误检查仅留数量、时间和异常类型。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |
@@ -326,7 +371,11 @@ HTTPS GET 核验因 CDN 证书过期未通过。**用户已明确本轮不处理
 
 | 环境 | 服务商 | 用途 | 模型/能力 | Base URL | API Key 标识 | Secret 存放位置 | 额度/计费 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 待补充 | 待补充 | 作品集 AI 生成 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 | 待补充 |
+| 本地技术验证（2026-10-10） | 腾讯云 TokenHub | 高级作品集生成、整体修改 | `glm-5.3-flash` | `https://tokenhub.tencentmaas.com/v1` | `TOKENHUB_API_KEY`（只记变量名） | `projects/java/wefolio-java-job/.env` | 实测11次调用共133435 token；费用按账户实际计量核对 | 连通性、8/8公开mock场景首轮通过，独立图片/视频主要画面人工核查一致；未发布，生产历史状态见 §4.10/4.11 |
+
+TokenHub 调用为 `POST /chat/completions`。Runtime 只冻结供应商、模型及端点配置，API Key 仅由 Job 使用；不得将旧 `DEEPSEEK_API_KEY` 作为新服务凭据。启用前 Runtime 与 Job 的 `WEFOLIO_AI_BASE_URL`、`WEFOLIO_AI_MODEL` 必须一致，未配置时使用上表默认值。当前迁移保持本地未提交状态，验证方案见本地 `docs/design/advanced-portfolios/2026-10-10-tokenhub-api.md`。
+
+本地真实结果见 `docs/design/advanced-portfolios/2026-10-10-tokenhub-validation.md`。提示词为 `portfolio-ai-2026-10-10.2`，启用思考、`temperature=1.0`、`top_p=0.95`、非流式及JSON输出；单HTTP60秒、总180秒、最多3次。本轮最慢作品集HTTP为58.808秒；23.13秒公开视频直接媒体探针输入62143 token。生产当前仍仅在文本JSON提供授权作品的COS链接，独立媒体探针不代表生产已发送视频媒体项。视频大小分流与数据万象取帧为后续独立方案，尚未实现或部署。
 
 ## 8. 数据库
 
@@ -348,6 +397,9 @@ HTTPS GET 核验因 CDN 证书过期未通过。**用户已明确本轮不处理
 | `OBJECT_STORAGE_ACCESS_KEY_ID` | 待补充 | 对象存储 AccessKey ID | 待补充 | 待补充 | 是 | 建议最小权限 |
 | `OBJECT_STORAGE_ACCESS_KEY_SECRET` | 待补充 | 对象存储 AccessKey Secret | 待补充 | 待补充 | 是 | 只记录存放位置 |
 | `LLM_API_KEY` | 待补充 | 大模型服务调用密钥 | 待补充 | 待补充 | 是 | 只记录存放位置 |
+| `TOKENHUB_API_KEY` | 本地 Job 技术验证 | 腾讯云 TokenHub API Key | 不记录值 | `projects/java/wefolio-java-job/.env` | 是 | 用户已在本地填写；仅 Job 和独立验证脚本读取 |
+| `WEFOLIO_AI_BASE_URL` | Runtime / Job | 高级作品集 AI 官方兼容端点 | `https://tokenhub.tencentmaas.com/v1` | `application.yml` 默认值或各服务环境配置 | 否 | 启用时仅接受 TokenHub 官方端点；清除旧 DeepSeek 覆盖值 |
+| `WEFOLIO_AI_MODEL` | Runtime / Job | 高级作品集 AI 模型 | `glm-5.3-flash` | `application.yml` 默认值或各服务环境配置 | 否 | 启用时固定此模型；公开mock真实技术场景已通过，尚未部署或完成业务端到端验收 |
 | `WEFOLIO_LOGIN_DEFAULT_TAB` | Runtime 双节点 | 小程序登录页普通入口默认标签 | `experience` / `maintainer` | `application.yml` 默认值或 `wefolio.service` 环境配置 | 否 | 默认 `experience`（体验）；`maintainer` 表示登录 / 注册；双节点应一致，修改后重启 Runtime 生效 |
 | `PORTFOLIO_MINIAPP_CODE_ENV_VERSION` | Runtime 双节点 | 官方小程序码打开的微信版本 | `release` / `trial` / `develop` | `application.yml` 默认值或服务环境配置 | 否 | 默认 `release`；不同环境使用独立 COS 目录与缓存身份 |
 | `PORTFOLIO_MINIAPP_CODE_CHECK_PATH` | Runtime 双节点 | 微信是否检查落地页存在 | `true` | `application.yml` 默认值或服务环境配置 | 否 | 默认 `true`；正式环境保持开启，双节点一致 |
@@ -426,3 +478,7 @@ HTTPS GET 核验因 CDN 证书过期未通过。**用户已明确本轮不处理
 | 2026-09-23 | Codex | Runtime 双节点进入 prevalidated 阶段，启动字体自检通过，ready=true、enabled=false；恢复双节点轮询 | Runtime 双节点及字体自检工作目录 | 如需停用自检，按 disabled 阶段滚动发布；保留现有字体资源和数据库列 |
 
 | 2026-09-23 | Codex | 两 Runtime 字体已 enabled 且 ready；按用户要求移除部署脚本字体阶段和配置写入，普通发布仅检查服务级健康 | Runtime 双节点、部署脚本及测试；现有字体配置保留 | 字体开关由服务器独立配置；部署脚本保留原 JAR 备份和切流保障 |
+
+| 2026-10-09 | Codex | 按授权依次发布高级作品集 Runtime、执行服务器检查、发布 Job；V61 已执行，三服务健康且 AI 开关已按用户环境配置启用 | Runtime 双节点、Job 单节点、Nginx 与 V61 数据库结构；小程序未发布 | 保留 Runtime 固定旧包及 Job 带时间戳备份；恢复前核查高级数据与 V61 兼容性，不自动回退数据库 |
+
+| 2026-10-10 | Codex | 按授权依次发布高级作品集 AI 模式清理后的 Runtime、Job 并检查服务器；双节点制品与本地一致，三服务 active/UP、字体 enabled/ready，Nginx 恢复双节点轮询，发布后未检出新的错误匹配 | Runtime 双节点、Job 单节点及 Nginx 切流；未改服务器环境或新增迁移，V61 未修改；小程序未发布 | Runtime 按既有脚本保留旧包；Job 另存 `wefolio-java-job.jar.backup-20261010-before-release`；恢复前核查高级数据与 V61 兼容性，不自动回退数据库 |

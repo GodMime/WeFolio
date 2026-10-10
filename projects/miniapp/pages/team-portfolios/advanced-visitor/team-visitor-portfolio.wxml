@@ -1,0 +1,54 @@
+<import src="../templates/portfolio-opening.wxml" />
+<navigation-bar title="团队作品集" back="{{showNavigationBack && !timelineGuideVisible}}" color="{{navigationColor}}" background="{{backgroundColor}}" />
+<scroll-view scroll-y="{{!fontOpening}}" class="page-shell theme-{{themeMode}} {{portfolio.bottomNav.enabled ? 'with-bottom-nav' : ''}}" style="background-color:{{backgroundColor}};" scroll-top="{{portfolioScrollTop}}">
+  <view wx:if="{{loading}}" class="state">加载中...</view>
+  <view wx:elif="{{errorMessage}}" class="state"><text>{{errorMessage}}</text><button bindtap="handleRetry">重新打开</button></view>
+  <view wx:elif="{{underMaintenance}}" class="state">该团队作品集维护中</view>
+  <view wx:else class="team-portfolio-menu-transition-content {{teamPortfolioMenuTransitionClass}}">
+    <view wx:if="{{empty}}" class="state">暂无展示内容</view>
+    <view wx:else class="content">
+      <team-profile theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.teamProfile}}" wx:key="componentKey" style="order:{{item.sortOrder}}" team="{{item.data.team}}" />
+      <team-carousel theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.carousel}}" wx:key="componentKey" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" items="{{item.data.items}}" bindpreview="handleImagePreview" />
+      <team-video-carousel theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.videoCarousel}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" title="{{item.data.title}}" show-component-title="{{item.data.showComponentTitle}}" works="{{item.data.works}}" show-title="{{item.data.showTitle}}" show-swipe-hint="{{item.data.showSwipeHint}}" bindplay="handleVideoCarouselPlay"  display-style="{{item.data.displayStyle}}" show-description="{{item.data.showDescription}}" />
+      <team-single-work theme-mode="{{themeMode}}" class="folio-component team-single-work-instance" wx:for="{{componentBuckets.singleWork}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" work="{{item.data.work}}" show-title="{{item.data.showTitle}}" show-description="{{item.data.showDescription}}" active-video-key="{{activeSingleWorkVideoKey}}" bindpreview="handleSingleWorkPreview" bindactivate="handleSingleWorkActivate" bindvideoplay="pauseBackgroundAudio" bindvideoerror="handleSingleWorkVideoError"  open-mode="{{item.data.openMode}}" binddetail="handleWorkDetail" />
+      <team-divider theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.divider}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
+      <team-member-portfolio-grid theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.grid}}" wx:key="componentKey" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" items="{{item.data.items}}" show-member-name="{{item.data.showMemberName}}" bindpreview="handleMemberPortfolio" />
+      <team-member-portfolio-list theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.list}}" wx:key="componentKey" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" items="{{item.data.items}}" show-member-name="{{item.data.showMemberName}}" bindpreview="handleMemberPortfolio" />
+      <team-text-section background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.text}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}"  font-context="{{fontContext}}"/>
+      <portfolio-text-grid theme-mode="{{themeMode}}" class="portfolio-font-grid folio-component" wx:for="{{componentBuckets.textGrid}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}"  font-context="{{fontContext}}"/>
+      <portfolio-contact-info theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.contactInfo}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}" />
+      <team-structured-text-section background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.structuredText}}" wx:key="componentKey" style="order:{{item.sortOrder}}" config="{{item.data}}"  font-context="{{fontContext}}"/>
+      <team-schedule-query theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.schedule}}" wx:key="componentKey" id="schedule-{{item.componentKey}}" style="order:{{item.sortOrder}}" share-code="{{shareCode}}" component-key="{{item.componentKey}}" config="{{item.data}}" result="{{scheduleResults[item.componentKey]}}" bindschedulequery="handleScheduleQuery" />
+      <team-contact-form theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.contact}}" wx:key="componentKey" id="contact-form-{{item.componentKey}}" data-key="{{item.componentKey}}" style="order:{{item.sortOrder}}" config="{{item.data}}" form="{{contactForms[item.componentKey]}}" modal-visible="{{contactModalVisible[item.componentKey]}}" submitting="{{contactSubmitting[item.componentKey]}}" bindcontactinput="handleContactInput" bindopenmodal="handleContactOpen" bindclosemodal="handleContactClose" bindsubmit="handleContactSubmit" />
+      <team-qr-contact theme-mode="{{themeMode}}" class="folio-component" wx:for="{{componentBuckets.qr}}" wx:key="componentKey" style="order:{{item.sortOrder}}" component-key="{{item.componentKey}}" config="{{item.data}}" visitor-mode="{{true}}" bindinteract="handleQrInteract" />
+    </view>
+    <view class="folio-brand-footer">
+      <image wx:if="{{themeMode === 'dark'}}" class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-dark-50kb.png" mode="aspectFit"></image>
+      <image wx:else class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-small-50kb.png" mode="aspectFit"></image>
+      <view class="folio-brand-name">映期Folio</view>
+    </view>
+  </view>
+</scroll-view>
+<portfolio-bottom-nav
+  wx:if="{{!underMaintenance}}"
+  navigation="{{portfolio.bottomNav}}"
+  active-menu-key="{{portfolio.activeMenuKey}}"
+  theme-mode="{{themeMode}}"
+  bindchange="handleMenuTap"
+></portfolio-bottom-nav>
+
+<view wx:if="{{visitorProfileAuthVisible}}" class="profile-mask">
+  <view class="profile-panel">
+    <input data-field="nickname" value="{{visitorProfileForm.nickname}}" bindinput="handleProfileInput" placeholder="昵称" />
+    <button bindtap="handleChooseAvatar">选择头像</button>
+    <text wx:if="{{visitorProfileForm.avatarPath}}">已选择头像</text>
+    <button class="primary" loading="{{visitorProfileSaving}}" bindtap="handleProfileSave">保存资料</button>
+    <button bindtap="handleProfileSkip">暂不填写</button>
+  </view>
+  <view wx:if="{{backgroundAudioResource.enabled && backgroundAudioResource.mediaUrl && !loading && !errorMessage}}" class="portfolio-background-audio" style="position: fixed; top: {{backgroundAudioTop}}px; right: 12px; z-index: 20;">
+    <background-audio-control draggable="{{true}}" anchor-top="{{backgroundAudioTop}}" display-style="{{backgroundAudioResource.displayStyle}}" cover-url="{{backgroundAudioResource.coverUrl}}" title="{{backgroundAudioResource.title}}" playing="{{backgroundAudioPlaying}}" bindtoggle="handleToggleBackgroundAudio" />
+  </view>
+</view>
+<timeline-share-guide visible="{{timelineGuideVisible}}" back="{{showNavigationBack}}" bindback="handleTimelineGuideBack" bindclose="handleCloseTimelineGuide"></timeline-share-guide>
+
+<template is="portfolio-opening" data="{{active: loading || fontOpeningVisible, top: fontOpeningTop, dark: portfolio.themeMode === 'dark', background: portfolio.style.backgroundColor, preview: false}}" />

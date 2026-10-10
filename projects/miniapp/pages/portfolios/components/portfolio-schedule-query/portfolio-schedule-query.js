@@ -88,10 +88,13 @@ function normalizeTeamPreviewScope(scope) {
 }
 
 function canLoadOptions(data = {}) {
+  if (data.candidatePreview) return false
   return data.preview ? Boolean(data.portfolioId) : Boolean(data.shareCode)
 }
 
 function buildOptionsRequest(data = {}, month) {
+  const minePrefix = data.advancedEditing ? '/api/mine/advanced-portfolios' : MINE_PORTFOLIO_API_PREFIX
+  const teamPrefix = data.advancedEditing ? '/api/mine/advanced-portfolios' : MINE_TEAM_PORTFOLIO_API_PREFIX
   if (data.preview) {
     const requestData = {
       month,
@@ -100,7 +103,7 @@ function buildOptionsRequest(data = {}, month) {
     if (data.teamPortfolioId) {
       requestData.scope = normalizeTeamPreviewScope(data.teamPreviewScope)
       return {
-        url: `${MINE_TEAM_PORTFOLIO_API_PREFIX}/${data.teamPortfolioId}/member-portfolios/${data.portfolioId}/schedule-options`,
+        url: `${teamPrefix}/${data.teamPortfolioId}/member-portfolios/${data.portfolioId}/schedule-options`,
         data: requestData
       }
     }
@@ -108,7 +111,7 @@ function buildOptionsRequest(data = {}, month) {
       requestData.scope = PUBLISHED_PREVIEW_SCOPE
     }
     return {
-      url: `${MINE_PORTFOLIO_API_PREFIX}/${data.portfolioId}/schedule-options`,
+      url: `${minePrefix}/${data.portfolioId}/schedule-options`,
       data: requestData
     }
   }
@@ -123,6 +126,8 @@ function buildOptionsRequest(data = {}, month) {
 }
 
 function buildQueryRequest(data = {}) {
+  const minePrefix = data.advancedEditing ? '/api/mine/advanced-portfolios' : MINE_PORTFOLIO_API_PREFIX
+  const teamPrefix = data.advancedEditing ? '/api/mine/advanced-portfolios' : MINE_TEAM_PORTFOLIO_API_PREFIX
   const payload = {
     componentKey: data.componentKey || '',
     queriedDate: data.selectedDate || '',
@@ -133,14 +138,14 @@ function buildQueryRequest(data = {}) {
     if (data.teamPortfolioId) {
       const teamScope = normalizeTeamPreviewScope(data.teamPreviewScope)
       return {
-        url: `${MINE_TEAM_PORTFOLIO_API_PREFIX}/${data.teamPortfolioId}/member-portfolios/${data.portfolioId}/schedule-query-preview?scope=${teamScope}`,
+        url: `${teamPrefix}/${data.teamPortfolioId}/member-portfolios/${data.portfolioId}/schedule-query-preview?scope=${teamScope}`,
         method: 'POST',
         data: payload
       }
     }
     const scopeQuery = isPublishedScope(data.previewScope) ? '?scope=published' : ''
     return {
-      url: `${MINE_PORTFOLIO_API_PREFIX}/${data.portfolioId}/schedule-query-preview${scopeQuery}`,
+      url: `${minePrefix}/${data.portfolioId}/schedule-query-preview${scopeQuery}`,
       method: 'POST',
       data: payload
     }
@@ -191,6 +196,8 @@ function buildDisplayOptions(options = {}) {
 
 Component({
   properties: {
+    advancedEditing: { type: Boolean, value: false },
+    candidatePreview: { type: Boolean, value: false },
     themeMode: {
       type: String,
       value: 'light'
@@ -273,6 +280,7 @@ Component({
     },
 
     handleOpenCalendar() {
+      if (this.data.candidatePreview) { wx.showToast({ title: '采用并保存后可查档', icon: 'none' }); return Promise.resolve() }
       this.setData({ visible: true })
       if (!this.data.options.yearMonth && !this.data.loading) {
         return this.loadScheduleOptions(this.data.selectedMonth)
@@ -305,6 +313,7 @@ Component({
     },
 
     async loadScheduleOptions(month) {
+      if (this.data.candidatePreview) return null
       if (this.data.loading) {
         return null
       }
@@ -371,6 +380,7 @@ Component({
     },
 
     async handleSubmitQuery() {
+      if (this.data.candidatePreview) { wx.showToast({ title: '采用并保存后可查档', icon: 'none' }); return null }
       if (!this.data.selectedDate) {
         getRuntimeWx().showToast({ title: DATE_REQUIRED_MESSAGE, icon: 'none' })
         return false

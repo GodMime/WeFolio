@@ -132,7 +132,8 @@ public class TeamContactFormComponentValidator {
      * @param context 团队组件上下文
      */
     private void validateContext(TeamPortfolioComponentContext context) {
-        if (context == null || context.teamId() <= 0 || context.portfolioId() <= 0 || context.revision() < 0) {
+        if (context == null || context.teamId() <= 0
+                || context.portfolioId() <= 0 && !context.hasReadOnlyCandidateIdentity() || context.revision() < 0) {
             throw new BusinessException(CONTEXT_INVALID_MESSAGE);
         }
     }

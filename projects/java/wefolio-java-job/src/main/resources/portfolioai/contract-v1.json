@@ -1,0 +1,1127 @@
+{
+  "schemaVersion": "ai-portfolio-v1",
+  "promptVersion": "portfolio-ai-2026-10-10.2",
+  "componentCatalog": {
+    "PROFILE": {
+      "params": {
+        "profileLayout": {
+          "type": "string",
+          "maxCodePoints": 16,
+          "enum": [
+            "VERTICAL",
+            "HORIZONTAL"
+          ]
+        },
+        "profileBorder": {
+          "type": "boolean"
+        },
+        "profileBorderWidthRpx": {
+          "type": "integer",
+          "min": 1,
+          "max": 12
+        },
+        "profileBorderColor": {
+          "type": "string",
+          "maxCodePoints": 7,
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+        },
+        "profileHorizontalMarginRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 96
+        },
+        "profileVerticalMarginRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 96
+        }
+      },
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {
+        "profile": {
+          "kind": "PROFILE"
+        }
+      },
+      "textFields": {
+        "bio": {
+          "type": "string",
+          "maxCodePoints": 1000
+        }
+      }
+    },
+    "TEAM_PROFILE": {
+      "params": {},
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {
+        "team": {
+          "kind": "TEAM_PROFILE"
+        }
+      },
+      "textFields": {
+        "intro": {
+          "type": "string",
+          "maxCodePoints": 1000
+        }
+      }
+    },
+    "TEXT_SECTION": {
+      "params": {
+        "fontFamily": {
+          "type": "string",
+          "maxCodePoints": 16,
+          "enum": [
+            "SYSTEM",
+            "WECHAT_SANS_SS"
+          ]
+        },
+        "fontSizeRpx": {
+          "type": "integer",
+          "min": 10,
+          "max": 96
+        },
+        "color": {
+          "type": "string",
+          "maxCodePoints": 7,
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+        },
+        "lineHeight": {
+          "type": "number",
+          "min": 0.5,
+          "max": 3,
+          "multipleOf": 0.1
+        },
+        "backgroundEnabled": {
+          "type": "boolean"
+        },
+        "backgroundTreatment": {
+          "type": "string",
+          "maxCodePoints": 12,
+          "enum": [
+            "ORIGINAL",
+            "DARK_MASK",
+            "GRADIENT"
+          ]
+        },
+        "content": {
+          "type": "string",
+          "maxCodePoints": 200
+        },
+        "alignment": {
+          "type": "string",
+          "maxCodePoints": 6,
+          "enum": [
+            "LEFT",
+            "CENTER",
+            "RIGHT"
+          ]
+        },
+        "verticalAlignment": {
+          "type": "string",
+          "maxCodePoints": 6,
+          "enum": [
+            "TOP",
+            "CENTER",
+            "BOTTOM"
+          ]
+        }
+      },
+      "requiredParams": [
+        "content"
+      ],
+      "primarySource": null,
+      "bindingSlots": {
+        "fontId": {
+          "kind": "FONT"
+        },
+        "backgroundWorkId": {
+          "kind": "WORK",
+          "mediaTypes": [
+            "IMAGE",
+            "VIDEO",
+            "ANIMATION"
+          ]
+        }
+      }
+    },
+    "STRUCTURED_TEXT_SECTION": {
+      "params": {
+        "backgroundEnabled": {
+          "type": "boolean"
+        },
+        "backgroundTreatment": {
+          "type": "string",
+          "maxCodePoints": 12,
+          "enum": [
+            "ORIGINAL",
+            "DARK_MASK",
+            "GRADIENT"
+          ]
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fontFamily": {
+                "type": "string",
+                "maxCodePoints": 16,
+                "enum": [
+                  "SYSTEM",
+                  "WECHAT_SANS_SS"
+                ]
+              },
+              "fontSizeRpx": {
+                "type": "integer",
+                "min": 10,
+                "max": 96
+              },
+              "color": {
+                "type": "string",
+                "maxCodePoints": 7,
+                "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+              },
+              "lineHeight": {
+                "type": "number",
+                "min": 0.5,
+                "max": 3,
+                "multipleOf": 0.1
+              },
+              "type": {
+                "type": "string",
+                "maxCodePoints": 16,
+                "enum": [
+                  "TITLE",
+                  "PARAGRAPH",
+                  "LIST",
+                  "HINT",
+                  "SPACER"
+                ]
+              },
+              "content": {
+                "type": "string",
+                "maxCodePoints": 2000
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxCodePoints": 2000
+                },
+                "maxItems": 10,
+                "minItems": 1
+              },
+              "heightRpx": {
+                "type": "integer",
+                "min": 0,
+                "max": 512,
+                "multipleOf": 4
+              },
+              "marginTopRpx": {
+                "type": "integer",
+                "min": 0,
+                "max": 128,
+                "multipleOf": 4
+              },
+              "marginBottomRpx": {
+                "type": "integer",
+                "min": 0,
+                "max": 128,
+                "multipleOf": 4
+              },
+              "fontWeight": {
+                "type": "string",
+                "maxCodePoints": 6,
+                "enum": [
+                  "NORMAL",
+                  "BOLD"
+                ]
+              },
+              "alignment": {
+                "type": "string",
+                "maxCodePoints": 6,
+                "enum": [
+                  "LEFT",
+                  "CENTER",
+                  "RIGHT"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "maxItems": 20,
+          "minItems": 1
+        }
+      },
+      "requiredParams": [
+        "blocks"
+      ],
+      "primarySource": null,
+      "bindingSlots": {
+        "backgroundWorkId": {
+          "kind": "WORK",
+          "mediaTypes": [
+            "IMAGE",
+            "VIDEO",
+            "ANIMATION"
+          ]
+        }
+      }
+    },
+    "TEXT_GRID": {
+      "params": {
+        "rows": {
+          "type": "integer",
+          "min": 1,
+          "max": 8
+        },
+        "columns": {
+          "type": "integer",
+          "min": 1,
+          "max": 5
+        },
+        "columnWeights": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "min": 1,
+            "max": 4
+          },
+          "maxItems": 5,
+          "minItems": 1
+        },
+        "rowMinHeightsRpx": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "min": 80,
+            "max": 600
+          },
+          "maxItems": 8,
+          "minItems": 1
+        },
+        "gapRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 48
+        },
+        "horizontalMarginRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 96
+        },
+        "verticalMarginRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 96
+        },
+        "cellPaddingRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 48
+        },
+        "cellRadiusRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 48
+        },
+        "cellBorder": {
+          "type": "boolean"
+        },
+        "cellBorderWidthRpx": {
+          "type": "integer",
+          "min": 1,
+          "max": 12
+        },
+        "cellBorderColor": {
+          "type": "string",
+          "maxCodePoints": 7,
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+        },
+        "cellBackground": {
+          "type": "string",
+          "maxCodePoints": 7,
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "row": {
+                "type": "integer",
+                "min": 0,
+                "max": 7
+              },
+              "column": {
+                "type": "integer",
+                "min": 0,
+                "max": 4
+              },
+              "rowSpan": {
+                "type": "integer",
+                "min": 1,
+                "max": 8
+              },
+              "columnSpan": {
+                "type": "integer",
+                "min": 1,
+                "max": 5
+              },
+              "verticalAlignment": {
+                "type": "string",
+                "maxCodePoints": 6,
+                "enum": [
+                  "TOP",
+                  "CENTER",
+                  "BOTTOM"
+                ]
+              },
+              "blocks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "alignment": {
+                      "type": "string",
+                      "maxCodePoints": 6,
+                      "enum": [
+                        "LEFT",
+                        "CENTER",
+                        "RIGHT"
+                      ]
+                    },
+                    "marginTopRpx": {
+                      "type": "integer",
+                      "min": 0,
+                      "max": 128
+                    },
+                    "marginBottomRpx": {
+                      "type": "integer",
+                      "min": 0,
+                      "max": 128
+                    },
+                    "lineHeight": {
+                      "type": "number",
+                      "min": 0.5,
+                      "max": 3,
+                      "multipleOf": 0.1
+                    },
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "fontFamily": {
+                            "type": "string",
+                            "maxCodePoints": 16,
+                            "enum": [
+                              "SYSTEM",
+                              "WECHAT_SANS_SS"
+                            ]
+                          },
+                          "fontSizeRpx": {
+                            "type": "integer",
+                            "min": 10,
+                            "max": 96
+                          },
+                          "color": {
+                            "type": "string",
+                            "maxCodePoints": 7,
+                            "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+                          },
+                          "text": {
+                            "type": "string",
+                            "maxCodePoints": 2000
+                          },
+                          "fontWeight": {
+                            "type": "string",
+                            "maxCodePoints": 6,
+                            "enum": [
+                              "NORMAL",
+                              "BOLD"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ]
+                      },
+                      "maxItems": 8,
+                      "minItems": 1
+                    }
+                  },
+                  "required": [
+                    "runs"
+                  ]
+                },
+                "maxItems": 8,
+                "minItems": 1
+              }
+            },
+            "required": [
+              "row",
+              "column",
+              "rowSpan",
+              "columnSpan",
+              "blocks"
+            ]
+          },
+          "maxItems": 40,
+          "minItems": 1
+        }
+      },
+      "requiredParams": [
+        "rows",
+        "columns",
+        "cells"
+      ],
+      "primarySource": null,
+      "bindingSlots": {}
+    },
+    "CAROUSEL": {
+      "params": {},
+      "requiredParams": [],
+      "primarySource": {
+        "kind": "WORK",
+        "mediaTypes": [
+          "IMAGE"
+        ],
+        "min": 1,
+        "max": 9
+      },
+      "bindingSlots": {}
+    },
+    "VIDEO_CAROUSEL": {
+      "params": {
+        "title": {
+          "type": "string",
+          "maxCodePoints": 10
+        },
+        "showTitle": {
+          "type": "boolean"
+        },
+        "showSwipeHint": {
+          "type": "boolean"
+        },
+        "showDescription": {
+          "type": "boolean"
+        },
+        "showComponentTitle": {
+          "type": "boolean"
+        },
+        "displayStyle": {
+          "type": "string",
+          "maxCodePoints": 16,
+          "enum": [
+            "STACKED",
+            "PORTRAIT_CARDS"
+          ]
+        }
+      },
+      "requiredParams": [],
+      "primarySource": {
+        "kind": "WORK",
+        "mediaTypes": [
+          "VIDEO"
+        ],
+        "min": 3,
+        "max": 8
+      },
+      "bindingSlots": {}
+    },
+    "SINGLE_WORK": {
+      "params": {
+        "showTitle": {
+          "type": "boolean"
+        },
+        "showDescription": {
+          "type": "boolean"
+        },
+        "openMode": {
+          "type": "string",
+          "maxCodePoints": 16,
+          "enum": [
+            "INLINE",
+            "DETAIL_PAGE"
+          ]
+        },
+        "detailOptions": {
+          "type": "object",
+          "properties": {
+            "showTitle": {
+              "type": "boolean"
+            },
+            "showDescription": {
+              "type": "boolean"
+            }
+          },
+          "required": []
+        }
+      },
+      "requiredParams": [],
+      "primarySource": {
+        "kind": "WORK",
+        "mediaTypes": [
+          "IMAGE",
+          "VIDEO",
+          "ANIMATION"
+        ],
+        "min": 1,
+        "max": 1
+      },
+      "bindingSlots": {}
+    },
+    "WORK_GRID": {
+      "params": {
+        "showTitle": {
+          "type": "boolean"
+        },
+        "showDescription": {
+          "type": "boolean"
+        },
+        "columns": {
+          "type": "integer",
+          "min": 2,
+          "max": 2
+        }
+      },
+      "requiredParams": [],
+      "primarySource": {
+        "kind": "WORK",
+        "mediaTypes": [
+          "IMAGE",
+          "VIDEO"
+        ],
+        "min": 1,
+        "max": 50
+      },
+      "bindingSlots": {}
+    },
+    "WORK_LIST": {
+      "params": {
+        "showTitle": {
+          "type": "boolean"
+        },
+        "showDescription": {
+          "type": "boolean"
+        },
+        "columns": {
+          "type": "integer",
+          "min": 1,
+          "max": 1
+        }
+      },
+      "requiredParams": [],
+      "primarySource": {
+        "kind": "WORK",
+        "mediaTypes": [
+          "IMAGE",
+          "VIDEO"
+        ],
+        "min": 1,
+        "max": 50
+      },
+      "bindingSlots": {}
+    },
+    "MEMBER_PORTFOLIO_GRID": {
+      "params": {
+        "showMemberName": {
+          "type": "boolean"
+        }
+      },
+      "requiredParams": [],
+      "primarySource": {
+        "kind": "MEMBER_PORTFOLIO",
+        "mediaTypes": [],
+        "min": 1,
+        "max": 50
+      },
+      "bindingSlots": {}
+    },
+    "MEMBER_PORTFOLIO_LIST": {
+      "params": {
+        "showMemberName": {
+          "type": "boolean"
+        }
+      },
+      "requiredParams": [],
+      "primarySource": {
+        "kind": "MEMBER_PORTFOLIO",
+        "mediaTypes": [],
+        "min": 1,
+        "max": 50
+      },
+      "bindingSlots": {}
+    },
+    "DIVIDER": {
+      "params": {
+        "color": {
+          "type": "string",
+          "maxCodePoints": 11,
+          "pattern": "(?:BLACK|WHITE|GRAY|TRANSPARENT|#[0-9A-Fa-f]{6})"
+        },
+        "heightPx": {
+          "type": "integer",
+          "min": 1,
+          "max": 2147483647
+        }
+      },
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {}
+    },
+    "SCHEDULE_QUERY": {
+      "params": {
+        "title": {
+          "type": "string",
+          "maxCodePoints": 2000
+        },
+        "description": {
+          "type": "string",
+          "maxCodePoints": 2000
+        },
+        "displayMode": {
+          "type": "string",
+          "maxCodePoints": 20,
+          "enum": [
+            "MODAL_CALENDAR",
+            "INLINE_CALENDAR"
+          ]
+        },
+        "queryRange": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "UNLIMITED",
+                "FUTURE_DAYS",
+                "DATE_RANGE"
+              ],
+              "maxCodePoints": 16
+            },
+            "futureDays": {
+              "type": "integer",
+              "min": 1,
+              "max": 2147483647
+            },
+            "startDate": {
+              "type": "string",
+              "maxCodePoints": 10,
+              "pattern": "[0-9]{4}-[0-9]{2}-[0-9]{2}"
+            },
+            "endDate": {
+              "type": "string",
+              "maxCodePoints": 10,
+              "pattern": "[0-9]{4}-[0-9]{2}-[0-9]{2}"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      },
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {}
+    },
+    "CONTACT_FORM": {
+      "params": {
+        "title": {
+          "type": "string",
+          "maxCodePoints": 2000
+        },
+        "description": {
+          "type": "string",
+          "maxCodePoints": 2000
+        },
+        "displayMode": {
+          "type": "string",
+          "maxCodePoints": 16,
+          "enum": [
+            "MODAL_FORM",
+            "INLINE_FORM"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxCodePoints": 16,
+            "enum": [
+              "contactName",
+              "phone",
+              "wechat",
+              "needs"
+            ]
+          },
+          "maxItems": 4,
+          "minItems": 2
+        }
+      },
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {}
+    },
+    "CONTACT_INFO": {
+      "params": {
+        "contactBorder": {
+          "type": "boolean"
+        },
+        "contactBorderWidthRpx": {
+          "type": "integer",
+          "min": 1,
+          "max": 12
+        },
+        "contactBorderColor": {
+          "type": "string",
+          "maxCodePoints": 7,
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+        },
+        "horizontalMarginRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 96
+        },
+        "verticalMarginRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 96
+        }
+      },
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {
+        "contactPhone": {
+          "kind": "CONTACT_PHONE"
+        },
+        "contactWechat": {
+          "kind": "CONTACT_WECHAT"
+        }
+      }
+    },
+    "QR_CONTACT": {
+      "params": {
+        "qrUrlSource": {
+          "type": "string",
+          "maxCodePoints": 8,
+          "enum": [
+            "PROFILE",
+            "CUSTOM"
+          ]
+        }
+      },
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {
+        "qrUrl": {
+          "kind": "QR_IMAGE"
+        }
+      }
+    },
+    "HYPERLINK": {
+      "params": {
+        "actionType": {
+          "type": "string",
+          "maxCodePoints": 20,
+          "enum": [
+            "INTERNAL_PORTFOLIO",
+            "EXTERNAL_LINK"
+          ]
+        },
+        "promptText": {
+          "type": "string",
+          "maxCodePoints": 30
+        },
+        "showClickIcon": {
+          "type": "boolean"
+        },
+        "iconPosition": {
+          "type": "string",
+          "maxCodePoints": 20,
+          "enum": [
+            "OVERLAY",
+            "OVERLAY_BOTTOM_CENTER",
+            "OVERLAY_CENTER",
+            "BELOW"
+          ]
+        }
+      },
+      "requiredParams": [],
+      "primarySource": {
+        "kind": "WORK",
+        "mediaTypes": [
+          "IMAGE",
+          "ANIMATION"
+        ],
+        "min": 1,
+        "max": 1
+      },
+      "bindingSlots": {
+        "targetPortfolioId": {
+          "kind": "PERSONAL_PORTFOLIO"
+        },
+        "externalContent": {
+          "kind": "EXTERNAL_LINK"
+        }
+      }
+    }
+  },
+  "settings": {
+    "share": {
+      "params": {
+        "title": {
+          "type": "string",
+          "maxCodePoints": 2000
+        }
+      },
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {
+        "coverUrl": {
+          "kind": "IMAGE"
+        },
+        "avatarUrl": {
+          "kind": "IMAGE"
+        }
+      }
+    },
+    "style": {
+      "params": {
+        "backgroundColor": {
+          "type": "string",
+          "maxCodePoints": 7,
+          "pattern": "#[0-9A-Fa-f]{6}"
+        },
+        "componentSpacingRpx": {
+          "type": "integer",
+          "min": 0,
+          "max": 96
+        }
+      },
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {}
+    },
+    "backgroundAudio": {
+      "params": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "displayStyle": {
+          "type": "string",
+          "maxCodePoints": 16,
+          "enum": [
+            "DISC",
+            "SLEEVE",
+            "MINI_PLAYER"
+          ]
+        }
+      },
+      "requiredParams": [],
+      "primarySource": null,
+      "bindingSlots": {
+        "workId": {
+          "kind": "WORK",
+          "mediaTypes": [
+            "AUDIO"
+          ]
+        }
+      }
+    }
+  },
+  "nodeParams": {
+    "STRUCTURED_BLOCK": {
+      "fontFamily": {
+        "type": "string",
+        "maxCodePoints": 16,
+        "enum": [
+          "SYSTEM",
+          "WECHAT_SANS_SS"
+        ]
+      },
+      "fontSizeRpx": {
+        "type": "integer",
+        "min": 10,
+        "max": 96
+      },
+      "color": {
+        "type": "string",
+        "maxCodePoints": 7,
+        "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+      },
+      "lineHeight": {
+        "type": "number",
+        "min": 0.5,
+        "max": 3,
+        "multipleOf": 0.1
+      },
+      "type": {
+        "type": "string",
+        "maxCodePoints": 16,
+        "enum": [
+          "TITLE",
+          "PARAGRAPH",
+          "LIST",
+          "HINT",
+          "SPACER"
+        ]
+      },
+      "content": {
+        "type": "string",
+        "maxCodePoints": 2000
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxCodePoints": 2000
+        },
+        "maxItems": 10,
+        "minItems": 1
+      },
+      "heightRpx": {
+        "type": "integer",
+        "min": 0,
+        "max": 512,
+        "multipleOf": 4
+      },
+      "marginTopRpx": {
+        "type": "integer",
+        "min": 0,
+        "max": 128,
+        "multipleOf": 4
+      },
+      "marginBottomRpx": {
+        "type": "integer",
+        "min": 0,
+        "max": 128,
+        "multipleOf": 4
+      },
+      "fontWeight": {
+        "type": "string",
+        "maxCodePoints": 6,
+        "enum": [
+          "NORMAL",
+          "BOLD"
+        ]
+      },
+      "alignment": {
+        "type": "string",
+        "maxCodePoints": 6,
+        "enum": [
+          "LEFT",
+          "CENTER",
+          "RIGHT"
+        ]
+      }
+    },
+    "GRID_CELL": {
+      "row": {
+        "type": "integer",
+        "min": 0,
+        "max": 7
+      },
+      "column": {
+        "type": "integer",
+        "min": 0,
+        "max": 4
+      },
+      "rowSpan": {
+        "type": "integer",
+        "min": 1,
+        "max": 8
+      },
+      "columnSpan": {
+        "type": "integer",
+        "min": 1,
+        "max": 5
+      },
+      "verticalAlignment": {
+        "type": "string",
+        "maxCodePoints": 6,
+        "enum": [
+          "TOP",
+          "CENTER",
+          "BOTTOM"
+        ]
+      }
+    },
+    "GRID_BLOCK": {
+      "alignment": {
+        "type": "string",
+        "maxCodePoints": 6,
+        "enum": [
+          "LEFT",
+          "CENTER",
+          "RIGHT"
+        ]
+      },
+      "marginTopRpx": {
+        "type": "integer",
+        "min": 0,
+        "max": 128
+      },
+      "marginBottomRpx": {
+        "type": "integer",
+        "min": 0,
+        "max": 128
+      },
+      "lineHeight": {
+        "type": "number",
+        "min": 0.5,
+        "max": 3,
+        "multipleOf": 0.1
+      }
+    },
+    "GRID_RUN": {
+      "fontFamily": {
+        "type": "string",
+        "maxCodePoints": 16,
+        "enum": [
+          "SYSTEM",
+          "WECHAT_SANS_SS"
+        ]
+      },
+      "fontSizeRpx": {
+        "type": "integer",
+        "min": 10,
+        "max": 96
+      },
+      "color": {
+        "type": "string",
+        "maxCodePoints": 7,
+        "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+      },
+      "text": {
+        "type": "string",
+        "maxCodePoints": 2000
+      },
+      "fontWeight": {
+        "type": "string",
+        "maxCodePoints": 6,
+        "enum": [
+          "NORMAL",
+          "BOLD"
+        ]
+      }
+    }
+  },
+  "limits": {
+    "maxSourceCount": 50,
+    "maxComponents": 100,
+    "maxOperations": 100,
+    "maxNotes": 10,
+    "maxNoteCodePoints": 200,
+    "maxReasonCodePoints": 200,
+    "maxQuestions": 1,
+    "maxOptions": 3,
+    "maxQuestionCodePoints": 500,
+    "maxOptionLabelCodePoints": 100,
+    "maxOptionAnswerCodePoints": 2000
+  }
+}

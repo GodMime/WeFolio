@@ -549,12 +549,54 @@ test('event-channel success callbacks accept direct opens that omit eventChannel
 
 })
 
+/** 只检查表达式中的实际调用，颜色与提示文案等字符串不参与方法匹配。 */
+function findTemplateMethodCalls(wxml) {
+  const calls = []
+  let cursor = 0
+  while ((cursor = wxml.indexOf('{{', cursor)) !== -1) {
+    cursor += 2
+    let expression = ''
+    let quote = ''
+    let escaped = false
+    while (cursor < wxml.length) {
+      const character = wxml[cursor]
+      if (quote) {
+        expression += ' '
+        if (escaped) escaped = false
+        else if (character === '\\') escaped = true
+        else if (character === quote) quote = ''
+      } else if (character === '\'' || character === '"') {
+        quote = character
+        expression += ' '
+      } else if (character === '}' && wxml[cursor + 1] === '}') {
+        cursor += 2
+        break
+      } else {
+        expression += character
+      }
+      cursor += 1
+    }
+    calls.push(...expression.match(/[A-Za-z_$][\w$]*(?=\s*\()/g) || [])
+  }
+  return calls
+}
+
+test('WXML method guard ignores quoted strings but still detects direct and member calls', () => {
+  assert.deepEqual(findTemplateMethodCalls("{{advancedEditing ? '#FFFFFF' : 'rgba(245, 246, 247, 0.94)'}}"), [])
+  assert.deepEqual(findTemplateMethodCalls("{{ 'can\\'t call(' }} {{ \"quoted \\\"format(\\\"\" }}"), [])
+  assert.deepEqual(findTemplateMethodCalls('{{formatTitle(title)}}'), ['formatTitle'])
+  assert.deepEqual(findTemplateMethodCalls('{{item.title.toUpperCase ()}}'), ['toUpperCase'])
+  assert.deepEqual(findTemplateMethodCalls("{{advancedEditing ? '#FFFFFF' : getBackground()}}"), ['getBackground'])
+  assert.deepEqual(findTemplateMethodCalls("{{ '}} rgba(' + formatTitle('rgba(') }}"), ['formatTitle'])
+  assert.deepEqual(findTemplateMethodCalls('<view aria-label="rgba(245, 246, 247, 0.94)">静态文案</view>'), [])
+})
+
 test('team WXML handlers exist and templates do not call methods', () => {
   const pageFiles = ['portfolios', 'team-select/team-select', 'standard-edit/team-portfolio-standard-edit', 'standard-preview/team-portfolio-standard-preview', 'contact-leads/team-contact-leads', 'visitor-portfolio/team-visitor-portfolio']
   for (const base of pageFiles) {
     const wxml = fs.readFileSync(path.join(ROOT, `${base}.wxml`), 'utf8')
     const source = fs.readFileSync(path.join(ROOT, `${base}.js`), 'utf8')
-    assert.doesNotMatch(wxml, /\{\{[^}]*[A-Za-z_$][\w$]*\s*\(/)
+    assert.deepEqual(findTemplateMethodCalls(wxml), [], `${base}: 模板不得调用方法`)
     const page = loadPage(`${base}.js`, async () => ({}))
     try {
       for (const match of wxml.matchAll(/\b(?:bind|catch)[a-z]+="([A-Za-z][A-Za-z0-9_]*)"/g)) {

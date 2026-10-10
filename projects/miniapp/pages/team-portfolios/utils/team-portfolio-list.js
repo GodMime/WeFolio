@@ -23,6 +23,7 @@ function nonNegativeInteger(value) {
 function normalizeTeamPortfolioSummary(item = {}) {
   return {
     portfolioId: normalizeId(item.portfolioId),
+    ...(item.templateType ? { templateType: text(item.templateType) } : {}),
     shareCode: text(item.shareCode),
     title: text(item.title),
     coverUrl: text(item.coverUrl),

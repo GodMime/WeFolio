@@ -70,6 +70,9 @@ public class PortfolioEntity extends BaseEntity {
     /** 发布状态：DRAFT_ONLY 草稿 / PUBLISHED 已发布 / OFFLINE 下线 */
     private String publicationStatus;
 
+    /** 高级编辑器来源编号上下文，仅供具有维护权限的接口使用。 */
+    private String aiContextJson;
+
     /** 当前高级作品集自然语言描述 */
     private String aiPrompt;
 

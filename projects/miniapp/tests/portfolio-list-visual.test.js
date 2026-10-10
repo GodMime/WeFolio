@@ -136,9 +136,19 @@ test('portfolio list matches the Travel design hierarchy and measurements', () =
     assert.match(createActionRule, /height:\s*92rpx/)
     assert.match(createActionRule, /font-weight:\s*600/)
     assert.doesNotMatch(createActionRule, /box-shadow/)
-    assert.match(advancedActionRule, /color:\s*#212529/)
-    assert.match(advancedActionRule, /background:\s*#e9ecef/)
-    assert.doesNotMatch(advancedActionRule, /border|box-shadow/)
+    if (styleFile === FORMAL_PORTFOLIO_STYLE_FILE) {
+      assert.match(advancedActionRule, /color:\s*#eed5a1/)
+      assert.match(advancedActionRule, /border:\s*1rpx solid #c6a264/)
+      assert.match(advancedActionRule, /background:\s*#191b1e/)
+      assert.match(advancedActionRule, /radial-gradient\(ellipse 65% 60% at 14% 0%, rgba\(229, 195, 132, 0\.85\) 0%, rgba\(229, 195, 132, 0\.38\) 28%, rgba\(229, 195, 132, 0\) 64%\)/)
+      assert.match(advancedActionRule, /linear-gradient\(160deg, #806840 0%, #544834 22%, #25282b 47%, #0b0e12 76%, #4d3d25 100%\)/)
+      assert.match(advancedActionRule, /box-shadow:\s*0 6rpx 18rpx rgba\(28, 25, 20, 0\.12\)/)
+      assert.match(readRule(wxss, '.create-action.advanced:active'), /opacity:\s*0\.88/)
+    } else {
+      assert.match(advancedActionRule, /color:\s*#212529/)
+      assert.match(advancedActionRule, /background:\s*#e9ecef/)
+      assert.doesNotMatch(advancedActionRule, /border|box-shadow/)
+    }
     assert.match(actionButtonRule, /color:\s*#212529/)
     assert.match(actionButtonRule, /(?:^|\n)\s*width:\s*108rpx/)
     assert.match(actionButtonRule, /(?:^|\n)\s*min-width:\s*108rpx/)

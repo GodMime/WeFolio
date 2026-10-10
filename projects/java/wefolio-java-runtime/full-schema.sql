@@ -29,32 +29,45 @@ CREATE TABLE `flyway_schema_history` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `wf_ai_generation_task` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `portfolio_id` bigint unsigned NOT NULL COMMENT '目标作品集ID',
-  `requested_by` bigint unsigned NOT NULL COMMENT '发起人用户ID',
-  `applied_revision` int unsigned DEFAULT NULL COMMENT '保存生效后的修订号',
-  `idempotency_key` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '请求幂等键',
-  `prompt` text COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '自然语言描述',
-  `selected_sources_json` json NOT NULL COMMENT '素材选择快照',
-  `status` varchar(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING RUNNING SUCCEEDED FAILED TIMED_OUT',
-  `result_schema_json` json DEFAULT NULL COMMENT '校验通过的生成结果',
-  `error_code` varchar(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '错误码',
-  `error_message` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '脱敏错误摘要',
-  `cost_points` int unsigned NOT NULL DEFAULT '0' COMMENT '实际扣除积分',
-  `started_at` datetime(3) DEFAULT NULL COMMENT '开始时间',
-  `completed_at` datetime(3) DEFAULT NULL COMMENT '完成时间',
-  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
-  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-  `deleted` bigint unsigned NOT NULL DEFAULT '0' COMMENT '逻辑删除：0未删除，已删除时为主键ID',
-  `version` int unsigned NOT NULL DEFAULT '0' COMMENT '乐观锁版本号',
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `owner_type` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL
+    COMMENT '归属类型USER或TEAM',
+  `owner_id` BIGINT UNSIGNED NOT NULL COMMENT '归属用户或团队ID',
+  `portfolio_id` BIGINT UNSIGNED NULL COMMENT '提交时已有作品集ID，新建未保存时为空',
+  `requested_by` BIGINT UNSIGNED NOT NULL COMMENT '发起人用户ID',
+  `idempotency_key` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL
+    COMMENT '请求人作用域内的提交幂等键',
+  `request_json` JSON NOT NULL
+    COMMENT '冻结的编辑输入、来源事实、模型配置与契约版本，不含密钥',
+  `result_json` JSON NULL
+    COMMENT '合法结果，kind为CANDIDATE或CLARIFICATION，output为模型信封',
+  `status` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'PENDING'
+    COMMENT 'PENDING RUNNING SUCCEEDED FAILED CANCELLED',
+  `attempt_count` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已领取执行次数，初次和自动重试共用',
+  `next_run_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+    COMMENT '等待任务最早执行时间',
+  `started_at` DATETIME(3) NULL COMMENT '最近一次领取时间，用于执行超时恢复',
+  `completed_at` DATETIME(3) NULL COMMENT '任务进入终态的时间',
+  `error_code` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT '最近一次失败错误码',
+  `error_message` VARCHAR(500) NULL COMMENT '最近一次失败的安全摘要，可用于下次纠正',
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+    ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+  `deleted` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '逻辑删除：0未删除，已删除时为主键ID',
+  `version` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '乐观锁版本，也用于隔离不同执行代次',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_ai_task_idempotency` (`idempotency_key`),
-  KEY `idx_ai_task_portfolio` (`portfolio_id`,`status`,`created_at`),
-  KEY `idx_ai_task_requester` (`requested_by`,`created_at`),
-  CONSTRAINT `chk_ai_error_code_format` CHECK (((`error_code` is null) or regexp_like(`error_code`,_ascii'^[A-Z][A-Z0-9_]*$'))),
-  CONSTRAINT `chk_ai_task_cost` CHECK (((`status` = _ascii'SUCCEEDED') or (`cost_points` = 0))),
-  CONSTRAINT `chk_ai_task_status` CHECK ((`status` in (_ascii'PENDING',_ascii'RUNNING',_ascii'SUCCEEDED',_ascii'FAILED',_ascii'TIMED_OUT')))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='高级作品集AI生成任务';
+  UNIQUE KEY `uk_ai_task_request_idempotency` (`requested_by`, `idempotency_key`, `deleted`),
+  KEY `idx_ai_task_queue` (`status`, `deleted`, `next_run_at`, `id`),
+  KEY `idx_ai_task_running` (`status`, `deleted`, `started_at`),
+  KEY `idx_ai_task_requester` (`requested_by`, `deleted`, `status`),
+  KEY `idx_ai_task_portfolio` (`portfolio_id`, `deleted`, `created_at`),
+  CONSTRAINT `chk_ai_task_owner_type` CHECK (`owner_type` IN ('USER', 'TEAM')),
+  CONSTRAINT `chk_ai_task_status`
+    CHECK (`status` IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')),
+  CONSTRAINT `chk_ai_error_code_format`
+    CHECK (`error_code` IS NULL OR REGEXP_LIKE(`error_code`, '^[A-Z][A-Z0-9_]*$'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  ROW_FORMAT=DYNAMIC COMMENT='高级作品集AI异步任务';
 
 CREATE TABLE `wf_contact_lead` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
@@ -426,6 +439,7 @@ CREATE TABLE `wf_portfolio` (
   `deleted` bigint unsigned NOT NULL DEFAULT '0' COMMENT '逻辑删除：0未删除，已删除时为主键ID',
   `draft_font_assets_json` json DEFAULT NULL COMMENT '草稿字体子集资源清单',
   `published_font_assets_json` json DEFAULT NULL COMMENT '发布字体子集资源清单',
+  `ai_context_json` JSON NULL COMMENT '高级草稿来源编号上下文，含nextSourceNo与当前来源列表，不进入访客配置',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_portfolio_share_code` (`share_code`,`deleted`),
   KEY `idx_portfolio_owner_list` (`owner_type`,`owner_id`,`deleted`,`status`,`updated_at`),

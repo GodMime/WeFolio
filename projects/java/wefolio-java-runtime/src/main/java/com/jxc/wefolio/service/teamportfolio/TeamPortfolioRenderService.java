@@ -132,7 +132,7 @@ public class TeamPortfolioRenderService {
                 .filter(component -> !Boolean.FALSE.equals(component.getEnabled()))
                 .toList());
         TeamPortfolioRenderDto render = new TeamPortfolioRenderDto();
-        render.setPortfolioId(context.portfolioId());
+        render.setPortfolioId(context.hasReadOnlyCandidateIdentity() ? null : context.portfolioId());
         render.setTeamId(context.teamId());
         render.setShare(copyShare(config.getShare()));
         render.setTitle(resolveTitle(config.getShare()));
@@ -222,7 +222,8 @@ public class TeamPortfolioRenderService {
      * 校验组件上下文。
      */
     private void validateContext(TeamPortfolioComponentContext context) {
-        if (context == null || context.teamId() <= 0 || context.portfolioId() <= 0 || context.revision() < 0) {
+        if (context == null || context.teamId() <= 0
+                || context.portfolioId() <= 0 && !context.hasReadOnlyCandidateIdentity() || context.revision() < 0) {
             throw new BusinessException(CONTEXT_INVALID_MESSAGE);
         }
     }
@@ -382,7 +383,7 @@ public class TeamPortfolioRenderService {
                 .toList();
         if (backgrounds.isEmpty()) { return context; }
         return new TeamPortfolioComponentContext(context.teamId(),context.portfolioId(),context.revision(),
-                textBackgroundSupport.load(backgrounds,context));
+                textBackgroundSupport.load(backgrounds,context), context.allowAdvancedMemberPortfolios(), context.unsavedAdvancedCandidate());
     }
 
     /**

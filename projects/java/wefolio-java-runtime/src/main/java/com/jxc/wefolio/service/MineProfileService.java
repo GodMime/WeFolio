@@ -174,6 +174,8 @@ public class MineProfileService {
     private static final String COL_CONTACT_WECHAT = "contact_wechat_ciphertext";
     /** 联系资料专用三态加密。 */
     private final UserContactCryptoService userContactCryptoService;
+    /** 公开联系方式三态解析器，资料与 AI 读取保持同一规则。 */
+    private final UserContactProfileService contactProfiles;
 
     /** 用户资料 Mapper */
     private final UserEntityMapper userEntityMapper;
@@ -702,26 +704,11 @@ public class MineProfileService {
         response.setProfession(defaultString(user.getProfession()));
         response.setCity(defaultString(user.getCity()));
         response.setIntro(defaultString(user.getIntro()));
-        response.setContactPhone(readContactField(user.getId(), COL_CONTACT_PHONE, user.getContactPhoneCiphertext(),
-                defaultString(user.getPhoneNumber()), userContactCryptoService::decryptPhone));
-        response.setContactWechat(readContactField(user.getId(), COL_CONTACT_WECHAT, user.getContactWechatCiphertext(),
-                "", userContactCryptoService::decryptWechat));
+        UserContactProfileService.ContactProfile contact = contactProfiles.resolve(user);
+        response.setContactPhone(contact.contactPhone());
+        response.setContactWechat(contact.contactWechat());
         response.setTags(parseTags(user.getProfileTags()));
         return response;
-    }
-
-    /** 单条损坏密文降级展示，不修改存储；系统配置错误继续上抛。 */
-    private String readContactField(Long userId, String field, String ciphertext, String fallback,
-            java.util.function.Function<String, String> decrypt) {
-        if (ciphertext == null) { return fallback; }
-        try {
-            return defaultString(decrypt.apply(ciphertext));
-        } catch (BusinessException exception) {
-            if (!MineProfileMessage.CONTACT_CRYPTO_INVALID.equals(exception.getMessage())) { throw exception; }
-            // 只记录定位所需用户标识与字段名，不记录原文、密文及可能夹带敏感值的异常。
-            log.warn("联系资料解密失败，使用展示默认值 userId={} field={}", userId, field);
-            return fallback;
-        }
     }
 
     /**

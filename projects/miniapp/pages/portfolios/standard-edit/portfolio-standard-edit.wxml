@@ -1,7 +1,7 @@
 <wxs module="componentRows" src="./component-rows.wxs"></wxs>
 
 <view class="page-shell portfolio-edit-page">
-  <navigation-bar title="标准个人作品集" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
+  <navigation-bar title="{{advancedEditing ? '高级个人作品集' : '标准个人作品集'}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view
     class="edit-scroll"
@@ -11,6 +11,19 @@
     scroll-into-view="{{validationComponentAnchor}}"
   >
     <view class="edit-content pe-page-content">
+      <view wx:if="{{advancedEditing}}" class="panel advanced-tools pe-page-card">
+        <view class="advanced-ai-glyph" aria-hidden="true">✧</view>
+        <view class="advanced-ai-copy">
+          <view class="advanced-ai-title">想调整哪里，说出来</view>
+          <view class="advanced-ai-description">AI 修改与手动编辑，随时切换</view>
+        </view>
+        <button class="advanced-ai-button" data-mode="MODIFY_PAGE" bindtap="handleAdvancedAi">AI 修改</button>
+      </view>
+      <view wx:if="{{advancedEditing && advancedCanUndo}}" class="advanced-undo-notice">
+        <view>AI 修改已采用，尚未保存</view>
+        <button class="advanced-text-button" bindtap="handleAdvancedUndo">撤销</button>
+      </view>
+
       <view class="panel share-panel pe-page-card">
         <view class="panel-heading pe-page-card-heading">
           <view class="heading-copy">
@@ -218,6 +231,28 @@
             <button class="editor-component-empty-action" bindtap="handleOpenComponentSheet">添加组件</button>
           </view>
         </view>
+      </view>
+      <view wx:if="{{advancedEditing}}" class="advanced-source-card panel pe-page-card">
+        <view class="advanced-source-heading">
+          <view class="advanced-source-title">已选内容 <text>{{aiContext.sources.length || 0}}</text></view>
+          <button class="advanced-text-button" data-mode="MANAGE_SOURCES" bindtap="handleAdvancedAi">管理内容</button>
+        </view>
+        <scroll-view wx:if="{{advancedSourceItems.length}}" class="advanced-source-scroll" scroll-x>
+          <view class="advanced-source-strip">
+            <view wx:for="{{advancedSourceItems}}" wx:key="sourceNo" class="advanced-source-chip {{item.available === false ? 'advanced-source-unavailable' : ''}}">
+              <view class="advanced-source-thumb">
+                <image wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                <view wx:else class="advanced-source-placeholder">{{item.kind === 'MEMBER_PORTFOLIO' ? '作品集' : '作品'}}</view>
+                <view class="advanced-source-no">{{item.sourceNo}}</view>
+                <view wx:if="{{item.kind === 'MEMBER_PORTFOLIO'}}" class="advanced-source-type">集</view>
+              </view>
+              <view class="advanced-source-label">{{item.sourceNo}} 号{{item.kind === 'MEMBER_PORTFOLIO' ? ' · 作品集' : ''}}</view>
+              <view wx:if="{{item.available === false}}" class="advanced-source-unavailable-note">不可用</view>
+            </view>
+          </view>
+        </scroll-view>
+        <view wx:else class="advanced-source-empty">还没有选择内容</view>
+        <view class="advanced-source-note">用素材序号向 AI 指明作品，序号不随排列改变。</view>
       </view>
     </view>
   </scroll-view>

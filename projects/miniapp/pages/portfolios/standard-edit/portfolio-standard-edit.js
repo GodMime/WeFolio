@@ -1,3 +1,4 @@
+const { advancedEditorPageMethods, editorRequest, installAdvancedEditor, loadAdvancedMetadata, markAdvancedSaved, SAVE_INCOMPLETE_MESSAGE, confirmAdvancedPortfolioPublish } = require('../utils/advanced-editor-page')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { normalizeTextGrid, validateTextGrid } = require('../utils/portfolio-text-grid')
 const { normalizeContactInfo, validateContactInfo } = require('../utils/portfolio-contact-info')
@@ -1207,6 +1208,8 @@ function updateShareCoverUrlInConfig(config = {}, coverUrl = '') {
 }
 
 Page({
+  ...advancedEditorPageMethods,
+  advancedRequest(options) { return editorRequest(this, options, request) },
   handleRemoteFontDraft(event) { if (this.remoteFontPage) this.remoteFontPage.editDraft(event.detail) },
   handleRemoteFontSelect(event) { if (this.remoteFontPage) this.remoteFontPage.select(event.detail.fontId, event.detail.sessionId) },
   handleExpandFonts() { if (this.remoteFontPage) return this.remoteFontPage.expand() },
@@ -1371,6 +1374,7 @@ Page({
 
   onLoad(options = {}) {
     this.remoteFontPage = installRemoteFontPage(this, { editor: true, team: false })
+    installAdvancedEditor(this, options, false)
     this.setData({ portfolioId: options.portfolioId || null })
     this.loadPortfolioFontCapability()
     return this.bootstrap()
@@ -1399,9 +1403,10 @@ Page({
       return
     }
     if (!this.data.portfolioId) {
+      if (this.data.advancedEditing) return Promise.resolve()
       return this.loadBasicProfileDefaults(this.data.config)
     }
-    return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}` })
+    return this.advancedRequest({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}` })
       .then((response) => {
         this.setData({ fontAssets: response.fontAssets || null })
         const config = normalizePortfolioConfig(response.config || {})
@@ -1411,6 +1416,7 @@ Page({
           ...buildEditorMenuState(config, this.data.activeMenuKey),
           shareFieldCounters: buildShareFieldCounters(config.share)
         }, buildPublicationStatusState(response.publicationStatus)))
+        loadAdvancedMetadata(this, response)
         this.restoreBackgroundAudioSelection()
         this.loadSingleWorkSummaries(config)
         return this.loadBasicProfileDefaults(config)
@@ -1459,7 +1465,7 @@ Page({
     if (!workId || this.backgroundAudioDisposed) return
     const seq = this.backgroundAudioRestoreSeq = (this.backgroundAudioRestoreSeq || 0) + 1
     try {
-      const response = await request({ url: `/api/mine/works/${workId}` })
+      const response = await this.advancedRequest({ url: `/api/mine/works/${workId}` })
       if (this.backgroundAudioDisposed || seq !== this.backgroundAudioRestoreSeq ||
           workId !== this.data.config.backgroundAudio.workId) return
       const work = response.work && response.work.mediaType === 'AUDIO' && response.work.auditStatus === 'PASSED' ? response.work : null
@@ -1513,7 +1519,7 @@ Page({
     const page = (this.backgroundAudioPage || 0) + 1
     this.setData({ backgroundAudioLoading: true })
     try {
-      const response = await request({ url: '/api/mine/works', data: { mediaType: 'AUDIO', auditStatus: 'PASSED', page, pageSize: 20 } })
+      const response = await this.advancedRequest({ url: '/api/mine/works', data: { mediaType: 'AUDIO', auditStatus: 'PASSED', page, pageSize: 20 } })
       if (seq !== this.backgroundAudioRequestSeq) return
       const list = normalizeWorkList(response)
       this.backgroundAudioPage = page
@@ -1726,7 +1732,7 @@ Page({
       singleWorkSummaryMap: currentSummaryMap,
       singleWorkSummaries: buildSingleWorkSummaryList(workIds, currentSummaryMap)
     })
-    return Promise.all(workIds.map((workId) => request({ url: `${WORKS_API_URL}/${workId}` })
+    return Promise.all(workIds.map((workId) => this.advancedRequest({ url: `${WORKS_API_URL}/${workId}` })
       .then((response = {}) => ({
         workId,
         work: response.work || null,
@@ -1787,7 +1793,7 @@ Page({
     if (!shouldApplyBasicProfileDefaults(normalizedConfig)) {
       return Promise.resolve(normalizedConfig)
     }
-    return request({ url: BASIC_PROFILE_API_URL })
+    return this.advancedRequest({ url: BASIC_PROFILE_API_URL })
       .then((response) => {
         const nextConfig = applyBasicProfileDefaultsToConfig(normalizedConfig, response)
         this.applyEditorConfig(nextConfig, this.data.activeMenuKey, {
@@ -1962,7 +1968,7 @@ Page({
   },
 
   loadComponentOptions() {
-    request({
+    this.advancedRequest({
       url: COMPONENT_LIBRARY_API_URL,
       data: { editorSchemaRevision: EDITOR_SCHEMA_REVISION }
     })
@@ -2541,7 +2547,7 @@ Page({
     let work = null
     let error = ''
     try {
-      const response = await request({ url: `${WORKS_API_URL}/${workId}` })
+      const response = await this.advancedRequest({ url: `${WORKS_API_URL}/${workId}` })
       const source = response && response.work
       const valid = source && String(source.id) === String(workId) && source.status === 'ACTIVE'
         && (source.mediaType === 'IMAGE' || (BACKGROUND_MEDIA_TYPES.includes(source.mediaType) && source.auditStatus === PASSED_WORK_AUDIT_STATUS))
@@ -2601,7 +2607,7 @@ Page({
     try {
       let list
       do {
-        const response = await request({ url: WORKS_API_URL,
+        const response = await this.advancedRequest({ url: WORKS_API_URL,
           data: { keyword, auditStatus: PASSED_WORK_AUDIT_STATUS, page, pageSize: COMPONENT_WORK_PAGE_SIZE } })
         if (seq !== this.textBackgroundRequestSeq) return
         list = normalizeWorkList(response)
@@ -2753,7 +2759,7 @@ Page({
       hyperlinkTargetLoading: true,
       hyperlinkTargetErrorText: ''
     })
-    return request({
+    return this.advancedRequest({
       url: HYPERLINK_TARGETS_API_URL,
       data: {
         sourcePortfolioId: this.data.portfolioId || undefined,
@@ -3182,7 +3188,7 @@ Page({
       profileSheetLoading: true,
       profileSheetErrorText: ''
     })
-    return request({ url: BASIC_PROFILE_API_URL })
+    return this.advancedRequest({ url: BASIC_PROFILE_API_URL })
       .then((response) => {
         const profileForm = buildProfileFormFromBasicProfile(response, this.data.profileForm)
         this.setData({
@@ -3267,7 +3273,7 @@ Page({
   },
 
   loadQrContactProfileQrUrl() {
-    return request({ url: BASIC_PROFILE_API_URL })
+    return this.advancedRequest({ url: BASIC_PROFILE_API_URL })
       .then((response) => {
         const qrUrl = resolveBasicProfileQrContactQrUrl(response)
         this.setData({ qrContactProfileQrUrl: qrUrl })
@@ -3299,7 +3305,7 @@ Page({
     if (!shouldLoadProfileQr) {
       return Promise.resolve('')
     }
-    return request({ url: BASIC_PROFILE_API_URL })
+    return this.advancedRequest({ url: BASIC_PROFILE_API_URL })
       .then((response) => resolveBasicProfileQrContactQrUrl(response))
       .catch((error) => {
         if (error && error.authRequired) {
@@ -3432,7 +3438,7 @@ Page({
   },
 
   async loadAllDisplayGroupWorks(page = 1, collectedWorks = []) {
-    const response = await request({
+    const response = await this.advancedRequest({
       url: WORKS_API_URL,
       data: {
         auditStatus: PASSED_WORK_AUDIT_STATUS,
@@ -3450,7 +3456,7 @@ Page({
 
   async loadDisplayGroupCatalog(componentKey) {
     try {
-      const tagResponse = await request({ url: `${WORKS_API_URL}/tags` })
+      const tagResponse = await this.advancedRequest({ url: `${WORKS_API_URL}/tags` })
       const tags = normalizeWorkTags(tagResponse)
       const works = await this.loadAllDisplayGroupWorks()
       const currentComponent = findComponentByKey(this.data.config, componentKey)
@@ -3650,7 +3656,7 @@ Page({
       componentWorkErrorText: ''
     })
     try {
-      const response = await request({
+      const response = await this.advancedRequest({
         url: VIDEO_CAROUSEL_WORKS_API_URL,
         data: requestData
       })
@@ -3802,7 +3808,7 @@ Page({
       let works = initialWorks
       let workOptions = []
       do {
-        const response = await request({
+        const response = await this.advancedRequest({
           url: WORKS_API_URL,
           data: {
             keyword,
@@ -4133,7 +4139,8 @@ Page({
     this.draftCreationPromise = creationApproved.then((confirmed) => {
       if (!confirmed) throw new Error(CREATE_RESULT_UNKNOWN_MESSAGE)
       this.draftCreationResultUnknown = false
-      return request({
+      if (this.data.advancedEditing) return this.createAdvancedDraft()
+      return this.advancedRequest({
         url: STANDARD_PERSONAL_API_URL,
         method: 'POST',
         data: payload
@@ -4168,11 +4175,11 @@ Page({
     if (!this.pendingDraftSave) {
       this.pendingDraftSave = {
         portfolioId,
-        payload: clonePlainObject(buildDraftPayload(config, this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_DRAFT)))
+        payload: clonePlainObject(this.advancedDraftPayload(buildDraftPayload(config, this.data.draftRevision, makeIdempotencyKey(IDEMPOTENCY_PREFIX_DRAFT))))
       }
     }
     const pending = this.pendingDraftSave
-    return request({
+    return this.advancedRequest({
       url: `${PORTFOLIO_API_PREFIX}/${pending.portfolioId}/draft`,
       method: 'PUT',
       data: clonePlainObject(pending.payload)
@@ -4184,8 +4191,11 @@ Page({
         publishedRevision: response.publishedRevision || this.data.publishedRevision
       }, buildPublicationStatusState(response.publicationStatus || this.data.publicationStatus)))
       // 成功仅确认已发送的快照；期间产生的新编辑仍留在本页，由用户再次保存后才返回列表。
-      const editorChanged = stableEditorConfigJson(buildDraftPayload(this.data.config).config) !== stableEditorConfigJson(pending.payload.config)
-      if (!editorChanged) this.setData({ fontAssets: response.fontAssets || null })
+      const editorChanged = stableEditorConfigJson(buildDraftPayload(this.data.config).config) !== stableEditorConfigJson(pending.payload.config) || this.advancedDraftChanged(pending.payload)
+      if (!editorChanged) {
+        this.setData({ fontAssets: response.fontAssets || null })
+        markAdvancedSaved(this)
+      }
       if (options.showToast !== false) {
         wx.showToast({ title: editorChanged ? UNSAVED_EDITOR_CHANGES_MESSAGE : '草稿已保存', icon: editorChanged ? 'none' : 'success' })
       }
@@ -4241,6 +4251,7 @@ Page({
       return Promise.resolve(nextConfig)
     }
     return uploadPortfolioImageAsset(portfolioId, coverUrl, {
+      ...this.advancedAssetOptions(portfolioId),
       assetType: PORTFOLIO_ASSET_TYPES.COVER,
       assetLabel: '封面图片',
       clientIdPrefix: 'cover'
@@ -4266,7 +4277,8 @@ Page({
 
         const uploadAvatar = avatarUrl
           ? uploadPortfolioImageAsset(portfolioId, avatarUrl, {
-            assetType: PORTFOLIO_ASSET_TYPES.PROFILE_AVATAR,
+            ...this.advancedAssetOptions(portfolioId),
+      assetType: PORTFOLIO_ASSET_TYPES.PROFILE_AVATAR,
             assetLabel: '头像图片',
             clientIdPrefix: 'profile-avatar'
           }).then((uploadedUrl) => {
@@ -4291,7 +4303,8 @@ Page({
             return ''
           }
           return uploadPortfolioImageAsset(portfolioId, wechatQrUrl, {
-            assetType: PORTFOLIO_ASSET_TYPES.QR_CONTACT,
+            ...this.advancedAssetOptions(portfolioId),
+      assetType: PORTFOLIO_ASSET_TYPES.QR_CONTACT,
             assetLabel: '微信二维码图片',
             clientIdPrefix: 'profile-wechat-qr'
           }).then((uploadedUrl) => {
@@ -4342,7 +4355,8 @@ Page({
             return ''
           }
           return uploadPortfolioImageAsset(portfolioId, qrUrl, {
-            assetType: PORTFOLIO_ASSET_TYPES.QR_CONTACT,
+            ...this.advancedAssetOptions(portfolioId),
+      assetType: PORTFOLIO_ASSET_TYPES.QR_CONTACT,
             assetLabel: '二维码图片',
             clientIdPrefix: 'qr-contact'
           }).then((uploadedUrl) => {
@@ -4391,7 +4405,7 @@ Page({
       return this.saveEditorDraft(portfolioId)
     }).catch((error) => {
       this.focusServerComponentError(error)
-      wx.showToast({ title: error.message || '保存失败', icon: 'none' })
+      wx.showToast({ title: this.advancedDraftCreatedLocally && this.data.portfolioId ? SAVE_INCOMPLETE_MESSAGE : error.message || '保存失败', icon: 'none' })
     })
   },
 
@@ -4462,7 +4476,7 @@ Page({
       wx.showToast({ title: validation.message, icon: 'none' })
       return Promise.resolve()
     }
-    return confirmPortfolioPublishDisclaimer().then((confirmed) => {
+    return (this.data.advancedEditing ? confirmAdvancedPortfolioPublish(options => this.advancedRequest(options)) : confirmPortfolioPublishDisclaimer()).then((confirmed) => {
       if (!confirmed) {
         return
       }
@@ -4506,7 +4520,7 @@ Page({
   /** 结果未知时保留旧发布快照，重试成功只确认该快照。 */
   submitPublishSnapshot() {
     const pending = this.pendingPublish
-    return request({
+    return this.advancedRequest({
       url: `${PORTFOLIO_API_PREFIX}/${pending.portfolioId}/publish`, method: 'POST',
       data: clonePlainObject(pending.payload)
     }).then((response = {}) => {
@@ -4537,8 +4551,9 @@ Page({
 
   handlePreview() {
     if (!this.data.portfolioId) {
+      if (this.data.advancedEditing) wx.showToast({ title: '请先保存草稿再预览', icon: 'none' })
       return
     }
-    wx.navigateTo({ url: `/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=${this.data.portfolioId}` })
+    wx.navigateTo({ url: `/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=${this.data.portfolioId}${this.data.advancedEditing ? '&templateType=ADVANCED' : ''}` })
   }
 })

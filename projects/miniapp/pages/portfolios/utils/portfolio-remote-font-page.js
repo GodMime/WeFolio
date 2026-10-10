@@ -186,7 +186,7 @@ function installRemoteFontPage(page, { editor = false, team = false } = {}) {
     const isCurrent = () => !disposed && (edit && edit.id) === identity && page.data.activeMenuKey === menuKey && JSON.stringify(candidateConfig()) === signature
     page.setData({ fontPreparing: true, fontMessage: '' })
     try {
-      const response = await request({ url: `/api/mine/${team ? 'team-portfolios' : 'portfolios'}/${page.data.portfolioId}/fonts/prepare`,
+      const response = await (page.advancedRequest ? options => page.advancedRequest(options) : request)({ url: `/api/mine/${team ? 'team-portfolios' : 'portfolios'}/${page.data.portfolioId}/fonts/prepare`,
         method: 'POST', data: { config, clientCapabilities: { portfolioRemoteFont: 1 } } })
       if (isCurrent()) {
         if (edit) edit.prepared = true

@@ -28,6 +28,7 @@ import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedTeamSourceAccessService;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -49,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -59,6 +61,25 @@ import static org.mockito.Mockito.when;
  * 团队作品集访问汇总、资源归属与完整幂等测试。
  */
 class TeamPortfolioVisitServiceTest {
+
+    /** 高级发布引用仍须读取当前授权，撤权失败不产生新事件或计数。 */
+    @Test
+    void advancedWorkEventRechecksCurrentSourceBeforePersistence() {
+        Context context = context();
+        AdvancedTeamSourceAccessService sources = mock(AdvancedTeamSourceAccessService.class);
+        TeamPortfolioVisitService service = new TeamPortfolioVisitService(context.recordMapper, context.eventMapper,
+                context.referenceMapper, context.workMapper, sources);
+        PortfolioEntity portfolio = portfolio(); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(context.recordMapper.selectOne(any())).thenReturn(ownedRecord());
+        when(context.referenceMapper.selectList(any())).thenReturn(List.of(reference(ReferenceTypeDict.WORK.getCode())));
+        WorkEntity work = work(71L, MediaTypeDict.IMAGE.getCode()); when(context.workMapper.selectById(71L)).thenReturn(work);
+        doThrow(new BusinessException("所选来源已移除或不可用")).when(sources).requireWork(TEAM_ID, work);
+        assertThatThrownBy(() -> service.recordEvent(portfolio, VISITOR_ID, VISITOR_KEY,
+                clientEvent(VisitEventTypeDict.WORK_VIEWED, "advanced-event"), PortfolioTemplateTypeDict.ADVANCED.getCode()))
+                .isInstanceOf(BusinessException.class);
+        verify(sources).requireWork(TEAM_ID, work); verifyNoInteractions(context.eventMapper);
+        verify(context.recordMapper, never()).incrementCounters(any(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt());
+    }
 
     /** 团队 ID。 */
     private static final long TEAM_ID = 31L;

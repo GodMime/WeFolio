@@ -388,11 +388,15 @@ test('personal portfolio editor consumes the shared page and thirteen-sheet cont
   assert.deepEqual(importPaths(wxss), [
     '../../../styles/portfolio-text-typography.wxss',
     '../../../styles/portfolio-text-section-editor.wxss',
-    '../../../styles/portfolio-editor-foundation.wxss'
+    '../../../styles/portfolio-editor-foundation.wxss',
+    '../styles/advanced-editor.wxss'
   ])
   assert.match(wxss, /^(?:@import[^\n]+\n)+\n[^@]/)
 
-  assert.equal(classTokenCount(wxml, 'pe-page-card'), 3)
+  // 三张标准表单卡与高级模式额外的 AI、已选内容卡共用页面样式。
+  assert.equal(classTokenCount(wxml, 'pe-page-card'), 5)
+  assert.match(wxml, /wx:if="\{\{advancedEditing\}\}" class="advanced-source-card panel pe-page-card"/)
+  assert.match(wxml, /wx:if="\{\{advancedEditing\}\}" class="panel advanced-tools pe-page-card"/)
   assert.equal(classTokenCount(wxml, 'pe-page-card-heading'), 3)
   assert.equal(classTokenCount(wxml, 'pe-component-row'), 1)
   assert.equal(classTokenCount(wxml, 'pe-component-index'), 1)
@@ -529,11 +533,15 @@ test('team portfolio editor consumes the shared page and ten-sheet contract', ()
     '../../../styles/portfolio-text-typography.wxss',
     '../../../styles/portfolio-text-section-editor.wxss',
     '../../../styles/portfolio-editor-foundation.wxss',
+    '../styles/advanced-editor.wxss',
     '../styles/team-member-selector.wxss'
   ])
   assert.match(wxss, /^(?:@import[^\n]+\n)+\n[^@]/)
 
-  assert.equal(classTokenCount(wxml, 'pe-page-card'), 3)
+  // 三张标准表单卡与高级模式额外的 AI、已选内容卡共用页面样式。
+  assert.equal(classTokenCount(wxml, 'pe-page-card'), 5)
+  assert.match(wxml, /wx:if="\{\{advancedEditing\}\}" class="advanced-source-card panel pe-page-card"/)
+  assert.match(wxml, /wx:if="\{\{advancedEditing\}\}" class="panel advanced-tools pe-page-card"/)
   assert.equal(classTokenCount(wxml, 'pe-page-card-heading'), 3)
   assert.equal(classTokenCount(wxml, 'pe-component-row'), 1)
   assert.equal(classTokenCount(wxml, 'pe-component-index'), 1)

@@ -108,6 +108,7 @@
                     <view class="portfolio-meta">{{item.updatedText}}</view>
                     <view class="portfolio-badges">
                       <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
+                      <view wx:if="{{item.templateType === 'ADVANCED'}}" class="status-badge draft">高级</view>
                     </view>
                   </view>
                   <view class="portfolio-side">
@@ -127,7 +128,7 @@
 
           <view class="create-actions">
             <button class="create-action standard" bindtap="handleCreateStandardPersonal">新建标准个人作品集</button>
-            <button class="create-action advanced" data-type="advanced-personal" bindtap="handleUnavailableTap">新建高级个人作品集</button>
+            <button class="create-action advanced" data-type="advanced-personal" bindtap="handleCreateAdvancedPersonal">新建高级个人作品集</button>
           </view>
         </view>
       </view>
@@ -205,7 +206,8 @@
                       </view>
                     </view>
                     <view class="portfolio-meta">{{item.updatedText}}</view>
-                    <view class="portfolio-badges"><view class="status-badge {{item.statusTone}}">{{item.statusText}}</view></view>
+                    <view class="portfolio-badges"><view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
+                      <view wx:if="{{item.templateType === 'ADVANCED'}}" class="status-badge draft">高级</view></view>
                   </view>
                   <view class="portfolio-side">
                     <view class="portfolio-action-row">
@@ -227,7 +229,7 @@
           </view>
           <view class="create-actions">
             <button class="create-action standard" bindtap="handleCreateStandardTeam" loading="{{creatingTeamPortfolio}}" disabled="{{!maintainableTeamsLoaded || noMaintainableTeam || creatingTeamPortfolio}}">新建标准团队作品集</button>
-            <button class="create-action advanced" data-type="advanced-team" bindtap="handleUnavailableTap">新建高级团队作品集</button>
+            <button class="create-action advanced" data-type="advanced-team" bindtap="handleCreateAdvancedTeam">新建高级团队作品集</button>
           </view>
         </view>
       </view>

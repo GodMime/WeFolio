@@ -52,6 +52,8 @@ function normalizePendingQueue(items, now) {
       portfolioType: item.portfolioType, shareCode: item.shareCode, clientSessionKey: item.clientSessionKey,
       idempotencyKey: item.idempotencyKey, visitorKey: String(item.visitorKey), trackingSessionId: item.trackingSessionId,
       sourceType: String(item.sourceType || ''), anonymousSessionId: String(item.anonymousSessionId || ''),
+      ...(item.portfolioType === 'TEAM' && item.visitorApiPrefix === '/api/visitor/advanced-team-portfolios'
+        ? { visitorApiPrefix: item.visitorApiPrefix } : {}),
       activeDurationMs: nonnegative(item.activeDurationMs), updatedAt: Math.min(item.updatedAt, now)
     })).sort((a, b) => a.updatedAt - b.updatedAt).slice(-MAX_QUEUE_SIZE)
 }
@@ -156,6 +158,8 @@ function createVisitActivityContext(options = {}) {
       return {
         shareCode: context.shareCode, sourceType: options.sourceType, anonymousSessionId: options.anonymousSessionId,
         idempotencyKey: context.idempotencyKey,
+        ...(options.portfolioType === 'TEAM' && options.visitorApiPrefix === '/api/visitor/advanced-team-portfolios'
+          ? { visitorApiPrefix: options.visitorApiPrefix } : {}),
         tracking: Object.assign({ version: 1, clientSessionKey: context.clientSessionKey }, device ? { device } : {})
       }
     },

@@ -1348,6 +1348,65 @@ test('team preview rejects schedule query locally without a request', async () =
   }
 })
 
+for (const scope of ['draft', 'published']) {
+  test(`高级团队已保存${scope}预览只读查档走高级入口`, async () => {
+    const requests = []
+    const resolved = []
+    const scheduleResult = { portfolioType: 'TEAM', queriedDate: '2026-10-10', status: 'TEAM_AVAILABLE', members: [] }
+    const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async options => {
+      requests.push(options)
+      return scheduleResult
+    })
+    page.setData({ advancedEditing: true, portfolioId: 7, scope })
+    page.selectComponent = () => ({ resolveQuery(value) { resolved.push(value) } })
+    try {
+      await page.handleScheduleQuery({ detail: { componentKey: 'schedule-1', queriedDate: '2026-10-10', idempotencyKey: 'preview-1' } })
+      assert.deepEqual(requests, [{ url: `/api/mine/advanced-portfolios/7/schedule-query-preview?scope=${scope}`,
+        method: 'POST', data: { componentKey: 'schedule-1', queriedDate: '2026-10-10', idempotencyKey: 'preview-1' } }])
+      assert.deepEqual(resolved, [{ detail: scheduleResult }])
+      assert.deepEqual(page.data.scheduleResults['schedule-1'], scheduleResult)
+    } finally { page.cleanup() }
+  })
+}
+
+test('高级团队候选查档只提示先采用并保存，不发送任何请求', async () => {
+  const requests = [], rejected = [], toasts = []
+  const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async options => { requests.push(options) },
+    { showToast(options) { toasts.push(options) } })
+  page.setData({ advancedEditing: true, candidatePreview: true, portfolioId: 7 })
+  page.selectComponent = () => ({ rejectQuery(value) { rejected.push(value) } })
+  try {
+    await page.handleScheduleQuery({ detail: { componentKey: 'schedule-1' } })
+    assert.deepEqual(requests, [])
+    assert.deepEqual(rejected, [{ detail: { message: '采用并保存后可预览档期', clearPendingIdempotencyKey: true } }])
+    assert.deepEqual(toasts, [{ title: '采用并保存后可预览档期', icon: 'none' }])
+  } finally { page.cleanup() }
+})
+
+test('高级团队只读查档网络失败保留重试键，切菜单后忽略迟到结果', async () => {
+  const rejected = [], resolved = []
+  let resolveQuery
+  let attempt = 0
+  const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async () => {
+    attempt += 1
+    if (attempt === 1) throw new Error('timeout')
+    return new Promise(resolve => { resolveQuery = resolve })
+  })
+  page.setData({ advancedEditing: true, portfolioId: 7, scope: 'draft' })
+  page.selectComponent = () => ({ rejectQuery(value) { rejected.push(value) }, resolveQuery(value) { resolved.push(value) } })
+  const event = { detail: { componentKey: 'schedule-1', queriedDate: '2026-10-10', idempotencyKey: 'retry-preview-1' } }
+  try {
+    await page.handleScheduleQuery(event)
+    assert.equal(rejected[0].detail.clearPendingIdempotencyKey, false)
+    const pending = page.handleScheduleQuery(event)
+    page.teamPortfolioMenuTransitionRevision = 1
+    resolveQuery({ status: 'TEAM_AVAILABLE', members: [] })
+    await pending
+    assert.deepEqual(resolved, [])
+    assert.deepEqual(page.data.scheduleResults, {})
+  } finally { page.cleanup() }
+})
+
 test('team preview video carousel opens a dedicated video page without events and handles failures', async () => {
   const toasts = [], previews = [], requests = []
   const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async (options) => { requests.push(options); return {} }, {

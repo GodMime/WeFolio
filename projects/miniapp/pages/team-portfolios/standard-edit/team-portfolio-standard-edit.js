@@ -1,3 +1,4 @@
+const { advancedEditorPageMethods, editorRequest, installAdvancedEditor, loadAdvancedMetadata, markAdvancedSaved, SAVE_INCOMPLETE_MESSAGE, confirmAdvancedPortfolioPublish } = require('../utils/advanced-editor-page')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { normalizeTextGrid, validateTextGrid } = require('../utils/portfolio-text-grid')
 const { normalizeContactInfo, validateContactInfo } = require('../utils/portfolio-contact-info')
@@ -543,6 +544,8 @@ function buckets(components) {
 }
 
 Page({
+  ...advancedEditorPageMethods,
+  advancedRequest(options) { return editorRequest(this, options, request) },
   handleRemoteFontDraft(event) { if (this.remoteFontPage) this.remoteFontPage.editDraft(event.detail) },
   handleRemoteFontSelect(event) { if (this.remoteFontPage) this.remoteFontPage.select(event.detail.fontId, event.detail.sessionId) },
   handleExpandFonts() { if (this.remoteFontPage) return this.remoteFontPage.expand() },
@@ -560,11 +563,12 @@ Page({
     portfolioId: 0, teamId: 0, teamSnapshot: {}, loading: false, errorMessage: '', canMaintain: false, publicationStatus: 'DRAFT_ONLY', draftRevision: 0, publishedRevision: 0, statusText: '草稿', statusTone: 'draft', showPublishAction: false, config: normalizeTeamPortfolioConfig(), activeMenuKey: '', activeMenuTitle: '', activeMenuTitleCount: 0, navigationItems: [], bottomNavCount: 1, backgroundColorOptions: TEAM_BACKGROUND_COLORS, bottomNavCountOptions: TEAM_BOTTOM_NAV_COUNTS, backgroundColorSheetVisible: false, backgroundColorDraft: '#FFFFFF', backgroundColorHsv: hexToHsv('#FFFFFF'), backgroundHueColor: '#FF0000', backgroundColorPadDotStyle: 'left: 0%; top: 0%', componentList: [], componentBuckets: buckets([]), componentOptions: buildComponentOptions(), componentValidation: {}, componentSources: {}, singleWorkRowSummaryMap: {}, hasInvalidComponents: false, saving: false, publishing: false, openingLibrary: false, shareCoverUploading: false, qrContactChoosing: false, qrContactCropVisible: false, qrContactCropSaving: false, qrContactCropErrorText: '', qrContactCropState: null, qrContactCropTouchStart: null, qrContactCropCanvasWidth: WECHAT_QR_CROP_OUTPUT_WIDTH, qrContactCropCanvasHeight: WECHAT_QR_CROP_OUTPUT_WIDTH, teamProfileRefreshing: false, pendingDraftKey: '', pendingPublishKey: '', pendingPublishRevision: 0, shareTitleCounter: '0 / 50', componentSheetVisible: false, textSectionSheetVisible: false, textSectionEditingComponentKey: '', structuredTextSheetVisible: false, structuredTextEditingComponentKey: '', structuredTextIsNew: false, structuredTextConfig: { blocks: [] }, textBackgroundOptions: [], textBackgroundLoading: false, textBackgroundError: '', textBackgroundHasMore: false, textBackgroundMembers: [], textBackgroundMemberUserId: 0, textBackgroundMembersLoading: false, textBackgroundResource: {}, textSectionAlignmentOptions: TEXT_SECTION_ALIGNMENT_OPTIONS, textSectionMaxLength: TEXT_SECTION_MAX_LENGTH, portfolioFontCapability: getPortfolioFontCapability(), ...buildTextSectionEditorState(), contactFormSheetVisible: false, contactFormEditingComponentKey: '', contactFormDisplayModeOptions: CONTACT_FORM_DISPLAY_MODE_OPTIONS, contactFormConfigForm: buildContactFormConfigForm(), scheduleQuerySheetVisible: false, scheduleQueryEditingComponentKey: '', scheduleQueryDisplayModeOptions: SCHEDULE_QUERY_DISPLAY_MODE_OPTIONS, scheduleQueryForm: buildScheduleQueryForm(), dividerSheetVisible: false, dividerEditingComponentKey: '', ...buildDividerEditorState(), componentEditorVisible: false, componentEditorLayoutType: '', activeComponentKey: '', activeComponentType: '', activeComponentName: '', activeComponent: { config: {} }, activeComponentSource: {}, activeComponentNeedsPortfolio: false, teamVideoTitle: '视频作品', teamVideoTitleCount: 4, teamVideoShowComponentTitle: true, teamVideoSettingsCollapsed: false, teamVideoShowTitle: true, teamVideoShowSwipeHint: true, teamVideoMembers: [], teamVideoSelectedMemberUserId: 0, teamVideoCandidates: [], teamVideoWorkOptions: [], teamVideoSelectedItems: [], teamVideoKeyword: '', teamVideoPage: 1, teamVideoPageSize: TEAM_VIDEO_PAGE_SIZE, teamVideoHasMore: false, teamVideoMembersLoading: false, teamVideoWorksLoading: false, teamVideoLoadingMore: false, teamVideoErrorText: '', teamVideoEditingNewComponent: false, revealedComponentKey: '', componentTouchStart: null, draggingIndex: -1, dragTargetIndex: -1, componentDragStartY: 0, componentDragStyle: '', componentMoveSheetVisible: false, componentMoveKey: '', componentMoveTargets: [], componentMovePending: false, highlightedComponentKey: '', componentScrollTarget: '', shareCoverCropVisible: false, shareCoverCropPath: '', ...buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) },
   onLoad(options = {}) {
     this.remoteFontPage = installRemoteFontPage(this, { editor: true, team: true })
+    installAdvancedEditor(this, options, true)
     const portfolioId = Number(options.portfolioId) || 0
     const teamId = Number(options.teamId) || 0
     this.loadPortfolioFontCapability()
     if (portfolioId) { this.setData({ portfolioId }); return this.bootstrap() }
-    if (teamId) { this.setData({ teamId }); return this.bootstrapNew() }
+    if (teamId) { this.setData({ teamId, ...(this.data.advancedEditing ? { canMaintain: true } : {}) }); if (this.data.advancedEditing) return; return this.bootstrapNew() }
     this.setData({ errorMessage: '作品集参数无效' })
   },
   loadPortfolioFontCapability() {
@@ -587,7 +591,7 @@ Page({
     if (this.data.loading || !this.data.teamId) return
     this.setData({ loading: true, errorMessage: '' })
     try {
-      const teamDetail = await request({ url: `/api/mine/teams/${this.data.teamId}` })
+      const teamDetail = await this.advancedRequest({ url: `/api/mine/teams/${this.data.teamId}` })
       const teamSnapshot = normalizeTeamSnapshot(this.data.teamId, teamDetail && teamDetail.team)
       const componentKey = makeKey()
       const config = normalizeTeamPortfolioConfig({
@@ -603,14 +607,14 @@ Page({
     if (this.data.loading || !this.data.portfolioId) return
     this.setData({ loading: true, errorMessage: '' })
     try {
-      const detail = await fetchTeamPortfolioDetail(request, this.data.portfolioId)
+      const detail = this.data.advancedEditing ? await this.advancedRequest({ url: `/api/mine/advanced-portfolios/${this.data.portfolioId}` }) : await fetchTeamPortfolioDetail(request, this.data.portfolioId)
       const config = normalizeTeamPortfolioConfig(detail.config)
       const componentValidation = Object.fromEntries(
         visitTeamPortfolioComponents(config).map((item) => [item.component.componentKey, true])
       )
       let teamSnapshot = draftTeamSnapshot(config)
       if (!hasTeamSnapshot(teamSnapshot)) {
-        const teamDetail = await request({ url: `/api/mine/teams/${detail.ownerId}` })
+        const teamDetail = await this.advancedRequest({ url: `/api/mine/teams/${detail.ownerId}` })
         teamSnapshot = normalizeTeamSnapshot(detail.ownerId, teamDetail && teamDetail.team)
       }
       this.setData(Object.assign({
@@ -625,6 +629,7 @@ Page({
         hasInvalidComponents: false
       }, buildPublicationState(detail.publicationStatus)))
       this.updateConfig(config)
+      loadAdvancedMetadata(this, detail)
       this.restoreBackgroundAudioSelection()
       this.loadSingleWorkRowSummaries(config)
     } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; this.setData({ errorMessage: '团队作品集加载失败，请重试', canMaintain: false }) } finally { this.setData({ loading: false }) }
@@ -699,7 +704,7 @@ Page({
     })
     this.refreshComponentList(summaryMap)
     if (!pendingComponents.length) return Promise.resolve(summaryMap)
-    return Promise.all(pendingComponents.map((component) => request({
+    return Promise.all(pendingComponents.map((component) => this.advancedRequest({
       url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${component.memberUserId}/works/page`,
       data: { page: 1, pageSize: 1, selectedWorkId: component.workId }
     }).then((response = {}) => {
@@ -750,7 +755,7 @@ Page({
   handleOpenComponentSheet() { if (!this.data.canMaintain) return; const allComponents = visitTeamPortfolioComponents(this.data.config).map((item) => item.component); this.setData({ componentSheetVisible: true, revealedComponentKey: '', componentOptions: buildComponentOptions(allComponents) }) },
   handleCloseComponentSheet() { this.setData({ componentSheetVisible: false }) },
   handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) { this.setData({ componentSheetVisible: false }); return this.openNewComponentSheet(componentType) }; if (componentType === 'STRUCTURED_TEXT_SECTION') { this.setData({ componentSheetVisible: false }); return this.openStructuredTextSheet() }; const componentKey = this.addComponent(componentType); this.setData({ componentSheetVisible: false }); if (componentType === 'VIDEO_CAROUSEL' && componentKey) return this.openTeamVideoCarouselSheet(componentKey, true) },
-  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'VIDEO_CAROUSEL') return this.openTeamVideoCarouselSheet(componentKey); if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) return this.openNewComponentSheet(componentType, componentKey); if (componentType === 'STRUCTURED_TEXT_SECTION') return this.openStructuredTextSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, componentEditorLayoutType: componentType, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType), ...(componentType === 'CAROUSEL' ? buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) : {}) }) },
+  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'VIDEO_CAROUSEL') return this.openTeamVideoCarouselSheet(componentKey); if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) return this.openNewComponentSheet(componentType, componentKey); if (componentType === 'STRUCTURED_TEXT_SECTION') return this.openStructuredTextSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, componentEditorLayoutType: componentType, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: !this.data.advancedEditing && PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType), ...(componentType === 'CAROUSEL' ? buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) : {}) }) },
   resetTeamVideoEditorState() {
     this.setData({
       teamVideoTitle: '视频作品',
@@ -789,7 +794,7 @@ Page({
       activeComponentName: COMPONENT_NAMES.VIDEO_CAROUSEL,
       activeComponent,
       activeComponentSource: {},
-      activeComponentNeedsPortfolio: true,
+      activeComponentNeedsPortfolio: !this.data.advancedEditing,
       teamVideoTitle: config.title,
       teamVideoTitleCount: countTextCodePoints(config.title),
       teamVideoShowComponentTitle: config.showComponentTitle !== false,
@@ -813,15 +818,15 @@ Page({
       teamVideoErrorText: '',
       teamVideoEditingNewComponent: Boolean(editingNewComponent)
     })
-    if (this.data.portfolioId) return this.loadTeamVideoMembers()
+    if (this.data.portfolioId || this.data.advancedEditing) return this.loadTeamVideoMembers()
   },
   async loadTeamVideoMembers() {
-    if (!Number(this.data.portfolioId)) return
+    if (!Number(this.data.portfolioId) && !this.data.advancedEditing) return
     const requestSeq = this.teamVideoMembersRequestSeq + 1
     this.teamVideoMembersRequestSeq = requestSeq
     this.setData({ teamVideoMembersLoading: true, teamVideoErrorText: '' })
     try {
-      const response = await request({
+      const response = await this.advancedRequest({
         url: `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members`
       })
       if (requestSeq !== this.teamVideoMembersRequestSeq || this.data.activeComponentType !== 'VIDEO_CAROUSEL') return
@@ -850,7 +855,7 @@ Page({
   },
   async loadTeamVideoWorks(memberUserId, options = {}) {
     memberUserId = Number(memberUserId || this.data.teamVideoSelectedMemberUserId)
-    if (!Number(this.data.portfolioId) || !memberUserId) return
+    if ((!Number(this.data.portfolioId) && !this.data.advancedEditing) || !memberUserId) return
     const reset = options.reset !== false
     const pageSize = Number(this.data.teamVideoPageSize) || TEAM_VIDEO_PAGE_SIZE
     const page = reset ? 1 : (Number(this.data.teamVideoPage) || 1) + 1
@@ -861,7 +866,7 @@ Page({
       ? { teamVideoWorksLoading: true, teamVideoLoadingMore: false, teamVideoErrorText: '' }
       : { teamVideoLoadingMore: true, teamVideoErrorText: '' })
     try {
-      const response = await request({
+      const response = await this.advancedRequest({
         url: `/api/mine/team-portfolios/${this.data.portfolioId}/components/video-carousel/members/${memberUserId}/works`,
         data: { keyword, page, pageSize }
       })
@@ -1115,7 +1120,7 @@ Page({
     if (this.textBackgroundMembersLoaded) return this.data.textBackgroundMembers
     if (!this.textBackgroundMembersPromise) {
       this.setData({ textBackgroundMembersLoading: true })
-      this.textBackgroundMembersPromise = request({ url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members` })
+      this.textBackgroundMembersPromise = this.advancedRequest({ url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members` })
     }
     const pending = this.textBackgroundMembersPromise
     const isCurrent = () => session === this.textBackgroundSession && isConsumerCurrent()
@@ -1150,7 +1155,7 @@ Page({
         return
       }
       // 已选作品恢复不受候选搜索、翻页或浏览成员的请求序列影响。
-      const response = await request({
+      const response = await this.advancedRequest({
         url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${selected.memberUserId}/works/page`,
         data: { page: 1, pageSize: SINGLE_WORK_PAGE_SIZE, selectedWorkId: selected.workId }
       })
@@ -1208,7 +1213,7 @@ Page({
       // 现有成员分页接口没有 keyword 参数；逐页本地匹配，跳过没有可用背景或无搜索结果的页。
       while (isCurrent()) {
         const selectedWorkId = page === 1 && selected.memberUserId === memberUserId ? selected.workId : 0
-        const response = await request({
+        const response = await this.advancedRequest({
           url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${memberUserId}/works/page`,
           data: Object.assign({ page, pageSize: SINGLE_WORK_PAGE_SIZE }, selectedWorkId ? { selectedWorkId } : {})
         })
@@ -1424,7 +1429,7 @@ Page({
     if (!workId || this.backgroundAudioDisposed) return
     const seq = this.backgroundAudioRestoreSeq = (this.backgroundAudioRestoreSeq || 0) + 1
     try {
-      const response = await request({ url: `/api/mine/team-portfolios/${this.data.portfolioId}/preview` })
+      const response = await this.advancedRequest({ url: `/api/mine/team-portfolios/${this.data.portfolioId}/preview` })
       if (this.backgroundAudioDisposed || seq !== this.backgroundAudioRestoreSeq ||
           workId !== this.data.config.backgroundAudio.workId) return
       const work = response.renderData && response.renderData.backgroundAudio
@@ -1469,7 +1474,7 @@ Page({
     const seq = this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
     this.setData({ backgroundAudioPickerVisible: true, backgroundAudioMembers: [], backgroundAudioOptions: [], backgroundAudioLoading: true })
     try {
-      const members = await request({ url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members` })
+      const members = await this.advancedRequest({ url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members` })
       if (seq !== this.backgroundAudioRequestSeq) return
       this.setData({ backgroundAudioMembers: members, backgroundAudioMemberIndex: 0, backgroundAudioLoading: false })
       return this.handleBackgroundAudioMemberChange({ detail: { value: 0 } })
@@ -1500,7 +1505,7 @@ Page({
     const page = (this.backgroundAudioPage || 0) + 1
     this.setData({ backgroundAudioLoading: true })
     try {
-      const response = await request({
+      const response = await this.advancedRequest({
         url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${member.memberUserId}/works/page`,
         data: { mediaType: 'AUDIO', page, pageSize: 20 }
       })
@@ -1813,7 +1818,7 @@ Page({
     this.setData({ teamProfileRefreshing: true })
     const child = this.selectComponent('#active-component-editor')
     try {
-      const detail = await request({ url: `/api/mine/teams/${this.data.teamId}` })
+      const detail = await this.advancedRequest({ url: `/api/mine/teams/${this.data.teamId}` })
       const team = normalizeTeamSnapshot(this.data.teamId, detail && detail.team)
       if (child && child.applyTeamSnapshot) child.applyTeamSnapshot({ detail: { team } })
     } catch (error) {
@@ -1848,7 +1853,7 @@ Page({
     return componentKey
   },
   updateSource(componentKey, patch) { const componentSources = Object.assign({}, this.data.componentSources, { [componentKey]: Object.assign({}, this.data.componentSources[componentKey], patch) }); const state = { componentSources }; if (componentKey === this.data.activeComponentKey) state.activeComponentSource = componentSources[componentKey]; this.setData(state) },
-  async loadSource(componentKey, fingerprint, url, patch, failureState, scopeId = this.data.portfolioId) { if (!Number(scopeId)) return; const source = this.data.componentSources[componentKey] || {}; if (source.loadingFingerprint === fingerprint) return; this.updateSource(componentKey, { loadingFingerprint: fingerprint, errorMessage: '', sourceAvailable: true }); try { const value = await request({ url }); if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; this.updateSource(componentKey, Object.assign({}, patch(value), { loadingFingerprint: '', failedStage: '', memberUserId: 0 })) } catch (error) { if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) { this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '', sourceAvailable: false }, failureState || {})); return }; this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '来源加载失败，请重试', sourceAvailable: false }, failureState || {})) } },
+  async loadSource(componentKey, fingerprint, url, patch, failureState, scopeId = this.data.portfolioId) { if (!Number(scopeId) && !this.data.advancedEditing) return; const source = this.data.componentSources[componentKey] || {}; if (source.loadingFingerprint === fingerprint) return; this.updateSource(componentKey, { loadingFingerprint: fingerprint, errorMessage: '', sourceAvailable: true }); try { const value = await this.advancedRequest({ url }); if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; this.updateSource(componentKey, Object.assign({}, patch(value), { loadingFingerprint: '', failedStage: '', memberUserId: 0 })) } catch (error) { if ((this.data.componentSources[componentKey] || {}).loadingFingerprint !== fingerprint) return; if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) { this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '', sourceAvailable: false }, failureState || {})); return }; this.updateSource(componentKey, Object.assign({ loadingFingerprint: '', errorMessage: '来源加载失败，请重试', sourceAvailable: false }, failureState || {})) } },
   async handleCarouselLoadMembers(event) { const key = event.currentTarget.dataset.key; return this.loadSource(key, 'carousel-members', `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members`, (members) => ({ members, works: [] }), { failedStage: 'members', memberUserId: 0 }) },
   async handleCarouselMemberChange(event) { const key = event.currentTarget.dataset.key; const memberUserId = event.detail.memberUserId; this.updateSource(key, { works: [], memberUserId, failedStage: '' }); return this.loadSource(key, `carousel-works-${memberUserId}`, `/api/mine/team-portfolios/${this.data.portfolioId}/components/carousel/members/${memberUserId}/works`, (works) => ({ works: Array.isArray(works) ? works : [] }), { failedStage: 'member-items', memberUserId }) },
   handleCarouselLayoutChange(event) {
@@ -1912,7 +1917,7 @@ Page({
       singleWorkRequestFingerprint: fingerprint
     })
     try {
-      const response = await request({
+      const response = await this.advancedRequest({
         url: `/api/mine/teams/${this.data.teamId}/portfolio-components/single-work/members/${normalizedMemberUserId}/works/page`,
         data: Object.assign({ page: requestPage, pageSize }, selectedWorkId
           ? { selectedWorkId }
@@ -2133,7 +2138,7 @@ Page({
     if (!coverUrl || isRemoteUrl(coverUrl)) return normalized
     this.setData({ shareCoverUploading: true })
     try {
-      const uploadedUrl = await uploadTeamPortfolioAsset({ portfolioId, assetType: TEAM_PORTFOLIO_COVER_ASSET_TYPE, clientId: makeKey(), filePath: coverUrl, requestFn: request })
+      const uploadedUrl = await uploadTeamPortfolioAsset({ portfolioId, assetType: TEAM_PORTFOLIO_COVER_ASSET_TYPE, clientId: makeKey(), filePath: coverUrl, requestFn: options => this.advancedRequest(options) })
       return normalizeTeamPortfolioConfig(Object.assign({}, normalized, { share: Object.assign({}, normalized.share, { coverUrl: uploadedUrl }) }))
     } finally { this.setData({ shareCoverUploading: false }) }
   },
@@ -2149,7 +2154,7 @@ Page({
         assetType: TEAM_PROFILE_AVATAR_ASSET_TYPE,
         clientId: makeKey(),
         filePath: team.avatarUrl,
-        requestFn: request
+        requestFn: options => this.advancedRequest(options)
       })
       normalized = updateTeamComponent(normalized, component.componentKey, (current) => Object.assign({}, current, {
         config: Object.assign({}, component.config, { team: Object.assign({}, team, { avatarUrl }) })
@@ -2169,7 +2174,7 @@ Page({
         assetType: TEAM_QR_CONTACT_ASSET_TYPE,
         clientId: makeKey(),
         filePath: qrUrl,
-        requestFn: request
+        requestFn: options => this.advancedRequest(options)
       })
       normalized = updateTeamComponent(normalized, component.componentKey, (current) => Object.assign({}, current, {
         config: Object.assign({}, component.config, { qrUrlSource: TEAM_QR_CONTACT_SOURCE_CUSTOM, qrUrl: uploadedUrl })
@@ -2199,7 +2204,7 @@ Page({
       let clientRevision = this.data.draftRevision
       let publicationStatus = this.data.publicationStatus
       if (isNew) {
-        const created = await createStandardTeamPortfolio(request, this.data.teamId, buildServerSafeTeamPortfolioConfig(editorSnapshot))
+        const created = this.data.advancedEditing ? await this.createAdvancedDraft() : await createStandardTeamPortfolio(request, this.data.teamId, buildServerSafeTeamPortfolioConfig(editorSnapshot))
         portfolioId = Number(created && created.portfolioId) || 0
         if (!portfolioId) throw new Error('团队作品集创建失败')
         clientRevision = Number(created && created.draftRevision) || 0
@@ -2217,14 +2222,18 @@ Page({
         this.updateConfig(mergeUploadedAssets(this.data.config, profileUploadedConfig, uploadedConfig))
         this.pendingDraftSave = {
           portfolioId, clientRevision, config: JSON.parse(JSON.stringify(uploadedConfig)),
-          idempotencyKey: makeIdempotencyKey('team-draft')
+          idempotencyKey: makeIdempotencyKey('team-draft'),
+          ...(this.data.advancedEditing ? { aiContext: JSON.parse(JSON.stringify(this.data.aiContext)), aiPrompt: this.data.aiPrompt || '' } : {})
         }
         this.setData({ pendingDraftKey: this.pendingDraftSave.idempotencyKey })
       }
       failureStage = 'save'
       const pending = this.pendingDraftSave
-      const result = await saveTeamPortfolioDraft(request, pending.portfolioId, pending.config, pending.clientRevision, pending.idempotencyKey)
-      const editorChanged = stableEditorConfigJson(this.data.config) !== stableEditorConfigJson(pending.config)
+      const result = this.data.advancedEditing
+        ? await this.advancedRequest({ url: `/api/mine/advanced-portfolios/${pending.portfolioId}/draft`, method: 'PUT',
+          data: this.advancedDraftPayload({ ...(this.data.advancedEditing ? { aiContext: pending.aiContext, aiPrompt: pending.aiPrompt } : {}), config: pending.config, clientRevision: pending.clientRevision, idempotencyKey: pending.idempotencyKey, clientCapabilities: { portfolioRemoteFont: 1 } }) })
+        : await saveTeamPortfolioDraft(request, pending.portfolioId, pending.config, pending.clientRevision, pending.idempotencyKey)
+      const editorChanged = stableEditorConfigJson(this.data.config) !== stableEditorConfigJson(pending.config) || this.advancedDraftChanged(pending)
       const draftRevision = Number(result && result.draftRevision) || pending.clientRevision
       const config = result && result.config ? normalizeTeamPortfolioConfig(result.config) : pending.config
       publicationStatus = (result && result.publicationStatus) || publicationStatus
@@ -2233,6 +2242,7 @@ Page({
       if (!editorChanged) {
         this.updateConfig(config)
         this.setData({ fontAssets: result.fontAssets || null })
+        markAdvancedSaved(this)
       } else {
         wx.showToast({ title: UNSAVED_EDITOR_CHANGES_MESSAGE, icon: 'none' })
       }
@@ -2246,7 +2256,7 @@ Page({
       }
       if (!isUncertainFailure(error)) { this.pendingDraftSave = null; this.setData({ pendingDraftKey: '' }) }
       wx.showToast({
-        title: failureStage === 'upload'
+        title: this.advancedDraftCreatedLocally && this.data.portfolioId ? SAVE_INCOMPLETE_MESSAGE : failureStage === 'upload'
           ? '素材上传失败，请重试'
           : serverBusinessMessage(error, '保存失败，请检查组件配置'),
         icon: 'none'
@@ -2263,7 +2273,7 @@ Page({
     if (delta > 0) return wx.navigateBack({ delta })
     wx.redirectTo({ url: TEAM_PORTFOLIOS_COMPAT_PAGE_URL })
   },
-  handlePreviewTap() { if (!this.data.portfolioId) return; wx.navigateTo({ url: `/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=${this.data.portfolioId}&scope=draft` }) },
+  handlePreviewTap() { if (!this.data.portfolioId) { if (this.data.advancedEditing) wx.showToast({ title: '请先保存草稿再预览', icon: 'none' }); return }; wx.navigateTo({ url: `/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=${this.data.portfolioId}&scope=draft${this.data.advancedEditing ? '&templateType=ADVANCED' : ''}` }) },
   finishPublishedSnapshot() {
     const editorChanged = this.pendingPublishSnapshot !== stableEditorConfigJson(this.data.config)
     this.pendingPublishSnapshot = null
@@ -2285,12 +2295,12 @@ Page({
       wx.showToast({ title: validation.message, icon: 'none' })
       return
     }
-    const confirmed = await confirmPortfolioPublishDisclaimer()
+    const confirmed = this.data.advancedEditing ? await confirmAdvancedPortfolioPublish(options => this.advancedRequest(options)) : await confirmPortfolioPublishDisclaimer()
     if (!confirmed) return
     this.setData({ publishing: true })
     try {
       if (this.data.pendingPublishKey) {
-        const result = await publishTeamPortfolio(request, this.data.portfolioId, this.data.pendingPublishRevision, this.data.pendingPublishKey)
+        const result = await publishTeamPortfolio(options => this.advancedRequest(options), this.data.portfolioId, this.data.pendingPublishRevision, this.data.pendingPublishKey)
         const publicationStatus = result.publicationStatus || 'PUBLISHED'
         this.setData(Object.assign({ publicationStatus, publishedRevision: Number(result.publishedRevision) || this.data.publishedRevision, pendingPublishKey: '', pendingPublishRevision: 0 }, buildPublicationState(publicationStatus)))
         this.finishPublishedSnapshot()
@@ -2302,7 +2312,7 @@ Page({
       const key = makeIdempotencyKey('team-publish')
       this.pendingPublishSnapshot = stableEditorConfigJson(this.data.config)
       this.setData({ pendingPublishKey: key, pendingPublishRevision: revision })
-      const result = await publishTeamPortfolio(request, this.data.portfolioId, revision, key)
+      const result = await publishTeamPortfolio(options => this.advancedRequest(options), this.data.portfolioId, revision, key)
       const publicationStatus = result.publicationStatus || 'PUBLISHED'
       this.setData(Object.assign({ publicationStatus, publishedRevision: Number(result.publishedRevision) || this.data.publishedRevision, pendingPublishKey: '', pendingPublishRevision: 0 }, buildPublicationState(publicationStatus)))
       this.finishPublishedSnapshot()

@@ -14,7 +14,7 @@ public enum AiTaskStatusDict {
         RUNNING("RUNNING", "执行中"),
         SUCCEEDED("SUCCEEDED", "成功"),
         FAILED("FAILED", "失败"),
-        TIMED_OUT("TIMED_OUT", "超时");
+        CANCELLED("CANCELLED", "已取消");
 
     private final String code;
     private final String displayName;

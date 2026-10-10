@@ -6,6 +6,8 @@ const {
 const { visitActivityLifecycle } = require('../../../utils/visit-activity-lifecycle.js')
 
 const TEAM_VISITOR_PREFIX = '/api/visitor/team-portfolios'
+const ADVANCED_TEAM_VISITOR_PREFIX = '/api/visitor/advanced-team-portfolios'
+const TEAM_VISITOR_PREFIXES = [TEAM_VISITOR_PREFIX, ADVANCED_TEAM_VISITOR_PREFIX]
 const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'
 const IDEMPOTENCY_KEY_PREFIX = 'team-open-'
 const IDEMPOTENCY_KEY_MAX_LENGTH = 64
@@ -64,6 +66,8 @@ async function openTeamVisitorSession(options = {}) {
   if (context && context.isInvalid()) throw Object.assign(new Error('访问上下文已失效'), { statusCode: 403 })
   if (context && context.isDisposed && context.isDisposed()) throw Object.assign(new Error('访问上下文已关闭'), { contextDisposed: true })
   if (context) options = Object.assign({}, options, context.openOptions())
+  const apiPrefix = options.apiPrefix || options.visitorApiPrefix || TEAM_VISITOR_PREFIX
+  if (!TEAM_VISITOR_PREFIXES.includes(apiPrefix)) throw new Error('团队访客接口无效')
   const shareCode = text(options.shareCode)
   if (!shareCode) throw new Error('分享码无效')
   const idempotencyKey = resolveOpenIdempotencyKey(options)
@@ -72,7 +76,7 @@ async function openTeamVisitorSession(options = {}) {
     ? { anonymousSessionId }
     : { loginCode: await wxLogin(options.wxApi) }
   const session = await (options.requestFn || request)({
-    url: `${TEAM_VISITOR_PREFIX}/${encodeURIComponent(shareCode)}/open`,
+    url: `${apiPrefix}/${encodeURIComponent(shareCode)}/open`,
     method: 'POST',
     authMode: 'none',
     data: Object.assign({}, identityData, {
@@ -94,7 +98,9 @@ async function openTeamVisitorSession(options = {}) {
 async function requestWithTeamVisitorSessionRefresh(options = {}) {
   const requestFn = options.requestFn || request
   const requestOptions = Object.assign({}, options.requestOptions, { authMode: 'visitor' })
-  if (!text(requestOptions.url).startsWith(`${TEAM_VISITOR_PREFIX}/`)) throw new Error('只允许团队访客接口')
+  const apiPrefix = TEAM_VISITOR_PREFIXES.find(prefix => text(requestOptions.url).startsWith(`${prefix}/`))
+  if (!apiPrefix) throw new Error('只允许团队访客接口')
+  options = { ...options, apiPrefix }
   const context = options.browserContext || visitActivityLifecycle.findContext('TEAM', options.shareCode)
   const beforeGeneration = context && context.sessionGeneration || 0
   if (context && context.isInvalid()) throw Object.assign(new Error('访问上下文已失效'), { statusCode: 403 })
@@ -130,6 +136,7 @@ async function requestWithTeamVisitorSessionRefresh(options = {}) {
 module.exports = {
   SOURCE_TYPE_WECHAT_SHARE_CARD,
   TEAM_VISITOR_PREFIX,
+  ADVANCED_TEAM_VISITOR_PREFIX,
   createIdempotencyKey,
   openTeamVisitorSession,
   requestWithTeamVisitorSessionRefresh,

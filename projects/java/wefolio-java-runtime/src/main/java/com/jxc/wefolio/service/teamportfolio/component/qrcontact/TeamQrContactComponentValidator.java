@@ -101,7 +101,7 @@ public class TeamQrContactComponentValidator {
     private void validateContext(TeamPortfolioComponentContext context) {
         if (context == null
                 || context.teamId() <= MINIMUM_VALID_ID
-                || context.portfolioId() <= MINIMUM_VALID_ID
+                || context.portfolioId() <= MINIMUM_VALID_ID && !context.hasReadOnlyCandidateIdentity()
                 || context.revision() < MINIMUM_VALID_REVISION) {
             throw new BusinessException(CONTEXT_INVALID_MESSAGE);
         }

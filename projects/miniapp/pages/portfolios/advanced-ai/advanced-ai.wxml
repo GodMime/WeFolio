@@ -1,0 +1,110 @@
+<template name="selected-strip">
+  <scroll-view class="selected-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+    <view class="selected-strip">
+      <view wx:for="{{selectedSources}}" wx:key="sourceNo" class="selected-item {{item.available === false ? 'unavailable' : ''}}">
+        <button class="selected-source" data-no="{{item.sourceNo}}" bindtap="handleSelectedSourceTap" disabled="{{waiting || adopting || submitting || submissionUncertain}}" aria-label="{{item.sourceNo}}号 {{item.title}}">
+          <view class="selected-cover">
+            <image wx:if="{{item.thumbnailUrl}}" class="selected-thumbnail" src="{{item.thumbnailUrl}}" mode="aspectFill"></image>
+            <view wx:else class="selected-placeholder">{{item.kind === 'MEMBER_PORTFOLIO' ? '作品集' : item.mediaTypeLabel || '作品'}}</view>
+            <text class="source-number">{{item.sourceNo}}</text>
+            <text wx:if="{{item.kind === 'MEMBER_PORTFOLIO'}}" class="source-kind-mark">集</text>
+          </view>
+          <text class="selected-label">{{item.sourceNo}}号{{item.kind === 'MEMBER_PORTFOLIO' ? ' · 作品集' : ''}}</text>
+        </button>
+        <view wx:if="{{step === 'sources'}}" class="remove-source" data-no="{{item.sourceNo}}" catchtap="handleRemoveSelected" aria-role="button" aria-label="移除{{item.sourceNo}}号">×</view>
+      </view>
+    </view>
+  </scroll-view>
+</template>
+<view class="page-shell advanced-ai-page">
+  <navigation-bar title="{{managingSources ? '管理已选内容' : mode === 'CREATE' ? (step === 'sources' ? '选择内容' : '描述你的想法') : 'AI 修改'}}" back="{{true}}" color="#212529" background="#ffffff"></navigation-bar>
+  <view wx:if="{{loading}}" class="panel page-state">正在加载...</view>
+  <view wx:elif="{{errorMessage}}" class="panel page-state"><text>{{errorMessage}}</text><button class="secondary-button" bindtap="bootstrap">重试</button></view>
+  <block wx:else>
+    <scroll-view class="ai-scroll" scroll-y type="list" bindscrolltolower="handleLoadMore">
+      <view class="ai-content">
+        <view wx:if="{{mode === 'CREATE'}}" class="steps">
+          <view class="step {{step === 'sources' ? 'active' : ''}}"><text class="step-circle">1</text><text>选内容</text></view>
+          <view class="step-line"></view>
+          <view class="step {{step === 'prompt' ? 'active' : ''}}"><text class="step-circle">2</text><text>描述需求</text></view>
+          <view class="step-line"></view>
+          <view class="step"><text class="step-circle">3</text><text>查看与编辑</text></view>
+        </view>
+        <view wx:if="{{!capabilities.enabled}}" class="notice">AI 服务暂未开放，可继续管理内容；已有作品集仍可手动编辑、保存和发布。</view>
+        <view wx:if="{{activeTaskId}}" class="notice notice-action"><text>已有等待或执行任务</text><button class="text-button" bindtap="handleCancel">取消该任务</button></view>
+        <block wx:if="{{step === 'sources'}}">
+          <view class="selection-heading"><view class="selection-title">{{managingSources ? '管理已选内容' : '先选内容，再告诉 AI 怎么排'}}</view><text class="help-text">{{team ? '作品与成员作品集可以一起选择' : '选择你想展示的作品'}}</text></view>
+          <view wx:if="{{team}}" class="source-tabs">
+            <button class="source-tab {{sourceKind === 'WORK' ? 'active' : ''}}" data-kind="WORK" bindtap="handleKindTap">成员作品</button>
+            <button class="source-tab {{sourceKind === 'MEMBER_PORTFOLIO' ? 'active' : ''}}" data-kind="MEMBER_PORTFOLIO" bindtap="handleKindTap">成员作品集</button>
+          </view>
+          <scroll-view wx:if="{{team && members.length}}" scroll-x class="filter-scroll" enhanced show-scrollbar="{{false}}">
+            <view class="filter-row"><button class="filter-chip {{memberIndex === 0 ? 'active' : ''}}" data-index="0" bindtap="handleMemberTap">全部成员</button><button wx:for="{{members}}" wx:key="memberUserId" class="filter-chip {{memberIndex === index + 1 ? 'active' : ''}}" data-index="{{index + 1}}" bindtap="handleMemberTap">{{item.memberName}}</button></view>
+          </scroll-view>
+          <view wx:if="{{team && sourceKind === 'MEMBER_PORTFOLIO'}}" class="notice">作为整体入口展示；需要其中的作品，请单独选择。</view>
+          <view class="search-row"><input class="search-input" placeholder="{{team ? '搜索内容名称' : '搜索作品名称'}}" placeholder-class="input-placeholder" value="{{keyword}}" bindinput="handleKeywordInput" bindconfirm="handleSearch" confirm-type="search" /><button class="search-button" bindtap="handleSearch" aria-label="搜索作品">搜索</button></view>
+          <scroll-view wx:if="{{!team}}" scroll-x class="filter-scroll" enhanced show-scrollbar="{{false}}">
+            <view class="filter-row">
+              <button class="filter-chip {{!tagId ? 'active' : ''}}" data-id="" bindtap="handleTagTap">全部</button>
+              <button wx:for="{{tags}}" wx:key="id" class="filter-chip {{tagId === item.id ? 'active' : ''}}"
+                style="color: {{item.color && tagId === item.id ? '#ffffff' : item.color}}; background: {{item.color ? (tagId === item.id ? item.color : '#ffffff') : ''}}; border-color: {{item.color}};"
+                data-id="{{item.id}}" bindtap="handleTagTap">{{item.name}}</button>
+            </view>
+          </scroll-view>
+          <view wx:if="{{sourceError}}" class="notice error notice-action"><text>{{sourceError}}</text><button class="text-button" bindtap="handleSearch">重试</button></view>
+          <view class="source-grid">
+            <view wx:for="{{sourceOptions}}" wx:key="key" class="source-cell {{index % 2 === 0 ? 'source-cell-left' : 'source-cell-right'}}">
+              <view class="source-card {{item.selected ? 'selected' : ''}} {{item.available === false ? 'unavailable' : ''}}" data-index="{{index}}" bindtap="handleSourceTap" aria-role="button" aria-label="{{item.selected ? '已选' : '选择'}}{{item.title}}">
+                <view class="source-cover"><image wx:if="{{item.thumbnailUrl}}" class="source-image" src="{{item.thumbnailUrl}}" mode="aspectFill"></image><view wx:else class="source-placeholder">{{item.mediaTypeLabel}}</view><text class="selection-circle">{{item.selected ? item.sourceNo : ''}}</text><text class="type-tag">{{item.mediaTypeLabel}}</text><view wx:if="{{item.mediaType === 'VIDEO'}}" class="play-badge"><view class="play-triangle"></view></view></view>
+                <view class="source-body"><text class="source-title">{{item.title}}</text><text class="source-meta">{{item.memberName ? item.memberName + ' · ' : ''}}{{item.available === false ? (item.unavailableReason || '当前不可用') : item.kind === 'MEMBER_PORTFOLIO' ? '已发布' : '审核通过'}}</text></view>
+              </view>
+            </view>
+          </view>
+          <view wx:if="{{sourceLoading}}" class="page-state">加载中...</view><view wx:elif="{{!sourceOptions.length}}" class="page-state">没有符合条件的内容，请清空关键词或切回全部。</view>
+          <button wx:if="{{hasMore}}" class="secondary-button full-width" bindtap="handleLoadMore" disabled="{{sourceLoading}}">加载更多</button>
+          <text class="help-text selection-tip">筛选与搜索保留已选内容。取消后重新选回同一内容，保留原序号。</text>
+        </block>
+        <block wx:elif="{{result && (result.kind === 'CANDIDATE' || result.available === false)}}">
+          <view class="selection-heading"><view class="selection-title">{{candidateTitle}}</view><text class="help-text">{{result.available === false ? '现有内容已保留' : '候选效果 · 尚未采用'}}</text></view>
+          <view class="panel candidate-panel">
+            <block wx:if="{{result.available === false}}">
+              <view class="field-label">失败原因</view>
+              <view class="notice error">{{taskError}}</view>
+              <text class="help-text">已选内容与描述已保留，可修改描述后再生成。</text>
+            </block>
+            <block wx:else>
+              <view class="notice success">{{result.hasChanges === false ? '当前内容已满足要求' : '候选已准备好，当前内容已保留。'}}</view>
+              <view class="section-title">{{mode === 'CREATE' ? '页面编排' : '本次变化'}}</view>
+              <text class="summary-text">{{summaryText}}</text>
+              <view wx:if="{{taskError}}" class="notice error">{{taskError}}</view>
+              <button wx:if="{{result.available && result.renderData}}" class="secondary-button full-width" bindtap="handleCandidatePreview">查看完整效果 →</button>
+              <text class="help-text">采用只更新编辑内容，保存与发布仍由你决定。</text>
+            </block>
+          </view>
+        </block>
+        <block wx:else>
+          <view class="selection-heading"><view class="selection-title">{{task.status === 'FAILED' && taskError ? '生成失败' : mode === 'CREATE' ? '你想怎样展示？' : '想怎样调整作品集？'}}</view><text class="help-text">{{mode === 'CREATE' ? '说出重点、顺序和风格就好。' : '描述整体修改需求，AI 会基于当前编辑内容调整，包括未保存的修改。'}}</text></view>
+          <view wx:if="{{task.status === 'FAILED' && taskError}}" class="panel failure-panel"><view class="field-label">失败原因</view><view class="notice error">{{taskError}}</view><text class="help-text">已选内容与描述已保留，可修改描述后再生成。</text></view>
+          <view class="panel selected-panel"><view class="card-heading"><view class="section-title">{{mode === 'CREATE' ? '已选内容' : '可引用的内容'}}</view><button class="text-button" bindtap="handleBackToSources" disabled="{{waiting || adopting || submitting || submissionUncertain}}">{{mode === 'CREATE' ? '调整' : '管理内容'}}</button></view><template is="selected-strip" data="{{selectedSources, step, waiting, adopting, submitting, submissionUncertain}}"></template><text wx:if="{{!selectedSources.length}}" class="help-text">尚未选内容；修改已有文字、样式与顺序可以不选来源。</text><text wx:else class="help-text">点击缩略图，将序号插入描述。</text></view>
+          <view wx:if="{{waiting}}" class="panel generation-panel"><view class="generation-mark">✦</view><view class="section-title">{{statusText}}</view><text class="help-text">已选内容与描述已保留，完成后先查看候选效果。</text><view wx:if="{{taskError}}" class="notice error">{{taskError}}</view></view>
+          <view wx:else class="panel prompt-panel">
+            <view class="field-label">{{mode === 'CREATE' ? '描述你的想法' : '描述整体修改需求'}}</view>
+            <textarea class="prompt-input" placeholder-class="input-placeholder" value="{{prompt}}" bindinput="handlePromptInput" disabled="{{adopting || submitting || submissionUncertain}}" maxlength="-1" placeholder="例如：把1号放在顶部，再放一段简短介绍，最后放档期查询。"></textarea>
+            <view class="counter {{promptCount > promptMaxLength ? 'over-limit' : ''}}">{{promptCount}} / {{promptMaxLength}}</view>
+            <view class="prompt-example"><text class="help-text">试试这样说</text><text class="example-copy">{{mode === 'CREATE' ? '先展示已选作品，再放一段简短介绍和档期查询。整体简洁，留白舒适。' : '介绍缩短成一句话，其他保持不变。'}}</text><button class="text-button example-button" bindtap="handleUseExample" disabled="{{adopting || submitting || submissionUncertain}}">使用示例</button></view>
+            <view wx:for="{{questions}}" wx:key="id" class="question"><view class="field-label">{{item.prompt}}</view><button wx:for="{{item.options}}" wx:for-item="option" wx:key="id" class="secondary-button question-option {{clarificationAnswer.optionId === option.id ? 'chosen' : ''}}" data-id="{{item.id}}" data-option="{{option.id}}" data-value="{{option.answerText}}" bindtap="handleQuestionOption">{{option.label}}</button><input class="question-input" placeholder="或说明你的选择" placeholder-class="input-placeholder" data-id="{{item.id}}" bindinput="handleQuestionInput" /></view>
+            <view wx:if="{{statusText && task.status !== 'FAILED'}}" class="notice">{{statusText}}</view><view wx:if="{{taskError && task.status !== 'FAILED'}}" class="notice error">{{taskError}}</view>
+          </view>
+          <text class="help-text form-tip">AI 会使用现有作品集组件生成，可继续手动调整。</text>
+        </block>
+      </view>
+    </scroll-view>
+    <view class="ai-footer">
+      <block wx:if="{{step === 'sources'}}"><template wx:if="{{selectedSources.length}}" is="selected-strip" data="{{selectedSources, step, waiting, adopting, submitting, submissionUncertain}}"></template><view class="footer-actions"><view class="footer-copy">已选 <text class="footer-count">{{selectedSources.length}}</text> 项</view><button class="primary-button next-button" bindtap="handleNext" disabled="{{mode === 'CREATE' && !selectedSources.length}}">{{managingSources ? '完成选择' : '下一步'}}</button></view></block>
+      <view wx:elif="{{result && (result.kind === 'CANDIDATE' || result.available === false)}}" class="footer-actions"><button class="secondary-button" bindtap="handleDiscard" disabled="{{adopting || submitting}}">{{result.available === false ? '修改描述' : '放弃结果'}}</button><button wx:if="{{result.available === false}}" class="primary-button" bindtap="handleGenerate" loading="{{submitting}}" disabled="{{submitting || adopting || !capabilities.enabled}}">重新生成</button><button wx:elif="{{canAdopt}}" class="primary-button" bindtap="handleAdopt" loading="{{adopting}}" disabled="{{adopting}}">{{mode === 'CREATE' ? '采用并编辑' : '采用修改'}}</button></view>
+      <view wx:elif="{{waiting}}" class="footer-actions"><button wx:if="{{taskError}}" class="secondary-button" bindtap="queryTask">重试查询</button><button class="secondary-button" bindtap="handleCancel">取消生成</button></view>
+      <view wx:elif="{{cancelFailed}}" class="footer-actions"><button class="secondary-button" bindtap="handleCancel">重试取消</button></view>
+      <view wx:else class="footer-actions"><button class="secondary-button" bindtap="handleBackToSources" disabled="{{adopting || submitting || submissionUncertain}}">{{mode === 'CREATE' ? '上一步' : '管理内容'}}</button><button class="primary-button" bindtap="handleGenerate" loading="{{submitting}}" disabled="{{submitting || adopting || !capabilities.enabled || !!activeTaskId}}"><text wx:if="{{!submissionUncertain && !questions.length && !taskError}}" class="ai-spark">✧</text>{{submissionUncertain ? '重试提交' : questions.length ? '回答后继续' : taskError ? '重试生成' : mode === 'CREATE' ? '生成作品集' : '生成修改'}}</button></view>
+    </view>
+  </block>
+</view>

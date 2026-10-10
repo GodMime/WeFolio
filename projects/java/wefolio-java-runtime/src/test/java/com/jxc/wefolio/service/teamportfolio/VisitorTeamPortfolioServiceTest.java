@@ -61,6 +61,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.time.LocalDate;
@@ -204,6 +205,23 @@ class VisitorTeamPortfolioServiceTest {
                 TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1,
                 PortfolioPublicationStatusDict.PUBLISHED.getCode(),
                 PortfolioStatusDict.ACTIVE.getCode(), 0L);
+    }
+
+    /** 高级独立访客路径使用高级模板查询，同时保留同一普通团队schema和TEAM匿名作用域。 */
+    @Test
+    void advancedVisitorLookupAndScopeRemainSeparateFromStandardEntry() {
+        VisitorServiceContext context = visitorContext();
+        PortfolioEntity advanced = portfolio(); advanced.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        advanced.setAiPrompt("维护描述"); advanced.setAiContextJson("{\"version\":1,\"nextSourceNo\":1,\"sources\":[]}");
+        when(context.portfolioMapper.selectOne(any())).thenReturn(advanced);
+        when(context.teamMapper.selectById(TEAM_ID)).thenReturn(team(TeamStatusDict.ACTIVE.getCode()));
+        when(context.scheduleService.previewOptions(any(), any(TeamPortfolioConfigDto.class), eq("schedule-1"))).thenReturn(new JSONObject());
+        context.service.queryScheduleOptions("TPF-TASK8", "schedule-1", PortfolioTemplateTypeDict.ADVANCED.getCode());
+        var contextCaptor = ArgumentCaptor.forClass(TeamPortfolioComponentContext.class);
+        verify(context.scheduleService).previewOptions(contextCaptor.capture(), any(TeamPortfolioConfigDto.class), eq("schedule-1"));
+        assertThat(contextCaptor.getValue().allowAdvancedMemberPortfolios()).isTrue();
+        assertThatThrownBy(() -> context.service.queryScheduleOptions("TPF-TASK8", "schedule-1"))
+                .isInstanceOf(BusinessException.class).hasMessage("当前作品集暂未开放访问");
     }
 
     /**

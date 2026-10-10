@@ -1,0 +1,271 @@
+{
+  "schemaVersion": "standard-team-v1",
+  "editorSchemaRevision": 10,
+  "share": {
+    "title": "",
+    "description": "",
+    "coverUrl": ""
+  },
+  "style": {
+    "backgroundColor": "#FFFFFF"
+  },
+  "components": [
+    {
+      "componentKey": "component-mv08q9k4-xi0qcg",
+      "componentType": "TEAM_PROFILE",
+      "sortOrder": 1000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "component-mv08q9k4-wr7jzv",
+      "componentType": "CAROUSEL",
+      "sortOrder": 2000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "component-mv08q9k4-qu6snd",
+      "componentType": "VIDEO_CAROUSEL",
+      "sortOrder": 3000,
+      "enabled": true,
+      "config": {
+        "title": "视频作品",
+        "items": [],
+        "showComponentTitle": true,
+        "showTitle": true,
+        "showSwipeHint": true,
+        "displayStyle": "STACKED",
+        "showDescription": false
+      }
+    },
+    {
+      "componentKey": "component-mv08q9k4-qma9qi",
+      "componentType": "SINGLE_WORK",
+      "sortOrder": 4000,
+      "enabled": true,
+      "config": {
+        "openMode": "INLINE",
+        "detailOptions": {
+          "showTitle": true,
+          "showDescription": true
+        }
+      }
+    },
+    {
+      "componentKey": "component-mv08q9k4-k8egmv",
+      "componentType": "DIVIDER",
+      "sortOrder": 5000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "component-mv08q9k4-gehjzj",
+      "componentType": "MEMBER_PORTFOLIO_GRID",
+      "sortOrder": 6000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "component-mv08q9k4-swxx7u",
+      "componentType": "MEMBER_PORTFOLIO_LIST",
+      "sortOrder": 7000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "component-mv08q9k4-vvhsso",
+      "componentType": "TEXT_SECTION",
+      "sortOrder": 8000,
+      "enabled": true,
+      "config": {
+        "fontFamily": "SYSTEM",
+        "fontSizeRpx": 28
+      }
+    },
+    {
+      "componentKey": "component-mv08q9k4-w1gytl",
+      "componentType": "STRUCTURED_TEXT_SECTION",
+      "sortOrder": 9000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "component-mv08q9k4-symje9",
+      "componentType": "SCHEDULE_QUERY",
+      "sortOrder": 10000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "component-mv08q9k4-isba4c",
+      "componentType": "CONTACT_FORM",
+      "sortOrder": 11000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "component-mv08q9k4-d2et89",
+      "componentType": "QR_CONTACT",
+      "sortOrder": 12000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "component-mv08q9k4-4h6zdk",
+      "componentType": "TEXT_GRID",
+      "sortOrder": 13000,
+      "enabled": true,
+      "config": {
+        "rows": 2,
+        "columns": 2,
+        "columnWeights": [
+          1,
+          1
+        ],
+        "rowMinHeightsRpx": [
+          180,
+          180
+        ],
+        "gapRpx": 16,
+        "cellPaddingRpx": 24,
+        "cellRadiusRpx": 24,
+        "cellBorder": false,
+        "cellBackground": "AUTO",
+        "cells": [
+          {
+            "cellKey": "cell_mv08q9k4_fpqhdxj",
+            "row": 0,
+            "column": 0,
+            "rowSpan": 1,
+            "columnSpan": 1,
+            "verticalAlignment": "CENTER",
+            "blocks": [
+              {
+                "blockKey": "block_mv08q9k4_2krf9p0",
+                "alignment": "CENTER",
+                "marginTopRpx": 0,
+                "marginBottomRpx": 12,
+                "runs": [
+                  {
+                    "runKey": "run_mv08q9k4_q4xy5mt",
+                    "text": "",
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 28,
+                    "fontWeight": "NORMAL",
+                    "color": "AUTO"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "cellKey": "cell_mv08q9k4_2cj7wtr",
+            "row": 0,
+            "column": 1,
+            "rowSpan": 1,
+            "columnSpan": 1,
+            "verticalAlignment": "CENTER",
+            "blocks": [
+              {
+                "blockKey": "block_mv08q9k4_2jm8gso",
+                "alignment": "CENTER",
+                "marginTopRpx": 0,
+                "marginBottomRpx": 12,
+                "runs": [
+                  {
+                    "runKey": "run_mv08q9k4_fk1kwzs",
+                    "text": "",
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 28,
+                    "fontWeight": "NORMAL",
+                    "color": "AUTO"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "cellKey": "cell_mv08q9k4_3du3db3",
+            "row": 1,
+            "column": 0,
+            "rowSpan": 1,
+            "columnSpan": 1,
+            "verticalAlignment": "CENTER",
+            "blocks": [
+              {
+                "blockKey": "block_mv08q9k4_ojxon50",
+                "alignment": "CENTER",
+                "marginTopRpx": 0,
+                "marginBottomRpx": 12,
+                "runs": [
+                  {
+                    "runKey": "run_mv08q9k4_ze94vfq",
+                    "text": "",
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 28,
+                    "fontWeight": "NORMAL",
+                    "color": "AUTO"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "cellKey": "cell_mv08q9k4_prohzrq",
+            "row": 1,
+            "column": 1,
+            "rowSpan": 1,
+            "columnSpan": 1,
+            "verticalAlignment": "CENTER",
+            "blocks": [
+              {
+                "blockKey": "block_mv08q9k4_u4yxgau",
+                "alignment": "CENTER",
+                "marginTopRpx": 0,
+                "marginBottomRpx": 12,
+                "runs": [
+                  {
+                    "runKey": "run_mv08q9k4_og4qvg8",
+                    "text": "",
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 28,
+                    "fontWeight": "NORMAL",
+                    "color": "AUTO"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "cellBorderWidthRpx": 1,
+        "cellBorderColor": "#D7DADD",
+        "horizontalMarginRpx": 0,
+        "verticalMarginRpx": 0
+      }
+    },
+    {
+      "componentKey": "component-mv08q9k4-svufii",
+      "componentType": "CONTACT_INFO",
+      "sortOrder": 14000,
+      "enabled": true,
+      "config": {
+        "contactPhone": "",
+        "contactWechat": "",
+        "contactBorder": false,
+        "contactBorderColor": "AUTO",
+        "verticalMarginRpx": 0,
+        "horizontalMarginRpx": 0,
+        "contactBorderWidthRpx": 1
+      }
+    }
+  ],
+  "backgroundAudio": {
+    "enabled": false,
+    "workId": null,
+    "displayStyle": "DISC"
+  },
+  "bottomNav": {
+    "enabled": false
+  }
+}

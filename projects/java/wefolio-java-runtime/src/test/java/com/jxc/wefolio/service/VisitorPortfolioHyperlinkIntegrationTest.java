@@ -184,6 +184,7 @@ class VisitorPortfolioHyperlinkIntegrationTest {
                   published_at TIMESTAMP,
                   publication_status VARCHAR(32),
                   ai_prompt CLOB,
+                  ai_context_json CLOB,
                   source_type VARCHAR(32),
                   content_hash VARCHAR(64),
                   current_revision INT NOT NULL DEFAULT 0,

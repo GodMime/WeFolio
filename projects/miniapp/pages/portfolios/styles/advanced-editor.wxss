@@ -1,0 +1,251 @@
+/* 仅为整体 AI 修改与已选内容增加样式，标准编辑表单和操作区共用原有样式。 */
+.advanced-source-card {
+  padding: 32rpx;
+  border: 1rpx solid var(--pe-color-border, #E9ECEF);
+  border-radius: 44rpx;
+  background: var(--pe-color-surface, #FFFFFF);
+}
+
+.advanced-source-title {
+  color: var(--pe-color-text-primary, #212529);
+  font-size: 30rpx;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.advanced-tools {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  min-height: 140rpx;
+  padding: 28rpx;
+  border-color: #e1e8e0;
+  border-radius: 36rpx;
+  background: #edf1ed;
+}
+
+.advanced-ai-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72rpx;
+  height: 72rpx;
+  flex: none;
+  border-radius: 24rpx;
+  color: #586e52;
+  background: #dde7d9;
+  font-size: 46rpx;
+  line-height: 1;
+}
+
+.advanced-ai-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.advanced-ai-title {
+  color: #39473b;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.advanced-ai-description {
+  margin-top: 8rpx;
+  color: #7f8a7d;
+  font-size: 22rpx;
+  line-height: 1.55;
+}
+
+/* 提高优先级，覆盖 WebView 普通按钮默认的 184px 宽度。 */
+.advanced-tools .advanced-ai-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 144rpx;
+  min-width: 144rpx;
+  min-height: 68rpx;
+  margin: 0;
+  padding: 14rpx 24rpx;
+  box-sizing: border-box;
+  border-radius: 44rpx;
+  color: var(--pe-color-surface, #FFFFFF);
+  background: #384b33;
+  font-size: 24rpx;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.advanced-undo-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 24rpx;
+  color: #60795a;
+  background: #edf3eb;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.advanced-recovery {
+  padding: 24rpx;
+  border-radius: 24rpx;
+  color: #9b824f;
+  background: #faf4e8;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.advanced-recovery button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 72rpx;
+  margin-top: 16rpx;
+  padding: 16rpx 24rpx;
+  border-radius: 24rpx;
+  color: var(--pe-color-text-strong, #495057);
+  background: var(--pe-color-surface, #FFFFFF);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.advanced-source-thumb image {
+  width: 100%;
+  height: 100%;
+}
+
+.advanced-source-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.advanced-source-title text {
+  margin-left: 8rpx;
+  color: var(--pe-color-text-secondary, #868E96);
+  font-weight: 400;
+}
+
+.advanced-text-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48rpx;
+  flex: none;
+  margin: 0;
+  padding: 6rpx 0;
+  color: var(--pe-color-text-strong, #495057);
+  background: transparent;
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* 管理入口按文字宽度贴齐右侧，覆盖 WebView 普通按钮的宽度与自动外边距。 */
+.advanced-source-heading .advanced-text-button {
+  width: auto;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.advanced-source-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.advanced-source-strip {
+  display: flex;
+  gap: 20rpx;
+  padding-bottom: 20rpx;
+}
+
+.advanced-source-chip {
+  width: 116rpx;
+  flex: none;
+}
+
+.advanced-source-unavailable .advanced-source-thumb {
+  opacity: 0.45;
+}
+
+.advanced-source-unavailable-note {
+  margin-top: 4rpx;
+  color: var(--pe-color-danger, #B55656);
+  font-size: 20rpx;
+  line-height: 1.4;
+}
+
+.advanced-source-thumb {
+  position: relative;
+  width: 116rpx;
+  height: 98rpx;
+  overflow: hidden;
+  border-radius: 18rpx;
+  background: var(--pe-color-secondary-surface, #F1F3F5);
+}
+
+.advanced-source-no {
+  position: absolute;
+  left: 8rpx;
+  top: 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34rpx;
+  height: 34rpx;
+  border-radius: 50%;
+  color: #4b5943;
+  background: rgba(255, 255, 255, 0.94);
+  font-size: 22rpx;
+}
+
+.advanced-source-type {
+  position: absolute;
+  right: 6rpx;
+  bottom: 6rpx;
+  padding: 2rpx 7rpx;
+  border-radius: 8rpx;
+  color: var(--pe-color-surface, #FFFFFF);
+  background: #386850;
+  font-size: 20rpx;
+  line-height: 1.4;
+}
+
+.advanced-source-label {
+  margin-top: 12rpx;
+  color: #7f8a92;
+  font-size: 22rpx;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.advanced-source-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--pe-color-text-muted, #ADB5BD);
+  font-size: 22rpx;
+}
+
+.advanced-source-note,
+.advanced-source-empty {
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.advanced-source-empty {
+  padding-bottom: 20rpx;
+}
+
+.advanced-ai-button[disabled] {
+  opacity: 0.45;
+}

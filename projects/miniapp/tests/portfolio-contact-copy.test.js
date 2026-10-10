@@ -39,7 +39,7 @@ function createClock() {
   }
 }
 
-function loadContact(scope, config = CONTACT) {
+function loadContact(scope, config = CONTACT, propertyOverrides = {}) {
   const filename = path.join(__dirname, '../pages', scope, 'components/contact-info/contact-info.js')
   const clock = createClock()
   const clipboardCalls = []
@@ -56,7 +56,8 @@ function loadContact(scope, config = CONTACT) {
       showToast: options => toasts.push(clone(options))
     }
   }, { filename })
-  const properties = { config: clone(config), themeMode: 'light' }
+  const defaults = Object.fromEntries(Object.entries(definition.properties).map(([key, settings]) => [key, clone(settings.value)]))
+  const properties = { ...defaults, config: clone(config), themeMode: 'light', ...propertyOverrides }
   const component = {
     properties,
     data: { ...clone(definition.data), ...clone(properties) },
@@ -74,17 +75,68 @@ function loadContact(scope, config = CONTACT) {
   }
   definition.lifetimes.attached.call(component)
   return {
-    component, clock, clipboardCalls, toasts, updates,
+    component, clock, clipboardCalls, toasts, updates, definition,
     detach() { definition.lifetimes.detached.call(component) },
     changeConfig(next) {
       component.properties.config = clone(next)
       component.data.config = clone(next)
       definition.observers['config, themeMode'].call(component)
+    },
+    changeRepairMode(repairMode) {
+      component.properties.repairMode = repairMode
+      component.data.repairMode = repairMode
     }
   }
 }
 
+// 使用真实 WXML 条件和组件当前数据，检查预览提示及两项联系信息的显示状态。
+function visibleContactContent(scope, component) {
+  const markup = fs.readFileSync(path.join(__dirname, '../pages', scope, 'components/contact-info/contact-info.wxml'), 'utf8')
+  const conditions = [...markup.matchAll(/<view\b[^>]*wx:if="\{\{([^}]+)\}\}"[^>]*class="(contact-row|contact-empty)"/g)]
+  assert.equal(conditions.length, 3, '应保留两项联系信息，并提供维护者空提示')
+  return conditions.filter(([, condition]) => vm.runInNewContext(condition, component.data))
+    .map(([, condition, className]) => className === 'contact-empty' ? 'empty' : condition.endsWith('contactPhone') ? 'phone' : 'wechat')
+}
+
 for (const scope of SCOPES) {
+  test(`${scope}: empty contact info stays silent for visitors and follows maintainer preview state changes`, () => {
+    const { component, definition, changeConfig, changeRepairMode } = loadContact(scope, { contactPhone: '', contactWechat: '' })
+    assert.equal(definition.properties.repairMode.type.name, 'Boolean')
+    assert.equal(definition.properties.repairMode.value, false)
+    assert.deepEqual(visibleContactContent(scope, component), [])
+
+    changeRepairMode(true)
+    assert.deepEqual(visibleContactContent(scope, component), ['empty'])
+    changeConfig({ contactPhone: CONTACT.contactPhone, contactWechat: '' })
+    assert.deepEqual(visibleContactContent(scope, component), ['phone'])
+    changeConfig({ contactPhone: '', contactWechat: CONTACT.contactWechat })
+    assert.deepEqual(visibleContactContent(scope, component), ['wechat'])
+    changeConfig(CONTACT)
+    assert.deepEqual(visibleContactContent(scope, component), ['phone', 'wechat'])
+    changeConfig({})
+    assert.deepEqual(visibleContactContent(scope, component), ['empty'])
+    changeRepairMode(false)
+    assert.deepEqual(visibleContactContent(scope, component), [])
+  })
+
+  test(`${scope}: saved and AI candidate previews enable contact repair hints while visitor pages keep them disabled`, () => {
+    const pageName = scope === 'portfolios' ? 'portfolio-standard-preview' : 'team-portfolio-standard-preview'
+    const preview = fs.readFileSync(path.join(__dirname, '../pages', scope, 'standard-preview', `${pageName}.wxml`), 'utf8')
+    const previewTag = preview.match(/<portfolio-contact-info\b[^>]*>/)
+    assert.ok(previewTag, '保存预览和 AI 候选预览应复用联系信息组件')
+    assert.match(previewTag[0], /repair-mode="\{\{true\}\}"/)
+    const visitorPages = scope === 'portfolios' ? ['visitor-portfolio/visitor-portfolio']
+      : ['visitor-portfolio/team-visitor-portfolio', 'advanced-visitor/team-visitor-portfolio']
+    for (const visitorPage of visitorPages) {
+      const visitor = fs.readFileSync(path.join(__dirname, '../pages', scope, `${visitorPage}.wxml`), 'utf8')
+      const visitorTag = visitor.match(/<portfolio-contact-info\b[^>]*>/)
+      assert.ok(visitorTag)
+      assert.doesNotMatch(visitorTag[0], /repair-mode="\{\{true\}\}"/)
+    }
+    const markup = fs.readFileSync(path.join(__dirname, '../pages', scope, 'components/contact-info/contact-info.wxml'), 'utf8')
+    assert.match(markup, /联系信息未填写，请返回编辑页补充/)
+  })
+
   test(`${scope}: copy feedback appears only after clipboard success and resets after two seconds`, () => {
     const { component, clock, clipboardCalls, toasts } = loadContact(scope)
     assert.deepEqual(clone(component.data.copiedFields), IDLE_FIELDS)

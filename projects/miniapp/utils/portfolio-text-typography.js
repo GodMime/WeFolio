@@ -135,9 +135,11 @@ function applyPortfolioFontSelection(value) {
 /** family 仅来自当前页面已成功注册的映射，未就绪始终回退系统字体。 */
 function buildRemoteFontStyle(node, context = {}) {
   if (!node || !node.fontId) return ''
-  const version = context.versions && context.versions[node.fontId]
+  // 首屏属性观察器可能传入显式 null，默认参数仅处理 undefined，需按未就绪回退。
+  const fontContext = context || {}
+  const version = fontContext.versions && fontContext.versions[node.fontId]
   const weight = node.fontWeight === 'BOLD' ? 700 : 400
-  const families = context.families || {}
+  const families = fontContext.families || {}
   const prefix = version ? `${node.fontId}:${version.fontVersion}:` : ''
   const family = families[prefix + resolvePortfolioFontWeight(node.fontId, version && version.fontVersion, weight)]
   return family && /^WF_[a-zA-Z0-9_]+$/.test(family)

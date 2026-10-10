@@ -10,6 +10,7 @@ import com.jxc.wefolio.annotation.TimelineAnonymousAccess;
 import com.jxc.wefolio.annotation.VisitorAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.controller.VisitActivitySessionController;
+import com.jxc.wefolio.controller.VisitorAdvancedTeamPortfolioController;
 import com.jxc.wefolio.dto.VisitActivityUpdateRequest;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
@@ -31,6 +32,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -197,6 +199,35 @@ class AuthAspectTest {
         assertThatThrownBy(() -> aspect().authenticate(joinPoint))
                 .isInstanceOf(AuthenticationRequiredException.class);
         verify(joinPoint, never()).proceed();
+    }
+
+    /** 高级团队沿现有 TEAM 分享码作用域受理匿名互动，拒绝错码、个人作用域及资料写入。 */
+    @Test
+    void advancedTeamAnonymousRequestsRequireExactTeamShareScope() throws Throwable {
+        MockHttpServletRequest request = new MockHttpServletRequest(); request.setMethod("POST");
+        request.setRequestURI("/api/visitor/advanced-team-portfolios/PF001/events");
+        request.addHeader("Authorization", "Bearer advanced-anonymous");
+        request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Map.of("shareCode", "PF001"));
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        setJoinPointMethod(VisitorAdvancedTeamPortfolioController.class, "event");
+        when(visitorAuthTokenService.resolveAuthenticatedVisitor("Bearer advanced-anonymous"))
+                .thenReturn(Optional.of(timelineAnonymousVisitorToken("TEAM:PF001")));
+        doAnswer(invocation -> {
+            assertThat(VisitorContextHolder.current().orElseThrow().isTimelineAnonymous()).isTrue();
+            return Response.success();
+        }).when(joinPoint).proceed();
+        aspect().authenticate(joinPoint);
+        assertThat(VisitorContextHolder.current()).isEmpty();
+        for (String mismatched : List.of("TEAM:PF999", "PERSONAL:PF001")) {
+            when(visitorAuthTokenService.resolveAuthenticatedVisitor("Bearer advanced-anonymous"))
+                    .thenReturn(Optional.of(timelineAnonymousVisitorToken(mismatched)));
+            assertThatThrownBy(() -> aspect().authenticate(joinPoint)).isInstanceOf(AuthenticationRequiredException.class);
+        }
+        setJoinPointMethod(VisitorAdvancedTeamPortfolioController.class, "updateVisitorProfile");
+        when(visitorAuthTokenService.resolveAuthenticatedVisitor("Bearer advanced-anonymous"))
+                .thenReturn(Optional.of(timelineAnonymousVisitorToken("TEAM:PF001")));
+        assertThatThrownBy(() -> aspect().authenticate(joinPoint)).isInstanceOf(AuthenticationRequiredException.class);
+        verify(joinPoint).proceed();
     }
 
     @Test
@@ -412,7 +443,9 @@ class AuthAspectTest {
     }
 
     private void setJoinPointMethod(Class<?> controllerClass, String methodName) throws NoSuchMethodException {
-        Method method = controllerClass.getDeclaredMethod(methodName);
+        Method method = Arrays.stream(controllerClass.getDeclaredMethods())
+                .filter(candidate -> candidate.getName().equals(methodName)).findFirst()
+                .orElseThrow(() -> new NoSuchMethodException(methodName));
         when(joinPoint.getSignature()).thenReturn(methodSignature);
         when(methodSignature.getMethod()).thenReturn(method);
         if (!isAccessAnnotated(method)) {

@@ -1,5 +1,5 @@
 const { request } = require('../../../utils/request.js')
-const { openTeamVisitorSession, requestWithTeamVisitorSessionRefresh } = require('./team-visitor-session')
+const { ADVANCED_TEAM_VISITOR_PREFIX, openTeamVisitorSession, requestWithTeamVisitorSessionRefresh } = require('./team-visitor-session')
 const { createVisitActivityContext } = require('./visit-activity')
 
 const API_PREFIX = '/api/visitor/team-portfolios'
@@ -11,16 +11,19 @@ function deviceCollectionEnabled() {
 function createPortfolioVisitActivity(page, options = {}) {
   const wxApi = options.wxApi || (typeof wx !== 'undefined' ? wx : null)
   const requestFn = options.requestFn || request
+  const apiPrefix = options.apiPrefix === ADVANCED_TEAM_VISITOR_PREFIX ? ADVANCED_TEAM_VISITOR_PREFIX : API_PREFIX
   const activity = createVisitActivityContext({
     portfolioType: 'TEAM', shareCode: page.data.shareCode, sourceType: page.data.sourceType,
+    ...(apiPrefix === ADVANCED_TEAM_VISITOR_PREFIX ? { visitorApiPrefix: apiPrefix } : {}),
     anonymousSessionId: page.anonymousSessionId, idempotencyKey: page.data.pendingOpenKey || undefined,
     wxApi, deviceCollectionEnabled: deviceCollectionEnabled(),
     sendActivity: (sessionId, activeDurationMs, browserContext) => requestWithTeamVisitorSessionRefresh({
       shareCode: page.data.shareCode, browserContext, wxApi, requestFn,
-      requestOptions: { url: `${API_PREFIX}/${encodeURIComponent(page.data.shareCode)}/visit-sessions/${sessionId}/activity`,
+      requestOptions: { url: `${apiPrefix}/${encodeURIComponent(page.data.shareCode)}/visit-sessions/${sessionId}/activity`,
         method: 'PUT', data: { activeDurationMs } }
     }),
     recoverPending: async (entry, currentIdentity, isCurrent) => {
+      const entryPrefix = entry.visitorApiPrefix === ADVANCED_TEAM_VISITOR_PREFIX ? ADVANCED_TEAM_VISITOR_PREFIX : API_PREFIX
       const session = await openTeamVisitorSession({
         ...entry, tracking: { version: 1, clientSessionKey: entry.clientSessionKey }, persistToken: false, wxApi, requestFn
       })
@@ -30,7 +33,7 @@ function createPortfolioVisitActivity(page, options = {}) {
         throw Object.assign(new Error('原访问会话不可恢复'), { statusCode: 403 })
       }
       const accepted = await requestFn({
-        url: `${API_PREFIX}/${encodeURIComponent(entry.shareCode)}/visit-sessions/${entry.trackingSessionId}/activity`,
+        url: `${entryPrefix}/${encodeURIComponent(entry.shareCode)}/visit-sessions/${entry.trackingSessionId}/activity`,
         method: 'PUT', authMode: 'none', header: { Authorization: `Bearer ${session.token}` }, data: { activeDurationMs: entry.activeDurationMs }
       })
       if (!Number.isSafeInteger(accepted) || accepted < entry.activeDurationMs) throw new Error('停留补报未确认')

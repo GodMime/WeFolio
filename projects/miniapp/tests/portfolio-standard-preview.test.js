@@ -442,6 +442,27 @@ test('preview page loads a team-referenced member portfolio through the nested p
   assert.match(wxml, /team-preview-scope="\{\{teamPreviewScope\}\}"/)
 })
 
+for (const scope of ['draft', 'published']) {
+  test(`高级团队${scope}预览通过高级父入口读取成员个人发布版`, async (t) => {
+    const requests = []
+    const page = loadPreviewPage(async options => {
+      requests.push(options)
+      return { portfolioId: 88, publishedRevision: 4, renderData: {
+        preview: true, title: '成员发布作品集', components: []
+      } }
+    })
+    global.wx = {}
+    t.after(() => { delete global.wx })
+    await page.onLoad({ portfolioId: '88', teamPortfolioId: '13', teamScope: scope, templateType: 'ADVANCED' })
+
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].url, '/api/mine/advanced-portfolios/13/member-portfolios/88/published-preview')
+    assert.deepEqual(requests[0].data, { scope })
+    assert.equal(page.data.portfolio.preview, true)
+    assert.equal(page.data.portfolio.title, '成员发布作品集')
+  })
+}
+
 test('preview display group switch tolerates unnormalized component arrays', () => {
   const page = loadPreviewPage(() => Promise.resolve({}))
   page.data.portfolio = {

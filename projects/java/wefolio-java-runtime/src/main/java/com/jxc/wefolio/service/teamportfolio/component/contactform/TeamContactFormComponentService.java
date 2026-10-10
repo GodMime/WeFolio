@@ -211,19 +211,25 @@ public class TeamContactFormComponentService {
      */
     @Transactional(rollbackFor = Exception.class)
     public SubmitResult submit(String shareCode, TeamContactLeadSubmitRequest request, VisitorContext visitor) {
+        return submit(shareCode, request, visitor, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public SubmitResult submit(String shareCode, TeamContactLeadSubmitRequest request, VisitorContext visitor, String templateType) {
         String normalizedShareCode = requireText(shareCode, PORTFOLIO_UNAVAILABLE_MESSAGE, IDEMPOTENCY_KEY_MAX_LENGTH);
         PortfolioEntity portfolio = portfolioEntityMapper.selectOne(
                 Wrappers.lambdaQuery(PortfolioEntity.class)
                         .eq(PortfolioEntity::getShareCode, normalizedShareCode)
                         .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.TEAM.getCode())
-                        .eq(PortfolioEntity::getTemplateType, PortfolioTemplateTypeDict.STANDARD.getCode())
+                        .eq(PortfolioEntity::getTemplateType, templateType)
                         .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
                         .eq(PortfolioEntity::getSchemaVersion,
                                 TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1)
                         .eq(PortfolioEntity::getPublicationStatus, PortfolioPublicationStatusDict.PUBLISHED.getCode())
                         .last(QUERY_LIMIT_ONE_FOR_UPDATE)
         );
-        if (!isPublishedTeamPortfolio(portfolio, normalizedShareCode)) {
+        if (!isPublishedTeamPortfolio(portfolio, normalizedShareCode, templateType)) {
             throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
         }
         requirePublishedContactForm(portfolio, null);
@@ -396,8 +402,13 @@ public class TeamContactFormComponentService {
      * @param componentKey 联系表单组件实例键
      */
     public void validatePublishedComponent(PortfolioEntity portfolio, String componentKey) {
+        validatePublishedComponent(portfolio, componentKey, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public void validatePublishedComponent(PortfolioEntity portfolio, String componentKey, String templateType) {
         String shareCode = portfolio == null ? "" : normalizeString(portfolio.getShareCode());
-        if (!isPublishedTeamPortfolio(portfolio, shareCode) || normalizeString(componentKey).isBlank()) {
+        if (!isPublishedTeamPortfolio(portfolio, shareCode, templateType) || normalizeString(componentKey).isBlank()) {
             throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
         }
         requirePublishedContactForm(portfolio, normalizeString(componentKey));
@@ -410,13 +421,13 @@ public class TeamContactFormComponentService {
      * @param shareCode 分享编码
      * @return 是否可作为团队访客作品集
      */
-    private boolean isPublishedTeamPortfolio(PortfolioEntity portfolio, String shareCode) {
+    private boolean isPublishedTeamPortfolio(PortfolioEntity portfolio, String shareCode, String templateType) {
         return portfolio != null
                 && portfolio.getId() != null && portfolio.getId() > 0
                 && portfolio.getOwnerId() != null && portfolio.getOwnerId() > 0
                 && portfolio.getPublishedRevision() != null && portfolio.getPublishedRevision() > 0
                 && PortfolioOwnerTypeDict.TEAM.getCode().equals(portfolio.getOwnerType())
-                && PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                && templateType.equals(portfolio.getTemplateType())
                 && PortfolioStatusDict.ACTIVE.getCode().equals(portfolio.getStatus())
                 && TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(portfolio.getSchemaVersion())
                 && PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())

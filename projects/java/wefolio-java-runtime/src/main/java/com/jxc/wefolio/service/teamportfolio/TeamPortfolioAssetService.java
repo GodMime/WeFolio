@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioAssetUploadTicketRequest;
@@ -124,8 +125,16 @@ public class TeamPortfolioAssetService {
             TeamPortfolioAssetUploadTicketRequest request,
             long userId
     ) {
+        return createUploadTicket(portfolioId, request, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口显式选择模板，素材生成仍按同一团队目录。 */
+    public TeamPortfolioAssetUploadTicketResponse createUploadTicket(long portfolioId,
+            TeamPortfolioAssetUploadTicketRequest request, long userId, String templateType) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireMaintainablePortfolio(portfolioId, userId);
+                PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)
+                        ? accessService.requireMaintainablePortfolio(portfolioId, userId)
+                        : accessService.requireMaintainablePortfolio(portfolioId, userId, templateType);
         String assetType = normalizeAssetType(request);
         String contentType = normalizeContentType(request);
         TeamEntity team = teamEntityMapper.selectById(access.team().getId());

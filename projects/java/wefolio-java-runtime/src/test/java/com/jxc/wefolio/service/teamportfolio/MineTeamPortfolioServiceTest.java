@@ -7,6 +7,7 @@ import com.jxc.wefolio.dto.PortfolioClientCapabilities;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.lenient;
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
@@ -77,6 +78,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -170,6 +172,7 @@ class MineTeamPortfolioServiceTest {
         publishedPortfolio.setPublishedConfigJson(JSON.toJSONString(config()));
         PortfolioEntity memberPortfolio = portfolio(12L);
         memberPortfolio.setId(14L);
+        memberPortfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
         PortfolioEntity disabledPortfolio = portfolio(15L);
         disabledPortfolio.setId(16L);
         disabledPortfolio.setStatus(PortfolioStatusDict.DISABLED.getCode());
@@ -189,6 +192,7 @@ class MineTeamPortfolioServiceTest {
             assertThat(item.isCanShare()).isTrue();
         });
         assertThat(result).filteredOn(item -> item.getTeamId().equals(12L)).singleElement().satisfies(item -> {
+            assertThat(item.getTemplateType()).isEqualTo(PortfolioTemplateTypeDict.ADVANCED.getCode());
             assertThat(item.getCurrentRole()).isEqualTo(TeamRoleDict.MEMBER.getCode());
             assertThat(item.isCanMaintain()).isFalse();
             assertThat(item.isCanShare()).isFalse();
@@ -201,9 +205,9 @@ class MineTeamPortfolioServiceTest {
         verify(context.portfolioMapper, times(1)).selectList(captor.capture());
         LambdaQueryWrapper<PortfolioEntity> wrapper = (LambdaQueryWrapper<PortfolioEntity>) captor.getValue();
         assertThat(wrapper.getSqlSegment()).contains(
-                "owner_type", "owner_id", "template_type", "schema_version", "status", "deleted");
+                "owner_type", "owner_id", "schema_version", "status", "deleted").doesNotContain("template_type");
         assertThat(wrapper.getParamNameValuePairs().values()).contains(
-                PortfolioOwnerTypeDict.TEAM.getCode(), PortfolioTemplateTypeDict.STANDARD.getCode(),
+                PortfolioOwnerTypeDict.TEAM.getCode(),
                 TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1,
                 PortfolioStatusDict.ACTIVE.getCode(), 0L, TEAM_ID, 12L, 15L);
     }
@@ -380,6 +384,35 @@ class MineTeamPortfolioServiceTest {
 
         verifyNoInteractions(context.validator, context.historyMapper, context.referenceService, context.assetService);
         verify(context.portfolioMapper, never()).updateById(any(PortfolioEntity.class));
+    }
+
+    /** 团队高级保存使用当前维护权限并允许高级成员来源，元数据沿原团队历史格式保存。 */
+    @Test
+    void advancedSaveUsesDedicatedAccessAndAtomicMetadata() {
+        TestContext context = context(true);
+        PortfolioEntity portfolio = portfolio(TEAM_ID); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode()))
+                .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
+        doReturn(portfolio).when(context.portfolioMapper).lockById(PORTFOLIO_ID);
+        TeamPortfolioConfigDto config = config();
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class))).thenReturn(config);
+        when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
+        TeamPortfolioDraftSaveRequest request = new TeamPortfolioDraftSaveRequest(); request.setConfig(config);
+        request.setClientRevision(0); request.setIdempotencyKey("adv-team-save");
+        JSONObject aiContext = JSON.parseObject("{\"version\":1,\"nextSourceNo\":1,\"sources\":[]}");
+        AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(aiContext, true, "团队描述", true, JSON.toJSONString(request));
+        context.service.saveDraft(PORTFOLIO_ID, request, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(portfolio.getDraftRevision()).isEqualTo(1); assertThat(portfolio.getAiPrompt()).isEqualTo("团队描述");
+        ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(context.historyMapper).insert(history.capture());
+        JSONObject snapshot = JSON.parseObject(history.getValue().getSnapshotJson());
+        assertThat(snapshot.getJSONObject("aiContext")).isEqualTo(aiContext);
+        assertThat(snapshot.getInteger("resultDraftRevision")).isEqualTo(1);
+        assertThat(snapshot.getString("requestFingerprint")).hasSize(64);
+        verify(context.referenceService).rebuild(eq(PORTFOLIO_ID), eq(PortfolioConfigScopeDict.DRAFT.getCode()), eq(config),
+                eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1, null, true)));
+        verifyNoInteractions(context.pointService);
     }
 
     @Test
