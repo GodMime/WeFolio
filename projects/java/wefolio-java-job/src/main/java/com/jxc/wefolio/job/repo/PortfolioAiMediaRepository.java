@@ -9,6 +9,7 @@ import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.model.PortfolioAiMediaSummaryIdentity;
 import com.jxc.wefolio.job.service.PortfolioAiCallException;
 import com.jxc.wefolio.job.service.PortfolioAiMediaAccessService;
+import com.jxc.wefolio.job.service.PortfolioAiModelClient.CacheStatus;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,16 @@ public class PortfolioAiMediaRepository {
     /** 摘要缓存元数据字段。 */
     private static final String CACHE_KEY = "cacheKey";
     private static final String PROMPT_VERSION = "promptVersion";
+    /** 同一广州估价口径的价格版本，仅用于日志，不代表账户实际计费地域。 */
+    private static final String PRICE_VERSION = "tokenhub-guangzhou-2026-10-12";
+    /** 广州模型计价地域。 */
+    private static final String PRICE_REGION = "ap-guangzhou";
+    /** 普通输入、缓存输入及输出每百万 token 的整数分单价。 */
+    private static final BigInteger INPUT_PRICE_CENTS = BigInteger.valueOf(80);
+    private static final BigInteger CACHED_INPUT_PRICE_CENTS = BigInteger.valueOf(23);
+    private static final BigInteger OUTPUT_PRICE_CENTS = BigInteger.valueOf(280);
+    /** 各项合并后仅对整次调用向上取整一次。 */
+    private static final BigInteger TOKEN_PRICE_UNIT = BigInteger.valueOf(1_000_000);
     /** SQL 访问器及全局硬预算。 */
     private final JdbcTemplate jdbc;
     private final PortfolioAiProperties properties;
@@ -135,7 +146,18 @@ public class PortfolioAiMediaRepository {
     /** 完整 usage 才结算；已取消、已清隐私或逻辑删除的费用行仍可核对，重复结算不得改写已知值。 */
     @Transactional(rollbackFor = Exception.class, noRollbackFor = PortfolioAiCallException.class)
     public void settle(AiGenerationTaskEntity task, int callNo, Long prompt, Long completion, LocalDateTime now) {
-        if (prompt == null || completion == null || prompt < 0 || completion < 0) { return; }
+        settle(task, callNo, prompt, completion, null, CacheStatus.UNKNOWN, now);
+    }
+
+    /** 合法缓存用量享受折扣，未知或异常缓存回退全价，首次已知费用保持不可改写。 */
+    @Transactional(rollbackFor = Exception.class, noRollbackFor = PortfolioAiCallException.class)
+    public void settle(AiGenerationTaskEntity task, int callNo, Long prompt, Long completion,
+                       Long cachedTokens, CacheStatus cacheStatus, LocalDateTime now) {
+        if (prompt == null || completion == null || prompt < 0 || completion < 0) {
+            log.info("媒体模型用量未知 taskId={}, attempt={}, callNo={}, cacheStatus={}",
+                    task.getId(), task.getAttemptCount(), callNo, CacheStatus.CORE_USAGE_UNKNOWN);
+            return;
+        }
         // 清理只锁任务行，不申请用户锁；这里固定用户 -> 任务顺序以避免跨实例预算竞态。
         jdbc.queryForList("SELECT id FROM wf_user WHERE id=? FOR UPDATE", Long.class, task.getRequestedBy());
         List<StoredBudget> rows = jdbc.query("""
@@ -147,10 +169,28 @@ public class PortfolioAiMediaRepository {
         PortfolioAiMediaBudget.Call call = budget.find(task.getAttemptCount(), callNo);
         if (call == null) { throw unavailable(); }
         // 第一次完整返回才写费用，晚到或重复 usage 不改变已知真实费用。
-        if (call.charged() != null) { return; }
-        long cents = costCents(prompt, completion);
+        if (call.charged() != null) {
+            log.info("媒体模型重复费用回执未采用 taskId={}, attempt={}, callNo={}, adopted=false, chargedCents={}",
+                    task.getId(), task.getAttemptCount(), callNo, call.charged());
+            return;
+        }
+        CacheStatus status = settlementCacheStatus(prompt, cachedTokens, cacheStatus);
+        Long adoptedCache = status == CacheStatus.KNOWN_HIT || status == CacheStatus.KNOWN_MISS ? cachedTokens : null;
+        long fullCents = costCents(prompt, completion);
+        long cents = costCents(prompt, completion, adoptedCache);
         budget.settle(call, cents, prompt, completion);
         writeBudget(task.getId(), budget);
+        /*
+         * 积分扣费扩展预留：首次已知模型费用记账并提交后，
+         * 可由独立用例按任务及调用身份关联用户积分结算。
+         * 本期仅记录平台模型成本，不调用积分服务、不扣用户积分。
+         * 接入前另行确定扣费主体、兑换比例与取整、失败和取消收费、
+         * 余额不足及可靠补偿规则；不得在当前事务锁内调用远端服务，
+         * 不得因积分结算失败回滚已发生的模型费用。
+         */
+        log.info("媒体模型费用结算 taskId={}, attempt={}, callNo={}, pricingModel={}, pricingRegion={}, priceVersion={}, promptTokens={}, completionTokens={}, cachedTokens={}, cacheStatus={}, fullCents={}, chargedCents={}, savedCents={}, adopted=true",
+                task.getId(), task.getAttemptCount(), callNo, PortfolioAiProperties.TOKENHUB_MODEL, PRICE_REGION, PRICE_VERSION,
+                prompt, completion, adoptedCache, status, fullCents, cents, fullCents - cents);
         if (cents > call.reserved()) {
             throw new PortfolioAiCallException(ERROR_BUDGET_OVERRUN, "模型用量超过预留，本次任务已停止", false);
         }
@@ -174,11 +214,28 @@ public class PortfolioAiMediaRepository {
         if (budget.releaseUnsent(call)) { writeBudget(task.getId(), budget); }
     }
 
-    /** 广州输入0.8/输出2.8元每百万tokens，费用向上取整为整数分。 */
+    /** 保留原全价估算入口，调用前预留不预测供应商缓存命中。 */
     public static long costCents(long prompt, long completion) {
-        BigInteger units = BigInteger.valueOf(prompt).multiply(BigInteger.valueOf(80))
-                .add(BigInteger.valueOf(completion).multiply(BigInteger.valueOf(280)));
-        return units.add(BigInteger.valueOf(999999)).divide(BigInteger.valueOf(1000000)).longValueExact();
+        return costCents(prompt, completion, null);
+    }
+
+    /** 广州普通输入0.8、缓存输入0.23、输出2.8元每百万token，未知或非法缓存保守按全价。 */
+    public static long costCents(long prompt, long completion, Long cachedTokens) {
+        long cached = cachedTokens != null && cachedTokens >= 0 && cachedTokens <= prompt ? cachedTokens : 0;
+        BigInteger units = BigInteger.valueOf(prompt - cached).multiply(INPUT_PRICE_CENTS)
+                .add(BigInteger.valueOf(cached).multiply(CACHED_INPUT_PRICE_CENTS))
+                .add(BigInteger.valueOf(completion).multiply(OUTPUT_PRICE_CENTS));
+        return units.add(TOKEN_PRICE_UNIT.subtract(BigInteger.ONE)).divide(TOKEN_PRICE_UNIT).longValueExact();
+    }
+
+    /** 内部替代客户端同样不能用越界缓存量或不一致的诊断状态制造折扣。 */
+    private static CacheStatus settlementCacheStatus(long prompt, Long cachedTokens, CacheStatus cacheStatus) {
+        if (cacheStatus == null) { return cachedTokens == null ? CacheStatus.UNKNOWN : CacheStatus.INVALID; }
+        if (cacheStatus == CacheStatus.KNOWN_HIT || cacheStatus == CacheStatus.KNOWN_MISS) {
+            if (cachedTokens == null || cachedTokens < 0 || cachedTokens > prompt
+                    || (cacheStatus == CacheStatus.KNOWN_HIT) != (cachedTokens > 0)) { return CacheStatus.INVALID; }
+        }
+        return cacheStatus;
     }
 
     /** 小批只清作品上的过期摘要，显式抑制 MySQL ON UPDATE；帧、源、作品版本均保留。 */

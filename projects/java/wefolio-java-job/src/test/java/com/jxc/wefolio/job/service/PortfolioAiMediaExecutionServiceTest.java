@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
+import com.jxc.wefolio.job.service.PortfolioAiModelClient.CacheStatus;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import org.junit.jupiter.api.Test;
 
@@ -49,10 +50,35 @@ class PortfolioAiMediaExecutionServiceTest {
         var order = inOrder(repository, client);
         order.verify(repository).cached(eq(9L), any(), any()); order.verify(repository).reserve(eq(task), intThat(value -> value <= 5), any());
         order.verify(client).summarize(eq(task), any(), anyList(), any());
-        order.verify(repository).settle(eq(task), eq(1), isNull(), isNull(), any());
+        order.verify(repository).settle(eq(task), eq(1), isNull(), isNull(), isNull(), eq(CacheStatus.UNKNOWN), any());
         order.verify(repository).cache(eq(9L), any(), contains("婚礼舞台"), any());
         order.verify(repository).reserve(eq(task), anyInt(), any()); order.verify(client).generateWithUsage(eq(task), any(), any());
+        order.verify(repository).settle(eq(task), eq(2), eq(1000L), eq(100L), isNull(), eq(CacheStatus.UNKNOWN), any());
         assertThat(request.toString()).doesNotContain("mediaSummary", "signature=fake");
+    }
+    /** 两个付费阶段均传递缓存命中量，但准入及发送前仍保留全价金额。 */
+    @Test void cachedTokenUsageReachesBothSettlementsWithoutDiscountingReservations() {
+        AiGenerationTaskEntity task = task();
+        when(access.signedAfterVerification(eq(task), any())).thenReturn(List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame", 1000L)));
+        when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1, 2);
+        when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
+        when(client.summarize(eq(task), any(), anyList(), any())).thenReturn(
+                new PortfolioAiModelClient.Completion(SUMMARY, 16000L, 100L, 12000L, CacheStatus.KNOWN_HIT));
+        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(
+                new PortfolioAiModelClient.Completion("final", 1000L, 100L, 800L, CacheStatus.KNOWN_HIT));
+
+        assertThat(service.generate(task, request(), checkOwned)).isEqualTo("final");
+
+        // 八帧摘要和最大输出布局各按全价预留三分，不能提前假设供应商缓存命中。
+        var order = inOrder(repository, client);
+        order.verify(repository).checkCapacity(eq(task), eq(6), eq(2), any());
+        order.verify(repository).reserve(eq(task), eq(3), any());
+        order.verify(client).summarize(eq(task), any(), anyList(), any());
+        order.verify(repository).settle(eq(task), eq(1), eq(16000L), eq(100L), eq(12000L), eq(CacheStatus.KNOWN_HIT), any());
+        order.verify(repository).reserve(eq(task), eq(3), any());
+        order.verify(client).generateWithUsage(eq(task), any(), any());
+        order.verify(repository).settle(eq(task), eq(2), eq(1000L), eq(100L), eq(800L), eq(CacheStatus.KNOWN_HIT), any());
+        verify(repository, never()).releaseUnsent(any(), anyInt());
     }
     /** 命中仍先验证当前权限，拒绝后不读缓存也不发模型。 */
     @Test void revokedPermissionCannotUseCachedSummary() {
@@ -69,13 +95,18 @@ class PortfolioAiMediaExecutionServiceTest {
         assertThatThrownBy(() -> service.generate(task(), request(), checkOwned)).hasMessageContaining("摘要JSON不合法");
         verifyNoInteractions(client); verify(repository, never()).reserve(any(), anyInt(), any());
     }
-    /** 改写文字使用同源摘要，不重复媒体调用，但最终请求仍有预留。 */
+    /** 七天摘要缓存命中只跳过媒体调用，最终请求仍全价预留并按供应商缓存用量结算。 */
     @Test void cachedMediaAvoidsRepeatedUnderstandingAndStillChecksPermission() {
         properties.setMediaEnabled(true); AiGenerationTaskEntity task = task();
         when(repository.cached(eq(9L), any(), any())).thenReturn(SUMMARY); when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
-        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 1L, 1L));
+        when(repository.reserve(eq(task), anyInt(), any())).thenReturn(7);
+        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(
+                new PortfolioAiModelClient.Completion("final", 1000L, 100L, 800L, CacheStatus.KNOWN_HIT));
         service.generate(task, request(), checkOwned); verify(client, never()).summarize(any(), any(), any(), any());
-        verify(repository, times(1)).reserve(eq(task), anyInt(), any()); verify(access, times(2)).verify(eq(task), any());
+        verify(repository).checkCapacity(eq(task), eq(3), eq(1), any());
+        verify(repository, times(1)).reserve(eq(task), eq(3), any()); verify(access, times(2)).verify(eq(task), any());
+        verify(repository).settle(eq(task), eq(7), eq(1000L), eq(100L), eq(800L), eq(CacheStatus.KNOWN_HIT), any());
+        verify(repository, never()).cache(anyLong(), any(), anyString(), any());
     }
 
     /** 返回前瞬时 HEAD 失败不丢失已付费摘要，下一代执行复用缓存而不重复理解。 */
@@ -162,9 +193,25 @@ class PortfolioAiMediaExecutionServiceTest {
         when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1);
         when(client.summarize(eq(task), any(), any(), any())).thenThrow(new IllegalStateException("模拟传输中断"));
         assertThatThrownBy(() -> service.generate(task, request(), checkOwned)).hasMessage("模拟传输中断");
-        verify(repository, never()).settle(any(), anyInt(), any(), any(), any());
+        verify(repository, never()).settle(any(), anyInt(), any(), any(), any(), any(), any());
         verify(repository, never()).releaseUnsent(any(), anyInt());
         verify(client, never()).generateWithUsage(any(), any(), any());
+    }
+
+    /** 最终客户端抛出异常同样保留未知预留，摘要缓存不能让该次调用免费。 */
+    @Test void finalModelTransportFailureKeepsUnknownReservationAfterSummaryCacheHit() {
+        AiGenerationTaskEntity task = task();
+        when(repository.cached(eq(9L), any(), any())).thenReturn(SUMMARY);
+        when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
+        when(repository.reserve(eq(task), anyInt(), any())).thenReturn(2);
+        when(client.generateWithUsage(eq(task), any(), any())).thenThrow(new IllegalStateException("模拟最终传输中断"));
+
+        assertThatThrownBy(() -> service.generate(task, request(), checkOwned)).hasMessage("模拟最终传输中断");
+
+        verify(repository).reserve(eq(task), eq(3), any());
+        verify(repository, never()).settle(any(), anyInt(), any(), any(), any(), any(), any());
+        verify(repository, never()).releaseUnsent(any(), anyInt());
+        verify(client, never()).summarize(any(), any(), anyList(), any());
     }
 
     /** 总步骤上界预算不足时，摘要、最终生成和逐次预留都还没有发生。 */
@@ -186,10 +233,10 @@ class PortfolioAiMediaExecutionServiceTest {
         when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1);
         when(client.summarize(eq(task), any(), anyList(), any())).thenAnswer(invocation -> {
             doThrow(new PortfolioAiCallException("EXECUTION_INTERRUPTED", "执行代次已失效", false)).when(owner).run();
-            return new PortfolioAiModelClient.Completion(SUMMARY, 100L, 10L);
+            return new PortfolioAiModelClient.Completion(SUMMARY, 100L, 10L, 80L, CacheStatus.KNOWN_HIT);
         });
         assertThatThrownBy(() -> service.generate(task, request(), owner)).hasMessage("执行代次已失效");
-        verify(repository).settle(eq(task), eq(1), eq(100L), eq(10L), any());
+        verify(repository).settle(eq(task), eq(1), eq(100L), eq(10L), eq(80L), eq(CacheStatus.KNOWN_HIT), any());
         verify(repository, never()).cache(anyLong(), any(), anyString(), any());
         verify(client, never()).generateWithUsage(any(), any(), any());
     }

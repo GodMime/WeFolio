@@ -4,6 +4,8 @@ import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.model.PortfolioAiMediaSummaryIdentity;
 import com.jxc.wefolio.job.service.PortfolioAiMediaAccessService;
+import com.jxc.wefolio.job.service.PortfolioAiModelClient.CacheStatus;
+import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
@@ -179,6 +181,106 @@ class PortfolioAiMediaRepositoryTest {
         assertThatThrownBy(() -> repository.reserve(task, 83, now)).hasMessageContaining("预算已用尽");
         assertThat(budget(1).callCount()).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT media_budget_unknown_count FROM wf_ai_generation_task WHERE id=1", Integer.class)).isEqualTo(1);
+    }
+
+    /** 全价预留由折扣金额替代后释放任务及日金额额度，真实调用次数与输入总量仍保留。 */
+    @Test
+    void discountedSettlementReleasesMoneyCapacityButKeepsCallQuotaAndV1Ledger() {
+        properties.setMediaTaskBudgetCents(11); properties.setMediaDailyBudgetCents(11); properties.setMediaMaxCalls(1);
+        var task = task(1); int call = repository.reserve(task, 11, now);
+        assertThat(budget(1).total()).isEqualTo(11);
+        assertThatThrownBy(() -> repository.reserve(task(2), 4, now)).hasMessageContaining("预算已用尽");
+        repository.settle(task, call, 100_000L, 10_000L, 80_000L, CacheStatus.KNOWN_HIT, now);
+        var settled = budget(1).find(1, call);
+        assertThat(settled.charged()).isEqualTo(7);
+        assertThat(settled.reserved()).isEqualTo(11);
+        assertThat(settled.prompt()).isEqualTo(100_000);
+        assertThat(settled.completion()).isEqualTo(10_000);
+        assertThat(budget(1).unknownCount()).isZero();
+        assertThat(budget(1).callCount()).isEqualTo(1);
+        assertThatThrownBy(() -> repository.reserve(task, 4, now)).hasMessageContaining("预算已用尽");
+        assertThat(repository.reserve(task(2), 4, now)).isEqualTo(1);
+        var ledger = StrictAiJson.parseObject(budget(1).json(), 128 * 1024, 8);
+        assertThat(ledger.path("version").asText()).isEqualTo("media-budget-v1");
+        var fields = new java.util.ArrayList<String>();
+        ledger.path("calls").get(0).fieldNames().forEachRemaining(fields::add);
+        assertThat(fields).containsExactlyInAnyOrder("attemptNo", "callNo", "budgetDay", "reservedCents",
+                "chargedCents", "usageKnown", "promptTokens", "completionTokens");
+    }
+
+    /** 失配或未知缓存参数不能绕过客户端归一化制造折扣，合法零缓存同样按全价。 */
+    @Test
+    void invalidOrUnknownInternalCacheStatisticsConservativelyUseFullPrice() {
+        Long[] cached = {-1L, 100_001L, null, 0L, 5L, 50_000L, 50_000L, 50_000L, 50_000L, 0L};
+        CacheStatus[] statuses = {CacheStatus.KNOWN_HIT, CacheStatus.KNOWN_HIT, CacheStatus.KNOWN_HIT,
+                CacheStatus.KNOWN_HIT, CacheStatus.KNOWN_MISS, CacheStatus.UNKNOWN, CacheStatus.CONFLICT,
+                CacheStatus.INVALID, null, CacheStatus.KNOWN_MISS};
+        var task = task(1);
+        for (int index = 0; index < cached.length; index++) {
+            int call = repository.reserve(task, 11, now);
+            repository.settle(task, call, 100_000L, 10_000L, cached[index], statuses[index], now);
+            assertThat(budget(1).find(1, call).charged()).as("缓存参数场景%s", index).isEqualTo(11);
+        }
+        assertThat(budget(1).unknownCount()).isZero();
+        assertThat(budget(1).callCount()).isEqualTo(cached.length);
+    }
+
+    /** 即使有缓存量，缺失或负数核心用量仍 UNKNOWN，不能释放预留。 */
+    @Test
+    void cacheStatisticsCannotSettleUnknownCoreUsage() {
+        var task = task(1); int call = repository.reserve(task, 11, now);
+        repository.settle(task, call, null, 10_000L, 80_000L, CacheStatus.CORE_USAGE_UNKNOWN, now);
+        repository.settle(task, call, 100_000L, null, 80_000L, CacheStatus.KNOWN_HIT, now);
+        repository.settle(task, call, -1L, 10_000L, 0L, CacheStatus.KNOWN_MISS, now);
+        repository.settle(task, call, 100_000L, -1L, 80_000L, CacheStatus.KNOWN_HIT, now);
+        assertThat(budget(1).find(1, call).charged()).isNull();
+        assertThat(budget(1).unknownCount()).isEqualTo(1);
+        assertThat(budget(1).total()).isEqualTo(11);
+    }
+
+    /** 已结算全价不能追溯降价，已采用折扣也不能被后来更多命中或另一回执重写。 */
+    @Test
+    void lateCacheInformationCannotRewriteEitherFullPriceOrDiscountedSettlement() {
+        var full = task(1); int fullCall = repository.reserve(full, 11, now);
+        repository.settle(full, fullCall, 100_000L, 10_000L, now);
+        String originalFull = budget(1).json();
+        repository.settle(full, fullCall, 100_000L, 10_000L, 80_000L, CacheStatus.KNOWN_HIT, now.plusDays(1));
+        assertThat(budget(1).json()).isEqualTo(originalFull);
+        assertThat(budget(1).find(1, fullCall).charged()).isEqualTo(11);
+        var discounted = task(2); int discountedCall = repository.reserve(discounted, 11, now);
+        repository.settle(discounted, discountedCall, 100_000L, 10_000L, 80_000L, CacheStatus.KNOWN_HIT, now);
+        String originalDiscount = budget(2).json();
+        repository.settle(discounted, discountedCall, 100_000L, 10_000L, 100_000L, CacheStatus.KNOWN_HIT, now.plusDays(1));
+        repository.settle(discounted, discountedCall, 100_000L, 10_000L, now.plusDays(1));
+        assertThat(budget(2).json()).isEqualTo(originalDiscount);
+        assertThat(budget(2).find(1, discountedCall).charged()).isEqualTo(7);
+    }
+
+    /** 折扣后仍超过预留时，真实事务提交费用再抛异常，不能因折扣绕过超额保护。 */
+    @Test
+    void discountedOverrunCommitsActualCostBeforeStopping() {
+        var task = task(1); int call = repository.reserve(task, 1, now);
+        assertThatThrownBy(() -> repository.settle(task, call, 1_000_000L, 0L, 1_000_000L, CacheStatus.KNOWN_HIT, now))
+                .hasMessageContaining("超过预留");
+        assertThat(budget(1).find(1, call).charged()).isEqualTo(23);
+        assertThat(budget(1).unknownCount()).isZero();
+        assertThat(budget(1).callCount()).isEqualTo(1);
+    }
+
+    /** 跨日取消后晚到折扣仍归原调用日，且不改版本、心跳及隐藏状态。 */
+    @Test
+    void lateDiscountedUsageKeepsOriginalDayAndDoesNotReviveCancelledTask() {
+        var task = task(1); LocalDateTime sent = now.toLocalDate().atTime(23, 59, 59);
+        int call = repository.reserve(task, 11, sent);
+        LocalDateTime heartbeat = now.minusSeconds(95);
+        jdbc.update("UPDATE wf_ai_generation_task SET status='CANCELLED',version=2,deleted=id,updated_at=? WHERE id=1", heartbeat);
+        repository.settle(task, call, 100_000L, 10_000L, 80_000L, CacheStatus.KNOWN_HIT, sent.plusSeconds(2));
+        assertThat(budget(1).total(sent.toLocalDate())).isEqualTo(7);
+        assertThat(budget(1).total(sent.plusSeconds(2).toLocalDate())).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM wf_ai_generation_task WHERE id=1", String.class)).isEqualTo("CANCELLED");
+        assertThat(jdbc.queryForObject("SELECT version FROM wf_ai_generation_task WHERE id=1", Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT deleted FROM wf_ai_generation_task WHERE id=1", Long.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT updated_at FROM wf_ai_generation_task WHERE id=1", LocalDateTime.class)).isEqualTo(heartbeat);
     }
 
     /** 完整用量结算真实整数分，超额错误必须在费用提交后抛出。 */
@@ -385,5 +487,28 @@ class PortfolioAiMediaRepositoryTest {
         assertThat(PortfolioAiMediaRepository.costCents(1000000, 8192)).isEqualTo(83);
         assertThat(PortfolioAiMediaRepository.costCents(1, 0)).isEqualTo(1);
         assertThat(PortfolioAiMediaRepository.costCents(0, 0)).isZero();
+    }
+
+    /** 混合用量合并后只取整一次；不足一分的优惠不能凭空降低整数分账本。 */
+    @Test
+    void cachePricesCoverPartialFullZeroHitsAndSingleCombinedRounding() {
+        assertThat(PortfolioAiMediaRepository.costCents(100_000, 10_000)).isEqualTo(11);
+        assertThat(PortfolioAiMediaRepository.costCents(100_000, 10_000, 80_000L)).isEqualTo(7);
+        assertThat(PortfolioAiMediaRepository.costCents(1_000_000, 0, 1_000_000L)).isEqualTo(23);
+        assertThat(PortfolioAiMediaRepository.costCents(1_000_000, 0, 0L)).isEqualTo(80);
+        assertThat(PortfolioAiMediaRepository.costCents(1, 0, 1L)).isEqualTo(1);
+        assertThat(PortfolioAiMediaRepository.costCents(2, 1, 1L)).isEqualTo(1);
+        assertThat(PortfolioAiMediaRepository.costCents(0, 0, 0L)).isZero();
+        assertThat(PortfolioAiMediaRepository.costCents(100_000, 10_000, null)).isEqualTo(11);
+        assertThat(PortfolioAiMediaRepository.costCents(100_000, 10_000, -1L)).isEqualTo(11);
+        assertThat(PortfolioAiMediaRepository.costCents(100_000, 10_000, 100_001L)).isEqualTo(11);
+    }
+
+    /** Long最大用量的中间乘加超出Long，但最终整数分仍能精确结算。 */
+    @Test
+    void largeTokenCountsUseExactIntegerArithmeticWithoutIntermediateOverflow() {
+        assertThat(PortfolioAiMediaRepository.costCents(Long.MAX_VALUE, Long.MAX_VALUE)).isEqualTo(3_320_413_933_267_720L);
+        assertThat(PortfolioAiMediaRepository.costCents(Long.MAX_VALUE, Long.MAX_VALUE, Long.MAX_VALUE)).isEqualTo(2_794_681_727_166_998L);
+        assertThat(PortfolioAiMediaRepository.costCents(Long.MAX_VALUE, 0, Long.MAX_VALUE)).isEqualTo(212_137_556_847_660L);
     }
 }

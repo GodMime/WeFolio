@@ -95,7 +95,8 @@ public class PortfolioAiMediaExecutionService {
                 Duration timeout = remainingBeforeSend(task, call, checkOwned);
                 // 发送失败/进程中断/未知usage均保留完整预留；绝不按未读到usage假设免费。
                 var completion = client.summarize(task, request, signed, timeout);
-                repository.settle(task, call, completion.promptTokens(), completion.completionTokens(), now());
+                repository.settle(task, call, completion.promptTokens(), completion.completionTokens(),
+                        completion.cachedTokens(), completion.cacheStatus(), now());
                 checkOwned.run();
                 summary = validateSummary(completion.content());
                 // 先复核当前数据库权限与源身份并缓存已付费摘要；后续瞬时 HEAD 故障可重试复用。
@@ -112,7 +113,8 @@ public class PortfolioAiMediaExecutionService {
         int call = repository.reserve(task, textReservation(task, request), now());
         Duration timeout = remainingBeforeSend(task, call, checkOwned);
         var completion = client.generateWithUsage(task, request, timeout);
-        repository.settle(task, call, completion.promptTokens(), completion.completionTokens(), now());
+        repository.settle(task, call, completion.promptTokens(), completion.completionTokens(),
+                completion.cachedTokens(), completion.cacheStatus(), now());
         checkOwned.run();
         // 晚到返回不能把已撤权、源替换或到期任务的结果发布为成功。
         remaining(task);

@@ -11,8 +11,35 @@ public interface PortfolioAiModelClient {
     /** 在绝对期限和响应字节预算内返回唯一 assistant 的 content。 */
     String generate(AiGenerationTaskEntity task, ObjectNode request, Duration remaining);
 
-    /** 单次结果及真实 usage；未知 usage 不允许预算退款。 */
-    record Completion(String content, Long promptTokens, Long completionTokens) { }
+    /**
+     * 单次结果及真实用量；未知核心用量不允许预算退款，未知缓存量保留为 null。
+     * @param content 唯一通过校验的模型正文
+     * @param promptTokens 输入总量，包含缓存命中部分
+     * @param completionTokens 输出总量，已包含思考用量
+     * @param cachedTokens 合法缓存命中量；未知、异常或冲突时为 null
+     * @param cacheStatus 缓存量采用或回退的受控诊断类别
+     */
+    record Completion(String content, Long promptTokens, Long completionTokens, Long cachedTokens, CacheStatus cacheStatus) {
+        /** 兼容旧客户端及测试替身；未报告缓存量时按全价处理。 */
+        public Completion(String content, Long promptTokens, Long completionTokens) {
+            this(content, promptTokens, completionTokens, null, CacheStatus.UNKNOWN);
+        }
+    }
+    /** 仅传递安全的缓存诊断分类，不保存供应商原始响应。 */
+    enum CacheStatus {
+        /** 已知缓存命中量大于零。 */
+        KNOWN_HIT,
+        /** 已知缓存命中量为零。 */
+        KNOWN_MISS,
+        /** 两个候选字段均未返回，缓存量未知。 */
+        UNKNOWN,
+        /** 已出现的候选字段或父节点不合法。 */
+        INVALID,
+        /** 两个合法候选字段的缓存量不一致。 */
+        CONFLICT,
+        /** 输入或输出核心用量不合法，不能结算已知费用。 */
+        CORE_USAGE_UNKNOWN
+    }
     /** 临时私有读取链接只在本次请求内存使用，禁止保存或记录。 */
     record MediaInput(String type, String url, Long timeMs) { }
     /** 新媒体任务最终文本生成，旧客户端仍可明确返回未知 usage。 */

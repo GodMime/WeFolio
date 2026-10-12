@@ -7,6 +7,9 @@ import com.jxc.wefolio.service.portfolioai.AiProtocolException;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 
 import java.io.ByteArrayOutputStream;
@@ -18,12 +21,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPOutputStream;
+import java.util.stream.Stream;
+
+import static com.jxc.wefolio.job.service.PortfolioAiModelClient.CacheStatus.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +39,181 @@ import static org.mockito.Mockito.*;
 
 /** 官方请求参数、供应商完成原因、绝对期限和读取中响应预算测试。 */
 class TokenHubPortfolioAiClientTest {
+    /** 真实客户端消费传输替身响应，缓存异常不影响正文及合法核心用量。 */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("cacheUsageCases")
+    void optionalCacheUsageIsStrictlyNormalized(String label, String fields, Long expectedCache,
+                                                PortfolioAiModelClient.CacheStatus expectedStatus) {
+        var completion = completionFromUsage("{\"prompt_tokens\":100,\"completion_tokens\":20" + fields + "}");
+        assertThat(completion.content()).isEqualTo("{}");
+        assertThat(completion.promptTokens()).isEqualTo(100L);
+        assertThat(completion.completionTokens()).isEqualTo(20L);
+        assertThat(completion.cachedTokens()).isEqualTo(expectedCache);
+        assertThat(completion.cacheStatus()).isEqualTo(expectedStatus);
+    }
+
+    /** 单字段、等值双字段、冲突及每种非法字段都经过最终 HTTP 响应解析。 */
+    private static Stream<Arguments> cacheUsageCases() {
+        List<Arguments> cases = new ArrayList<>(List.of(
+                Arguments.of("嵌套字段命中", ",\"prompt_tokens_details\":{\"cached_tokens\":80}", 80L, KNOWN_HIT),
+                Arguments.of("直接字段命中", ",\"cache_read_tokens\":80", 80L, KNOWN_HIT),
+                Arguments.of("双字段相同只使用一次", ",\"prompt_tokens_details\":{\"cached_tokens\":80},\"cache_read_tokens\":80", 80L, KNOWN_HIT),
+                Arguments.of("双字段冲突", ",\"prompt_tokens_details\":{\"cached_tokens\":80},\"cache_read_tokens\":79", null, CONFLICT),
+                Arguments.of("已知零缓存", ",\"prompt_tokens_details\":{\"cached_tokens\":0},\"cache_read_tokens\":0", 0L, KNOWN_MISS),
+                Arguments.of("全部输入命中", ",\"cache_read_tokens\":100", 100L, KNOWN_HIT),
+                Arguments.of("候选字段均缺失", "", null, UNKNOWN),
+                Arguments.of("空详情对象", ",\"prompt_tokens_details\":{}", null, UNKNOWN),
+                Arguments.of("详情存在其它字段", ",\"prompt_tokens_details\":{\"audio_tokens\":10}", null, UNKNOWN),
+                Arguments.of("输出思考用量已包含", ",\"cache_read_tokens\":80,\"completion_tokens_details\":{\"reasoning_tokens\":15}", 80L, KNOWN_HIT)));
+        for (String value : List.of("null", "\"80\"", "80.0", "1e400", "1e-2000", "-1", "101", "9223372036854775808", "-9223372036854775809", "true", "[]", "{}",
+                "[9223372036854775808]", "{\"value\":9223372036854775808}", "[1e400]", "{\"value\":1e400}")) {
+            cases.add(Arguments.of("嵌套非法且直接合法：" + value,
+                    ",\"prompt_tokens_details\":{\"cached_tokens\":" + value + "},\"cache_read_tokens\":80", null, INVALID));
+            cases.add(Arguments.of("直接非法且嵌套合法：" + value,
+                    ",\"prompt_tokens_details\":{\"cached_tokens\":80},\"cache_read_tokens\":" + value, null, INVALID));
+        }
+        for (String value : List.of("null", "\"invalid\"", "[]", "80", "true", "9223372036854775808", "1e400", "[9223372036854775808]", "[1e400]")) {
+            cases.add(Arguments.of("详情父节点非法：" + value,
+                    ",\"prompt_tokens_details\":" + value + ",\"cache_read_tokens\":80", null, INVALID));
+        }
+        return cases.stream();
+    }
+
+    /** 核心用量不能由缓存推算；合法的一侧仍保留供未知用量日志诊断。 */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("coreUsageCases")
+    void invalidCoreUsageRemainsUnknown(String label, String usage, Long expectedPrompt, Long expectedOutput) {
+        var completion = completionFromUsage(usage);
+        assertThat(completion.content()).isEqualTo("{}");
+        assertThat(completion.promptTokens()).isEqualTo(expectedPrompt);
+        assertThat(completion.completionTokens()).isEqualTo(expectedOutput);
+        assertThat(completion.cachedTokens()).isNull();
+        assertThat(completion.cacheStatus()).isEqualTo(CORE_USAGE_UNKNOWN);
+    }
+
+    /** 缺失、类型错误、负数与溢出都不制造合法核心用量。 */
+    private static Stream<Arguments> coreUsageCases() {
+        List<Arguments> cases = new ArrayList<>(List.of(
+                Arguments.of("整个用量缺失", null, null, null),
+                Arguments.of("整个用量为null", "null", null, null),
+                Arguments.of("整个用量为数组", "[]", null, null),
+                Arguments.of("整个用量为字符串", "\"unknown\"", null, null),
+                Arguments.of("整个用量为超界整数", "9223372036854775808", null, null),
+                Arguments.of("整个用量为超界浮点", "1e400", null, null),
+                Arguments.of("整个用量为带超界整数的数组", "[9223372036854775808]", null, null),
+                Arguments.of("整个用量为带超界浮点的数组", "[1e400]", null, null),
+                Arguments.of("输入缺失", "{\"completion_tokens\":20,\"cache_read_tokens\":80}", null, 20L),
+                Arguments.of("输出缺失", "{\"prompt_tokens\":100,\"cache_read_tokens\":80}", 100L, null)));
+        for (String value : List.of("null", "\"100\"", "100.0", "1e400", "1e-2000", "-1", "9223372036854775808", "true", "[]", "{}",
+                "[9223372036854775808]", "{\"value\":9223372036854775808}", "[1e400]", "{\"value\":1e400}")) {
+            cases.add(Arguments.of("核心输入非法：" + value,
+                    "{\"prompt_tokens\":" + value + ",\"completion_tokens\":20,\"cache_read_tokens\":80}", null, 20L));
+            cases.add(Arguments.of("核心输出非法：" + value,
+                    "{\"prompt_tokens\":100,\"completion_tokens\":" + value + ",\"cache_read_tokens\":80}", 100L, null));
+        }
+        return cases.stream();
+    }
+
+    /** 摘要与最终生成共享相同用量解析，零用量和 Long 上界可无损通过。 */
+    @Test
+    void summarySharesCacheUsageAndSupportsZeroAndLongBoundary() {
+        var client = respondingClient(responseWithUsage("{\"prompt_tokens\":100,\"completion_tokens\":20,\"cache_read_tokens\":80}"));
+        var summary = client.summarize(task(), request(),
+                List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame", null)), Duration.ofSeconds(2));
+        assertThat(summary.cachedTokens()).isEqualTo(80L);
+        assertThat(summary.cacheStatus()).isEqualTo(KNOWN_HIT);
+        var zero = completionFromUsage("{\"prompt_tokens\":0,\"completion_tokens\":0,\"cache_read_tokens\":0}");
+        assertThat(zero.promptTokens()).isZero(); assertThat(zero.completionTokens()).isZero();
+        assertThat(zero.cachedTokens()).isZero(); assertThat(zero.cacheStatus()).isEqualTo(KNOWN_MISS);
+        var boundary = completionFromUsage("{\"prompt_tokens\":9223372036854775807,\"completion_tokens\":0,\"cache_read_tokens\":9223372036854775807}");
+        assertThat(boundary.promptTokens()).isEqualTo(Long.MAX_VALUE);
+        assertThat(boundary.cachedTokens()).isEqualTo(Long.MAX_VALUE);
+    }
+
+    /** 旧三参结果和默认客户端仍明确报告未知缓存，不需要旧调用方修改。 */
+    @Test
+    void legacyCompletionAndDefaultClientKeepUnknownCache() {
+        var old = new PortfolioAiModelClient.Completion("{}", 100L, 20L);
+        assertThat(old.cachedTokens()).isNull(); assertThat(old.cacheStatus()).isEqualTo(UNKNOWN);
+        PortfolioAiModelClient legacyClient = (task, request, remaining) -> "{}";
+        var completion = legacyClient.generateWithUsage(task(), request(), Duration.ofSeconds(2));
+        assertThat(completion.content()).isEqualTo("{}");
+        assertThat(completion.promptTokens()).isNull(); assertThat(completion.completionTokens()).isNull();
+        assertThat(completion.cachedTokens()).isNull(); assertThat(completion.cacheStatus()).isEqualTo(UNKNOWN);
+    }
+
+    /** 只降级计费候选位置的整数溢出，完整响应仍受共享严格 JSON 边界约束。 */
+    @Test
+    void overflowFallbackStillRejectsMalformedOrUnrelatedResponseFields() {
+        String valid = responseWithUsage("{\"prompt_tokens\":100,\"completion_tokens\":20,\"cache_read_tokens\":9223372036854775808}");
+        for (String invalid : List.of(
+                valid.substring(0, valid.length() - 1) + ",\"unrelated\":9223372036854775808}",
+                valid.substring(0, valid.length() - 1) + ",\"unrelated\":1,\"unrelated\":2}",
+                valid.substring(0, valid.length() - 1) + ",\"unrelated\":\"\\ud800\"}",
+                valid.substring(0, valid.length() - 1) + ",\"unrelated\":1e400}",
+                valid.substring(0, valid.length() - 1) + ",\"unrelated\":0e-2000}",
+                valid.substring(0, valid.length() - 1) + ",\"unrelated\":1.0e-2000}",
+                valid.substring(0, valid.length() - 1) + ",\"unrelated\":1.000e-1000}",
+                valid + " {}")) {
+            assertThatThrownBy(() -> respondingClient(invalid).generateWithUsage(task(), request(), Duration.ofSeconds(2)))
+                    .isInstanceOf(AiProtocolException.class);
+        }
+        for (String unrelatedDetails : List.of("9223372036854775808", "1e400", "0e-2000", "1.0e-2000", "1.000e-1000")) {
+            var raw = responseWithUsage("{\"prompt_tokens\":100,\"completion_tokens\":20,\"prompt_tokens_details\":{\"cached_tokens\":9223372036854775808,\"unrelated\":"
+                    + unrelatedDetails + "}}");
+            assertThatThrownBy(() -> respondingClient(raw).generateWithUsage(task(), request(), Duration.ofSeconds(2)))
+                    .isInstanceOf(AiProtocolException.class);
+        }
+    }
+
+    /** 要降级的结构也先检查原文树，禁止删除其中的非法 Unicode 或重复键掩盖协议错误。 */
+    @Test
+    void overflowFallbackChecksUnicodeAndDuplicateKeysBeforeClearingInvalidUsageStructures() {
+        for (String usage : List.of(
+                "{\"prompt_tokens\":100,\"completion_tokens\":20,\"cache_read_tokens\":{\"value\":9223372036854775808,\"text\":\"\\ud800\"}}",
+                "{\"prompt_tokens\":100,\"completion_tokens\":20,\"cache_read_tokens\":{\"value\":9223372036854775808,\"\\ud800\":\"text\"}}",
+                "{\"prompt_tokens\":100,\"completion_tokens\":20,\"prompt_tokens_details\":[9223372036854775808,\"\\ud800\"]}",
+                "[9223372036854775808,\"\\ud800\"]",
+                "[9223372036854775808,{\"value\":1,\"value\":2}]")) {
+            assertThatThrownBy(() -> respondingClient(responseWithUsage(usage)).generateWithUsage(task(), request(), Duration.ofSeconds(2)))
+                    .isInstanceOf(AiProtocolException.class);
+        }
+    }
+
+    /** 缓存解析不得将截断结果变为成功，仍在正文校验阶段抛原有安全分类。 */
+    @Test
+    void validCacheUsageDoesNotOverrideTruncatedOutput() {
+        String raw = responseWithUsage("{\"prompt_tokens\":100,\"completion_tokens\":20,\"cache_read_tokens\":80}")
+                .replace("\"finish_reason\":\"stop\"", "\"finish_reason\":\"length\"");
+        assertThatThrownBy(() -> respondingClient(raw).generateWithUsage(task(), request(), Duration.ofSeconds(2)))
+                .isInstanceOfSatisfying(PortfolioAiCallException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("OUTPUT_TRUNCATED"));
+    }
+
+    /** 构造供应商返回结构，null 参数表示整个用量字段缺失。 */
+    private String responseWithUsage(String usage) {
+        return "{\"model\":\"glm-5.3-flash\",\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"{}\"}}]"
+                + (usage == null ? "" : ",\"usage\":" + usage) + "}";
+    }
+
+    /** 通过真实响应解析读取用量，不直接调用私有解析方法。 */
+    private PortfolioAiModelClient.Completion completionFromUsage(String usage) {
+        return respondingClient(responseWithUsage(usage)).generateWithUsage(task(), request(), Duration.ofSeconds(2));
+    }
+
+    /** 替换 HTTP 传输，不调用真实模型或读取环境密钥。 */
+    private TokenHubPortfolioAiClient respondingClient(String raw) {
+        TokenHubPortfolioAiClient client = spy(new TokenHubPortfolioAiClient(properties()));
+        HttpClient transport = mock(HttpClient.class); doReturn(transport).when(client).createHttpClient(any());
+        HttpResponse<byte[]> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.headers()).thenReturn(HttpHeaders.of(Map.of(), (name, value) -> true));
+        when(response.body()).thenReturn(raw.getBytes(StandardCharsets.UTF_8));
+        when(transport.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
+        return client;
+    }
+
     /** 官方结构化媒体字段及图片/视频互斥，链接不藏在文字content。 */
     @Test void multimediaPayloadUsesTypedContentAndRejectsMixedInput() {
         var client = new TokenHubPortfolioAiClient(properties());
