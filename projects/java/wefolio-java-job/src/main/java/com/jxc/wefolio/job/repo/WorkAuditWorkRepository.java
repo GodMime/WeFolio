@@ -1,9 +1,11 @@
 package com.jxc.wefolio.job.repo;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.job.dict.MediaTypeDict;
 import com.jxc.wefolio.job.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.job.entity.WorkAuditWorkEntity;
+import com.jxc.wefolio.job.entity.WorkAuditTaskEntity;
 import com.jxc.wefolio.job.mapper.WorkAuditWorkMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -26,6 +28,9 @@ public class WorkAuditWorkRepository {
 
     /** 乐观锁版本递增 SQL */
     private static final String VERSION_INCREMENT_SQL = "version = version + 1";
+
+    /** 只在最终短事务内锁定旧清单，不跨远端操作持有锁。 */
+    private static final String FOR_UPDATE_SQL = "FOR UPDATE";
 
     private final WorkAuditWorkMapper workMapper;
 
@@ -106,6 +111,68 @@ public class WorkAuditWorkRepository {
                 .isNull(WorkAuditWorkEntity::getManualAuditNo)
                 .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED));
         return updated == 1;
+    }
+
+    /** 首次持久帧领取同时冻结源和审核轮次，避免扫描后源被替换仍创建旧任务。 */
+    public boolean claimPendingWorkForSource(WorkAuditTaskEntity task) {
+        return workMapper.update(null, Wrappers.<WorkAuditWorkEntity>lambdaUpdate()
+                .set(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.AUDITING.getCode())
+                .set(WorkAuditWorkEntity::getAuditReasonCode, null)
+                .set(WorkAuditWorkEntity::getAuditReasonCodes, null)
+                .set(WorkAuditWorkEntity::getAuditRejectReason, null)
+                .set(WorkAuditWorkEntity::getUpdatedAt, LocalDateTime.now())
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditWorkEntity::getId, task.getWorkId())
+                .eq(WorkAuditWorkEntity::getAuditRound, task.getAuditRound())
+                .eq(WorkAuditWorkEntity::getMediaObjectKey, task.getMediaObjectKey())
+                .isNull(task.getMediaSha256() == null, WorkAuditWorkEntity::getMediaSha256)
+                .eq(task.getMediaSha256() != null, WorkAuditWorkEntity::getMediaSha256, task.getMediaSha256())
+                .eq(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.PENDING.getCode())
+                .isNull(WorkAuditWorkEntity::getManualAuditNo)
+                .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED)) == 1;
+    }
+
+    /** 新视频最终只更新审核字段和完整清单，保留用户中途编辑的作品字段。 */
+    public boolean updatePersistentVideoForRound(WorkAuditTaskEntity task, WorkAuditStatusDict auditStatus,
+                                                String reasonCode, String reasonCodes, String reason,
+                                                String manifestJson) {
+        return workMapper.update(null, Wrappers.<WorkAuditWorkEntity>lambdaUpdate()
+                .set(WorkAuditWorkEntity::getAuditStatus, auditStatus.getCode())
+                .set(WorkAuditWorkEntity::getAuditReasonCode, reasonCode)
+                .set(WorkAuditWorkEntity::getAuditReasonCodes, reasonCodes)
+                .set(WorkAuditWorkEntity::getAuditRejectReason, reason)
+                .set(manifestJson != null, WorkAuditWorkEntity::getVideoFramesJson, manifestJson)
+                .set(WorkAuditWorkEntity::getUpdatedAt, LocalDateTime.now())
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditWorkEntity::getId, task.getWorkId())
+                .eq(WorkAuditWorkEntity::getAuditRound, task.getAuditRound())
+                .eq(WorkAuditWorkEntity::getMediaObjectKey, task.getMediaObjectKey())
+                .isNull(task.getMediaSha256() == null, WorkAuditWorkEntity::getMediaSha256)
+                .eq(task.getMediaSha256() != null, WorkAuditWorkEntity::getMediaSha256, task.getMediaSha256())
+                .eq(WorkAuditWorkEntity::getAuditStatus, WorkAuditStatusDict.AUDITING.getCode())
+                .isNull(WorkAuditWorkEntity::getManualAuditNo)
+                .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED)) == 1;
+    }
+
+    /** 检查最终保存是否已经引用本次清单，保护结果不确定时的有效对象。 */
+    public boolean isVideoManifestPublished(Long workId, String manifestJson) {
+        WorkAuditWorkEntity work = workMapper.selectOne(Wrappers.<WorkAuditWorkEntity>lambdaQuery()
+                .select(WorkAuditWorkEntity::getVideoFramesJson)
+                .eq(WorkAuditWorkEntity::getId, workId)
+                .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED));
+        // MySQL JSON 列可能重排键和空白，语义相等的已发布清单必须保护。
+        return work != null && work.getVideoFramesJson() != null
+                && JSON.parseObject(manifestJson).equals(JSON.parseObject(work.getVideoFramesJson()));
+    }
+
+    /** 保存新清单之前读取并锁住当前清单，避免重审持续遗留旧持久对象。 */
+    public String lockVideoManifest(Long workId) {
+        WorkAuditWorkEntity work = workMapper.selectOne(Wrappers.<WorkAuditWorkEntity>lambdaQuery()
+                .select(WorkAuditWorkEntity::getVideoFramesJson)
+                .eq(WorkAuditWorkEntity::getId, workId)
+                .eq(WorkAuditWorkEntity::getDeleted, NOT_DELETED)
+                .last(FOR_UPDATE_SQL));
+        return work == null ? null : work.getVideoFramesJson();
     }
 
     /**

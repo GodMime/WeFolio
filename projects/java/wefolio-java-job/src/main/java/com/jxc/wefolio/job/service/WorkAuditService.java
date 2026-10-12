@@ -1,6 +1,7 @@
 package com.jxc.wefolio.job.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.job.config.WorkAuditProperties;
 import com.jxc.wefolio.job.dict.AuditProviderDict;
 import com.jxc.wefolio.job.dict.AuditResultDict;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -80,6 +82,31 @@ public class WorkAuditService {
     /** 审核任务租约或作品审核轮次失效原因 */
     private static final String CLAIM_OR_ROUND_STALE_REASON = "任务租约已失效或作品审核轮次已变化";
 
+    /** 冻结请求和源身份在原任务请求摘要中的字段。 */
+    private static final String FROZEN_AUDIT_REQUEST = "auditRequest";
+    private static final String FROZEN_VIDEO_SOURCE = "source";
+    /** 新策略失败阶段代码。 */
+    private static final String STAGE_AUDIT_SUBMIT = "AUDIT_SUBMIT";
+    private static final String STAGE_AUDIT_QUERY = "AUDIT_QUERY";
+    private static final String STAGE_MANIFEST_SAVE = "MANIFEST_SAVE";
+    private static final String STAGE_FRAME_LIST = "FRAME_LIST";
+    private static final String STAGE_PROCESS_INTERRUPTED = "PROCESS_INTERRUPTED";
+    /** 给最终短事务预留时间，不延长原租约。 */
+    private static final int FRAME_TRANSACTION_RESERVE_SECONDS = 5;
+    /** 本审核任务隔离的对象目录标识。 */
+    private static final String FRAME_TASK_PREFIX = "audit-";
+    /** 安全诊断摘要字段，不包含认证信息。 */
+    private static final String DIAGNOSTIC_STAGE = "stage";
+    private static final String DIAGNOSTIC_WORK_ID = "workId";
+    private static final String DIAGNOSTIC_TASK_ID = "taskId";
+    private static final String DIAGNOSTIC_CI_JOB_ID = "ciJobId";
+    private static final String DIAGNOSTIC_REASON = "reason";
+    private static final String DIAGNOSTIC_PROVIDER_RESULT = "providerResult";
+    private static final String REDACTED_MEDIA_URL = "REDACTED_MEDIA_URL";
+
+    /** 构造时拒绝缺失的持久帧依赖，保证后续所有调用点安全。 */
+    private static final String VIDEO_FRAME_STORAGE_REQUIRED = "持久视频审核需要注入 VideoFrameStorageService";
+
     private final WorkAuditWorkRepository workRepository;
 
     private final WorkAuditTaskRepository taskRepository;
@@ -95,6 +122,9 @@ public class WorkAuditService {
     private final AnimationAuditResultAggregator animationResultAggregator;
 
     private final AnimationFrameCosService animationFrameCosService;
+
+    /** 审核和历史共用的逐帧内存规范化与持久 COS 保存。 */
+    private final VideoFrameStorageService videoFrameStorageService;
 
     /** 本服务专用时钟，默认使用系统时区，可在包内测试注入。 */
     private Clock clock = Clock.systemDefaultZone();
@@ -116,8 +146,12 @@ public class WorkAuditService {
             WorkAuditProperties properties,
             AnimationFrameSampler animationFrameSampler,
             AnimationAuditResultAggregator animationResultAggregator,
-            AnimationFrameCosService animationFrameCosService
+            AnimationFrameCosService animationFrameCosService,
+            VideoFrameStorageService videoFrameStorageService
     ) {
+        if (videoFrameStorageService == null) {
+            throw new IllegalArgumentException(VIDEO_FRAME_STORAGE_REQUIRED);
+        }
         this.workRepository = workRepository;
         this.taskRepository = taskRepository;
         this.claimTransactionService = claimTransactionService;
@@ -126,20 +160,7 @@ public class WorkAuditService {
         this.animationFrameSampler = animationFrameSampler;
         this.animationResultAggregator = animationResultAggregator;
         this.animationFrameCosService = animationFrameCosService;
-    }
-
-    /**
-     * 保留原有单元测试和轻量调用方构造方式。
-     */
-    WorkAuditService(
-            WorkAuditWorkRepository workRepository,
-            WorkAuditTaskRepository taskRepository,
-            WorkAuditClaimTransactionService claimTransactionService,
-            TencentCiAuditClient auditClient,
-            WorkAuditProperties properties
-    ) {
-        this(workRepository, taskRepository, claimTransactionService, auditClient, properties,
-                new AnimationFrameSampler(), new AnimationAuditResultAggregator(), null);
+        this.videoFrameStorageService = videoFrameStorageService;
     }
 
     /**
@@ -202,12 +223,15 @@ public class WorkAuditService {
 
     /**
      * 先终态回收达到上限的提交任务，再重领仍可重提的过期任务。
+     * 持久任务中断回收复用同一上限配置但独立限量，不扣除提交容量；
+     * 只有旧任务的付费重提与新提交共享剩余容量，避免回收挤占新提交。
      *
      * @param limit 本轮视频提交容量
      * @param now 本轮扫描截止时间，不作为领取时间
      * @return 新视频可使用的剩余提交容量
      */
     int recoverExpiredVideoSubmissions(int limit, LocalDateTime now) {
+        recoverInterruptedPersistentVideos(Math.max(limit, 0), now);
         int remainingCapacity = Math.max(limit, 0);
         int terminalRecovered = 0;
         int retried = 0;
@@ -616,8 +640,19 @@ public class WorkAuditService {
         WorkAuditTaskEntity task = newSubmittingTask(work, audio ? MediaTypeDict.AUDIO : MediaTypeDict.VIDEO);
         task.setLockedBy(newClaimToken());
         if (!audio) {
-            task.setSnapshotIntervalSeconds(properties.getVideoSnapshotIntervalSeconds());
-            task.setSnapshotCount(snapshotCount);
+            if (properties.isVideoPersistentFramesEnabled()) {
+                task.setSnapshotMode(TencentCiVideoAuditRequest.AVERAGE);
+                task.setSnapshotDurationMs(work.getDurationMs());
+                task.setSnapshotPolicyVersion(VideoFrameStorageService.POLICY_VERSION);
+                task.setSnapshotCount(VideoFrameStorageService.calculateFrameCount(work.getDurationMs()));
+                JSONObject frozen = new JSONObject();
+                frozen.put(FROZEN_AUDIT_REQUEST, TencentCiVideoAuditRequest.average(task.getSnapshotCount()));
+                task.setRequestPayload(frozen.toJSONString());
+            } else {
+                task.setSnapshotMode(TencentCiVideoAuditRequest.INTERVAL);
+                task.setSnapshotIntervalSeconds(properties.getVideoSnapshotIntervalSeconds());
+                task.setSnapshotCount(snapshotCount);
+            }
         }
         task = claimTransactionService.claimAndCreateSubmittingTask(work.getId(), task);
         if (task == null) {
@@ -635,6 +670,10 @@ public class WorkAuditService {
     }
 
     private void submitClaimedVideoTask(WorkAuditTaskEntity task) {
+        if (isPersistentVideo(task)) {
+            submitPersistentVideo(task);
+            return;
+        }
         try {
             TencentCiAuditResult result = MediaTypeDict.AUDIO.getCode().equals(task.getMediaType())
                     ? auditClient.submitAudio(task.getMediaObjectKey()) : auditClient.submitVideo(
@@ -668,6 +707,158 @@ public class WorkAuditService {
             log.info("视频作品审核简洁结果: workId={}, taskId={}, objectKey={}, auditStatus={}, auditRejectReason={}",
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(),
                     WorkAuditStatusDict.FAILED.getCode(), auditRejectReason);
+        }
+    }
+
+    /** 新视频在原审核任务冻结 HEAD，提交异常直接结束本轮。 */
+    private void submitPersistentVideo(WorkAuditTaskEntity task) {
+        try {
+            Instant deadline = persistentDeadline(task);
+            requireWithinDeadline(deadline);
+            VideoFrameSource source = videoFrameStorageService.inspectSource(task.getMediaObjectKey(), task.getMediaSha256());
+            requireWithinDeadline(deadline);
+            TencentCiVideoAuditRequest request = frozenVideoRequest(task);
+            JSONObject frozen = new JSONObject();
+            frozen.put(FROZEN_AUDIT_REQUEST, request);
+            frozen.put(FROZEN_VIDEO_SOURCE, source);
+            if (!claimTransactionService.freezePersistentVideoSource(task, source.sourceVersion(), frozen.toJSONString())) {
+                logDiscardedVideoResult(task);
+                return;
+            }
+            task.setSnapshotSourceVersion(source.sourceVersion());
+            task.setRequestPayload(frozen.toJSONString());
+            TencentCiAuditResult result = safePersistentResult(auditClient.submitVideo(task.getMediaObjectKey(), request));
+            requireWithinDeadline(deadline);
+            if (result.providerFailed() || result.ciJobId() == null || result.ciJobId().isBlank()) {
+                failPersistentVideo(task, STAGE_AUDIT_SUBMIT, "腾讯云未返回有效审核任务", result, null);
+                return;
+            }
+            task.setCiJobId(result.ciJobId());
+            if (!claimTransactionService.markPersistentVideoWaiting(task, result, true)) {
+                logDiscardedVideoResult(task);
+            }
+        } catch (VideoFrameSourceChangedException exception) {
+            discardChangedPersistentVideo(task);
+        } catch (WorkAuditStaleClaimException exception) {
+            logDiscardedVideoResult(task);
+        } catch (RuntimeException exception) {
+            failPersistentVideo(task, failureStage(exception, STAGE_AUDIT_SUBMIT), safeFailureReason(exception), null, exception);
+        }
+    }
+
+    /** 只对新策略回收中断任务，绝不重提审核或恢复搬帧。 */
+    private void recoverInterruptedPersistentVideos(int limit, LocalDateTime scanCutoff) {
+        for (WorkAuditTaskEntity task : taskRepository.findInterruptedPersistentVideoTasks(limit, scanCutoff)) {
+            LocalDateTime now = LocalDateTime.now(clock);
+            String token = newClaimToken();
+            if (!taskRepository.claimInterruptedPersistentVideo(task.getId(), token, now, lockedUntil(now))) {
+                continue;
+            }
+            task.setLockedBy(token);
+            task.setLockedUntil(lockedUntil(now));
+            try {
+                if (task.getSnapshotSourceVersion() != null) {
+                    JSONObject payload = JSON.parseObject(task.getRequestPayload());
+                    VideoFrameSource source = payload == null ? null
+                            : payload.getObject(FROZEN_VIDEO_SOURCE, VideoFrameSource.class);
+                    if (source != null) {
+                        videoFrameStorageService.verifySource(source, persistentDeadline(task));
+                    }
+                }
+            } catch (VideoFrameSourceChangedException exception) {
+                discardChangedPersistentVideo(task);
+                continue;
+            } catch (RuntimeException exception) {
+                // 回收只记录中断失败，源复核网络异常不触发新审核或帧恢复。
+                log.warn("视频中断回收源复核失败: workId={}, taskId={}, errorType={}",
+                        task.getWorkId(), task.getId(), exception.getClass().getSimpleName());
+            }
+            failPersistentVideo(task, STAGE_PROCESS_INTERRUPTED, "审核执行中断或超过处理期限", null, null);
+        }
+    }
+
+    /** 前端时长和数量只从任务行及冻结请求读取，不从当前作品或新配置推导。 */
+    private TencentCiVideoAuditRequest frozenVideoRequest(WorkAuditTaskEntity task) {
+        JSONObject payload = JSON.parseObject(task.getRequestPayload());
+        TencentCiVideoAuditRequest request = payload == null ? null
+                : payload.getObject(FROZEN_AUDIT_REQUEST, TencentCiVideoAuditRequest.class);
+        if (request == null || !TencentCiVideoAuditRequest.AVERAGE.equals(request.mode())
+                || !Objects.equals(task.getSnapshotCount(), request.count())
+                || !VideoFrameStorageService.POLICY_VERSION.equals(task.getSnapshotPolicyVersion())) {
+            throw new IllegalArgumentException("新视频冻结审核合同缺失或不一致");
+        }
+        return request;
+    }
+
+    /** 新策略由持久模式识别，关闭新提交开关也不能改变已有任务行为。 */
+    private boolean isPersistentVideo(WorkAuditTaskEntity task) {
+        return MediaTypeDict.VIDEO.getCode().equals(task.getMediaType())
+                && TencentCiVideoAuditRequest.AVERAGE.equals(task.getSnapshotMode());
+    }
+
+    /** 全部远端处理止于原租约之前，为最终事务保留时间。 */
+    private Instant persistentDeadline(WorkAuditTaskEntity task) {
+        if (task.getLockedUntil() == null) {
+            throw new WorkAuditStaleClaimException();
+        }
+        return task.getLockedUntil().atZone(clock.getZone()).toInstant().minusSeconds(FRAME_TRANSACTION_RESERVE_SECONDS);
+    }
+
+    /** 处理超时是技术失败，落库时还需要通过数据库租约 CAS。 */
+    private void requireWithinDeadline(Instant deadline) {
+        if (!clock.instant().isBefore(deadline) || Thread.currentThread().isInterrupted()) {
+            throw new VideoFrameProcessingException(STAGE_PROCESS_INTERRUPTED, "审核处理超时或线程中断");
+        }
+    }
+
+    /** 已知阶段保留，否则用当前用例阶段。 */
+    private String failureStage(RuntimeException exception, String fallback) {
+        return exception instanceof VideoFrameProcessingException failure ? failure.getStage() : fallback;
+    }
+
+    /** 图片服务异常已保证安全，其他异常仅记录类型避免认证或临时链接泄漏。 */
+    private String safeFailureReason(RuntimeException exception) {
+        return exception instanceof VideoFrameProcessingException ? exception.getMessage()
+                : "处理失败（" + exception.getClass().getSimpleName() + "）";
+    }
+
+    /** 诊断保存腾讯结论但不保存临时截图 URL 或签名参数。 */
+    private TencentCiAuditResult safePersistentResult(TencentCiAuditResult result) {
+        if (result == null) {
+            throw new IllegalStateException("腾讯云审核响应缺失");
+        }
+        String payload = result.rawPayload() == null ? null : result.rawPayload()
+                .replaceAll("https?://[^\\\"\\s]+", REDACTED_MEDIA_URL);
+        return new TencentCiAuditResult(result.ciJobId(), result.ciState(), result.auditResult(), result.ciResult(),
+                result.ciLabel(), result.ciScore(), result.terminal(), result.providerFailed(), payload,
+                result.risks(), result.snapshots(), result.providerSnapshotCount());
+    }
+
+    /** 新视频故障一次写回；数据库不可用时只记录日志，由原租约回收处理。 */
+    private void failPersistentVideo(WorkAuditTaskEntity task, String stage, String reason,
+                                      TencentCiAuditResult providerResult, RuntimeException exception) {
+        String summary = truncateAuditRejectReason(stage + ": " + reason);
+        JSONObject diagnostic = new JSONObject();
+        diagnostic.put(DIAGNOSTIC_STAGE, stage);
+        diagnostic.put(DIAGNOSTIC_WORK_ID, task.getWorkId());
+        diagnostic.put(DIAGNOSTIC_TASK_ID, task.getId());
+        diagnostic.put(DIAGNOSTIC_CI_JOB_ID, task.getCiJobId());
+        diagnostic.put(DIAGNOSTIC_REASON, summary);
+        if (providerResult != null) {
+            diagnostic.put(DIAGNOSTIC_PROVIDER_RESULT, providerResult.rawPayload());
+        }
+        if (exception != null) {
+            diagnostic.put(ERROR_TYPE_FIELD, exception.getClass().getName());
+        }
+        try {
+            if (!claimTransactionService.failPersistentVideo(task, summary, diagnostic.toJSONString())) {
+                logDiscardedVideoResult(task);
+            }
+        } catch (WorkAuditStaleClaimException stale) {
+            logDiscardedVideoResult(task);
+        } catch (RuntimeException failure) {
+            log.error("视频技术失败未能落库，等待原租约回收: workId={}, taskId={}, ciJobId={}, stage={}, errorType={}",
+                    task.getWorkId(), task.getId(), task.getCiJobId(), stage, failure.getClass().getSimpleName());
         }
     }
 
@@ -747,6 +938,103 @@ public class WorkAuditService {
                 task.getWorkId(), task.getId(), task.getAuditRound());
     }
 
+    /** 新视频正常等待原 job；真实异常、帧不齐或保存失败立即终止审核。 */
+    private void queryPersistentVideo(WorkAuditTaskEntity task, int queryCount) {
+        TencentCiAuditResult result = null;
+        VideoFrameSource source = null;
+        String manifest = null;
+        String stage = STAGE_AUDIT_QUERY;
+        boolean committed = false;
+        try {
+            Instant deadline = persistentDeadline(task);
+            requireWithinDeadline(deadline);
+            frozenVideoRequest(task);
+            JSONObject payload = JSON.parseObject(task.getRequestPayload());
+            source = payload.getObject(FROZEN_VIDEO_SOURCE, VideoFrameSource.class);
+            if (source == null || !Objects.equals(source.objectKey(), task.getMediaObjectKey())
+                    || !Objects.equals(source.sourceVersion(), task.getSnapshotSourceVersion())) {
+                throw new IllegalArgumentException("审核任务冻结源身份缺失或不一致");
+            }
+            videoFrameStorageService.verifySource(source, deadline);
+            result = safePersistentResult(auditClient.queryVideo(task.getCiJobId(), true));
+            requireWithinDeadline(deadline);
+            if (!Objects.equals(task.getCiJobId(), result.ciJobId())) {
+                failPersistentVideo(task, STAGE_AUDIT_QUERY, "腾讯云响应任务ID与本轮任务不一致", result, null);
+                return;
+            }
+            if (result.providerFailed() || (result.terminal() && result.auditResult() == AuditResultDict.UNKNOWN)) {
+                failPersistentVideo(task, STAGE_AUDIT_QUERY, "腾讯云审核任务失败或结果未知", result, null);
+                return;
+            }
+            if (!result.terminal()) {
+                if (queryCount >= properties.getVideoQueryMaxAttempts()) {
+                    failPersistentVideo(task, STAGE_AUDIT_QUERY, queryLimitReason(queryCount), result, null);
+                } else if (!claimTransactionService.markPersistentVideoWaiting(task, result, false)) {
+                    logDiscardedVideoResult(task);
+                }
+                return;
+            }
+            if (result.auditResult() != AuditResultDict.BLOCK) {
+                stage = STAGE_FRAME_LIST;
+                if (!Objects.equals(task.getSnapshotCount(), result.providerSnapshotCount())
+                        || result.snapshots().size() != task.getSnapshotCount()) {
+                    throw new VideoFrameProcessingException(stage, "供应商截图总数或列表长度与冻结数量不一致");
+                }
+                manifest = videoFrameStorageService.persist(source, task.getWorkId(), FRAME_TASK_PREFIX + task.getId(),
+                        task.getSnapshotDurationMs(), task.getSnapshotCount(), result.snapshots(), deadline);
+                if (manifest == null || manifest.isBlank()) {
+                    throw new VideoFrameProcessingException(stage, "帧服务没有返回完整清单");
+                }
+            } else {
+                // 明确违规不搬存，但迟到结果仍须复核源身份，禁止覆盖替换后视频。
+                videoFrameStorageService.verifySource(source, deadline);
+            }
+            requireWithinDeadline(deadline);
+            stage = STAGE_MANIFEST_SAVE;
+            PersistentVideoCompletion completion = claimTransactionService.completePersistentVideoWithFrames(task, result,
+                    mapWorkAuditStatus(result.auditResult()), auditRejectReason(result), manifest);
+            committed = completion.committed();
+            if (!committed) {
+                logDiscardedVideoResult(task);
+            } else if (completion.previousManifest() != null && !completion.previousManifest().equals(manifest)) {
+                cleanupUnpublishedManifest(task, source, completion.previousManifest());
+            }
+        } catch (VideoFrameSourceChangedException exception) {
+            discardChangedPersistentVideo(task);
+        } catch (WorkAuditStaleClaimException exception) {
+            logDiscardedVideoResult(task);
+        } catch (RuntimeException exception) {
+            failPersistentVideo(task, failureStage(exception, stage), safeFailureReason(exception), result, exception);
+        } finally {
+            if (!committed && manifest != null) {
+                cleanupUnpublishedManifest(task, source, manifest);
+            }
+        }
+    }
+
+    /** 保存结果不确定时先确认作品未引用清单；数据库不可读时保留对象，避免删到有效帧。 */
+    private void cleanupUnpublishedManifest(WorkAuditTaskEntity task, VideoFrameSource source, String manifest) {
+        try {
+            if (!workRepository.isVideoManifestPublished(task.getWorkId(), manifest)) {
+                videoFrameStorageService.cleanupOwnedManifest(manifest, source, task.getWorkId());
+            }
+        } catch (RuntimeException exception) {
+            log.warn("视频帧清理未完成: workId={}, taskId={}, errorType={}",
+                    task.getWorkId(), task.getId(), exception.getClass().getSimpleName());
+        }
+    }
+
+    /** 源变化终结旧任务避免后续回收把当前作品误标失败。 */
+    private void discardChangedPersistentVideo(WorkAuditTaskEntity task) {
+        try {
+            taskRepository.discardChangedPersistentVideo(task);
+        } catch (RuntimeException exception) {
+            log.warn("旧视频源结果终结未落库: workId={}, taskId={}, errorType={}",
+                    task.getWorkId(), task.getId(), exception.getClass().getSimpleName());
+        }
+        logDiscardedVideoResult(task);
+    }
+
     private void queryOneVideoResult(WorkAuditTaskEntity task) {
         LocalDateTime claimNow = LocalDateTime.now(clock);
         int nextQueryCount = nullToZero(task.getQueryCount()) + 1;
@@ -770,6 +1058,10 @@ public class WorkAuditService {
 
         try {
             nextQueryCount = currentQueryCountAfterClaim(task, nextQueryCount);
+            if (isPersistentVideo(task)) {
+                queryPersistentVideo(task, nextQueryCount);
+                return;
+            }
             log.info("视频审核查询次数确认: workId={}, taskId={}, objectKey={}, ciJobId={}, queryCount={}, maxQueryCount={}",
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), nextQueryCount,
                     properties.getVideoQueryMaxAttempts());

@@ -32,6 +32,19 @@ class WechatPaymentIdentityTest {
                 new MaintainerWechatSession(7L, 11L, "test", 1L, "127.0.0.1"))).isTrue();
     }
 
+    /** 历史共享用户的不同 openid 不因大小写或尾空格相似而被猜选用于资金操作。 */
+    @Test
+    void rejectsDistinctExactWechatIdentitiesForSharedUser() {
+        UserAuthEntityMapper mapper = mock(UserAuthEntityMapper.class);
+        for (String openId : new String[]{"OtherOpenId", "testopenid ", "TestOpenId"}) {
+            UserAuthEntity second = auth();
+            second.setId(12L);
+            second.setOpenId(openId);
+            when(mapper.selectList(any())).thenReturn(List.of(auth(), second));
+            assertThat(WechatPaymentIdentity.findUnique(mapper, 7L)).isNull();
+        }
+    }
+
     /** 使用保留大小写及尾空格的测试身份。 */
     private UserAuthEntity auth() {
         UserAuthEntity auth = new UserAuthEntity();

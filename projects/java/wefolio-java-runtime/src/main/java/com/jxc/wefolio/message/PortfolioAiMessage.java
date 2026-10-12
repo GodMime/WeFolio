@@ -14,6 +14,10 @@ public interface PortfolioAiMessage {
     String TASK_NOT_FOUND = "生成任务不存在或已过期";
     /** 来源已经不再有效。 */
     String SOURCE_UNAVAILABLE = "所选来源已移除或不可用";
+    /** 授权作品没有当前可读的COS媒体。 */
+    String MEDIA_UNAVAILABLE = "所选作品媒体当前不可用";
+    /** 持久帧必须由审核或历史任务提前生成。 */
+    String MEDIA_NOT_PREPARED = "所选视频持久帧尚未准备完成，请稍后重试";
     /** 远端草稿修订已变化。 */
     String STALE_DRAFT = "作品集已被其他成员更新，请基于最新内容重新生成";
     /** 契约升级导致旧候选不可用。 */

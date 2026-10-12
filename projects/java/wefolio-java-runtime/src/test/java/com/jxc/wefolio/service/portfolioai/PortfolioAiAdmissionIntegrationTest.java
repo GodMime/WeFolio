@@ -1,10 +1,15 @@
 package com.jxc.wefolio.service.portfolioai;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.config.PortfolioAiProperties;
+import com.jxc.wefolio.dict.AiTaskStatusDict;
+import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
+import com.jxc.wefolio.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.AiGenerationTaskEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
@@ -41,6 +46,8 @@ class PortfolioAiAdmissionIntegrationTest {
     @Autowired private JdbcTemplate jdbc;
     /** 本次独立服务级队列配置。 */
     @Autowired private PortfolioAiProperties properties;
+    /** 真实实体 Mapper，用于检查预算字段默认值及普通更新隔离。 */
+    @Autowired private AiGenerationTaskEntityMapper taskMapper;
 
     /** 每个测试使用空的本地任务表，不读写真实环境。 */
     @BeforeEach void clearTasks() {
@@ -68,7 +75,35 @@ class PortfolioAiAdmissionIntegrationTest {
         var second = service.submit(101L, "replay-key", request);
         assertThat(second.getId()).isEqualTo(first.getId());
         assertThat(second.getRequestJson()).isEqualTo(first.getRequestJson());
+        assertThat(first.getMediaBudgetUnknownCount()).isZero();
+        assertThat(second.getMediaBudgetUnknownCount()).isZero();
+        assertThat(second.getMediaBudgetJson()).isNull();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM wf_ai_generation_task", Integer.class)).isEqualTo(1);
+    }
+
+    /** 旧插入语句不携带媒体字段仍取得零默认值，普通更新不能覆盖 Job 已写入的新预算。 */
+    @Test void legacyInsertAndGenericUpdatePreserveMediaBudget() {
+        jdbc.update("""
+                INSERT INTO wf_ai_generation_task(owner_type,owner_id,requested_by,idempotency_key,request_json,status,
+                  attempt_count,next_run_at,created_at,updated_at,deleted,version)
+                VALUES(?,101,101,'legacy-media-fields',?,?,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,0,0)
+                """, PortfolioOwnerTypeDict.USER.getCode(), frozen(101L).toString(), AiTaskStatusDict.PENDING.getCode());
+        AiGenerationTaskEntity original = service.find(101L, "legacy-media-fields");
+        assertThat(original.getMediaBudgetUnknownCount()).isZero();
+        assertThat(original.getMediaBudgetJson()).isNull();
+        jdbc.update("UPDATE wf_ai_generation_task SET media_budget_json=?,media_budget_unknown_count=1 WHERE id=?",
+                "{\"version\":1,\"calls\":[{\"reservedCents\":83}]}", original.getId());
+        AiGenerationTaskEntity stale = taskMapper.selectById(original.getId());
+        String refreshedBudget = "{\"version\":1,\"calls\":[{\"reservedCents\":83},{\"reservedCents\":83}]}";
+        jdbc.update("UPDATE wf_ai_generation_task SET media_budget_json=?,media_budget_unknown_count=2 WHERE id=?",
+                refreshedBudget, original.getId());
+        stale.setStatus(AiTaskStatusDict.FAILED.getCode());
+        assertThat(taskMapper.updateById(stale)).isEqualTo(1);
+        AiGenerationTaskEntity updated = taskMapper.selectById(original.getId());
+        assertThat(updated.getStatus()).isEqualTo(AiTaskStatusDict.FAILED.getCode());
+        assertThat(updated.getMediaBudgetJson()).isEqualTo(refreshedBudget);
+        assertThat(updated.getMediaBudgetUnknownCount()).isEqualTo(2);
+        assertThat(updated.getVersion()).isEqualTo(original.getVersion() + 1);
     }
 
     /** 异参重放失败后原任务保持不变，事务未产生额外行。 */
@@ -116,7 +151,7 @@ class PortfolioAiAdmissionIntegrationTest {
     @Configuration
     @EnableTransactionManagement
     static class Config {
-        /** 内存库与十九列任务表。 */
+        /** 内存库与二十一列任务表，新增媒体字段沿用可空/零默认值。 */
         @Bean DataSource dataSource() {
             JdbcDataSource source = new JdbcDataSource();
             source.setURL("jdbc:h2:mem:advanced_ai_admission;MODE=MySQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=5000");
@@ -127,6 +162,7 @@ class PortfolioAiAdmissionIntegrationTest {
                     CREATE TABLE wf_ai_generation_task(
                       id BIGINT AUTO_INCREMENT PRIMARY KEY,owner_type VARCHAR(32),owner_id BIGINT,portfolio_id BIGINT,
                       requested_by BIGINT,idempotency_key VARCHAR(64),request_json CLOB,result_json CLOB,status VARCHAR(32),
+                      media_budget_json CLOB,media_budget_unknown_count INT NOT NULL DEFAULT 0,
                       attempt_count INT,next_run_at TIMESTAMP,started_at TIMESTAMP,completed_at TIMESTAMP,
                       error_code VARCHAR(64),error_message VARCHAR(500),created_at TIMESTAMP,updated_at TIMESTAMP,
                       deleted BIGINT DEFAULT 0,version INT DEFAULT 0,UNIQUE(requested_by,idempotency_key,deleted))
@@ -135,11 +171,14 @@ class PortfolioAiAdmissionIntegrationTest {
         }
         /** 真实 JDBC 事务管理器，服务注解通过代理生效。 */
         @Bean PlatformTransactionManager transactionManager(DataSource source) { return new DataSourceTransactionManager(source); }
-        /** 注册实际两个 Mapper，使用生产 SQL 和 Lambda 映射。 */
+        /** 注册实际两个 Mapper、生产乐观锁拦截器和 Lambda 映射，保留版本 CAS。 */
         @Bean SqlSessionFactory sqlSessionFactory(DataSource source) throws Exception {
             MybatisConfiguration configuration = new MybatisConfiguration(); configuration.setMapUnderscoreToCamelCase(true);
             configuration.addMapper(UserEntityMapper.class); configuration.addMapper(AiGenerationTaskEntityMapper.class);
             MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean(); factory.setDataSource(source); factory.setConfiguration(configuration);
+            MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+            interceptor.addInnerInterceptor(new OptimisticLockerInnerInterceptor());
+            factory.setPlugins(interceptor);
             return factory.getObject();
         }
         /** 事务内连接由 MyBatis Spring 共享。 */

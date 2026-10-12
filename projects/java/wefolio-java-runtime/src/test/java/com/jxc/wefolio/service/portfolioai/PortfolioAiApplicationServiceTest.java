@@ -51,7 +51,7 @@ class PortfolioAiApplicationServiceTest {
     /** 创建请求身份，不依赖真实令牌或环境配置。 */
     @BeforeEach void prepare() {
         AuthContextHolder.set(new AuthContext(101L, "test-token"));
-        service = new PortfolioAiApplicationService(properties, tasks, transactions, facts, configs);
+        service = new PortfolioAiApplicationService(properties, tasks, transactions, facts, configs, mock(PortfolioAiMediaPlanService.class));
     }
     /** 清理线程身份，避免影响相邻测试。 */
     @AfterEach void clear() { AuthContextHolder.clear(); }
@@ -126,7 +126,11 @@ class PortfolioAiApplicationServiceTest {
         AiGenerationTaskEntity task = task(); task.setStatus(AiTaskStatusDict.FAILED.getCode());
         task.setErrorCode("不可信内部分类"); task.setErrorMessage("不可信内部原文");
         when(tasks.selectById(7001L)).thenReturn(task);
-        assertThat(service.query(7001L).get("error")).isEqualTo(Map.of("code", "GENERATION_FAILED", "message", "AI 生成未完成，请重新生成"));
+        Map<String, Object> response = service.query(7001L);
+        assertThat(response.get("error")).isEqualTo(Map.of("code", "GENERATION_FAILED", "message", "AI 生成未完成，请重新生成"));
+        assertThat(response.get("errorCode")).isEqualTo("不可信内部分类");
+        assertThat(response.get("errorMessage")).isEqualTo(PortfolioAiTaskMessage.TASK_FAILED_MESSAGE);
+        assertThat(response.toString()).doesNotContain("不可信内部原文");
     }
 
     /** 任务失败分类均有稳定中文解释，不受存库内部原因影响。 */
@@ -153,6 +157,28 @@ class PortfolioAiApplicationServiceTest {
         assertThat(response.get("error")).isEqualTo(Map.of("code", code, "message", message));
         assertThat(response.get("errorMessage")).isEqualTo(PortfolioAiTaskMessage.TASK_FAILED_MESSAGE);
         assertThat(response.toString()).doesNotContain("不展示的内部原文");
+    }
+
+    /** 媒体准备失败必须保留具体分类及安全原因，旧客户端的顶层提示仍然保持兼容。 */
+    @ParameterizedTest
+    @CsvSource({
+            "MEDIA_INVALID,所选素材不符合 AI 处理要求，请调整素材后重新生成",
+            "SOURCE_UNAVAILABLE,所选素材已失效或无权访问，请重新选择素材后生成",
+            "MEDIA_NOT_PREPARED,所选视频尚未完成素材准备，请稍后重新生成",
+            "MEDIA_BUDGET_EXHAUSTED,AI 媒体处理额度不足，请减少素材或稍后重试",
+            "MEDIA_BUDGET_OVERRUN,本次 AI 媒体处理超出额度，请减少素材后重新生成",
+            "MEDIA_BUDGET_INVALID,AI 媒体处理费用记录异常，请联系管理员核对",
+            "MEDIA_ACCESS_RETRY,媒体对象服务暂时不可用，请稍后重新生成",
+            "INVALID_MEDIA_SUMMARY,AI 返回的素材分析结果不符合要求，请重新生成"})
+    void mediaFailedTaskIncludesSpecificSafeReason(String code, String message) {
+        AiGenerationTaskEntity task = task(); task.setStatus(AiTaskStatusDict.FAILED.getCode());
+        task.setErrorCode(code); task.setErrorMessage("不展示的媒体地址及内部原文");
+        when(tasks.selectById(7001L)).thenReturn(task);
+        Map<String, Object> response = service.query(7001L);
+        assertThat(response.get("errorCode")).isEqualTo(code);
+        assertThat(response.get("errorMessage")).isEqualTo(PortfolioAiTaskMessage.TASK_FAILED_MESSAGE);
+        assertThat(response.get("error")).isEqualTo(Map.of("code", code, "message", message));
+        assertThat(response.toString()).doesNotContain("不展示的媒体地址及内部原文");
     }
 
     /** 普通个人和团队组件的固定校验提示进入新增原因，旧不可用提示保持兼容。 */
@@ -262,7 +288,9 @@ class PortfolioAiApplicationServiceTest {
         verify(transactions).submit(eq(101L), eq("test-key"), frozen.capture());
         properties.setTemperature(0.5);
         ObjectNode snapshot = frozen.getValue();
-        assertThat(snapshot.path("modelConfig").size()).isEqualTo(7);
+        assertThat(snapshot.path("modelConfig").size()).isEqualTo(8);
+        assertThat(snapshot.path("modelConfig").path("mediaEnabled").isBoolean()).isTrue();
+        assertThat(snapshot.path("modelConfig").path("mediaEnabled").asBoolean()).isFalse();
         assertThat(snapshot.path("modelConfig").path("provider").asText()).isEqualTo("TOKENHUB");
         assertThat(snapshot.path("modelConfig").path("model").asText()).isEqualTo("glm-5.3-flash");
         assertThat(snapshot.path("modelConfig").path("baseUrl").asText()).isEqualTo("https://tokenhub.tencentmaas.com/v1");

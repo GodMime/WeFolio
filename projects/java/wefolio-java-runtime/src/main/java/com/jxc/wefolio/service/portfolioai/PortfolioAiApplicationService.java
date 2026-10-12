@@ -40,6 +40,8 @@ public class PortfolioAiApplicationService {
     private static final int WRAPPER_DEPTH = 8;
     /** 等待轮询初始间隔。 */
     private static final int INITIAL_POLL_MS = 2000;
+    /** Runtime 负责新任务能力冻结，Job 可诊断部署差异而不改变已冻结契约。 */
+    private static final String FROZEN_MEDIA_ENABLED = "mediaEnabled";
     /** 所有终态。 */
     private static final Set<String> TERMINAL = Set.of(AiTaskStatusDict.SUCCEEDED.getCode(), AiTaskStatusDict.FAILED.getCode(), AiTaskStatusDict.CANCELLED.getCode());
     /** 当前有效运行预算与开关。 */
@@ -52,6 +54,8 @@ public class PortfolioAiApplicationService {
     private final PortfolioAiFactsService facts;
     /** 真实普通配置业务校验及预览渲染。 */
     private final PortfolioAiConfigService configs;
+    /** 多模态任务仅冻结经授权的对象身份，不保存短期签名。 */
+    private final PortfolioAiMediaPlanService mediaPlans;
 
     /** 返回服务当前能力与本人活动任务，仅包含安全状态。 */
     public Map<String, Object> capabilities() {
@@ -103,6 +107,7 @@ public class PortfolioAiApplicationService {
         ObjectNode frozen = NODES.objectNode();
         frozen.set(KEY_INPUT, input);
         ObjectNode frozenFacts = facts.freeze(input, normalized);
+        if (properties.isMediaEnabled()) { mediaPlans.freeze(input, frozenFacts); }
         if (MODE_CREATE.equals(input.path(KEY_MODE).asText())) {
             boolean anyAvailable = false;
             for (JsonNode source : frozenFacts.path(KEY_SOURCES)) { anyAvailable |= source.path(KEY_CAN_BIND).asBoolean(true); }
@@ -112,6 +117,7 @@ public class PortfolioAiApplicationService {
         frozen.put(KEY_CONTRACT_VERSION, AiPortfolioProtocol.CONTRACT_VERSION).put(KEY_PROMPT_VERSION, AiPortfolioProtocol.PROMPT_VERSION);
         frozen.putObject(KEY_MODEL_CONFIG).put(KEY_PROVIDER, PROVIDER_TOKENHUB).put(KEY_MODEL, properties.getModel())
                 .put(KEY_BASE_URL, properties.getBaseUrl()).put(KEY_TEMPERATURE, properties.getTemperature())
+                .put(FROZEN_MEDIA_ENABLED, properties.isMediaEnabled())
                 .put(KEY_MAX_TOKENS, properties.getMaxTokens()).put(KEY_THINKING, THINKING_ENABLED).put(KEY_STREAM, false);
         // 投影在提交时预检，不能把无法定位的菜单、组件或未支持基准交给 Job。
         AiPortfolioProtocol.project(frozen);

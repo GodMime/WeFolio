@@ -8,6 +8,7 @@ import com.qcloud.cos.region.Region;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
  * COS 客户端配置。
@@ -28,6 +29,7 @@ public class CosConfig {
      *
      * @return COS 客户端
      */
+    @Primary
     @Bean(destroyMethod = "shutdown")
     public COSClient cosClient() {
         BasicCOSCredentials credentials = new BasicCOSCredentials(

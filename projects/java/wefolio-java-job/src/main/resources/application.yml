@@ -81,8 +81,22 @@ work-audit:
   video-snapshot-interval-seconds: 60
   # 单个视频最多截帧数量，防止超长视频产生过多审核帧。
   max-video-snapshot-count: 120
+  # 完成兼容部署与真实链路验证后才开启；旧 Interval 任务始终沿原冻结参数执行。
+  video-persistent-frames-enabled: ${WORK_AUDIT_VIDEO_PERSISTENT_FRAMES_ENABLED:${WEFOLIO_AI_MEDIA_ENABLED:false}}
   # 腾讯云远端接口调用超时时间，单位秒。
   remote-call-timeout-seconds: 30
+
+video-frame:
+  # 共用持久帧服务逐张以内存处理；独立 COS 客户端不隐藏重试。
+  remote-timeout-seconds: ${VIDEO_FRAME_REMOTE_TIMEOUT_SECONDS:5}
+  max-download-bytes: ${VIDEO_FRAME_MAX_DOWNLOAD_BYTES:10485760}
+  max-pixels: ${VIDEO_FRAME_MAX_PIXELS:40000000}
+  # 仅一次性历史补帧使用；默认查询当前桶唯一可用媒体队列，可显式指定真实队列 ID。
+  ci-queue-id: ${VIDEO_FRAME_CI_QUEUE_ID:auto}
+  backfill-max-frames: ${VIDEO_FRAME_BACKFILL_MAX_FRAMES:2400}
+  backfill-item-seconds: ${VIDEO_FRAME_BACKFILL_ITEM_SECONDS:180}
+  backfill-batch-size: ${VIDEO_FRAME_BACKFILL_BATCH_SIZE:20}
+  backfill-poll-seconds: ${VIDEO_FRAME_BACKFILL_POLL_SECONDS:3}
 
 admin:
   point:
@@ -150,6 +164,11 @@ virtual-payment-dispatch:
 portfolio-ai:
   # 与 Runtime 共用全局开关，默认关闭；启动读取，重启生效。
   enabled: ${WEFOLIO_AI_ENABLED:false}
+  media-enabled: ${WEFOLIO_AI_MEDIA_ENABLED:false}
+  media-task-budget-cents: ${WEFOLIO_AI_MEDIA_TASK_BUDGET_CENTS:300}
+  media-daily-budget-cents: ${WEFOLIO_AI_MEDIA_DAILY_BUDGET_CENTS:2000}
+  media-max-calls: ${WEFOLIO_AI_MEDIA_MAX_CALLS:100}
+  media-cache-days: 7
   # 服务端固定腾讯云 TokenHub 官方兼容端点及 GLM 模型。
   base-url: ${WEFOLIO_AI_BASE_URL:https://tokenhub.tencentmaas.com/v1}
   model: ${WEFOLIO_AI_MODEL:glm-5.3-flash}
@@ -159,12 +178,12 @@ portfolio-ai:
   # 单实例并发有界，未领取任务始终留在数据库队列。
   worker-count: ${WEFOLIO_AI_WORKER_COUNT:2}
   batch-size: ${WEFOLIO_AI_BATCH_SIZE:100}
-  # 含排队及所有重试的绝对期限和统一执行预算。
-  total-timeout-seconds: 180
+  # 与 Runtime 共用任务总期限，包含排队及所有重试。
+  total-timeout-seconds: ${WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS:180}
   call-timeout-seconds: 60
   connect-timeout-seconds: 5
-  recovery-seconds: 75
+  recovery-seconds: 90
   max-attempts: 3
   # 解压响应读取中限制预算，终态到期按小时小批物理清理。
   max-response-bytes: 2097152
-  retention-days: 30
+  retention-days: ${WEFOLIO_AI_RETENTION_DAYS:30}

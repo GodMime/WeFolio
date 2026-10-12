@@ -3119,7 +3119,7 @@ public class MineWorkService {
     }
 
     /**
-     * 收集作品原文件和封面/缩略图对象键。
+     * 收集作品原文件、封面和本作品持久帧对象键。
      *
      * @param work 作品实体
      * @return 去重后的对象键集合
@@ -3131,6 +3131,7 @@ public class MineWorkService {
         if (!MediaTypeDict.AUDIO.getCode().equals(work.getMediaType())) {
             addObjectKey(objectKeys, work.getCoverObjectKey());
         }
+        objectKeys.addAll(VideoFrameObjectKeys.collect(work));
         return objectKeys;
     }
 

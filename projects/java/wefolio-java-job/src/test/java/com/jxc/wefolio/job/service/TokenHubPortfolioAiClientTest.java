@@ -5,6 +5,7 @@ import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -18,6 +19,7 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
@@ -30,6 +32,47 @@ import static org.mockito.Mockito.*;
 
 /** 官方请求参数、供应商完成原因、绝对期限和读取中响应预算测试。 */
 class TokenHubPortfolioAiClientTest {
+    /** 官方结构化媒体字段及图片/视频互斥，链接不藏在文字content。 */
+    @Test void multimediaPayloadUsesTypedContentAndRejectsMixedInput() {
+        var client = new TokenHubPortfolioAiClient(properties());
+        var frame = new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame?signature=fake", 1000L);
+        ObjectNode body = client.mediaPayload(task(), request(), List.of(frame));
+        assertThat(body.path("max_tokens").asInt()).isEqualTo(4096);
+        var content = body.path("messages").get(1).path("content");
+        assertThat(content.isArray()).isTrue();
+        assertThat(content.get(2).path("type").asText()).isEqualTo("image_url");
+        assertThat(content.get(2).path("image_url").path("url").asText()).contains("private.example");
+        assertThat(content.get(0).path("text").asText()).doesNotContain("private.example");
+        var video = new PortfolioAiModelClient.MediaInput("video_url", "https://private.example/video", null);
+        assertThatThrownBy(() -> client.mediaPayload(task(), request(), List.of(frame, video))).hasMessageContaining("类型或数量");
+        assertThat(client.mediaPayload(task(), request(), List.of(video)).path("messages").get(1).path("content").get(1).path("type").asText()).isEqualTo("video_url");
+    }
+
+    /** 模型图片输入接受持久帧固定上限，超限及空媒体统一报安全分类。 */
+    @Test void multimediaCountLimitUsesTheSameContractAsPersistentFrames() {
+        var client = new TokenHubPortfolioAiClient(properties());
+        var frame = new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame", null);
+        ObjectNode body = client.mediaPayload(task(), request(), Collections.nCopies(PortfolioAiMediaContract.FRAME_MAX_COUNT, frame));
+        assertThat(body.path("messages").get(1).path("content").size()).isEqualTo(1 + PortfolioAiMediaContract.FRAME_MAX_COUNT);
+        assertThatThrownBy(() -> client.mediaPayload(task(), request(), Collections.nCopies(PortfolioAiMediaContract.FRAME_MAX_COUNT + 1, frame)))
+                .hasMessageContaining("类型或数量");
+        assertThatThrownBy(() -> client.mediaPayload(task(), request(), List.of())).hasMessageContaining("类型或数量");
+        assertThatThrownBy(() -> client.mediaPayload(task(), request(), null)).hasMessageContaining("类型或数量");
+    }
+
+    /** 最终摘要投影也只认WORK且可绑定，不能从不可用来源复制残留摘要。 */
+    @Test void finalPayloadProjectsMediaSummaryOnlyForBindableWork() {
+        var client = new TokenHubPortfolioAiClient(properties()); ObjectNode request = request();
+        var sources = request.withObject("facts").withArray("sources");
+        sources.addObject().put("sourceNo", 1).put("kind", "WORK").put("canBind", false)
+                .putObject("mediaSummary").put("summary", "不可用作品的残留摘要");
+        sources.addObject().put("sourceNo", 2).put("kind", "MEMBER_PORTFOLIO").put("canBind", true)
+                .putObject("mediaSummary").put("summary", "成员作品集不能作为媒体摘要");
+        sources.addObject().put("sourceNo", 3).put("kind", "WORK").put("canBind", true)
+                .putObject("mediaSummary").put("summary", "当前可绑定作品摘要");
+        String user = client.payload(task(), request).path("messages").get(1).path("content").asText();
+        assertThat(user).contains("当前可绑定作品摘要").doesNotContain("不可用作品的残留摘要", "成员作品集不能作为媒体摘要");
+    }
     /** 固定假凭据只存在测试，不读取环境文件或真实密钥。 */
     private PortfolioAiProperties properties() {
         PortfolioAiProperties properties = new PortfolioAiProperties(); properties.setApiKey("test-fake-key"); return properties;

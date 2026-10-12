@@ -1,16 +1,18 @@
 package com.jxc.wefolio.job.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import java.time.LocalDateTime;
 
-/** 高级作品集 AI 异步任务；十四个任务字段加五个公共字段，共十九列。 */
+/** 高级作品集 AI 异步任务及独立媒体费用记录。 */
 @Data
 @EqualsAndHashCode(callSuper = true)
-@ToString(exclude = {"requestJson", "resultJson"})
+@ToString(exclude = {"requestJson", "resultJson", "mediaBudgetJson"})
 @TableName("wf_ai_generation_task")
 public class AiGenerationTaskEntity extends BaseEntity {
     /** 真实归属类型 USER 或 TEAM。 */
@@ -27,6 +29,12 @@ public class AiGenerationTaskEntity extends BaseEntity {
     private String requestJson;
     /** 合法中间模型结果，不是作品集配置。 */
     private String resultJson;
+    /** 独立逐调用费用协议，由专用短事务更新，禁止普通实体更新回带旧值。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String mediaBudgetJson;
+    /** 尚无完整用量的调用数，隐私清理保留其最小费用行。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Integer mediaBudgetUnknownCount;
     /** 五态任务状态。 */
     private String status;
     /** 已领取执行次数，含中断的尝试。 */

@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service.advancedportfolio;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -47,15 +48,7 @@ public record AdvancedPortfolioSaveMetadata(JSONObject context, boolean contextP
         long next = integer(context.get("nextSourceNo"));
         if (next < 1 || next > Integer.MAX_VALUE) { throw new BusinessException(AdvancedPortfolioMessage.INVALID_CONTEXT); }
         Map<Long,String> old = new HashMap<>();
-        long oldNext = 1;
-        if (previousJson != null && !previousJson.isBlank()) {
-            JSONObject previous = JSON.parseObject(previousJson);
-            oldNext = integer(previous.get("nextSourceNo"));
-            for (Object item : previous.getJSONArray("sources")) {
-                JSONObject source = (JSONObject) item;
-                old.put(integer(source.get("sourceNo")), identity(source));
-            }
-        }
+        long oldNext = previousWatermark(previousJson, old);
         if (next < oldNext || !(context.get("sources") instanceof List<?> sources)) {
             throw new BusinessException(AdvancedPortfolioMessage.INVALID_CONTEXT);
         }
@@ -74,6 +67,33 @@ public record AdvancedPortfolioSaveMetadata(JSONObject context, boolean contextP
                 throw new BusinessException(AdvancedPortfolioMessage.INVALID_CONTEXT);
             }
         }
+    }
+
+    /** 历史缺失字段按空列表和初始高水位恢复，已有映射及编号只保留、不回收。 */
+    private static long previousWatermark(String previousJson, Map<Long,String> old) {
+        if (previousJson == null || previousJson.isBlank()) { return 1; }
+        JSONObject previous;
+        try { previous = JSON.parseObject(previousJson); }
+        catch (JSONException exception) { throw new BusinessException(AdvancedPortfolioMessage.INVALID_CONTEXT); }
+        if (previous == null) { return 1; }
+        long next = previous.get("nextSourceNo") == null ? 1 : integer(previous.get("nextSourceNo"));
+        if (next < 1 || next > Integer.MAX_VALUE) { throw new BusinessException(AdvancedPortfolioMessage.INVALID_CONTEXT); }
+        Object values = previous.get("sources");
+        if (values == null) { return next; }
+        if (!(values instanceof List<?> sources)) { throw new BusinessException(AdvancedPortfolioMessage.INVALID_CONTEXT); }
+        for (Object value : sources) {
+            if (!(value instanceof JSONObject source)
+                    || !(source.get("kind") instanceof String kind) || !SOURCE_KINDS.contains(kind)
+                    || !(source.get("sourceId") instanceof String id) || !isSourceId(id)) {
+                throw new BusinessException(AdvancedPortfolioMessage.INVALID_CONTEXT);
+            }
+            long no = integer(source.get("sourceNo"));
+            if (no < 1 || no >= Integer.MAX_VALUE || old.putIfAbsent(no, identity(source)) != null) {
+                throw new BusinessException(AdvancedPortfolioMessage.INVALID_CONTEXT);
+            }
+            next = Math.max(next, no + 1);
+        }
+        return next;
     }
 
     /** 仅协议整数类型可用作来源号。 */

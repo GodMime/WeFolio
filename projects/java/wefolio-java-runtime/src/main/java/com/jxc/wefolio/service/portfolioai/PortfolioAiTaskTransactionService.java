@@ -58,6 +58,7 @@ public class PortfolioAiTaskTransactionService {
         task.setRequestedBy(requester);
         task.setIdempotencyKey(key);
         task.setRequestJson(frozen.toString());
+        task.setMediaBudgetUnknownCount(0);
         task.setStatus(AiTaskStatusDict.PENDING.getCode());
         task.setAttemptCount(0);
         task.setNextRunAt(now);

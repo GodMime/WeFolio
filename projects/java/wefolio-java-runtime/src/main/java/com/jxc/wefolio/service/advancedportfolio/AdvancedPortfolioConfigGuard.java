@@ -23,14 +23,16 @@ import java.util.Set;
 
 /** 高级独立入口的原始配置结构守卫；先拒绝未知键及类型强转，再进入普通业务校验。 */
 public final class AdvancedPortfolioConfigGuard {
+    /** 普通组件可选开关字段，裸 Boolean 的缺省和空值沿各自校验器处理。 */
+    private static final String ENABLED = "enabled";
     /** 组件基础字段。 */
-    private static final Set<String> COMPONENT_KEYS = Set.of("componentKey", "componentType", "sortOrder", "enabled", "config", "name");
+    private static final Set<String> COMPONENT_KEYS = Set.of("componentKey", "componentType", "sortOrder", ENABLED, "config", "name");
     /** 普通超链接的站内目标模式。 */
     private static final String INTERNAL_PORTFOLIO_ACTION = "INTERNAL_PORTFOLIO";
     /** 普通超链接的外链模式。 */
     private static final String EXTERNAL_LINK_ACTION = "EXTERNAL_LINK";
     /** 布尔型组件参数。 */
-    private static final Set<String> BOOLEAN_KEYS = Set.of("enabled", "showMemberName", "showTitle", "showDescription", "showComponentTitle", "showSwipeHint", "showClickIcon", "profileBorder", "contactBorder", "cellBorder", "backgroundEnabled");
+    private static final Set<String> BOOLEAN_KEYS = Set.of(ENABLED, "showMemberName", "showTitle", "showDescription", "showComponentTitle", "showSwipeHint", "showClickIcon", "profileBorder", "contactBorder", "cellBorder", "backgroundEnabled");
     /** 整数型组件参数。 */
     private static final Set<String> INTEGER_KEYS = Set.of("sortOrder", "workId", "memberUserId", "portfolioId", "teamId", "targetPortfolioId", "backgroundWorkId", "backgroundMemberUserId", "heightPx", "fontSizeRpx", "profileBorderWidthRpx", "profileHorizontalMarginRpx", "profileVerticalMarginRpx", "contactBorderWidthRpx", "horizontalMarginRpx", "verticalMarginRpx", "rows", "columns", "gapRpx", "cellPaddingRpx", "cellRadiusRpx", "cellBorderWidthRpx", "row", "column", "rowSpan", "columnSpan", "marginTopRpx", "marginBottomRpx", "heightRpx", "futureDays");
     /** 各普通组件私有配置的完整受理字段。 */
@@ -74,6 +76,11 @@ public final class AdvancedPortfolioConfigGuard {
     }
     /** 校验规范化没有改变明确提交的普通字段；仅允许已登记的派生排序、字体裁剪和显示名称。 */
     public static void assertNormalized(ObjectNode incoming, ObjectNode normalized) {
+        assertNormalized(incoming, normalized, false);
+    }
+
+    /** 按真实个人或团队校验器的组件启用默认值检查规范化，避免高级入口改变旧字段语义。 */
+    public static void assertNormalized(ObjectNode incoming, ObjectNode normalized, boolean team) {
         ObjectNode expected = incoming.deepCopy();
         JsonNode fonts = expected.get("fonts");
         if (fonts != null && fonts.isObject()) {
@@ -85,11 +92,11 @@ public final class AdvancedPortfolioConfigGuard {
             retained.remove(removed);
             expected.set("fonts", retained);
         }
-        preserved(expected, normalized, "");
+        preserved(expected, normalized, "", team);
     }
 
     /** 递归比较明确字段，精确登记组件名称、排序及最终字体引用的派生值。 */
-    private static void preserved(JsonNode before, JsonNode after, String path) {
+    private static void preserved(JsonNode before, JsonNode after, String path, boolean team) {
         String field = path.substring(path.lastIndexOf('.') + 1);
         if (path.endsWith(".component.name")) { return; }
         if (field.equals("fonts")) { preservedFonts(before, after); return; }
@@ -102,7 +109,7 @@ public final class AdvancedPortfolioConfigGuard {
             if (!after.isObject()) { throw invalid(); }
             ObjectNode expected = ((ObjectNode) before).deepCopy();
             deriveConfig(expected, after, path);
-            expected.fields().forEachRemaining(entry -> preserved(entry.getValue(), after.get(entry.getKey()), path + "." + entry.getKey()));
+            expected.fields().forEachRemaining(entry -> preserved(entry.getValue(), after.get(entry.getKey()), path + "." + entry.getKey(), team));
             return;
         }
         if (before.isArray()) {
@@ -111,7 +118,9 @@ public final class AdvancedPortfolioConfigGuard {
                 String id = field.equals("components") ? "componentKey" : "groupKey";
                 List<JsonNode> ordered = new ArrayList<>();
                 before.forEach(item -> {
-                    if (!field.equals("components") || !item.has("enabled") || item.path("enabled").asBoolean()) { ordered.add(item); }
+                    // 个人只保留明确启用项，团队沿普通校验器把缺省或空值开关视为启用。
+                    if (!field.equals("components") || item.path(ENABLED).asBoolean()
+                            || team && !item.hasNonNull(ENABLED)) { ordered.add(item); }
                 });
                 ordered.sort(Comparator.comparingInt((JsonNode item) -> item.has("sortOrder")
                         ? item.path("sortOrder").intValue() : Integer.MAX_VALUE).thenComparing(item -> item.path(id).asText()));
@@ -120,12 +129,16 @@ public final class AdvancedPortfolioConfigGuard {
                     ObjectNode expected = ordered.get(index).deepCopy();
                     // 两类普通保存均按最终排序派生每项1000递增，不能忽略任意sortOrder变化。
                     expected.put("sortOrder", (index + 1) * 1000);
+                    if (field.equals("components") && team && expected.has(ENABLED) && expected.path(ENABLED).isNull()) {
+                        // 团队普通保存将裸 Boolean 空值派生为 true，仍需拒绝其它规范化结果。
+                        expected.put(ENABLED, true);
+                    }
                     if (!expected.path(id).equals(after.get(index).path(id))) { throw invalid(); }
-                    preserved(expected, after.get(index), path + (field.equals("components") ? ".component" : ".group"));
+                    preserved(expected, after.get(index), path + (field.equals("components") ? ".component" : ".group"), team);
                 }
             } else {
                 if (before.size() != after.size()) { throw invalid(); }
-                for (int index = 0; index < before.size(); index++) { preserved(before.get(index), after.get(index), path + ".item"); }
+                for (int index = 0; index < before.size(); index++) { preserved(before.get(index), after.get(index), path + ".item", team); }
             }
             return;
         }
@@ -242,7 +255,7 @@ public final class AdvancedPortfolioConfigGuard {
             if (!allowed.contains(entry.getKey())) { throw invalid(); }
             JsonNode value = entry.getValue();
             if (value.isNull()) {
-                if (booleanValues || BOOLEAN_KEYS.contains(entry.getKey())) { throw invalid(); }
+                if (booleanValues || BOOLEAN_KEYS.contains(entry.getKey()) && !ENABLED.equals(entry.getKey())) { throw invalid(); }
                 return;
             }
             boolean bool = booleanValues || BOOLEAN_KEYS.contains(entry.getKey()) && !Set.of("profile", "team").contains(entry.getKey());

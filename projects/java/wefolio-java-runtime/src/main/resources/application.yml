@@ -21,6 +21,7 @@ spring:
 # AI 开关仅影响新任务；保存、发布、访客和已存在任务查询仍可用。
 portfolio-ai:
   enabled: ${WEFOLIO_AI_ENABLED:false}
+  media-enabled: ${WEFOLIO_AI_MEDIA_ENABLED:false}
   base-url: ${WEFOLIO_AI_BASE_URL:https://tokenhub.tencentmaas.com/v1}
   model: ${WEFOLIO_AI_MODEL:glm-5.3-flash}
   temperature: ${WEFOLIO_AI_TEMPERATURE:1.0}

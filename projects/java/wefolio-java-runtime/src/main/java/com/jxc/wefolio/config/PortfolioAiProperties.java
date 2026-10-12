@@ -20,6 +20,8 @@ public class PortfolioAiProperties {
     private static final int MAX_OUTPUT_TOKENS = 8192;
     /** 新任务开关，默认关闭以允许后端先发布。 */
     private boolean enabled;
+    /** 新任务是否冻结真实多模态输入，默认关闭以兼容旧部署。 */
+    private boolean mediaEnabled;
     /** 单次描述的 Unicode 码点上限。 */
     private int maxPromptCodePoints = 2000;
     /** 完整普通配置的字节上限。 */

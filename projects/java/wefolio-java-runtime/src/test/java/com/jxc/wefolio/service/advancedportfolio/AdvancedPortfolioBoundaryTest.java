@@ -6,10 +6,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
+import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.service.PortfolioConfigValidator;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioConfigValidator;
+import com.jxc.wefolio.service.teamportfolio.component.divider.TeamDividerComponentValidator;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
 import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.message.AdvancedPortfolioMessage;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import java.io.InputStream;
 import static org.assertj.core.api.Assertions.*;
@@ -81,6 +87,82 @@ class AdvancedPortfolioBoundaryTest {
         input.put("text", "原内容"); output.put("text", "其他内容");
         assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.assertNormalized(input, output)).isInstanceOf(BusinessException.class);
     }
+    /** 个人普通保存只保留明确启用组件，高级守卫须接受缺失、空值及关闭组件的剔除。 */
+    @Test
+    void acceptsRealPersonalPruningWhenEnabledIsMissing() throws Exception {
+        ObjectNode incoming = (ObjectNode) mapper.readTree("""
+                {"schemaVersion":"standard-personal-v1","share":{"title":"兼容旧配置"},"components":[
+                  {"componentKey":"on","componentType":"DIVIDER","enabled":true,"sortOrder":10,"config":{}},
+                  {"componentKey":"missing","componentType":"DIVIDER","sortOrder":20,"config":{}},
+                  {"componentKey":"null","componentType":"DIVIDER","enabled":null,"sortOrder":30,"config":{}},
+                  {"componentKey":"off","componentType":"DIVIDER","enabled":false,"sortOrder":40,"config":{}}]}
+                """);
+        AdvancedPortfolioConfigGuard.validate(incoming, false);
+        PortfolioConfigDto normalized = new PortfolioConfigValidator(mock(WorkEntityMapper.class))
+                .normalizeForDraft(7L, JSON.parseObject(incoming.toString(), PortfolioConfigDto.class), null);
+        ObjectNode saved = (ObjectNode) mapper.readTree(JSON.toJSONString(normalized));
+        assertThat(saved.path("components")).hasSize(1);
+        assertThatCode(() -> AdvancedPortfolioConfigGuard.assertNormalized(incoming, saved)).doesNotThrowAnyException();
+    }
+    /** 个人次级菜单采用同一剔除规则，不能因嵌套组件缺省开关而拒绝整份保存。 */
+    @Test
+    void acceptsPersonalMissingEnabledPruningInSecondaryMenu() throws Exception {
+        ObjectNode incoming = (ObjectNode) mapper.readTree("""
+                {"schemaVersion":"standard-personal-v1","editorSchemaRevision":14,"share":{"title":"兼容旧菜单"},
+                  "components":[{"componentKey":"home","componentType":"DIVIDER","enabled":true,"config":{}}],
+                  "bottomNav":{"enabled":true,"items":[{"key":"nav_home","title":"首页"},{"key":"nav_more","title":"更多","components":[
+                    {"componentKey":"missing","componentType":"DIVIDER","sortOrder":10,"config":{}},
+                    {"componentKey":"on","componentType":"DIVIDER","enabled":true,"sortOrder":20,"config":{}}]}]}}
+                """);
+        AdvancedPortfolioConfigGuard.validate(incoming, false);
+        PortfolioConfigDto normalized = new PortfolioConfigValidator(mock(WorkEntityMapper.class))
+                .normalizeForDraft(7L, JSON.parseObject(incoming.toString(), PortfolioConfigDto.class), null);
+        ObjectNode saved = (ObjectNode) mapper.readTree(JSON.toJSONString(normalized));
+        assertThat(saved.path("bottomNav").path("items").get(1).path("components")).hasSize(1);
+        AdvancedPortfolioConfigGuard.assertNormalized(incoming, saved);
+    }
+    /** 团队普通保存缺省开关仍为启用，高级守卫必须沿真实归属保留此既有行为。 */
+    @Test
+    void acceptsRealTeamRetentionWhenEnabledIsMissing() throws Exception {
+        ObjectNode incoming = (ObjectNode) mapper.readTree("""
+                {"schemaVersion":"standard-team-v1","share":{"title":"兼容团队旧配置"},"components":[
+                  {"componentKey":"missing","componentType":"DIVIDER","sortOrder":10,"config":{}},
+                  {"componentKey":"on","componentType":"DIVIDER","enabled":true,"sortOrder":20,"config":{}},
+                  {"componentKey":"off","componentType":"DIVIDER","enabled":false,"sortOrder":30,"config":{}}]}
+                """);
+        AdvancedPortfolioConfigGuard.validate(incoming, true);
+        TeamPortfolioConfigValidator validator = new TeamPortfolioConfigValidator(null, null, null,
+                new TeamDividerComponentValidator(), null, null, null, null, null, null, null, null);
+        TeamPortfolioConfigDto normalized = validator.normalizeForDraft(
+                JSON.parseObject(incoming.toString(), TeamPortfolioConfigDto.class), null,
+                new TeamPortfolioComponentContext(11L, 22L, 1));
+        ObjectNode saved = (ObjectNode) mapper.readTree(JSON.toJSONString(normalized));
+        assertThat(saved.path("components")).hasSize(2);
+        assertThat(saved.path("components").get(0).path("enabled").booleanValue()).isTrue();
+        AdvancedPortfolioConfigGuard.assertNormalized(incoming, saved, true);
+    }
+    /** 团队的裸 Boolean 空值沿普通保存视为启用，结构守卫和派生值比较均须兼容。 */
+    @Test
+    void acceptsRealTeamRetentionWhenEnabledIsNull() throws Exception {
+        ObjectNode incoming = (ObjectNode) mapper.readTree("""
+                {"schemaVersion":"standard-team-v1","share":{"title":"兼容团队空开关"},"components":[
+                  {"componentKey":"null","componentType":"DIVIDER","enabled":null,"sortOrder":10,"config":{}}]}
+                """);
+        TeamPortfolioConfigValidator validator = new TeamPortfolioConfigValidator(null, null, null,
+                new TeamDividerComponentValidator(), null, null, null, null, null, null, null, null);
+        TeamPortfolioConfigDto normalized = validator.normalizeForDraft(
+                JSON.parseObject(incoming.toString(), TeamPortfolioConfigDto.class), null,
+                new TeamPortfolioComponentContext(11L, 22L, 1));
+        ObjectNode saved = (ObjectNode) mapper.readTree(JSON.toJSONString(normalized));
+        assertThat(saved.path("components")).hasSize(1);
+        assertThat(saved.path("components").get(0).path("enabled").booleanValue()).isTrue();
+        Assertions.assertAll(
+                () -> assertThatCode(() -> AdvancedPortfolioConfigGuard.validate(incoming, true)).doesNotThrowAnyException(),
+                () -> assertThatCode(() -> AdvancedPortfolioConfigGuard.assertNormalized(incoming, saved, true)).doesNotThrowAnyException());
+        ((ObjectNode) saved.path("components").get(0)).put("enabled", false);
+        assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.assertNormalized(incoming, saved, true))
+                .isInstanceOf(BusinessException.class);
+    }
     /** 真实普通校验与字体合并后，仅裁剪未引用字体并保留实际版本。 */
     @Test
     void supportsRealTextFontAndDisabledBackgroundNormalization() throws Exception {
@@ -123,6 +205,41 @@ class AdvancedPortfolioBoundaryTest {
     @Test
     void acceptsRemovedNumbersAndMonotonicNewSource() {
         AdvancedPortfolioSaveMetadata.validateContext(context(6, "{\"sourceNo\":1,\"kind\":\"WORK\",\"sourceId\":\"10\"},{\"sourceNo\":5,\"kind\":\"WORK\",\"sourceId\":\"20\"}"), context(5, "{\"sourceNo\":1,\"kind\":\"WORK\",\"sourceId\":\"10\"}").toJSONString());
+    }
+    /** 历史来源列表缺失时仍可保存，并保留已占用来源号的高水位。 */
+    @Test
+    void savesLegacyContextWithoutSourcesAndKeepsWatermark() {
+        PortfolioEntity portfolio = new PortfolioEntity();
+        portfolio.setAiContextJson("{\"version\":1,\"nextSourceNo\":5}");
+        new AdvancedPortfolioSaveMetadata(context(5, ""), true, null, false, "{}").apply(portfolio);
+        assertThat(JSON.parseObject(portfolio.getAiContextJson()).getJSONArray("sources")).isEmpty();
+        assertThatThrownBy(() -> AdvancedPortfolioSaveMetadata.validateContext(context(4, ""),
+                "{\"version\":1,\"nextSourceNo\":5}"))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> AdvancedPortfolioSaveMetadata.validateContext(
+                context(5, "{\"sourceNo\":1,\"kind\":\"WORK\",\"sourceId\":\"10\"}"),
+                "{\"version\":1,\"nextSourceNo\":5}"))
+                .isInstanceOf(BusinessException.class);
+    }
+    /** 历史没有高水位时从已有来源号推导，不能把旧号重新绑定到其它来源。 */
+    @Test
+    void recoversMissingLegacyWatermarkFromExistingSources() {
+        String previous = "{\"version\":1,\"sources\":[{\"sourceNo\":3,\"kind\":\"WORK\",\"sourceId\":\"10\"}]}";
+        assertThatCode(() -> AdvancedPortfolioSaveMetadata.validateContext(
+                context(4, "{\"sourceNo\":3,\"kind\":\"WORK\",\"sourceId\":\"10\"}"), previous))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> AdvancedPortfolioSaveMetadata.validateContext(
+                context(4, "{\"sourceNo\":3,\"kind\":\"WORK\",\"sourceId\":\"11\"}"), previous))
+                .isInstanceOf(BusinessException.class);
+    }
+    /** 历史字段类型损坏时返回既有业务提示，不能泄漏解析异常成为服务器错误。 */
+    @Test
+    void rejectsMalformedLegacyContextWithBusinessMessage() {
+        for (String previous : new String[]{"{", "{\"sources\":\"bad\"}", "{\"sources\":[null]}"}) {
+            assertThatThrownBy(() -> AdvancedPortfolioSaveMetadata.validateContext(context(1, ""), previous))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage(AdvancedPortfolioMessage.INVALID_CONTEXT);
+        }
     }
     /** 旧号不允许重新绑定，即使旧来源已移除也不能回收。 */
     @Test

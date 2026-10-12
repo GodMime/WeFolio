@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 作品审核用作品仓储测试。
@@ -29,6 +30,18 @@ class WorkAuditWorkRepositoryTest {
     void workEntityDeclaresManualAuditIsolationField() throws NoSuchFieldException {
         assertThat(WorkAuditWorkEntity.class.getDeclaredField("manualAuditNo").getType())
                 .isEqualTo(String.class);
+    }
+
+    /** MySQL JSON 规范化后的相同清单仍视为引用，禁止误删已发布资产。 */
+    @Test
+    void publishedManifestComparisonShouldIgnoreDatabaseJsonFormatting() {
+        WorkAuditWorkMapper mapper = mock(WorkAuditWorkMapper.class);
+        WorkAuditWorkEntity work = new WorkAuditWorkEntity();
+        work.setVideoFramesJson("{\"frames\": [{\"timeMs\": 964, \"objectKey\": \"frame.jpg\"}], \"frameCount\": 1}");
+        when(mapper.selectOne(org.mockito.ArgumentMatchers.any(Wrapper.class))).thenReturn(work);
+        assertThat(new WorkAuditWorkRepository(mapper).isVideoManifestPublished(11L,
+                "{\"frameCount\":1,\"frames\":[{\"objectKey\":\"frame.jpg\",\"timeMs\":964}]}"))
+                .isTrue();
     }
 
     /**

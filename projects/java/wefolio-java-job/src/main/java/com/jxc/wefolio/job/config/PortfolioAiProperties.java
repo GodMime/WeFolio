@@ -22,6 +22,16 @@ public class PortfolioAiProperties {
     public static final String TOKENHUB_PROVIDER = "TOKENHUB";
     /** 全局接单开关，启动读取。 */
     private boolean enabled;
+    /** 媒体部署预期开关；新任务能力以 Runtime 冻结计划为准，差异会告警。 */
+    private boolean mediaEnabled;
+    /** 单任务全部真实请求及重试的费用上限，单位分。 */
+    private int mediaTaskBudgetCents = 300;
+    /** 每请求人每日真实请求预算，单位分。 */
+    private int mediaDailyBudgetCents = 2000;
+    /** 单任务全部尝试共享的模型调用次数。 */
+    private int mediaMaxCalls = 100;
+    /** 媒体摘要长期缓存天数，不控制帧资产生命周期。 */
+    private int mediaCacheDays = 7;
     /** 腾讯云 TokenHub 官方根地址，包含 v1 路径。 */
     private String baseUrl = TOKENHUB_BASE_URL;
     /** 当前固定模型名称。 */
@@ -37,7 +47,7 @@ public class PortfolioAiProperties {
     /** 连接期限不超过剩余调用时间。 */
     private int connectTimeoutSeconds = 5;
     /** 进程中断恢复窗口，大于一次 HTTP 期限。 */
-    private int recoverySeconds = 75;
+    private int recoverySeconds = 90;
     /** 初次及自动重试共用预算。 */
     private int maxAttempts = 3;
     /** 终态主库保留天数。 */
@@ -65,6 +75,10 @@ public class PortfolioAiProperties {
                 || workerCount > 32 || batchSize <= 0 || batchSize > 1000 || maxCleanupBatches <= 0 || maxCleanupBatches > 1000 || maxResponseBytes <= 0
                 || maxResponseBytes > 2 * 1024 * 1024) {
             throw new IllegalStateException("portfolio-ai 的期限、数量与字节预算不合法");
+        }
+        if (mediaTaskBudgetCents < 1 || mediaTaskBudgetCents > 10000 || mediaDailyBudgetCents < mediaTaskBudgetCents
+                || mediaDailyBudgetCents > 1000000 || mediaMaxCalls < 1 || mediaMaxCalls > 100 || mediaCacheDays != 7) {
+            throw new IllegalStateException("portfolio-ai 媒体费用、次数或缓存预算不合法");
         }
         if (enabled && (!TOKENHUB_BASE_URL.equals(canonicalBaseUrl(baseUrl)) || !TOKENHUB_MODEL.equals(model))) {
             throw new IllegalStateException("启用高级 AI 仅支持腾讯云 TokenHub 的 glm-5.3-flash 官方端点");

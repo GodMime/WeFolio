@@ -30,6 +30,22 @@ public interface PortfolioAiFailureMessage {
     String EXECUTION_INTERRUPTED = "生成任务执行中断，请重新生成";
     /** 未预期的内部执行失败。 */
     String INTERNAL_ERROR = "生成服务处理异常，请稍后重新生成";
+    /** 媒体输入或冻结计划不符合处理条件。 */
+    String MEDIA_INVALID = "所选素材不符合 AI 处理要求，请调整素材后重新生成";
+    /** 媒体源身份变化或作品、团队授权失效。 */
+    String SOURCE_UNAVAILABLE = "所选素材已失效或无权访问，请重新选择素材后生成";
+    /** 视频持久帧缺失或不完整。 */
+    String MEDIA_NOT_PREPARED = "所选视频尚未完成素材准备，请稍后重新生成";
+    /** 媒体对象服务短暂故障，多次重试仍未恢复。 */
+    String MEDIA_ACCESS_RETRY = "媒体对象服务暂时不可用，请稍后重新生成";
+    /** 单任务、每日额度或媒体调用次数不足，不能继续付费请求。 */
+    String MEDIA_BUDGET_EXHAUSTED = "AI 媒体处理额度不足，请减少素材或稍后重试";
+    /** 模型实际用量超过媒体预留额度。 */
+    String MEDIA_BUDGET_OVERRUN = "本次 AI 媒体处理超出额度，请减少素材后重新生成";
+    /** 媒体账本异常，不允许在无法核对费用时继续执行。 */
+    String MEDIA_BUDGET_INVALID = "AI 媒体处理费用记录异常，请联系管理员核对";
+    /** 素材分析结果或摘要缓存不满足固定媒体协议。 */
+    String INVALID_MEDIA_SUMMARY = "AI 返回的素材分析结果不符合要求，请重新生成";
     /** 冻结请求不能解析。 */
     String REQUEST_INVALID = "生成任务的原始输入不完整或已失效，请重新生成";
     /** 本次查询的基准校验失败。 */

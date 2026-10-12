@@ -2,6 +2,7 @@ package com.jxc.wefolio.job.config;
 
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import com.jxc.wefolio.job.WefolioJavaJobApplication;
+import com.jxc.wefolio.job.service.VideoFrameBackfillExecutionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +40,7 @@ class JobSchedulingCoverageIntegrationTest {
     private JobScheduledTaskRegistry scheduledTaskRegistry;
 
     @Test
-    void shouldRegisterAllEightScheduledMethodsInProtectedSchedulers() {
+    void shouldRegisterAllNineScheduledMethodsIncludingSnapshotCleanupInProtectedSchedulers() {
         long scheduledMethodCount = Arrays.stream(applicationContext.getBeanDefinitionNames())
                 .map(applicationContext::getBean)
                 .map(AopUtils::getTargetClass)
@@ -51,8 +52,11 @@ class JobSchedulingCoverageIntegrationTest {
 
         applicationContext.getBeansOfType(ThreadPoolTaskScheduler.class)
                 .values().forEach(scheduler -> assertThat(scheduler).isInstanceOf(JobLifecycleTaskScheduler.class));
-        assertThat(scheduledMethodCount).isEqualTo(8);
-        assertThat(scheduledTaskRegistry.scheduledTasks()).hasSize(8);
+        // 历史截图扫尾也必须进入同一注册器，随全部后台任务接受停用和排空保护。
+        assertThat(scheduledMethodCount).isEqualTo(9);
+        assertThat(scheduledTaskRegistry.scheduledTasks()).hasSize(9)
+                .extracting(task -> task.getTask().getRunnable().toString())
+                .contains(VideoFrameBackfillExecutionService.class.getName() + ".cleanupFinishedSnapshots");
     }
 
     private void assertProtectedScheduler(ScheduledMethod scheduledMethod) {

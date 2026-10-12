@@ -468,7 +468,7 @@ class AiPortfolioProtocolTest {
     void runtimeAndJobSourcesAndCatalogAreExactlyTheSame() throws IOException {
         Path local = Path.of("").toAbsolutePath(); Path root = local.getParent();
         if (local.getFileName().toString().equals("wefolio-java-runtime")) { root = local.getParent(); }
-        for (String file : List.of("AiPortfolioProtocol.java", "AiProtocolException.java", "StrictAiJson.java")) {
+        for (String file : List.of("AiPortfolioProtocol.java", "AiProtocolException.java", "StrictAiJson.java", "PortfolioAiMediaContract.java")) {
             String relative = "src/main/java/com/jxc/wefolio/service/portfolioai/" + file;
             assertThat(Files.readString(root.resolve("wefolio-java-runtime/" + relative)))
                     .isEqualTo(Files.readString(root.resolve("wefolio-java-job/" + relative)));

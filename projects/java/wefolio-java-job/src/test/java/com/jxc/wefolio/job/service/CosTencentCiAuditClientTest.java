@@ -13,6 +13,7 @@ import com.qcloud.cos.model.ciModel.auditing.PornInfo;
 import com.qcloud.cos.model.ciModel.auditing.SnapshotInfo;
 import com.qcloud.cos.model.ciModel.auditing.VideoAuditingRequest;
 import com.qcloud.cos.model.ciModel.auditing.VideoAuditingResponse;
+import com.qcloud.cos.model.ciModel.xml.CIAuditingXmlFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -158,12 +159,67 @@ class CosTencentCiAuditClientTest {
         assertThat(request.getConf().getDetectType()).isEqualTo("all");
         assertThat(request.getConf().getDetectContent()).isEqualTo("0");
         assertThat(request.getConf().getCallback()).isNull();
+        assertThat(request.getConf().getCallbackType()).isEqualTo("1");
         assertThat(request.getConf().getSnapshot().getMode()).isEqualTo("Interval");
         assertThat(request.getConf().getSnapshot().getTimeInterval()).isEqualTo("60");
         assertThat(request.getConf().getSnapshot().getCount()).isEqualTo("5");
         assertThat(result.ciJobId()).isEqualTo("video-job-id");
         assertThat(result.ciState()).isEqualTo("Submitted");
         assertThat(result.terminal()).isFalse();
+    }
+
+    /** 平均模式在 SDK 请求体中完全省略时间间隔，并使用无重试专用客户端。 */
+    @Test
+    void averageShouldUseFrozenRequestAndExcludeTimeInterval() {
+        COSClient legacy = mock(COSClient.class);
+        COSClient bounded = mock(COSClient.class);
+        VideoAuditingResponse response = new VideoAuditingResponse();
+        AuditingJobsDetail detail = new AuditingJobsDetail();
+        detail.setJobId("average-job");
+        detail.setState("Submitted");
+        response.setJobsDetail(detail);
+        when(bounded.createVideoAuditingJob(org.mockito.ArgumentMatchers.any(VideoAuditingRequest.class)))
+                .thenReturn(response);
+        new CosTencentCiAuditClient(legacy, testCosProperties(), bounded)
+                .submitVideo(OBJECT_KEY, TencentCiVideoAuditRequest.average(18));
+        ArgumentCaptor<VideoAuditingRequest> captor = ArgumentCaptor.forClass(VideoAuditingRequest.class);
+        verify(bounded).createVideoAuditingJob(captor.capture());
+        VideoAuditingRequest request = captor.getValue();
+        assertThat(request.getConf().getSnapshot().getMode()).isEqualTo("Average");
+        assertThat(request.getConf().getSnapshot().getTimeInterval()).isNull();
+        assertThat(request.getConf().getSnapshot().getCount()).isEqualTo("18");
+        assertThat(request.getConf().getCallbackType()).isEqualTo("1");
+        // COSClient.createVideoAuditingJob 实际使用 CIAuditingXmlFactory，不能使用旧通用序列化器。
+        String xml = new String(CIAuditingXmlFactory.convertToXmlByteArray(request),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(xml).contains("<Mode>Average</Mode>", "<Count>18</Count>", "<CallbackType>1</CallbackType>")
+                .doesNotContain("<TimeInterval>");
+        org.mockito.Mockito.verifyNoInteractions(legacy);
+    }
+
+    /** 查询时保留真实毫秒时间，非法值保留为 null，由完整帧校验明确失败。 */
+    @Test
+    void snapshotTimesShouldRemainRealAndInvalidTimesShouldNotBeDropped() {
+        COSClient cos = mock(COSClient.class);
+        VideoAuditingResponse response = new VideoAuditingResponse();
+        AuditingJobsDetail detail = new AuditingJobsDetail();
+        detail.setState("Success");
+        detail.setResult("0");
+        detail.setSnapshotCount("2");
+        SnapshotInfo valid = new SnapshotInfo();
+        valid.setSnapshotTime("964");
+        valid.setUrl("https://test-bucket.cos.ap-guangzhou.myqcloud.com/snapshot/one");
+        SnapshotInfo invalid = new SnapshotInfo();
+        invalid.setSnapshotTime("not-a-time");
+        invalid.setUrl("https://test-bucket.cos.ap-guangzhou.myqcloud.com/snapshot/two");
+        detail.setSnapshotList(List.of(valid, invalid));
+        response.setJobsDetail(detail);
+        when(cos.describeAuditingJob(org.mockito.ArgumentMatchers.any(VideoAuditingRequest.class))).thenReturn(response);
+        TencentCiAuditResult result = new CosTencentCiAuditClient(cos, testCosProperties()).queryVideo("job", true);
+        assertThat(result.snapshots()).hasSize(2);
+        assertThat(result.providerSnapshotCount()).isEqualTo(2);
+        assertThat(result.snapshots().get(0).timeMs()).isEqualTo(964L);
+        assertThat(result.snapshots().get(1).timeMs()).isNull();
     }
 
     @Test

@@ -537,7 +537,7 @@ public class MineTeamPortfolioService {
         if (metadata != null) {
             AdvancedPortfolioConfigGuard.assertNormalized(
                     StrictAiJson.parseObject(metadata.fingerprint(), 2 * 1024 * 1024, 20).withObject("config"),
-                    StrictAiJson.parseObject(JSON.toJSONString(normalized), 2 * 1024 * 1024, 20));
+                    StrictAiJson.parseObject(JSON.toJSONString(normalized), 2 * 1024 * 1024, 20), true);
         }
         if (metadata != null && metadata.contextPresent()) {
             AdvancedPortfolioSaveMetadata.validateContext(metadata.context(), portfolio.getAiContextJson());

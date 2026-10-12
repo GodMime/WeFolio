@@ -31,9 +31,34 @@ class PortfolioAiPropertiesTest {
                 .withProperty("DEEPSEEK_API_KEY", "test-legacy-key"));
         assertThat(properties.getBaseUrl()).isEqualTo("https://tokenhub.tencentmaas.com/v1");
         assertThat(properties.getModel()).isEqualTo("glm-5.3-flash");
+        assertThat(properties.getTotalTimeoutSeconds()).isEqualTo(180);
+        assertThat(properties.getRetentionDays()).isEqualTo(30);
+        assertThat(properties.getRecoverySeconds()).isEqualTo(90);
+        assertThat(properties.getMediaMaxCalls()).isGreaterThanOrEqualTo(51);
+        assertThat(new PortfolioAiProperties().getMediaMaxCalls()).isGreaterThanOrEqualTo(51);
+        assertThat(new PortfolioAiProperties().getRecoverySeconds()).isEqualTo(90);
         assertThat(properties.getApiKey()).isEqualTo("test-tokenhub-key");
         assertThatCode(properties::validate).doesNotThrowAnyException();
         assertThat(properties.toString()).doesNotContain("test-tokenhub-key", "test-legacy-key");
+    }
+
+    /** 开启媒体时持久帧默认联动启用，显式配置仍可被启动守卫检查。 */
+    @Test void mediaSwitchEnablesPersistentFramesByDefault() throws IOException {
+        MockEnvironment environment = new MockEnvironment().withProperty("WEFOLIO_AI_MEDIA_ENABLED", "true");
+        bind(environment);
+        WorkAuditProperties audit = Binder.get(environment).bind("work-audit", WorkAuditProperties.class).get();
+        assertThat(audit.isVideoPersistentFramesEnabled()).isTrue();
+    }
+
+    /** 与 Runtime 同名的环境变量应覆盖 Job 的任务总期限和终态留存默认值。 */
+    @Test
+    void applicationBindsSharedTimeoutAndRetentionEnvironmentVariables() throws IOException {
+        PortfolioAiProperties properties = bind(new MockEnvironment()
+                .withProperty("WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS", "240")
+                .withProperty("WEFOLIO_AI_RETENTION_DAYS", "45"));
+        assertThat(properties.getTotalTimeoutSeconds()).isEqualTo(240);
+        assertThat(properties.getRetentionDays()).isEqualTo(45);
+        assertThatCode(properties::validate).doesNotThrowAnyException();
     }
 
     /** 启用后不能因旧密钥仍在部署环境中而继续启动。 */

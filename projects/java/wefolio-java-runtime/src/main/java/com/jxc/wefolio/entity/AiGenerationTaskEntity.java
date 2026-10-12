@@ -4,13 +4,15 @@ import java.time.LocalDateTime;
 import com.jxc.wefolio.dict.AiTaskStatusDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.ToString;
 
 
 /**
- * wf_ai_generation_task — AI 生成任务表 — 高级作品集 AI 生成请求与结果
+ * wf_ai_generation_task — AI 生成任务表 — 高级作品集 AI 生成请求与结果，共 21 列（16 个业务字段及 5 个公共字段）
  */
 @Data
 @TableName("wf_ai_generation_task")
@@ -41,6 +43,15 @@ public class AiGenerationTaskEntity extends BaseEntity {
     /** 校验通过的生成结果 JSON */
     @ToString.Exclude
     private String resultJson;
+
+    /** 版本化逐调用预算，费用单位分；由 Job 显式维护，普通任务更新不得覆盖旧预算。 */
+    @ToString.Exclude
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String mediaBudgetJson;
+
+    /** 完整用量尚未返回的预留笔数；仅创建时置零，后续由 Job 显式维护。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Integer mediaBudgetUnknownCount;
 
     /** 已领取次数，初次和自动重试共享最多三次预算。 */
     private Integer attemptCount;

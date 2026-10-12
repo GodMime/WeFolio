@@ -210,6 +210,26 @@ for (const team of [false, true]) {
     assert.equal(page.data.taskError, 'AI 返回的内容不完整，请重新生成')
   })
 
+  test(`${team ? '团队' : '个人'}媒体失败分类沿用既有任务结构展示安全原因`, () => {
+    const page = pageFor(async () => {}, {}, team)
+    const reasons = [
+      ['MEDIA_INVALID', '所选素材不符合 AI 处理要求，请调整素材后重新生成'],
+      ['SOURCE_UNAVAILABLE', '所选素材已失效或无权访问，请重新选择素材后生成'],
+      ['MEDIA_NOT_PREPARED', '所选视频尚未完成素材准备，请稍后重新生成'],
+      ['MEDIA_BUDGET_EXHAUSTED', 'AI 媒体处理额度不足，请减少素材或稍后重试'],
+      ['MEDIA_BUDGET_OVERRUN', '本次 AI 媒体处理超出额度，请减少素材后重新生成'],
+      ['MEDIA_BUDGET_INVALID', 'AI 媒体处理费用记录异常，请联系管理员核对'],
+      ['MEDIA_ACCESS_RETRY', '媒体对象服务暂时不可用，请稍后重新生成'],
+      ['INVALID_MEDIA_SUMMARY', 'AI 返回的素材分析结果不符合要求，请重新生成']
+    ]
+    for (const [code, message] of reasons) {
+      page.applyTask({ taskId: '7', status: 'FAILED', errorCode: code, errorMessage: TASK_FAILED_MESSAGE,
+        error: { code, message } })
+      assert.equal(page.data.taskError, message)
+      assert.equal(page.data.canAdopt, false)
+    }
+  })
+
   test(`${team ? '团队' : '个人'}采用前候选失效同步失败原因并保留当前编辑`, async () => {
     const page = pageFor(async () => ({ taskId: '7', status: 'SUCCEEDED', baseDraftRevision: 0, localEditRevision: 0,
       result: { kind: 'CANDIDATE', available: false, candidate: null,
