@@ -22,11 +22,18 @@ class PortfolioAiMediaLeaseHeartbeatTest {
     /** 租约短 SQL 替身。 */ private final AiGenerationTaskRepository repository = mock(AiGenerationTaskRepository.class);
     /** 手动驱动回调，不等待真实十秒。 */ private final ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
     /** 可验证终止续约的句柄。 */ private final ScheduledFuture<?> future = mock(ScheduledFuture.class);
-    /** 恢复窗口及总期限。 */ private final PortfolioAiProperties properties = new PortfolioAiProperties();
+    /** 旧租约边界显式沿用原预算，不与生产默认值耦合。 */ private final PortfolioAiProperties properties = legacyTimeoutProperties();
     /** 被测独立租约调度器。 */ private final PortfolioAiMediaLeaseHeartbeat heartbeat = new PortfolioAiMediaLeaseHeartbeat(repository, properties, scheduler);
     /** 固定当前领取代次。 */ private final AiGenerationTaskEntity task = task();
 
     /** 测试后明确结束心跳线程资源。 */ @AfterEach void close() { heartbeat.close(); }
+
+    /** 固定旧恢复窗口，保留原心跳丢失和短窗口场景的边界含义。 */
+    private PortfolioAiProperties legacyTimeoutProperties() {
+        PortfolioAiProperties properties = new PortfolioAiProperties();
+        properties.setTotalTimeoutSeconds(180); properties.setCallTimeoutSeconds(60); properties.setRecoverySeconds(90);
+        return properties;
+    }
 
     /** 仅使用当前领取的 ID、版本和尝试次数。 */
     private AiGenerationTaskEntity task() {

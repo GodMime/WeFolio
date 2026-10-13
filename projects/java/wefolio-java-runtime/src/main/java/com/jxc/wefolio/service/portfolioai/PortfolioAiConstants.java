@@ -54,6 +54,8 @@ public final class PortfolioAiConstants {
     public static final String SOURCE_KIND_WORK = "WORK";
     /** 成员已发布个人作品集整体来源类型。 */
     public static final String SOURCE_KIND_MEMBER_PORTFOLIO = "MEMBER_PORTFOLIO";
+    /** 已授权个人作品提供的分享封面图片资源类型。 */
+    public static final String RESOURCE_KIND_IMAGE = "IMAGE";
     /** 固定版本字体资源类型。 */
     public static final String RESOURCE_KIND_FONT = "FONT";
     /** 隐藏联系电话资源类型。 */
@@ -248,6 +250,8 @@ public final class PortfolioAiConstants {
     public static final String KEY_MAX_SOURCE_COUNT = "maxSourceCount";
     /** 冻结的模型输出 token 上限字段名。 */
     public static final String KEY_MAX_TOKENS = "maxTokens";
+    /** 冻结的模型思考深度字段名。 */
+    public static final String KEY_REASONING_EFFORT = "reasoningEffort";
     /** 授权作品的媒体类型字段名。 */
     public static final String KEY_MEDIA_TYPE = "mediaType";
     /** 服务端生成并提供模型读取的授权作品媒体地址字段名。 */
@@ -410,12 +414,18 @@ public final class PortfolioAiConstants {
     public static final String INITIAL_PROFILE_COMPONENT_KEY = "c_profile";
     /** 可信字体目录句柄前缀。 */
     public static final String FONT_REF_PREFIX = "font_";
+    /** 已授权个人作品分享封面句柄前缀，后缀采用素材号。 */
+    public static final String SOURCE_COVER_REF_PREFIX = "source_cover_";
     /** 已有隐藏资源原位句柄前缀。 */
     public static final String EXISTING_REF_PREFIX = "existing_";
     /** 用户明确提供资源的隐藏句柄前缀。 */
     public static final String INPUT_REF_PREFIX = "input_";
     /** 已验证公开资料基础句柄。 */
     public static final String PROFILE_BASE_REF = "profile_base";
+    /** 当前本人公开头像的分享头像隐藏句柄。 */
+    public static final String PROFILE_SHARE_AVATAR_REF = "profile_share_avatar";
+    /** 本人公开分享头像句柄的模型展示名称。 */
+    public static final String PROFILE_SHARE_AVATAR_LABEL = "本人头像（分享头像）";
     /** 当前公开资料联系手机的隐藏事实句柄。 */
     public static final String PROFILE_CONTACT_PHONE_REF = "profile_contact_phone";
     /** 当前公开资料联系微信的隐藏事实句柄。 */

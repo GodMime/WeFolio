@@ -109,6 +109,80 @@ class PortfolioAiMediaExecutionServiceTest {
         verify(repository, never()).cache(anyLong(), any(), anyString(), any());
     }
 
+    /** 冻结配置未显式给出输出上限时，准入和发送前均按新默认 32768 token 全价预留。 */
+    @Test void missingFrozenMaxTokensReservesThirtyTwoKOutputBudget() {
+        AiGenerationTaskEntity task = task(); ObjectNode request = request();
+        request.withObject("modelConfig").remove("maxTokens");
+        when(repository.cached(eq(9L), any(), any())).thenReturn(SUMMARY);
+        when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
+        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(
+                new PortfolioAiModelClient.Completion("final", 1000L, 100L));
+
+        assertThat(service.generate(task, request, checkOwned)).isEqualTo("final");
+
+        // 输入 1000 token、输出 32768 token 按广州全价共 9.25504 分，向上预留 10 分。
+        verify(repository).checkCapacity(eq(task), eq(10), eq(1), any());
+        verify(repository).reserve(eq(task), eq(10), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any());
+    }
+
+    /** 新冻结 32768 输出上限扩大最终布局预留，媒体摘要仍保持原 4096 token 上限对应金额。 */
+    @Test void frozenThirtyTwoKMaxTokensReservesMoreForGenerationWithoutChangingSummaryBudget() {
+        AiGenerationTaskEntity task = task(); ObjectNode request = request();
+        request.withObject("modelConfig").put("maxTokens", 32768);
+        when(access.signedAfterVerification(eq(task), any())).thenReturn(List.of(
+                new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame", 1000L)));
+        when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1, 2);
+        when(client.summarize(eq(task), any(), anyList(), any())).thenReturn(
+                new PortfolioAiModelClient.Completion(SUMMARY, 16000L, 100L));
+        when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
+        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(
+                new PortfolioAiModelClient.Completion("final", 1000L, 100L));
+
+        assertThat(service.generate(task, request, checkOwned)).isEqualTo("final");
+
+        // 原八帧摘要预留 3 分，新最终布局预留 10 分，首次付费前须准入全部 13 分。
+        var order = inOrder(repository, client);
+        order.verify(repository).checkCapacity(eq(task), eq(13), eq(2), any());
+        order.verify(repository).reserve(eq(task), eq(3), any());
+        order.verify(client).summarize(eq(task), any(), anyList(), any());
+        order.verify(repository).reserve(eq(task), eq(10), any());
+        order.verify(client).generateWithUsage(eq(task), any(), any());
+    }
+
+    /** 已接单的旧冻结 16384 输出上限继续按原价预留，不因新默认值扩大该任务预算。 */
+    @Test void legacyFrozenSixteenKMaxTokensKeepsOriginalOutputReservation() {
+        AiGenerationTaskEntity task = task(); ObjectNode request = request();
+        request.withObject("modelConfig").put("maxTokens", 16384);
+        when(repository.cached(eq(9L), any(), any())).thenReturn(SUMMARY);
+        when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
+        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(
+                new PortfolioAiModelClient.Completion("final", 1000L, 100L));
+
+        assertThat(service.generate(task, request, checkOwned)).isEqualTo("final");
+
+        // 输入 1000 token、旧冻结输出 16384 token 按全价共 4.66752 分，仍预留 5 分。
+        verify(repository).checkCapacity(eq(task), eq(5), eq(1), any());
+        verify(repository).reserve(eq(task), eq(5), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any());
+    }
+
+    /** 已接单的旧冻结 8192 输出上限继续按原价预留，不能因新默认值扩大该任务预算。 */
+    @Test void legacyFrozenEightKMaxTokensKeepsOriginalOutputReservation() {
+        AiGenerationTaskEntity task = task();
+        when(repository.cached(eq(9L), any(), any())).thenReturn(SUMMARY);
+        when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
+        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(
+                new PortfolioAiModelClient.Completion("final", 1000L, 100L));
+
+        assertThat(service.generate(task, request(), checkOwned)).isEqualTo("final");
+
+        // 输入 1000 token、旧冻结输出 8192 token 按全价共 2.37376 分，仍预留 3 分。
+        verify(repository).checkCapacity(eq(task), eq(3), eq(1), any());
+        verify(repository).reserve(eq(task), eq(3), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any());
+    }
+
     /** 返回前瞬时 HEAD 失败不丢失已付费摘要，下一代执行复用缓存而不重复理解。 */
     @Test void retryAfterTransientFinalVerificationReusesPaidSummary() {
         properties.setMediaEnabled(true); AiGenerationTaskEntity task = task();

@@ -62,14 +62,32 @@ final class PortfolioAiCandidateSummary {
     /** 来源使用包含所有菜单及背景引用，WORK和成员作品集身份命名空间保持独立。 */
     static Map<String, Object> sources(ObjectNode candidate, ObjectNode request) {
         Set<String> usedReferences = new LinkedHashSet<>(); references(candidate, usedReferences);
+        Set<Integer> shareSources = shareImageSources(candidate, request);
         List<Integer> used = new ArrayList<>(); List<Map<String, Object>> unused = new ArrayList<>();
         for (JsonNode source : request.path(KEY_FACTS).path(KEY_SOURCES)) {
             int number = source.path(KEY_SOURCE_NO).intValue();
             String identity = source.path(KEY_KIND).asText() + REFERENCE_SEPARATOR + source.path(KEY_SOURCE_ID).asText();
-            if (usedReferences.contains(identity)) { used.add(number); }
+            if (usedReferences.contains(identity)
+                    || SOURCE_KIND_WORK.equals(source.path(KEY_KIND).asText()) && shareSources.contains(number)) { used.add(number); }
             else { unused.add(Map.of(KEY_SOURCE_NO, number, KEY_REASON, source.path(KEY_CAN_BIND).asBoolean(true) ? UNUSED_REASON : INVALID_REASON)); }
         }
         return Map.of(KEY_USED_SOURCE_NOS, used, KEY_UNUSED_SOURCES, unused);
+    }
+
+    /** 分享图片没有作品 ID，只能按对应槽位的可信图片句柄原值精确回溯素材号。 */
+    private static Set<Integer> shareImageSources(ObjectNode candidate, ObjectNode request) {
+        Set<Integer> sources = new LinkedHashSet<>();
+        for (JsonNode binding : request.path(KEY_FACTS).path(KEY_BINDINGS)) {
+            if (!RESOURCE_KIND_IMAGE.equals(binding.path(KEY_KIND).asText()) || !binding.path(KEY_SOURCE_NO).isIntegralNumber()) { continue; }
+            for (JsonNode slot : binding.path(KEY_ALLOWED_SLOTS)) {
+                if (!List.of(KEY_COVER_URL, KEY_AVATAR_URL).contains(slot.asText())) { continue; }
+                JsonNode image = candidate.path(KEY_SHARE).path(slot.asText());
+                if (image.isTextual() && !image.asText().isBlank() && image.equals(binding.path(KEY_VALUE))) {
+                    sources.add(binding.path(KEY_SOURCE_NO).intValue());
+                }
+            }
+        }
+        return sources;
     }
 
     /** 只检查普通配置真实引用键，不把文字、分享路径或其它ID误算成素材。 */

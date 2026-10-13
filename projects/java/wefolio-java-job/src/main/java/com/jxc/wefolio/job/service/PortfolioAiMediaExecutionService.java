@@ -31,7 +31,7 @@ public class PortfolioAiMediaExecutionService {
     /** 固定业务时区，与原任务总期限一致。 */
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
     /** 每次模型最大输出上限。 */
-    private static final int OUTPUT_TOKENS = 8192;
+    private static final int OUTPUT_TOKENS = PortfolioAiProperties.MAX_OUTPUT_TOKENS;
     /** 原作品事实的媒体类型字段，不扩大v1输出合同。 */
     private static final String MEDIA_TYPE_FIELD = "mediaType";
     /** 摘要协议中的文本与条目上限，准入上界与实际校验保持一致。 */

@@ -53,6 +53,7 @@
                 <view class="attachment-remove" data-index="{{item.slotIndex}}" catchtap="handleRemoveAttachment" aria-role="button" aria-label="删除附件">×</view>
               </view>
               <view wx:else class="attachment-add" bindtap="handleChooseMedia" aria-role="button" aria-label="添加附件">
+                <image class="attachment-border" src="/assets/system/feedback-attachment-border.svg" mode="scaleToFill" aria-hidden="true"></image>
                 <view class="attachment-plus">+</view>
                 <view class="attachment-add-text">添加</view>
               </view>

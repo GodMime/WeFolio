@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONWriter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 import com.jxc.wefolio.config.PortfolioAiProperties;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
@@ -37,6 +38,8 @@ import static com.jxc.wefolio.service.portfolioai.PortfolioAiConstants.*;
 public class PortfolioAiConfigService {
     /** 节点构建工厂。 */
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
+    /** 三类文字组件的行高字段路径后缀，普通规范化固定使用一位小数。 */
+    private static final String LINE_HEIGHT_PATH_SUFFIX = "." + PortfolioTextLineHeightSupport.LINE_HEIGHT;
     /** AI 独立运行预算。 */
     private final PortfolioAiProperties properties;
     /** 个人完整业务校验器。 */
@@ -138,7 +141,7 @@ public class PortfolioAiConfigService {
         return count;
     }
 
-    /** 逐个显式字段核对；只允许普通 ID 表示等价和已声明的派生排序。 */
+    /** 逐个显式字段核对；仅允许已声明的 ID、颜色、标题与行高表示等价。 */
     static void requireExplicitValuesPreserved(JsonNode before, JsonNode after, String path) {
         if (path.equals(FONTS_PATH) && before.isObject() && before.isEmpty() && after.isNull()) {
             return; // 普通规范化把无依赖字体表保存为空值，不改变任何字体选择。
@@ -158,6 +161,9 @@ public class PortfolioAiConfigService {
             for (int i = 0; i < before.size(); i++) { requireExplicitValuesPreserved(before.get(i), after.get(i), path + "[]"); }
         } else if (before.isIntegralNumber() && after.isIntegralNumber() && before.longValue() == after.longValue()) {
             // 整数容器宽度变化没有改变实际值。
+        } else if (path.endsWith(LINE_HEIGHT_PATH_SUFFIX) && before.isNumber() && after.isNumber()
+                && before.decimalValue().compareTo(after.decimalValue()) == 0) {
+            // 合法整数行高如 2 会规范化为 2.0，只有精确数值相等才视为同一作者选择。
         } else if (before.isTextual() && path.endsWith(ID_FIELD_SUFFIX) && after.isIntegralNumber()
                 && before.textValue().equals(after.asText())) {
             // 普通 HTTP ID 支持字符串，数据库配置保持既有整数表示。

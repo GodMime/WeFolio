@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.dict.JoinStatusDict;
+import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
@@ -151,6 +152,10 @@ public class PortfolioAiFactsService {
         }
         boolean isTeam = PortfolioOwnerTypeDict.TEAM.getCode().equals(input.path(KEY_OWNER_TYPE).asText());
         addBinding(bindings, PROFILE_BASE_REF, isTeam ? COMPONENT_TEAM_PROFILE : COMPONENT_PROFILE, isTeam ? KEY_TEAM : KEY_PROFILE, profile, false, null);
+        if (!isTeam) {
+            freezeSourceCovers(sources, bindings);
+            freezeProfileShareAvatar(profile, bindings);
+        }
         if (!isTeam) { freezeHyperlinkTargets(input, owner, bindings); }
         Map<String, Object> catalog = fontSources.catalog();
         if (input.path(KEY_CLIENT_CAPABILITIES).path(KEY_PORTFOLIO_REMOTE_FONT).asInt() == 1 && Boolean.TRUE.equals(catalog.get(KEY_AVAILABLE))) {
@@ -178,6 +183,33 @@ public class PortfolioAiFactsService {
             facts.set(KEY_SAFE_CLARIFICATION_ANSWER, safeAnswer);
         }
         return facts;
+    }
+
+    /** 个人作品的原图或静态封面可绑定分享图片；团队仍沿自有作品集上传素材约束。 */
+    private static void freezeSourceCovers(ArrayNode sources, ArrayNode bindings) {
+        for (JsonNode source : sources) {
+            if (!SOURCE_KIND_WORK.equals(source.path(KEY_KIND).asText()) || !source.path(KEY_CAN_BIND).asBoolean(false)) { continue; }
+            String mediaType = source.path(KEY_MEDIA_TYPE).asText();
+            JsonNode image;
+            if (MediaTypeDict.IMAGE.getCode().equals(mediaType)) {
+                image = source.hasNonNull(KEY_MEDIA_URL) ? source.path(KEY_MEDIA_URL) : source.path(KEY_COVER_URL);
+            } else if (MediaTypeDict.VIDEO.getCode().equals(mediaType) || MediaTypeDict.ANIMATION.getCode().equals(mediaType)) {
+                image = source.path(KEY_COVER_URL);
+            } else { continue; }
+            if (!image.isTextual() || image.asText().isBlank()) { continue; }
+            int sourceNo = source.path(KEY_SOURCE_NO).intValue();
+            addBinding(bindings, SOURCE_COVER_REF_PREFIX + sourceNo, RESOURCE_KIND_IMAGE, KEY_COVER_URL, image, false, null)
+                    .put(KEY_SOURCE_NO, sourceNo).withArray(KEY_ALLOWED_SLOTS).add(KEY_AVATAR_URL);
+        }
+    }
+
+    /** 本人公开头像只供分享头像使用，原值不发给模型，也不占用作品素材号。 */
+    private static void freezeProfileShareAvatar(ObjectNode profile, ArrayNode bindings) {
+        String avatarUrl = profile.path(KEY_AVATAR_URL).asText();
+        if (isPublicMediaUrl(avatarUrl)) {
+            addBinding(bindings, PROFILE_SHARE_AVATAR_REF, RESOURCE_KIND_IMAGE, KEY_AVATAR_URL,
+                    NODES.textNode(avatarUrl), false, null).put(KEY_LABEL, PROFILE_SHARE_AVATAR_LABEL);
+        }
     }
 
     /** 当前本人公开联系资料恢复为可新绑定句柄；原值仅留在冻结事实，模型投影剥离 value。 */
@@ -242,22 +274,29 @@ public class PortfolioAiFactsService {
         return result;
     }
 
-    /** 仅复核输出确实绑定的素材号，未使用的失效来源不阻止合法候选。 */
+    /** 仅复核输出确实绑定的素材号或来源图片句柄，未使用的失效来源不阻止合法候选。 */
     public void revalidate(ObjectNode request, ObjectNode output) {
         ObjectNode input = (ObjectNode) request.path(KEY_INPUT);
-        Set<Integer> used = new LinkedHashSet<>(); collectSourceNumbers(output, used);
+        Set<Integer> used = new LinkedHashSet<>();
+        Set<String> usedRefs = new LinkedHashSet<>(); collectSourceNumbers(output, used, usedRefs);
+        for (JsonNode binding : request.path(KEY_FACTS).path(KEY_BINDINGS)) {
+            if (usedRefs.contains(binding.path(KEY_REF).asText()) && binding.path(KEY_SOURCE_NO).isIntegralNumber()) {
+                used.add(binding.path(KEY_SOURCE_NO).intValue());
+            }
+        }
         for (JsonNode source : input.path(KEY_AI_CONTEXT).path(KEY_SOURCES)) {
             if (used.contains(source.path(KEY_SOURCE_NO).intValue())) { resolve(input, source); }
         }
     }
 
-    /** 中间协议封闭字段中只读取实际来源绑定，不扫描用户说明中的数字。 */
-    private static void collectSourceNumbers(JsonNode node, Set<Integer> used) {
+    /** 中间协议封闭字段中只读取实际来源号和资源句柄，不扫描用户说明中的数字或文字。 */
+    private static void collectSourceNumbers(JsonNode node, Set<Integer> used, Set<String> usedRefs) {
         if (node.isObject()) {
             if (node.path(KEY_SOURCE_NO).isIntegralNumber()) { used.add(node.path(KEY_SOURCE_NO).intValue()); }
             for (JsonNode n : node.path(KEY_SOURCE_NOS)) { used.add(n.intValue()); }
+            if (node.path(KEY_REF).isTextual()) { usedRefs.add(node.path(KEY_REF).textValue()); }
         }
-        for (JsonNode child : node) { collectSourceNumbers(child, used); }
+        for (JsonNode child : node) { collectSourceNumbers(child, used, usedRefs); }
     }
 
     /** 解析来源 ID，真实成员身份由数据库反查。 */
@@ -314,14 +353,17 @@ public class PortfolioAiFactsService {
     private void freezeMediaUrl(ObjectNode fact, String field, String objectKey) {
         if (objectKey == null || objectKey.isBlank()) { return; }
         String url = cos.publicUrl(objectKey);
-        if (url == null || url.isBlank()) { return; }
+        if (isPublicMediaUrl(url)) { fact.put(field, url); }
+    }
+
+    /** 只允许无凭据、查询签名或片段的 HTTPS 公开地址参与媒体绑定。 */
+    private static boolean isPublicMediaUrl(String url) {
+        if (url == null || url.isBlank()) { return false; }
         try {
             URI uri = new URI(url);
-            if (PUBLIC_MEDIA_SCHEME.equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null && uri.getUserInfo() == null
-                    && uri.getQuery() == null && uri.getFragment() == null) {
-                fact.put(field, url);
-            }
-        } catch (URISyntaxException ignored) { /* 无效公开地址不作为媒体内容提供给模型。 */ }
+            return PUBLIC_MEDIA_SCHEME.equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null && uri.getUserInfo() == null
+                    && uri.getQuery() == null && uri.getFragment() == null;
+        } catch (URISyntaxException ignored) { return false; }
     }
 
     /** 只提供当前本人普通已发布且可选择的内部目标，真实ID以隐藏句柄冻结。 */

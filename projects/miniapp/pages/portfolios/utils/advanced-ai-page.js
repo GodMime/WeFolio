@@ -6,6 +6,15 @@ const PAGE_SIZE = 20
 /** 媒体枚举只用于显示，提交仍保留原始类型。 */
 const MEDIA_TYPE_LABELS = Object.freeze({ IMAGE: '图片', VIDEO: '视频', ANIMATION: '动图', AUDIO: '音频' })
 
+/** 仅展示接口明确返回的累计用量，缺失值与不安全整数不得伪装为零。 */
+function normalizeTokenUsage(usage) {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage) || typeof usage.complete !== 'boolean') return ''
+  if (usage.complete === false && usage.totalTokens === null) return 'Token 用量未返回'
+  if (!Number.isSafeInteger(usage.totalTokens) || usage.totalTokens < 0) return ''
+  const amount = String(usage.totalTokens).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return usage.complete ? `本次消耗 ${amount} tokens` : `已记录 ${amount} tokens · 部分用量未返回`
+}
+
 function normalizeSource(source = {}, team = false) {
   return { sourceId: text(source.sourceId || source.id || source.workId || source.portfolioId),
     key: `${source.kind || 'WORK'}:${text(source.sourceId || source.id || source.workId || source.portfolioId)}`,
@@ -26,7 +35,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       errorMessage: '', sourceLoading: false, sourceError: '', sourceOptions: [], selectedSources: [], keyword: '', tagId: '', tags: [],
       sourceKind: team ? 'WORK' : '', members: [], memberIndex: 0, page: 1, total: 0, hasMore: false, capabilities: null,
       submitting: false, submissionUncertain: false, waiting: false, adopting: false, task: null, statusText: '', result: null, summaryText: '', candidateTitle: '',
-      canAdopt: false, questions: [], clarificationAnswer: null, taskError: '', cancelFailed: false, activeTaskId: '' },
+      canAdopt: false, questions: [], clarificationAnswer: null, taskError: '', tokenUsageText: '', cancelFailed: false, activeTaskId: '' },
 
     onLoad(options = {}) {
       this.sourceNumbers = {}
@@ -38,10 +47,11 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
         this.setData({ mode: options.mode === 'MANAGE_SOURCES' ? 'MODIFY_PAGE' : options.mode, managingSources: options.mode === 'MANAGE_SOURCES',
           step: options.mode === 'MANAGE_SOURCES' || options.mode === 'CREATE' ? 'sources' : 'prompt' })
         if (this.channel && this.channel.on) this.channel.on('initialize', state => {
+          this.invalidateTaskQuery()
           this.sourceNumbers = {}
           this.setData({ ...state, aiContext: normalizeContext(state.aiContext), promptCount: Array.from(state.prompt || '').length,
             step: options.mode === 'MANAGE_SOURCES' || options.mode === 'CREATE' ? 'sources' : 'prompt',
-            mode: options.mode === 'MANAGE_SOURCES' ? 'MODIFY_PAGE' : options.mode, managingSources: options.mode === 'MANAGE_SOURCES' })
+            mode: options.mode === 'MANAGE_SOURCES' ? 'MODIFY_PAGE' : options.mode, managingSources: options.mode === 'MANAGE_SOURCES', tokenUsageText: '' })
           this.bootstrap()
         })
       } else {
@@ -173,17 +183,19 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       const selected = this.data.aiContext.sources.find(item => item.kind === source.kind && item.sourceId === source.sourceId)
       const max = this.data.capabilities && this.data.capabilities.limits && this.data.capabilities.limits.maxSourceCount
       if (!selected && max && this.data.aiContext.sources.length >= max) { wx.showToast({ title: `最多选择 ${max} 个来源`, icon: 'none' }); return }
+      this.invalidateTaskQuery()
       this.rememberSourceNumbers()
       this.setData({ aiContext: selected ? removeSource(this.data.aiContext, selected.sourceNo)
         : addSource(this.data.aiContext, source, this.sourceNumbers[`${source.kind}:${source.sourceId}`]),
-        localEditRevision: this.data.localEditRevision + 1, result: null, canAdopt: false })
+        localEditRevision: this.data.localEditRevision + 1, result: null, canAdopt: false, tokenUsageText: '' })
       this.refreshSelection()
       this.emitContext()
     },
     handleRemoveSelected(event) {
       if (this.data.waiting || this.data.adopting || this.data.submissionUncertain) return
+      this.invalidateTaskQuery()
       this.rememberSourceNumbers()
-      this.setData({ aiContext: removeSource(this.data.aiContext, event.currentTarget.dataset.no), localEditRevision: this.data.localEditRevision + 1, result: null, canAdopt: false })
+      this.setData({ aiContext: removeSource(this.data.aiContext, event.currentTarget.dataset.no), localEditRevision: this.data.localEditRevision + 1, result: null, canAdopt: false, tokenUsageText: '' })
       this.refreshSelection()
       this.emitContext()
       wx.showToast({ title: '移除后仍保留页面已有展示', icon: 'none' })
@@ -196,14 +208,16 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
     handleBackToSources() { this.setData({ step: 'sources' }) },
     handlePromptInput(event) {
       if (this.data.waiting || this.data.adopting || this.data.submissionUncertain) return
-      this.setData({ prompt: event.detail.value, promptCount: Array.from(event.detail.value).length })
+      this.invalidateTaskQuery()
+      this.setData({ prompt: event.detail.value, promptCount: Array.from(event.detail.value).length, tokenUsageText: '' })
       this.emitContext()
     },
     handleInsertNumber(event) {
       if (this.data.waiting || this.data.adopting || this.data.submissionUncertain) return
       const value = `${this.data.prompt}${event.currentTarget.dataset.no}号`
       if (Array.from(value).length > PROMPT_MAX_LENGTH) return
-      this.setData({ prompt: value, promptCount: Array.from(value).length })
+      this.invalidateTaskQuery()
+      this.setData({ prompt: value, promptCount: Array.from(value).length, tokenUsageText: '' })
       this.emitContext()
     },
     handleSelectedSourceTap(event) { if (this.data.step === 'prompt') this.handleInsertNumber(event) },
@@ -215,7 +229,8 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       const prompt = this.data.mode === 'CREATE'
         ? `${references ? `先展示${references}，` : ''}再放一段简短介绍，最后放档期查询。整体简洁，留白舒适。`
         : `${references ? `把${sources[0].sourceNo}号放在最上面，` : ''}介绍缩短成一句话，其他保持不变。`
-      this.setData({ prompt, promptCount: Array.from(prompt).length })
+      this.invalidateTaskQuery()
+      this.setData({ prompt, promptCount: Array.from(prompt).length, tokenUsageText: '' })
       this.emitContext()
     },
     handleQuestionInput(event) { this.setData({ clarificationAnswer: { questionId: event.currentTarget.dataset.id, answerText: event.detail.value } }) },
@@ -237,7 +252,9 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
         this.pendingSubmission = buildTaskPayload(current, { ...this.data,
           clarificationAnswer: this.data.clarificationAnswer || null }, makeKey())
       }
-      this.setData({ submitting: true, taskError: '', result: null, canAdopt: false, cancelFailed: false })
+      // 新提交使旧任务的在途查询失效，避免延迟结果与用量覆盖新的生成会话。
+      this.invalidateTaskQuery()
+      this.setData({ submitting: true, taskError: '', result: null, canAdopt: false, tokenUsageText: '', cancelFailed: false })
       try {
         const task = await request({ url: `${AI_API_PREFIX}/tasks`, method: 'POST', data: clone(this.pendingSubmission) })
         if (this.disposed) { request({ url: `${AI_API_PREFIX}/tasks/${task.taskId}/cancel`, method: 'POST' }).catch(() => {}); return }
@@ -255,13 +272,19 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
         this.setData({ submissionUncertain: uncertain, taskError: uncertain ? '提交结果未知，重试提交将找回同一个任务' : error.message || '提交失败，请调整后重试' })
       } finally { if (!this.disposed) this.setData({ submitting: false }) }
     },
+    /** 清除计划轮询并使在途查询失效，手动重试与编辑不能恢复旧任务结果。 */
+    invalidateTaskQuery() {
+      clearTimeout(this.pollTimer); this.pollTimer = null
+      this.pollSequence = (this.pollSequence || 0) + 1
+    },
     schedulePoll(delay = 2000) {
       clearTimeout(this.pollTimer)
       this.pollTimer = setTimeout(() => { this.pollTimer = null; this.queryTask() }, Math.max(2000, Math.min(5000, Number(delay) || 2000)))
     },
     async queryTask() {
       if (!this.data.task || this.disposed) return
-      const sequence = this.pollSequence = (this.pollSequence || 0) + 1
+      this.invalidateTaskQuery()
+      const sequence = this.pollSequence
       try {
         const task = await request({ url: `${AI_API_PREFIX}/tasks/${this.data.task.taskId}` })
         if (this.disposed || sequence !== this.pollSequence) return
@@ -280,20 +303,22 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
         candidateTitle: result && result.available === false ? '生成失败' : result && result.hasChanges === false ? '当前内容已满足要求' : this.data.mode === 'CREATE' ? '作品集已生成' : '修改已生成',
         summaryText: result && result.available === false ? '' : result && result.hasChanges === false ? '当前内容已满足要求' : summaryText,
         questions: result && result.questions || [], canAdopt: task.status === 'SUCCEEDED' && !!result && result.kind === 'CANDIDATE' && result.available === true && result.hasChanges === true,
-        taskError: taskErrorMessage(task) })
+        taskError: taskErrorMessage(task), tokenUsageText: task.status === 'SUCCEEDED' || task.status === 'FAILED' ? normalizeTokenUsage(task.usage) : '' })
     },
     async handleCancel() {
       const id = this.data.task && this.data.task.taskId || this.data.activeTaskId
       if (!id) return
-      clearTimeout(this.pollTimer); this.pollTimer = null
-      this.pollSequence = (this.pollSequence || 0) + 1
-      this.setData({ waiting: false, canAdopt: false, result: null, cancelFailed: false, statusText: '已取消，现有内容已保留' })
+      this.invalidateTaskQuery()
+      this.setData({ waiting: false, canAdopt: false, result: null, tokenUsageText: '', cancelFailed: false, statusText: '已取消，现有内容已保留' })
       try {
         await request({ url: `${AI_API_PREFIX}/tasks/${id}/cancel`, method: 'POST' })
         this.setData({ task: { taskId: id, status: 'CANCELLED' }, activeTaskId: '' })
       } catch (error) { this.setData({ cancelFailed: true, activeTaskId: id, taskError: '取消未确认，请重试取消；当前内容已保留' }) }
     },
-    handleDiscard() { this.setData({ result: null, canAdopt: false, questions: [], taskError: '', summaryText: '' }) },
+    handleDiscard() {
+      this.invalidateTaskQuery()
+      this.setData({ result: null, canAdopt: false, questions: [], taskError: '', summaryText: '', tokenUsageText: '' })
+    },
     handleCandidatePreview() {
       const renderData = this.data.result && this.data.result.renderData
       if (!renderData) { wx.showToast({ title: '候选完整效果暂不可用，请重新查询', icon: 'none' }); return }
@@ -316,7 +341,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
             success: result => {
               result.eventChannel.emit('advancedInitial', { ...state, config: response.result.candidate,
                 renderData: response.result.renderData, prompt: this.data.prompt, sourceItems: this.data.selectedSources, localEditRevision: state.localEditRevision + 1 })
-              this.setData({ result: null, canAdopt: false })
+              this.setData({ result: null, canAdopt: false, tokenUsageText: '' })
             } })
         } else {
           this.emitContext()

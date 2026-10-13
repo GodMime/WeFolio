@@ -10,45 +10,54 @@
           "enum": [
             "VERTICAL",
             "HORIZONTAL"
-          ]
+          ],
+          "description": "个人资料排列方式：VERTICAL 纵向排列，HORIZONTAL 横向排列。"
         },
         "profileBorder": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示个人资料区域的边框。"
         },
         "profileBorderWidthRpx": {
           "type": "integer",
           "min": 1,
-          "max": 12
+          "max": 12,
+          "description": "个人资料边框宽度，单位 rpx；仅显示边框时生效。"
         },
         "profileBorderColor": {
           "type": "string",
           "maxCodePoints": 7,
-          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})",
+          "description": "个人资料边框颜色：AUTO 跟随页面配色，或使用 #RRGGBB 六位十六进制颜色。"
         },
         "profileHorizontalMarginRpx": {
           "type": "integer",
           "min": 0,
-          "max": 96
+          "max": 96,
+          "description": "个人资料区域左右外边距，单位 rpx。"
         },
         "profileVerticalMarginRpx": {
           "type": "integer",
           "min": 0,
-          "max": 96
+          "max": 96,
+          "description": "个人资料区域上下外边距，单位 rpx。"
         }
       },
       "requiredParams": [],
       "primarySource": null,
       "bindingSlots": {
         "profile": {
-          "kind": "PROFILE"
+          "kind": "PROFILE",
+          "description": "绑定当前个人资料的可信 PROFILE ref；不用作品 sourceNo。"
         }
       },
       "textFields": {
         "bio": {
           "type": "string",
-          "maxCodePoints": 1000
+          "maxCodePoints": 1000,
+          "description": "当前作品集展示的个人简介，不回写账号基础资料。"
         }
-      }
+      },
+      "description": "展示当前个人的公开基础资料；用户要求展示个人资料或姓名头像名片时才新增，不是作品集默认首项。文艺主持描述应使用文字组件，访客留资应使用 CONTACT_FORM，不附带本组件。修改简介只影响本作品集展示，不修改账号资料。没有主素材，sourceNos=[]。"
     },
     "TEAM_PROFILE": {
       "params": {},
@@ -56,15 +65,18 @@
       "primarySource": null,
       "bindingSlots": {
         "team": {
-          "kind": "TEAM_PROFILE"
+          "kind": "TEAM_PROFILE",
+          "description": "绑定当前团队资料的可信 TEAM_PROFILE ref；不用作品 sourceNo。"
         }
       },
       "textFields": {
         "intro": {
           "type": "string",
-          "maxCodePoints": 1000
+          "maxCodePoints": 1000,
+          "description": "当前作品集展示的团队介绍，不回写团队基础资料。"
         }
-      }
+      },
+      "description": "展示当前团队的公开基础资料；用户要求展示团队资料时才新增，不是作品集默认首项。存在团队资料或可信 ref 不表示必须展示，不因完整布局的风格要求额外插入。修改介绍只影响本作品集展示，不修改团队资料。没有主素材，sourceNos=[]。"
     },
     "TEXT_SECTION": {
       "params": {
@@ -74,26 +86,31 @@
           "enum": [
             "SYSTEM",
             "WECHAT_SANS_SS"
-          ]
+          ],
+          "description": "内置字体：SYSTEM 系统默认字体；WECHAT_SANS_SS 微信无衬线字体，主要适合英文与数字，中文回退系统字体。文艺远程字体不能写名称到此字段，应绑定可信 FONT ref 到 fontId。"
         },
         "fontSizeRpx": {
           "type": "integer",
           "min": 10,
-          "max": 96
+          "max": 96,
+          "description": "文字字号，单位 rpx，不是素材序号。"
         },
         "color": {
           "type": "string",
           "maxCodePoints": 7,
-          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})",
+          "description": "文字颜色：AUTO 跟随页面配色，或使用 #RRGGBB 六位十六进制颜色。"
         },
         "lineHeight": {
           "type": "number",
           "min": 0.5,
           "max": 3,
-          "multipleOf": 0.1
+          "multipleOf": 0.1,
+          "description": "文字行高相对于字号的倍数，无单位；不是像素或 rpx，按 0.1 步进。"
         },
         "backgroundEnabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否为当前文字区域显示作品背景。开启时通过 backgroundWorkId 槽位绑定已选兼容作品；不控制全页背景色。"
         },
         "backgroundTreatment": {
           "type": "string",
@@ -102,11 +119,13 @@
             "ORIGINAL",
             "DARK_MASK",
             "GRADIENT"
-          ]
+          ],
+          "description": "文字区域背景处理：ORIGINAL 原图/原画面，DARK_MASK 深色遮罩，GRADIENT 渐变遮罩；用于提升文字可读性，不改变源作品。"
         },
         "content": {
           "type": "string",
-          "maxCodePoints": 200
+          "maxCodePoints": 200,
+          "description": "当前文字内容；可生成非事实性的主持风格文案，不虚构经历、奖项或联系方式。"
         },
         "alignment": {
           "type": "string",
@@ -115,7 +134,8 @@
             "LEFT",
             "CENTER",
             "RIGHT"
-          ]
+          ],
+          "description": "文字水平对齐：LEFT 左对齐，CENTER 居中，RIGHT 右对齐。"
         },
         "verticalAlignment": {
           "type": "string",
@@ -124,7 +144,8 @@
             "TOP",
             "CENTER",
             "BOTTOM"
-          ]
+          ],
+          "description": "文字在所属区域中的垂直对齐：TOP 顶部，CENTER 居中，BOTTOM 底部。"
         }
       },
       "requiredParams": [
@@ -133,7 +154,8 @@
       "primarySource": null,
       "bindingSlots": {
         "fontId": {
-          "kind": "FONT"
+          "kind": "FONT",
+          "description": "绑定可信 FONT ref 来选择远程字体，实际字体 ID 与固定版本由 Runtime 写入；文艺中文字体须匹配可用字体名称和语言，不把字体名称写进 fontFamily。"
         },
         "backgroundWorkId": {
           "kind": "WORK",
@@ -141,14 +163,17 @@
             "IMAGE",
             "VIDEO",
             "ANIMATION"
-          ]
+          ],
+          "description": "绑定已选图片、视频或动画作品的 sourceNo，作为当前文字区域的局部背景；同时设置 backgroundEnabled=true。不能写入 sourceNos 或用作全页背景。"
         }
-      }
+      },
+      "description": "展示一段文字，可用已选图片、视频或动画作品作这段文字的局部背景，并独立设置字体和排版；不设置全页背景。没有主素材，sourceNos=[]。"
     },
     "STRUCTURED_TEXT_SECTION": {
       "params": {
         "backgroundEnabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否为当前文字区域显示作品背景。开启时通过 backgroundWorkId 槽位绑定已选兼容作品；不控制全页背景色。"
         },
         "backgroundTreatment": {
           "type": "string",
@@ -157,7 +182,8 @@
             "ORIGINAL",
             "DARK_MASK",
             "GRADIENT"
-          ]
+          ],
+          "description": "文字区域背景处理：ORIGINAL 原图/原画面，DARK_MASK 深色遮罩，GRADIENT 渐变遮罩；用于提升文字可读性，不改变源作品。"
         },
         "blocks": {
           "type": "array",
@@ -170,23 +196,27 @@
                 "enum": [
                   "SYSTEM",
                   "WECHAT_SANS_SS"
-                ]
+                ],
+                "description": "内置字体：SYSTEM 系统默认字体；WECHAT_SANS_SS 微信无衬线字体，主要适合英文与数字，中文回退系统字体。CREATE 或 INSERT_COMPONENT 新建内部文字节点时只能选内置字体，不允许填写 fontId 或 bindings。远程字体仅可在 MODIFY_PAGE 对现有允许 fontId 的节点用 BIND_RESOURCES 绑定可信 FONT ref；生成内容需要远程字体时选 TEXT_SECTION。"
               },
               "fontSizeRpx": {
                 "type": "integer",
                 "min": 10,
-                "max": 96
+                "max": 96,
+                "description": "文字字号，单位 rpx，不是素材序号。"
               },
               "color": {
                 "type": "string",
                 "maxCodePoints": 7,
-                "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+                "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})",
+                "description": "文字颜色：AUTO 跟随页面配色，或使用 #RRGGBB 六位十六进制颜色。"
               },
               "lineHeight": {
                 "type": "number",
                 "min": 0.5,
                 "max": 3,
-                "multipleOf": 0.1
+                "multipleOf": 0.1,
+                "description": "文字行高相对于字号的倍数，无单位；不是像素或 rpx，按 0.1 步进。"
               },
               "type": {
                 "type": "string",
@@ -197,38 +227,45 @@
                   "LIST",
                   "HINT",
                   "SPACER"
-                ]
+                ],
+                "description": "文字块类型：TITLE 标题，PARAGRAPH 段落，LIST 列表，HINT 提示，SPACER 空白；列表使用 items，其它文字块使用 content，空白块使用 heightRpx。"
               },
               "content": {
                 "type": "string",
-                "maxCodePoints": 2000
+                "maxCodePoints": 2000,
+                "description": "当前文字内容；可生成非事实性的主持风格文案，不虚构经历、奖项或联系方式。"
               },
               "items": {
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "maxCodePoints": 2000
+                  "maxCodePoints": 2000,
+                  "description": "列表型文字块的逐条内容；仅用于 LIST，不作为作品素材列表。"
                 },
                 "maxItems": 10,
-                "minItems": 1
+                "minItems": 1,
+                "description": "列表型文字块的逐条内容；仅用于 LIST，不作为作品素材列表。"
               },
               "heightRpx": {
                 "type": "integer",
                 "min": 0,
                 "max": 512,
-                "multipleOf": 4
+                "multipleOf": 4,
+                "description": "SPACER 空白块高度，单位 rpx；其它文字块不填写此字段。"
               },
               "marginTopRpx": {
                 "type": "integer",
                 "min": 0,
                 "max": 128,
-                "multipleOf": 4
+                "multipleOf": 4,
+                "description": "当前文字块顶部外边距，单位 rpx。"
               },
               "marginBottomRpx": {
                 "type": "integer",
                 "min": 0,
                 "max": 128,
-                "multipleOf": 4
+                "multipleOf": 4,
+                "description": "当前文字块底部外边距，单位 rpx。"
               },
               "fontWeight": {
                 "type": "string",
@@ -236,7 +273,8 @@
                 "enum": [
                   "NORMAL",
                   "BOLD"
-                ]
+                ],
+                "description": "文字字重：NORMAL 常规，BOLD 加粗。"
               },
               "alignment": {
                 "type": "string",
@@ -245,15 +283,18 @@
                   "LEFT",
                   "CENTER",
                   "RIGHT"
-                ]
+                ],
+                "description": "文字水平对齐：LEFT 左对齐，CENTER 居中，RIGHT 右对齐。"
               }
             },
             "required": [
               "type"
-            ]
+            ],
+            "description": "当前文字块的封闭参数结构；只填写 properties 中列出的字段。"
           },
           "maxItems": 20,
-          "minItems": 1
+          "minItems": 1,
+          "description": "按显示顺序排列的文字块，各块类型、内容和排版必须符合内部字段；当前协议未开放通过结构操作重建已有文字块。"
         }
       },
       "requiredParams": [
@@ -267,84 +308,101 @@
             "IMAGE",
             "VIDEO",
             "ANIMATION"
-          ]
+          ],
+          "description": "绑定已选图片、视频或动画作品的 sourceNo，作为当前文字区域的局部背景；同时设置 backgroundEnabled=true。不能写入 sourceNos 或用作全页背景。"
         }
-      }
+      },
+      "description": "按顺序展示标题、段落、列表、提示和空白等文字块，各文字块独立排版；可为整段文字绑定局部背景。没有主素材，sourceNos=[]。"
     },
     "TEXT_GRID": {
       "params": {
         "rows": {
           "type": "integer",
           "min": 1,
-          "max": 8
+          "max": 8,
+          "description": "文字网格行数；单元格必须覆盖所有行列且不能重叠。"
         },
         "columns": {
           "type": "integer",
           "min": 1,
-          "max": 5
+          "max": 5,
+          "description": "文字网格列数；单元格必须覆盖所有行列且不能重叠。"
         },
         "columnWeights": {
           "type": "array",
           "items": {
             "type": "integer",
             "min": 1,
-            "max": 4
+            "max": 4,
+            "description": "各列宽度的相对权重，无单位；数量必须等于 columns，值越大该列越宽。"
           },
           "maxItems": 5,
-          "minItems": 1
+          "minItems": 1,
+          "description": "各列宽度的相对权重，无单位；数量必须等于 columns，值越大该列越宽。"
         },
         "rowMinHeightsRpx": {
           "type": "array",
           "items": {
             "type": "integer",
             "min": 80,
-            "max": 600
+            "max": 600,
+            "description": "各行最小高度，单位 rpx；数量必须等于 rows，文字较多时可自然增高。"
           },
           "maxItems": 8,
-          "minItems": 1
+          "minItems": 1,
+          "description": "各行最小高度，单位 rpx；数量必须等于 rows，文字较多时可自然增高。"
         },
         "gapRpx": {
           "type": "integer",
           "min": 0,
-          "max": 48
+          "max": 48,
+          "description": "文字网格单元格之间的间距，单位 rpx。"
         },
         "horizontalMarginRpx": {
           "type": "integer",
           "min": 0,
-          "max": 96
+          "max": 96,
+          "description": "当前组件左右外边距，单位 rpx。"
         },
         "verticalMarginRpx": {
           "type": "integer",
           "min": 0,
-          "max": 96
+          "max": 96,
+          "description": "当前组件上下外边距，单位 rpx。"
         },
         "cellPaddingRpx": {
           "type": "integer",
           "min": 0,
-          "max": 48
+          "max": 48,
+          "description": "文字网格各单元格的内边距，单位 rpx。"
         },
         "cellRadiusRpx": {
           "type": "integer",
           "min": 0,
-          "max": 48
+          "max": 48,
+          "description": "文字网格各单元格的圆角半径，单位 rpx。"
         },
         "cellBorder": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示文字网格各单元格的边框。"
         },
         "cellBorderWidthRpx": {
           "type": "integer",
           "min": 1,
-          "max": 12
+          "max": 12,
+          "description": "文字网格单元格边框宽度，单位 rpx；仅显示边框时生效。"
         },
         "cellBorderColor": {
           "type": "string",
           "maxCodePoints": 7,
-          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})",
+          "description": "文字网格单元格边框颜色：AUTO 跟随页面配色，或 #RRGGBB 六位十六进制颜色。"
         },
         "cellBackground": {
           "type": "string",
           "maxCodePoints": 7,
-          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})",
+          "description": "文字网格单元格背景颜色：AUTO 跟随页面配色，或 #RRGGBB 六位十六进制颜色；不修改全页背景。"
         },
         "cells": {
           "type": "array",
@@ -354,22 +412,26 @@
               "row": {
                 "type": "integer",
                 "min": 0,
-                "max": 7
+                "max": 7,
+                "description": "单元格起始行坐标，从 0 开始，不是用户可见的行号或素材序号。"
               },
               "column": {
                 "type": "integer",
                 "min": 0,
-                "max": 4
+                "max": 4,
+                "description": "单元格起始列坐标，从 0 开始，不是素材序号。"
               },
               "rowSpan": {
                 "type": "integer",
                 "min": 1,
-                "max": 8
+                "max": 8,
+                "description": "单元格跨越的行数，至少为 1，不能超出网格总行数。"
               },
               "columnSpan": {
                 "type": "integer",
                 "min": 1,
-                "max": 5
+                "max": 5,
+                "description": "单元格跨越的列数，至少为 1，不能超出网格总列数。"
               },
               "verticalAlignment": {
                 "type": "string",
@@ -378,7 +440,8 @@
                   "TOP",
                   "CENTER",
                   "BOTTOM"
-                ]
+                ],
+                "description": "文字在所属区域中的垂直对齐：TOP 顶部，CENTER 居中，BOTTOM 底部。"
               },
               "blocks": {
                 "type": "array",
@@ -392,23 +455,27 @@
                         "LEFT",
                         "CENTER",
                         "RIGHT"
-                      ]
+                      ],
+                      "description": "文字水平对齐：LEFT 左对齐，CENTER 居中，RIGHT 右对齐。"
                     },
                     "marginTopRpx": {
                       "type": "integer",
                       "min": 0,
-                      "max": 128
+                      "max": 128,
+                      "description": "当前文字块顶部外边距，单位 rpx。"
                     },
                     "marginBottomRpx": {
                       "type": "integer",
                       "min": 0,
-                      "max": 128
+                      "max": 128,
+                      "description": "当前文字块底部外边距，单位 rpx。"
                     },
                     "lineHeight": {
                       "type": "number",
                       "min": 0.5,
                       "max": 3,
-                      "multipleOf": 0.1
+                      "multipleOf": 0.1,
+                      "description": "文字行高相对于字号的倍数，无单位；不是像素或 rpx，按 0.1 步进。"
                     },
                     "runs": {
                       "type": "array",
@@ -421,21 +488,25 @@
                             "enum": [
                               "SYSTEM",
                               "WECHAT_SANS_SS"
-                            ]
+                            ],
+                            "description": "内置字体：SYSTEM 系统默认字体；WECHAT_SANS_SS 微信无衬线字体，主要适合英文与数字，中文回退系统字体。CREATE 或 INSERT_COMPONENT 新建内部文字节点时只能选内置字体，不允许填写 fontId 或 bindings。远程字体仅可在 MODIFY_PAGE 对现有允许 fontId 的节点用 BIND_RESOURCES 绑定可信 FONT ref；生成内容需要远程字体时选 TEXT_SECTION。"
                           },
                           "fontSizeRpx": {
                             "type": "integer",
                             "min": 10,
-                            "max": 96
+                            "max": 96,
+                            "description": "文字字号，单位 rpx，不是素材序号。"
                           },
                           "color": {
                             "type": "string",
                             "maxCodePoints": 7,
-                            "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+                            "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})",
+                            "description": "文字颜色：AUTO 跟随页面配色，或使用 #RRGGBB 六位十六进制颜色。"
                           },
                           "text": {
                             "type": "string",
-                            "maxCodePoints": 2000
+                            "maxCodePoints": 2000,
+                            "description": "当前文字片段的实际内容。"
                           },
                           "fontWeight": {
                             "type": "string",
@@ -443,23 +514,28 @@
                             "enum": [
                               "NORMAL",
                               "BOLD"
-                            ]
+                            ],
+                            "description": "文字字重：NORMAL 常规，BOLD 加粗。"
                           }
                         },
                         "required": [
                           "text"
-                        ]
+                        ],
+                        "description": "当前文字片段的封闭参数结构；只填写 properties 中列出的字段。"
                       },
                       "maxItems": 8,
-                      "minItems": 1
+                      "minItems": 1,
+                      "description": "当前文字块中按顺序显示的文字片段，每个片段可设置自身字体、字号、颜色与字重。"
                     }
                   },
                   "required": [
                     "runs"
-                  ]
+                  ],
+                  "description": "当前文字块的封闭参数结构；只填写 properties 中列出的字段。"
                 },
                 "maxItems": 8,
-                "minItems": 1
+                "minItems": 1,
+                "description": "按显示顺序排列的文字块，各块类型、内容和排版必须符合内部字段；当前协议未开放通过结构操作重建已有文字块。"
               }
             },
             "required": [
@@ -468,10 +544,12 @@
               "rowSpan",
               "columnSpan",
               "blocks"
-            ]
+            ],
+            "description": "当前单元格的封闭参数结构；只填写 properties 中列出的字段。"
           },
           "maxItems": 40,
-          "minItems": 1
+          "minItems": 1,
+          "description": "文字网格单元格配置，按零起始行列坐标和跨行跨列范围覆盖完整网格，不得重叠。"
         }
       },
       "requiredParams": [
@@ -480,7 +558,8 @@
         "cells"
       ],
       "primarySource": null,
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "用行列、合并单元格、文字块和文字片段编排文字版面；不是作品图片网格。没有主素材，sourceNos=[]。"
     },
     "CAROUSEL": {
       "params": {},
@@ -491,27 +570,34 @@
           "IMAGE"
         ],
         "min": 1,
-        "max": 9
+        "max": 9,
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "轮播展示已选图片作品，主图片按 sourceNos 顺序绑定；不是作品集分享封面设置。"
     },
     "VIDEO_CAROUSEL": {
       "params": {
         "title": {
           "type": "string",
-          "maxCodePoints": 10
+          "maxCodePoints": 10,
+          "description": "视频轮播组件标题，最多 10 个 Unicode 字符；源作品标题由 showTitle 控制。"
         },
         "showTitle": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示源作品标题；不修改作品库中的原标题。"
         },
         "showSwipeHint": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示视频轮播的滑动提示。"
         },
         "showDescription": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示源作品描述；不修改作品库中的原描述。"
         },
         "showComponentTitle": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示视频轮播组件自己的标题，不控制源作品标题。"
         },
         "displayStyle": {
           "type": "string",
@@ -519,7 +605,8 @@
           "enum": [
             "STACKED",
             "PORTRAIT_CARDS"
-          ]
+          ],
+          "description": "视频轮播展示样式：STACKED 堆叠式，PORTRAIT_CARDS 竖向卡片式。"
         }
       },
       "requiredParams": [],
@@ -529,17 +616,21 @@
           "VIDEO"
         ],
         "min": 3,
-        "max": 8
+        "max": 8,
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "滑动展示多项已选视频作品；视频主素材通过 sourceNos 绑定，数量和媒体类型遵守 primarySource。"
     },
     "SINGLE_WORK": {
       "params": {
         "showTitle": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示源作品标题；不修改作品库中的原标题。"
         },
         "showDescription": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示源作品描述；不修改作品库中的原描述。"
         },
         "openMode": {
           "type": "string",
@@ -547,19 +638,23 @@
           "enum": [
             "INLINE",
             "DETAIL_PAGE"
-          ]
+          ],
+          "description": "单作品展示方式：INLINE 在当前正文直接展示；DETAIL_PAGE 点击入口后进入作品详情页。"
         },
         "detailOptions": {
           "type": "object",
           "properties": {
             "showTitle": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "是否显示源作品标题；不修改作品库中的原标题。"
             },
             "showDescription": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "是否显示源作品描述；不修改作品库中的原描述。"
             }
           },
-          "required": []
+          "required": [],
+          "description": "进入作品详情页时的标题、描述显示选项；不修改源作品内容。"
         }
       },
       "requiredParams": [],
@@ -571,22 +666,27 @@
           "ANIMATION"
         ],
         "min": 1,
-        "max": 1
+        "max": 1,
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "在正文单独展示一项已选图片、视频或动画作品。放在顶部可作为正文首图，但不设置作品集封面或分享封面；封面应使用全局 share.coverUrl。"
     },
     "WORK_GRID": {
       "params": {
         "showTitle": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示源作品标题；不修改作品库中的原标题。"
         },
         "showDescription": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示源作品描述；不修改作品库中的原描述。"
         },
         "columns": {
           "type": "integer",
           "min": 2,
-          "max": 2
+          "max": 2,
+          "description": "作品网格列数，当前固定为 2 列，不支持其它列数。"
         }
       },
       "requiredParams": [],
@@ -597,22 +697,27 @@
           "VIDEO"
         ],
         "min": 1,
-        "max": 50
+        "max": 50,
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "按双列网格展示已选个人图片或视频作品；主素材通过 sourceNos 绑定，已有作品分组保留原边界。"
     },
     "WORK_LIST": {
       "params": {
         "showTitle": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示源作品标题；不修改作品库中的原标题。"
         },
         "showDescription": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示源作品描述；不修改作品库中的原描述。"
         },
         "columns": {
           "type": "integer",
           "min": 1,
-          "max": 1
+          "max": 1,
+          "description": "作品列表列数，当前固定为 1 列。"
         }
       },
       "requiredParams": [],
@@ -623,14 +728,17 @@
           "VIDEO"
         ],
         "min": 1,
-        "max": 50
+        "max": 50,
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "按单列列表展示已选个人图片或视频作品；主素材通过 sourceNos 绑定，已有作品分组保留原边界。"
     },
     "MEMBER_PORTFOLIO_GRID": {
       "params": {
         "showMemberName": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示所引用作品集对应的成员姓名；不修改成员资料。"
         }
       },
       "requiredParams": [],
@@ -638,14 +746,17 @@
         "kind": "MEMBER_PORTFOLIO",
         "mediaTypes": [],
         "min": 1,
-        "max": 50
+        "max": 50,
+        "description": "主成员作品集仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "在团队作品集中用网格展示已选成员作品集的整体入口；不展开或修改成员作品集内部内容。"
     },
     "MEMBER_PORTFOLIO_LIST": {
       "params": {
         "showMemberName": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示所引用作品集对应的成员姓名；不修改成员资料。"
         }
       },
       "requiredParams": [],
@@ -653,36 +764,43 @@
         "kind": "MEMBER_PORTFOLIO",
         "mediaTypes": [],
         "min": 1,
-        "max": 50
+        "max": 50,
+        "description": "主成员作品集仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "在团队作品集中用列表展示已选成员作品集的整体入口；不展开或修改成员作品集内部内容。"
     },
     "DIVIDER": {
       "params": {
         "color": {
           "type": "string",
           "maxCodePoints": 11,
-          "pattern": "(?:BLACK|WHITE|GRAY|TRANSPARENT|#[0-9A-Fa-f]{6})"
+          "pattern": "(?:BLACK|WHITE|GRAY|TRANSPARENT|#[0-9A-Fa-f]{6})",
+          "description": "分隔线颜色：BLACK 黑色、WHITE 白色、GRAY 灰色、TRANSPARENT 透明留白，或 #RRGGBB 六位十六进制颜色。"
         },
         "heightPx": {
           "type": "integer",
           "min": 1,
-          "max": 2147483647
+          "max": 2147483647,
+          "description": "分隔线或留白高度，单位 px；与文字参数的 rpx 单位不同。"
         }
       },
       "requiredParams": [],
       "primarySource": null,
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "展示分隔线或透明留白，用颜色和高度分隔正文内容；没有主素材，sourceNos=[]。"
     },
     "SCHEDULE_QUERY": {
       "params": {
         "title": {
           "type": "string",
-          "maxCodePoints": 2000
+          "maxCodePoints": 2000,
+          "description": "档期查询区域或入口的标题，不是作品集分享标题。"
         },
         "description": {
           "type": "string",
-          "maxCodePoints": 2000
+          "maxCodePoints": 2000,
+          "description": "档期查询区域的说明文案，不生成实际可约或已占用日期。"
         },
         "displayMode": {
           "type": "string",
@@ -690,7 +808,8 @@
           "enum": [
             "MODAL_CALENDAR",
             "INLINE_CALENDAR"
-          ]
+          ],
+          "description": "档期查询展示方式：MODAL_CALENDAR 点击入口弹出日历；INLINE_CALENDAR 在正文内嵌日历。"
         },
         "queryRange": {
           "type": "object",
@@ -702,42 +821,50 @@
                 "FUTURE_DAYS",
                 "DATE_RANGE"
               ],
-              "maxCodePoints": 16
+              "maxCodePoints": 16,
+              "description": "日期范围类型：UNLIMITED 不限制范围；FUTURE_DAYS 从今天起的未来天数，须填 futureDays；DATE_RANGE 固定日期区间，须填 startDate 与 endDate。"
             },
             "futureDays": {
               "type": "integer",
               "min": 1,
-              "max": 2147483647
+              "max": 2147483647,
+              "description": "FUTURE_DAYS 模式的未来可查询天数，单位天，必须为正整数。"
             },
             "startDate": {
               "type": "string",
               "maxCodePoints": 10,
-              "pattern": "[0-9]{4}-[0-9]{2}-[0-9]{2}"
+              "pattern": "[0-9]{4}-[0-9]{2}-[0-9]{2}",
+              "description": "DATE_RANGE 模式的查询开始日期，格式 YYYY-MM-DD，必须为有效日期且不晚于 endDate。"
             },
             "endDate": {
               "type": "string",
               "maxCodePoints": 10,
-              "pattern": "[0-9]{4}-[0-9]{2}-[0-9]{2}"
+              "pattern": "[0-9]{4}-[0-9]{2}-[0-9]{2}",
+              "description": "DATE_RANGE 模式的查询结束日期，格式 YYYY-MM-DD，必须为有效日期且不早于 startDate。"
             }
           },
           "required": [
             "type"
-          ]
+          ],
+          "description": "允许访客查询的日期范围：根据 type 填对应天数或起止日期，仅限制查询展示，不修改真实档期。"
         }
       },
       "requiredParams": [],
       "primarySource": null,
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "提供真实档期查询入口或内嵌日历，仅编辑展示文案、模式和可查询日期范围，不生成或修改档期。没有主素材，sourceNos=[]、bindings=[]。"
     },
     "CONTACT_FORM": {
       "params": {
         "title": {
           "type": "string",
-          "maxCodePoints": 2000
+          "maxCodePoints": 2000,
+          "description": "访客留资表单区域或入口的标题，例如“留下您的联系信息”。"
         },
         "description": {
           "type": "string",
-          "maxCodePoints": 2000
+          "maxCodePoints": 2000,
+          "description": "引导访客填写自身联系方式和需求的说明，不填写或编造主持人的联系方式。"
         },
         "displayMode": {
           "type": "string",
@@ -745,7 +872,8 @@
           "enum": [
             "MODAL_FORM",
             "INLINE_FORM"
-          ]
+          ],
+          "description": "留资表单展示方式：MODAL_FORM 点击入口弹出表单；INLINE_FORM 在正文内嵌表单。"
         },
         "fields": {
           "type": "array",
@@ -757,52 +885,63 @@
               "phone",
               "wechat",
               "needs"
-            ]
+            ],
+            "description": "留资表单字段配置：contactName 姓名，phone 电话，wechat 微信，needs 需求；必须包含 contactName，并至少包含 phone 或 wechat。"
           },
           "maxItems": 4,
-          "minItems": 2
+          "minItems": 2,
+          "description": "留资表单字段配置：contactName 姓名，phone 电话，wechat 微信，needs 需求；必须包含 contactName，并至少包含 phone 或 wechat。"
         }
       },
       "requiredParams": [],
       "primarySource": null,
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "供访客填写并提交自己的联系信息和需求，适用于“留下/预留联系信息”的留资意图；不是主持人的联系方式展示。没有主素材，sourceNos=[]、bindings=[]。"
     },
     "CONTACT_INFO": {
       "params": {
         "contactBorder": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示主持人联系方式区域的边框。"
         },
         "contactBorderWidthRpx": {
           "type": "integer",
           "min": 1,
-          "max": 12
+          "max": 12,
+          "description": "主持人联系方式区域边框宽度，单位 rpx；仅显示边框时生效。"
         },
         "contactBorderColor": {
           "type": "string",
           "maxCodePoints": 7,
-          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+          "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})",
+          "description": "主持人联系方式区域边框颜色：AUTO 跟随页面配色，或 #RRGGBB 六位十六进制颜色。"
         },
         "horizontalMarginRpx": {
           "type": "integer",
           "min": 0,
-          "max": 96
+          "max": 96,
+          "description": "当前组件左右外边距，单位 rpx。"
         },
         "verticalMarginRpx": {
           "type": "integer",
           "min": 0,
-          "max": 96
+          "max": 96,
+          "description": "当前组件上下外边距，单位 rpx。"
         }
       },
       "requiredParams": [],
       "primarySource": null,
       "bindingSlots": {
         "contactPhone": {
-          "kind": "CONTACT_PHONE"
+          "kind": "CONTACT_PHONE",
+          "description": "绑定当前公开资料或用户明确提供电话的可信 CONTACT_PHONE ref，不输出真实电话值或编造号码。"
         },
         "contactWechat": {
-          "kind": "CONTACT_WECHAT"
+          "kind": "CONTACT_WECHAT",
+          "description": "绑定当前公开资料或用户明确提供微信的可信 CONTACT_WECHAT ref，不输出真实微信值或编造账号。"
         }
-      }
+      },
+      "description": "展示主持人或维护者已有、或用户明确提供的电话与微信，只通过可信联系方式 ref 绑定；不是访客填写的留资表单。没有主素材，sourceNos=[]。"
     },
     "QR_CONTACT": {
       "params": {
@@ -812,16 +951,19 @@
           "enum": [
             "PROFILE",
             "CUSTOM"
-          ]
+          ],
+          "description": "二维码来源：PROFILE 仅个人可用，使用当前个人基础资料的联系二维码；CUSTOM 通过 qrUrl 槽位绑定可信自定义二维码 ref。团队只支持 CUSTOM，且须提供团队自有上传二维码的 ref；缺少该 ref 时不能新增二维码组件或虚构地址。"
         }
       },
       "requiredParams": [],
       "primarySource": null,
       "bindingSlots": {
         "qrUrl": {
-          "kind": "QR_IMAGE"
+          "kind": "QR_IMAGE",
+          "description": "绑定可信 QR_IMAGE ref 作为自定义联系二维码，配合 qrUrlSource=CUSTOM；团队须使用团队自有上传二维码 ref。不是任意作品图片、IMAGE ref 或原始 URL，缺少合法 ref 时不新增自定义二维码。"
         }
-      }
+      },
+      "description": "展示联系二维码：个人可使用基础资料二维码或可信自定义二维码 ref；团队只支持自有上传二维码的 CUSTOM 模式。不是作品图片展示或访客留资表单。没有主素材，sourceNos=[]。"
     },
     "HYPERLINK": {
       "params": {
@@ -831,14 +973,17 @@
           "enum": [
             "INTERNAL_PORTFOLIO",
             "EXTERNAL_LINK"
-          ]
+          ],
+          "description": "点击入口动作：INTERNAL_PORTFOLIO 跳转可信个人作品集 targetPortfolioId；EXTERNAL_LINK 使用可信外部地址 externalContent，不直接在小程序内执行任意网页代码。"
         },
         "promptText": {
           "type": "string",
-          "maxCodePoints": 30
+          "maxCodePoints": 30,
+          "description": "外部链接的提示文案；不填写实际 URL，地址通过 externalContent 槽位绑定。"
         },
         "showClickIcon": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否显示图片入口的点击图标。"
         },
         "iconPosition": {
           "type": "string",
@@ -848,7 +993,8 @@
             "OVERLAY_BOTTOM_CENTER",
             "OVERLAY_CENTER",
             "BELOW"
-          ]
+          ],
+          "description": "点击图标位置：OVERLAY 默认叠加，OVERLAY_BOTTOM_CENTER 画面底部居中，OVERLAY_CENTER 画面中心，BELOW 画面下方。"
         }
       },
       "requiredParams": [],
@@ -859,16 +1005,20 @@
           "ANIMATION"
         ],
         "min": 1,
-        "max": 1
+        "max": 1,
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
       "bindingSlots": {
         "targetPortfolioId": {
-          "kind": "PERSONAL_PORTFOLIO"
+          "kind": "PERSONAL_PORTFOLIO",
+          "description": "绑定可信 PERSONAL_PORTFOLIO ref 作为站内目标，配合 actionType=INTERNAL_PORTFOLIO，不输出真实作品集 ID。"
         },
         "externalContent": {
-          "kind": "EXTERNAL_LINK"
+          "kind": "EXTERNAL_LINK",
+          "description": "绑定可信 EXTERNAL_LINK ref 作为外部地址，配合 actionType=EXTERNAL_LINK，不把原始 URL 写入参数。"
         }
-      }
+      },
+      "description": "使用一项已选图片或动画作品作点击入口，跳转可信个人作品集或打开外部链接提示；作品通过 sourceNos，跳转目标通过 bindings 绑定。"
     }
   },
   "settings": {
@@ -876,41 +1026,49 @@
       "params": {
         "title": {
           "type": "string",
-          "maxCodePoints": 2000
+          "maxCodePoints": 2000,
+          "description": "作品集标题，同时用于作品集列表与微信分享卡片；不是正文组件标题。"
         }
       },
       "requiredParams": [],
       "primarySource": null,
       "bindingSlots": {
         "coverUrl": {
-          "kind": "IMAGE"
+          "kind": "IMAGE",
+          "description": "作品集封面/分享封面图片，通过允许 coverUrl 的可信 IMAGE ref 绑定。已选作品可用其服务端提供的对应图片 ref；不直接使用 WORK sourceNo、作品 ID 或原始 URL，不新增正文展示。"
         },
         "avatarUrl": {
-          "kind": "IMAGE"
+          "kind": "IMAGE",
+          "description": "个人作品集的分享头像，通过允许 avatarUrl 的可信 IMAGE ref 绑定，可使用本次提供的个人资料头像 ref 或已选作品对应图片 ref；团队不提供此字段。不修改账号头像，不直接使用 WORK sourceNo 或原始 URL，不能挪用不允许该槽位的 ref。"
         }
-      }
+      },
+      "description": "作品集列表卡片与微信分享使用的全局分享资料。作品集封面、分享封面均指 coverUrl；不新增正文首图，不设置独立开场画面。个人支持分享头像，团队支持分享描述，以本次实际字段为准。"
     },
     "style": {
       "params": {
         "backgroundColor": {
           "type": "string",
           "maxCodePoints": 7,
-          "pattern": "#[0-9A-Fa-f]{6}"
+          "pattern": "#[0-9A-Fa-f]{6}",
+          "description": "整个作品集各页面的底色，格式为 #RRGGBB 六位十六进制颜色；整体黑色使用 #000000。与某段文字的作品背景不同，不填写背景素材号。"
         },
         "componentSpacingRpx": {
           "type": "integer",
           "min": 0,
-          "max": 96
+          "max": 96,
+          "description": "个人作品集相邻正文组件间的全局间距，单位 rpx，范围 0 至 96；团队不提供此字段。不是组件内部的行距、留白或单独外边距。"
         }
       },
       "requiredParams": [],
       "primarySource": null,
-      "bindingSlots": {}
+      "bindingSlots": {},
+      "description": "全局页面样式，仅控制作品集各页背景色和个人作品集组件间距。主题通过实际颜色与组件排版表达；独立开场、全页背景图/视频、全局字体和底部导航结构不在当前 AI 设置范围。"
     },
     "backgroundAudio": {
       "params": {
         "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "是否启用全局背景音乐。播放已选音频须设置 true 并绑定 workId；false 关闭播放并保留已有音频引用，不删除源作品。"
         },
         "displayStyle": {
           "type": "string",
@@ -919,7 +1077,8 @@
             "DISC",
             "SLEEVE",
             "MINI_PLAYER"
-          ]
+          ],
+          "description": "背景音乐控件样式：DISC 唱片，SLEEVE 唱片套，MINI_PLAYER 迷你播放器；不改变音频内容或设置正文布局。"
         }
       },
       "requiredParams": [],
@@ -929,9 +1088,11 @@
           "kind": "WORK",
           "mediaTypes": [
             "AUDIO"
-          ]
+          ],
+          "description": "通过 sourceNo 绑定已选且可新增使用的 AUDIO 音频作品作背景音乐；不是 IMAGE/VIDEO 或 IMAGE ref，不放入任何正文组件的 sourceNos。"
         }
-      }
+      },
+      "description": "整个作品集的背景音乐，共用于个人与团队；不是正文作品组件，音频作品只通过 workId 槽位绑定。仅配置已有音频和控件样式，不生成音乐。"
     }
   },
   "nodeParams": {
@@ -942,23 +1103,27 @@
         "enum": [
           "SYSTEM",
           "WECHAT_SANS_SS"
-        ]
+        ],
+        "description": "内置字体：SYSTEM 系统默认字体；WECHAT_SANS_SS 微信无衬线字体，主要适合英文与数字，中文回退系统字体。此规则用于 MODIFY_PAGE 的现有文字节点；仅对允许 fontId 的现有节点使用 BIND_RESOURCES 绑定可信 FONT ref 选择远程字体。CREATE 或 INSERT_COMPONENT 新节点不能在内部 schema 中填写 fontId 或 bindings，需要远程字体时选 TEXT_SECTION。"
       },
       "fontSizeRpx": {
         "type": "integer",
         "min": 10,
-        "max": 96
+        "max": 96,
+        "description": "文字字号，单位 rpx，不是素材序号。"
       },
       "color": {
         "type": "string",
         "maxCodePoints": 7,
-        "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+        "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})",
+        "description": "文字颜色：AUTO 跟随页面配色，或使用 #RRGGBB 六位十六进制颜色。"
       },
       "lineHeight": {
         "type": "number",
         "min": 0.5,
         "max": 3,
-        "multipleOf": 0.1
+        "multipleOf": 0.1,
+        "description": "文字行高相对于字号的倍数，无单位；不是像素或 rpx，按 0.1 步进。"
       },
       "type": {
         "type": "string",
@@ -969,38 +1134,45 @@
           "LIST",
           "HINT",
           "SPACER"
-        ]
+        ],
+        "description": "文字块类型：TITLE 标题，PARAGRAPH 段落，LIST 列表，HINT 提示，SPACER 空白；列表使用 items，其它文字块使用 content，空白块使用 heightRpx。"
       },
       "content": {
         "type": "string",
-        "maxCodePoints": 2000
+        "maxCodePoints": 2000,
+        "description": "当前文字内容；可生成非事实性的主持风格文案，不虚构经历、奖项或联系方式。"
       },
       "items": {
         "type": "array",
         "items": {
           "type": "string",
-          "maxCodePoints": 2000
+          "maxCodePoints": 2000,
+          "description": "列表型文字块的逐条内容；仅用于 LIST，不作为作品素材列表。"
         },
         "maxItems": 10,
-        "minItems": 1
+        "minItems": 1,
+        "description": "列表型文字块的逐条内容；仅用于 LIST，不作为作品素材列表。"
       },
       "heightRpx": {
         "type": "integer",
         "min": 0,
         "max": 512,
-        "multipleOf": 4
+        "multipleOf": 4,
+        "description": "SPACER 空白块高度，单位 rpx；其它文字块不填写此字段。"
       },
       "marginTopRpx": {
         "type": "integer",
         "min": 0,
         "max": 128,
-        "multipleOf": 4
+        "multipleOf": 4,
+        "description": "当前文字块顶部外边距，单位 rpx。"
       },
       "marginBottomRpx": {
         "type": "integer",
         "min": 0,
         "max": 128,
-        "multipleOf": 4
+        "multipleOf": 4,
+        "description": "当前文字块底部外边距，单位 rpx。"
       },
       "fontWeight": {
         "type": "string",
@@ -1008,7 +1180,8 @@
         "enum": [
           "NORMAL",
           "BOLD"
-        ]
+        ],
+        "description": "文字字重：NORMAL 常规，BOLD 加粗。"
       },
       "alignment": {
         "type": "string",
@@ -1017,29 +1190,34 @@
           "LEFT",
           "CENTER",
           "RIGHT"
-        ]
+        ],
+        "description": "文字水平对齐：LEFT 左对齐，CENTER 居中，RIGHT 右对齐。"
       }
     },
     "GRID_CELL": {
       "row": {
         "type": "integer",
         "min": 0,
-        "max": 7
+        "max": 7,
+        "description": "单元格起始行坐标，从 0 开始，不是用户可见的行号或素材序号。"
       },
       "column": {
         "type": "integer",
         "min": 0,
-        "max": 4
+        "max": 4,
+        "description": "单元格起始列坐标，从 0 开始，不是素材序号。"
       },
       "rowSpan": {
         "type": "integer",
         "min": 1,
-        "max": 8
+        "max": 8,
+        "description": "单元格跨越的行数，至少为 1，不能超出网格总行数。"
       },
       "columnSpan": {
         "type": "integer",
         "min": 1,
-        "max": 5
+        "max": 5,
+        "description": "单元格跨越的列数，至少为 1，不能超出网格总列数。"
       },
       "verticalAlignment": {
         "type": "string",
@@ -1048,7 +1226,8 @@
           "TOP",
           "CENTER",
           "BOTTOM"
-        ]
+        ],
+        "description": "文字在所属区域中的垂直对齐：TOP 顶部，CENTER 居中，BOTTOM 底部。"
       }
     },
     "GRID_BLOCK": {
@@ -1059,23 +1238,27 @@
           "LEFT",
           "CENTER",
           "RIGHT"
-        ]
+        ],
+        "description": "文字水平对齐：LEFT 左对齐，CENTER 居中，RIGHT 右对齐。"
       },
       "marginTopRpx": {
         "type": "integer",
         "min": 0,
-        "max": 128
+        "max": 128,
+        "description": "当前文字块顶部外边距，单位 rpx。"
       },
       "marginBottomRpx": {
         "type": "integer",
         "min": 0,
-        "max": 128
+        "max": 128,
+        "description": "当前文字块底部外边距，单位 rpx。"
       },
       "lineHeight": {
         "type": "number",
         "min": 0.5,
         "max": 3,
-        "multipleOf": 0.1
+        "multipleOf": 0.1,
+        "description": "文字行高相对于字号的倍数，无单位；不是像素或 rpx，按 0.1 步进。"
       }
     },
     "GRID_RUN": {
@@ -1085,21 +1268,25 @@
         "enum": [
           "SYSTEM",
           "WECHAT_SANS_SS"
-        ]
+        ],
+        "description": "内置字体：SYSTEM 系统默认字体；WECHAT_SANS_SS 微信无衬线字体，主要适合英文与数字，中文回退系统字体。此规则用于 MODIFY_PAGE 的现有文字节点；仅对允许 fontId 的现有节点使用 BIND_RESOURCES 绑定可信 FONT ref 选择远程字体。CREATE 或 INSERT_COMPONENT 新节点不能在内部 schema 中填写 fontId 或 bindings，需要远程字体时选 TEXT_SECTION。"
       },
       "fontSizeRpx": {
         "type": "integer",
         "min": 10,
-        "max": 96
+        "max": 96,
+        "description": "文字字号，单位 rpx，不是素材序号。"
       },
       "color": {
         "type": "string",
         "maxCodePoints": 7,
-        "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})"
+        "pattern": "(?:AUTO|#[0-9A-Fa-f]{6})",
+        "description": "文字颜色：AUTO 跟随页面配色，或使用 #RRGGBB 六位十六进制颜色。"
       },
       "text": {
         "type": "string",
-        "maxCodePoints": 2000
+        "maxCodePoints": 2000,
+        "description": "当前文字片段的实际内容。"
       },
       "fontWeight": {
         "type": "string",
@@ -1107,7 +1294,8 @@
         "enum": [
           "NORMAL",
           "BOLD"
-        ]
+        ],
+        "description": "文字字重：NORMAL 常规，BOLD 加粗。"
       }
     }
   },

@@ -32,9 +32,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
@@ -62,6 +64,15 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
     private static final String TOP_P_PARAMETER = "top_p";
     /** 兼容 API 中用于滥用检测的匿名用户标识参数。 */
     private static final String USER_PARAMETER = "user";
+    /** 官方可选缓存键，只由服务端静态提示词生成。 */
+    private static final String PROMPT_CACHE_KEY_PARAMETER = "prompt_cache_key";
+    /** 缓存键命名空间及独立调用阶段，避免布局与媒体摘要共用路由分组。 */
+    private static final String PROMPT_CACHE_NAMESPACE = "wefolio-portfolio-ai-cache-v1";
+    private static final String GENERATION_CACHE_STAGE = "generation";
+    private static final String MEDIA_SUMMARY_CACHE_STAGE = "media-summary";
+    /** 缓存键采用固定长度的摘要，不传提示词原文、业务内容或用户身份。 */
+    private static final String PROMPT_CACHE_DIGEST_ALGORITHM = "SHA-256";
+    private static final String PROMPT_CACHE_DIGEST_UNAVAILABLE = "AI 缓存键摘要算法不可用";
     /** 官方 completion 路由。 */
     private static final String COMPLETION_PATH = "/chat/completions";
     /** HMAC 摘要算法。 */
@@ -82,6 +93,16 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
     private static final String KEY_USAGE = "usage";
     private static final String KEY_PROMPT_TOKENS = "prompt_tokens";
     private static final String KEY_COMPLETION_TOKENS = "completion_tokens";
+    /** 供应商输出上限参数名，同时兼容历史冻结参数的下划线写法。 */
+    private static final String MAX_TOKENS_PARAMETER = "max_tokens";
+    /** 供应商报告的思考用量属于 completion_tokens，不能再次计费相加。 */
+    private static final String KEY_COMPLETION_TOKENS_DETAILS = "completion_tokens_details";
+    private static final String KEY_REASONING_TOKENS = "reasoning_tokens";
+    /** Runtime 可选冻结字段与供应商参数名；旧冻结请求保持缺省思考行为。 */
+    private static final String KEY_REASONING_EFFORT = "reasoningEffort";
+    private static final String REASONING_EFFORT_PARAMETER = "reasoning_effort";
+    /** 官方 GLM 思考深度白名单，禁止业务文字影响调用参数。 */
+    private static final Set<String> REASONING_EFFORTS = Set.of("max", "high", "low");
     /** 两种可选缓存读取量不能相加，必须一致或只出现一种合法值。 */
     private static final String KEY_PROMPT_TOKENS_DETAILS = "prompt_tokens_details";
     private static final String KEY_CACHED_TOKENS = "cached_tokens";
@@ -131,6 +152,9 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8)).build();
         long started = System.nanoTime();
+        log.info("高级 AI 请求 taskId={}, attempt={}, maxTokens={}, reasoningEffort={}, timeoutMs={}",
+                task.getId(), task.getAttemptCount(), body.path(MAX_TOKENS_PARAMETER).asInt(),
+                safeMeta(body.path(REASONING_EFFORT_PARAMETER)), timeout.toMillis());
         CompletableFuture<HttpResponse<byte[]>> responseFuture;
         try (HttpClient client = createHttpClient(connection)) {
             responseFuture = client.sendAsync(http, response -> {
@@ -163,7 +187,11 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
             ObjectNode completion = parseCompletion(utf8(decoded));
             String result = content(completion, task);
             if (System.nanoTime() - started >= timeout.toNanos()) { throw failed("REMOTE_TIMEOUT", "模型调用超过绝对期限", true); }
-            return completionWithUsage(result, completion.path(KEY_USAGE));
+            Completion usage = completionWithUsage(result, completion.path(KEY_USAGE));
+            log.info("高级 AI 缓存 taskId={}, attempt={}, promptCacheKey={}, promptTokens={}, cachedTokens={}, cacheStatus={}",
+                    task.getId(), task.getAttemptCount(), body.path(PROMPT_CACHE_KEY_PARAMETER).asText(),
+                    usage.promptTokens(), usage.cachedTokens(), usage.cacheStatus());
+            return usage;
         }
     }
 
@@ -291,19 +319,28 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
         ObjectNode body = StrictAiJson.mapper().createObjectNode();
         body.put("model", config.path("model").asText()).put("stream", false);
         JsonNode temperature = config.get("temperature");
-        JsonNode maxTokens = config.has("maxTokens") ? config.get("maxTokens") : config.get("max_tokens");
+        JsonNode maxTokens = config.has("maxTokens") ? config.get("maxTokens") : config.get(MAX_TOKENS_PARAMETER);
         if (temperature != null && (!temperature.isNumber() || !Double.isFinite(temperature.doubleValue()) || temperature.doubleValue() < 0 || temperature.doubleValue() > 2)
-                || maxTokens != null && (!maxTokens.isIntegralNumber() || !maxTokens.canConvertToInt() || maxTokens.intValue() < 1 || maxTokens.intValue() > 8192)) {
+                || maxTokens != null && (!maxTokens.isIntegralNumber() || !maxTokens.canConvertToInt() || maxTokens.intValue() < 1 || maxTokens.intValue() > PortfolioAiProperties.MAX_OUTPUT_TOKENS)) {
             throw failed("AI_UNAVAILABLE", "模型请求参数不合法", false);
         }
         body.put("temperature", temperature == null ? 1.0 : temperature.doubleValue());
-        body.put("max_tokens", maxTokens == null ? 8192 : maxTokens.intValue());
+        body.put(MAX_TOKENS_PARAMETER, maxTokens == null ? PortfolioAiProperties.MAX_OUTPUT_TOKENS : maxTokens.intValue());
+        JsonNode effort = config.get(KEY_REASONING_EFFORT);
+        if (effort != null) {
+            if (!effort.isTextual() || !REASONING_EFFORTS.contains(effort.textValue())) {
+                throw failed("AI_UNAVAILABLE", "模型请求参数不合法", false);
+            }
+            body.put(REASONING_EFFORT_PARAMETER, effort.textValue());
+        }
         body.put(TOP_P_PARAMETER, TOP_P);
         body.putObject("thinking").put("type", THINKING_ENABLED);
         body.putObject("response_format").put("type", "json_object");
         body.put(USER_PARAMETER, requesterHash(task.getRequestedBy()));
         String mode = request.path("input").path("mode").asText();
         String system = resource("system.txt") + "\n" + resource(mode + ".txt") + "\n可信能力契约：\n" + AiPortfolioProtocol.contract(request);
+        // 缓存键对应稳定的基础前缀；媒体附加规则和重试反馈继续追加，但不拆分同一组请求。
+        body.put(PROMPT_CACHE_KEY_PARAMETER, promptCacheKey(config.path("model").asText(), GENERATION_CACHE_STAGE, system));
         if (request.path(KEY_FACTS).has(KEY_MEDIA_PLAN)) {
             system += MEDIA_FACT_RULES;
         }
@@ -333,9 +370,12 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
             throw failed(ERROR_MEDIA_INVALID, "媒体输入类型或数量不合法", false);
         }
         ObjectNode body = payload(task, request);
-        body.put("max_tokens", SUMMARY_OUTPUT_MAX_TOKENS);
+        body.put(MAX_TOKENS_PARAMETER, SUMMARY_OUTPUT_MAX_TOKENS);
+        String summarySystem = resource(MEDIA_SUMMARY_RESOURCE);
+        // 摘要使用自己的实际系统提示词，覆盖布局键；签名地址和帧时刻不参与路由分组。
+        body.put(PROMPT_CACHE_KEY_PARAMETER, promptCacheKey(body.path("model").asText(), MEDIA_SUMMARY_CACHE_STAGE, summarySystem));
         var messages = body.putArray("messages");
-        messages.addObject().put("role", "system").put("content", resource(MEDIA_SUMMARY_RESOURCE));
+        messages.addObject().put("role", "system").put("content", summarySystem);
         var content = messages.addObject().put("role", "user").putArray("content");
         content.addObject().put("type", "text").put("text", MEDIA_SUMMARY_HINT);
         for (MediaInput item : media) {
@@ -364,11 +404,14 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
         if (!choices.isArray() || choices.size() != 1) { throw failed("INVALID_OUTPUT", "模型响应必须有唯一回复", true); }
         JsonNode choice = choices.get(0); JsonNode message = choice.path("message");
         String finish = choice.path("finish_reason").asText();
-        log.info("高级 AI 响应 taskId={}, completionId={}, model={}, fingerprint={}, finishReason={}, usageKnown={}, promptTokens={}, completionTokens={}",
+        log.info("高级 AI 响应 taskId={}, completionId={}, model={}, fingerprint={}, finishReason={}, usageKnown={}, promptTokens={}, completionTokens={}, reasoningTokens={}, contentCharacters={}",
                 task.getId(), safeMeta(completion.path("id")), safeMeta(completion.path("model")), safeMeta(completion.path("system_fingerprint")),
                 safeMeta(choice.path("finish_reason")), completion.path("usage").isObject(),
                 completion.path("usage").path("prompt_tokens").isIntegralNumber() ? completion.path("usage").path("prompt_tokens").asLong() : null,
-                completion.path("usage").path("completion_tokens").isIntegralNumber() ? completion.path("usage").path("completion_tokens").asLong() : null);
+                completion.path("usage").path("completion_tokens").isIntegralNumber() ? completion.path("usage").path("completion_tokens").asLong() : null,
+                completion.path(KEY_USAGE).path(KEY_COMPLETION_TOKENS_DETAILS).path(KEY_REASONING_TOKENS).isIntegralNumber()
+                        ? completion.path(KEY_USAGE).path(KEY_COMPLETION_TOKENS_DETAILS).path(KEY_REASONING_TOKENS).asLong() : null,
+                message.path("content").isTextual() ? message.path("content").textValue().codePointCount(0, message.path("content").textValue().length()) : null);
         if ("insufficient_system_resource".equals(finish)) { throw failed("REMOTE_BUSY", "模型服务繁忙", true); }
         if (!"stop".equals(finish)) {
             throw failed("length".equals(finish) ? "OUTPUT_TRUNCATED" : "OUTPUT_BLOCKED", "模型未能完整生成，请调整描述", false);
@@ -410,6 +453,16 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
             if (input == null) { throw failed("CONTRACT_UNAVAILABLE", "AI 提示词版本不可用", false); }
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException exception) { throw failed("CONTRACT_UNAVAILABLE", "AI 提示词版本不可用", false); }
+    }
+
+    /** 按模型、调用阶段及静态前缀生成可跨任务复用的键；内容更新自动切换分组。 */
+    private String promptCacheKey(String model, String stage, String stableSystem) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance(PROMPT_CACHE_DIGEST_ALGORITHM);
+            String scope = PROMPT_CACHE_NAMESPACE + "\n" + model + "\n" + stage + "\n";
+            digest.update(scope.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest.digest(stableSystem.getBytes(StandardCharsets.UTF_8)));
+        } catch (GeneralSecurityException exception) { throw new IllegalStateException(PROMPT_CACHE_DIGEST_UNAVAILABLE, exception); }
     }
 
     /** 对发起人主键作服务端 HMAC，供应商不接收真实主键或个人唯一码。 */

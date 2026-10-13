@@ -5,6 +5,9 @@ const test = require('node:test')
 
 const MINIAPP_ROOT = path.resolve(__dirname, '..')
 const read = file => fs.readFileSync(path.join(MINIAPP_ROOT, file), 'utf8')
+const readRule = (styles, selector) => styles.match(new RegExp(`(?:^|\\n)\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`))[1]
+const readRpx = (rule, property) => Number.parseFloat(rule.match(new RegExp(`(?:^|;)\\s*${property}:\\s*([\\d.]+rpx|0)\\s*;`))?.[1])
+const textHeight = rule => readRpx(rule, 'font-size') * Number(rule.match(/line-height:\s*([\d.]+);/)[1])
 // 来自本机微信基础库 3.16.2 的 WAWebview.js；普通 button 会以 wx-button 元素参与样式层叠。
 const NATIVE_BUTTON_WIDTH_STYLE = 'wx-button:not([size=mini]){margin-left:auto;margin-right:auto;width:184px}'
 
@@ -67,6 +70,33 @@ function resolveButtonProperty(sources, property, disabled = false) {
 }
 
 for (const [folder, filename] of [['portfolios', 'portfolio-standard-edit'], ['team-portfolios', 'team-portfolio-standard-edit']]) {
+  test(`${folder} 高级编辑已选内容滚动区容纳封面、编号及不可用提示，避免真机卡片重叠`, () => {
+    const wxml = read(`pages/${folder}/standard-edit/${filename}.wxml`)
+    const styles = read(`pages/${folder}/styles/advanced-editor.wxss`)
+    const scrollRule = readRule(styles, '.advanced-source-scroll')
+    const stripRule = readRule(styles, '.advanced-source-strip')
+    const thumbRule = readRule(styles, '.advanced-source-thumb')
+    const labelRule = readRule(styles, '.advanced-source-label')
+    const unavailableRule = readRule(styles, '.advanced-source-unavailable-note')
+    const itemHeight = readRpx(thumbRule, 'height') + readRpx(labelRule, 'margin-top') + textHeight(labelRule)
+
+    assert.match(wxml, /<scroll-view wx:if="\{\{advancedSourceItems.length\}\}" class="advanced-source-scroll" scroll-x>/, '空来源显示原空态，不能额外占用缩略图高度')
+    // 横向 scroll-view 必须明确占位，最高项还需包括不可用来源的额外说明行。
+    for (const unavailable of [false, true]) {
+      const requiredHeight = Math.ceil(itemHeight + readRpx(stripRule, 'padding-bottom')
+        + (unavailable ? readRpx(unavailableRule, 'margin-top') + textHeight(unavailableRule) : 0))
+      assert.ok(readRpx(scrollRule, 'height') >= requiredHeight, `${unavailable ? '不可用' : '正常'}来源至少需要 ${requiredHeight}rpx，不能溢出并覆盖卡片说明`)
+    }
+    assert.match(scrollRule, /flex:\s*none;/, '已选内容不得被父容器压缩')
+  })
+
+  test(`${folder} 高级编辑已选内容标题和数量在真机中保持同行`, () => {
+    const styles = read(`pages/${folder}/styles/advanced-editor.wxss`)
+    const titleRule = readRule(styles, '.advanced-source-title')
+    assert.match(titleRule, /display:\s*flex;/, '显式横排，避免 Skyline 默认块布局把数量放到下一行')
+    assert.match(titleRule, /align-items:\s*center;/)
+  })
+
   test(`${folder} AI 按钮宽度在真实基础库普通按钮规则前后均保持 144rpx`, () => {
     const styles = read(`pages/${folder}/styles/advanced-editor.wxss`)
     assert.deepEqual(selectorSpecificity('wx-button:not([size=mini])'), [0, 1, 1])

@@ -15,6 +15,155 @@ function pageFor(requestFn, patch = {}, team = false) {
 }
 
 for (const team of [false, true]) {
+  test(`${team ? '团队' : '个人'}生成结果保留真实累计 token 用量，无变化与不可用候选同样显示`, () => {
+    const page = pageFor(async () => {}, {}, team)
+    for (const result of [
+      { kind: 'CANDIDATE', available: true, hasChanges: true },
+      { kind: 'CANDIDATE', available: true, hasChanges: false },
+      { kind: 'CANDIDATE', available: false, error: { message: '候选无法使用' } }
+    ]) {
+      page.applyTask({ status: 'SUCCEEDED', result, usage: { complete: true, totalTokens: 12480 } })
+      assert.equal(page.data.tokenUsageText, '本次消耗 12,480 tokens')
+    }
+    page.applyTask({ status: 'FAILED', usage: { complete: true, totalTokens: 0 } })
+    assert.equal(page.data.tokenUsageText, '本次消耗 0 tokens')
+  })
+
+  test(`${team ? '团队' : '个人'}部分用量与未返回用量明确区分，不把缺失值显示为零`, () => {
+    const page = pageFor(async () => {}, {}, team)
+    page.applyTask({ status: 'FAILED', usage: { complete: false, totalTokens: 12480 } })
+    assert.equal(page.data.tokenUsageText, '已记录 12,480 tokens · 部分用量未返回')
+    page.applyTask({ status: 'FAILED', usage: { complete: false, totalTokens: null } })
+    assert.equal(page.data.tokenUsageText, 'Token 用量未返回')
+  })
+
+  test(`${team ? '团队' : '个人'}旧接口和非法用量隐藏 token 提示，不做类型转换或不安全整数计算`, () => {
+    const page = pageFor(async () => {}, {}, team)
+    for (const usage of [undefined, null, {}, [], { complete: 'true', totalTokens: 12480 },
+      { totalTokens: 12480 }, { complete: true, totalTokens: null }, { complete: false },
+      { complete: true, totalTokens: '12480' }, { complete: true, totalTokens: -1 },
+      { complete: false, totalTokens: 1.5 }, { complete: true, totalTokens: Number.MAX_SAFE_INTEGER + 1 }]) {
+      page.applyTask({ status: 'SUCCEEDED', result: { kind: 'CANDIDATE', available: true },
+        usage: { complete: true, totalTokens: 12480 } })
+      page.applyTask({ status: 'SUCCEEDED', result: { kind: 'CANDIDATE', available: true }, usage })
+      assert.equal(page.data.tokenUsageText, '', `非法用量不得沿用上一结果：${JSON.stringify(usage)}`)
+    }
+  })
+
+  test(`${team ? '团队' : '个人'}执行中与取消状态不展示累计 token`, () => {
+    const page = pageFor(async () => {}, {}, team)
+    for (const status of ['PENDING', 'RUNNING', 'CANCELLED']) {
+      page.setData({ tokenUsageText: '本次消耗 12,480 tokens' })
+      page.applyTask({ status, usage: { complete: true, totalTokens: 12480 } })
+      assert.equal(page.data.tokenUsageText, '')
+    }
+  })
+
+  test(`${team ? '团队' : '个人'}放弃结果及修改描述不残留上一任务 token`, () => {
+    const page = pageFor(async () => {}, {}, team)
+    for (const action of [
+      () => page.handleDiscard(),
+      () => page.handlePromptInput({ detail: { value: '调整留白' } }),
+      () => page.handleInsertNumber({ currentTarget: { dataset: { no: 1 } } }),
+      () => page.handleUseExample()
+    ]) {
+      page.applyTask({ status: 'FAILED', usage: { complete: false, totalTokens: 12480 } })
+      action()
+      assert.equal(page.data.tokenUsageText, '')
+    }
+  })
+
+  test(`${team ? '团队' : '个人'}新任务提交与取消立即清空旧用量，并忽略取消后的在途查询`, async () => {
+    let resolveQuery
+    const page = pageFor(options => options.method === 'POST'
+      ? Promise.resolve({ taskId: '9', status: 'PENDING' })
+      : new Promise(resolve => { resolveQuery = resolve }), {}, team)
+    page.applyTask({ status: 'FAILED', usage: { complete: true, totalTokens: 12480 } })
+    await page.handleGenerate()
+    assert.equal(page.data.tokenUsageText, '')
+    const pending = page.queryTask()
+    page.setData({ tokenUsageText: '本次消耗 12,480 tokens' })
+    await page.handleCancel()
+    assert.equal(page.data.tokenUsageText, '')
+    resolveQuery({ taskId: '9', status: 'SUCCEEDED', result: { kind: 'CANDIDATE', available: true },
+      usage: { complete: true, totalTokens: 500 } })
+    await pending
+    assert.equal(page.data.tokenUsageText, '')
+    assert.equal(page.data.task.status, 'CANCELLED')
+  })
+
+  test(`${team ? '团队' : '个人'}重新生成后旧任务的延迟查询不能覆盖新任务或恢复旧用量`, async () => {
+    let resolveOldQuery
+    const page = pageFor(options => options.method === 'POST'
+      ? Promise.resolve({ taskId: '9', status: 'PENDING' })
+      : new Promise(resolve => { resolveOldQuery = resolve }), {}, team)
+    page.applyTask({ taskId: '7', status: 'FAILED', usage: { complete: true, totalTokens: 12480 } })
+    const oldQuery = page.queryTask()
+    await page.handleGenerate()
+    resolveOldQuery({ taskId: '7', status: 'SUCCEEDED', result: { kind: 'CANDIDATE', available: true },
+      usage: { complete: true, totalTokens: 12480 } })
+    await oldQuery
+    assert.equal(page.data.task.taskId, '9')
+    assert.equal(page.data.waiting, true)
+    assert.equal(page.data.result, null)
+    assert.equal(page.data.tokenUsageText, '')
+  })
+
+  test(`${team ? '团队' : '个人'}手动重试完成后取消旧轮询计划，放弃结果不会被定时查询恢复`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    let queryCount = 0
+    const page = pageFor(async () => {
+      queryCount += 1
+      if (queryCount === 1) throw new Error('query timeout')
+      return { taskId: '7', status: 'SUCCEEDED', result: { kind: 'CANDIDATE', available: true },
+        usage: { complete: true, totalTokens: 12480 } }
+    }, { waiting: true, step: 'prompt', task: { taskId: '7', status: 'RUNNING' } }, team)
+    page.schedulePoll = (team ? createTeamAdvancedAiPage : createAdvancedAiPage)(team).schedulePoll
+    await page.queryTask()
+    assert.equal(page.data.waiting, true)
+    page.onShow()
+    assert.ok(page.pollTimer)
+    await page.queryTask()
+    page.handleDiscard()
+    t.mock.timers.tick(5000)
+    await Promise.resolve()
+    assert.equal(queryCount, 2)
+    assert.equal(page.pollTimer, null)
+    assert.equal(page.data.result, null)
+    assert.equal(page.data.tokenUsageText, '')
+  })
+
+  test(`${team ? '团队' : '个人'}放弃或编辑后在途终态查询不能恢复旧结果和 token`, async () => {
+    const oldWx = global.wx
+    global.wx = { showToast() {} }
+    try {
+      for (const action of [
+        page => page.handleDiscard(),
+        page => page.handlePromptInput({ detail: { value: '调整留白' } }),
+        page => page.handleInsertNumber({ currentTarget: { dataset: { no: 1 } } }),
+        page => page.handleUseExample(),
+        page => page.handleSourceTap({ currentTarget: { dataset: { index: 0 } } }),
+        page => page.handleRemoveSelected({ currentTarget: { dataset: { no: 1 } } })
+      ]) {
+        let resolveOldQuery
+        const page = pageFor(() => new Promise(resolve => { resolveOldQuery = resolve }), {
+          sourceOptions: [normalizeSource({ id: '11', title: '作品一', mediaType: 'IMAGE' }, team)],
+          aiContext: normalizeContext({ nextSourceNo: 2, sources: [{ sourceNo: 1, kind: 'WORK', sourceId: '11' }] })
+        }, team)
+        page.applyTask({ taskId: '7', status: 'SUCCEEDED', result: { kind: 'CANDIDATE', available: true, summary: '原结果' },
+          usage: { complete: true, totalTokens: 12480 } })
+        const oldQuery = page.queryTask()
+        action(page)
+        const afterEdit = JSON.stringify([page.data.result, page.data.prompt, page.data.aiContext])
+        resolveOldQuery({ taskId: '7', status: 'SUCCEEDED', result: { kind: 'CANDIDATE', available: true, summary: '延迟旧结果' },
+          usage: { complete: true, totalTokens: 12480 } })
+        await oldQuery
+        assert.equal(JSON.stringify([page.data.result, page.data.prompt, page.data.aiContext]), afterEdit)
+        assert.equal(page.data.tokenUsageText, '')
+      }
+    } finally { global.wx = oldWx }
+  })
+
   test(`${team ? '团队' : '个人'}整体 AI 修改使用完整编辑配置和描述提交`, async () => {
     const calls = []
     const page = pageFor(async options => { calls.push(options); return { taskId: '7', status: 'PENDING' } }, {}, team)

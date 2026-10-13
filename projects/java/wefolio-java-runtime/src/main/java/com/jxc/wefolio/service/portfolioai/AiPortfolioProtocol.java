@@ -3,6 +3,7 @@ package com.jxc.wefolio.service.portfolioai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.jxc.wefolio.message.PortfolioAiBindingMessage;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,8 +26,10 @@ public final class AiPortfolioProtocol {
     public static final String PROMPT_VERSION = "portfolio-ai-2026-10-10.2";
     /** 模型只看到当前菜单别名。 */
     public static final String MENU_ALIAS = "menu_current";
+    /** 首次生成从用户意图编排正文，不把初始化占位组件当作既有页面。 */
+    private static final String CREATE_MODE = "CREATE";
     /** 首次生成和整体描述修改页面两种模式。 */
-    private static final Set<String> MODES = Set.of("CREATE", "MODIFY_PAGE");
+    private static final Set<String> MODES = Set.of(CREATE_MODE, "MODIFY_PAGE");
     /** 不允许通过普通参数注入的身份、地址和结构字段。 */
     private static final Set<String> STRUCTURES = Set.of("blocks", "cells", "runs", "items", "type", "row", "column", "rowSpan", "columnSpan", "rows", "columns");
     /** 已实现的文字字段。 */
@@ -49,6 +52,22 @@ public final class AiPortfolioProtocol {
     private static final Set<String> MEMBER_COMPONENT_TYPES = Set.of("MEMBER_PORTFOLIO_LIST", "MEMBER_PORTFOLIO_GRID");
     /** 团队成员别名只在同一冻结来源首次出现顺序内分配，不暴露用户身份。 */
     private static final String MEMBER_ALIAS_PREFIX = "member_";
+    /** 素材错误仍使用原有分类，不改变任务重试及前端映射。 */
+    private static final String INVALID_OUTPUT_CODE = "INVALID_OUTPUT";
+    /** 首次生成组件的固定字段路径模板，索引从零开始。 */
+    private static final String CREATE_COMPONENT_PATH = "page.components[%d]";
+    /** 新建组件操作的固定字段路径模板。 */
+    private static final String INSERT_COMPONENT_PATH = "operations[%d].payload.component";
+    /** 已有组件重绑及全局设置操作的固定字段路径模板。 */
+    private static final String OPERATION_PAYLOAD_PATH = "operations[%d].payload";
+    /** 全局设置的固定路径前缀。 */
+    private static final String CREATE_SETTING_PATH = "page.settings.";
+    /** 主素材数组字段。 */
+    private static final String SOURCE_NUMBERS_FIELD = "sourceNos";
+    /** 资源槽位数组字段。 */
+    private static final String BINDINGS_FIELD = "bindings";
+    /** 文字背景只能通过该独立槽位绑定。 */
+    private static final String BACKGROUND_WORK_SLOT = "backgroundWorkId";
     /** 目录在进程启动时读取，调用时返回独立副本。 */
     private static final ObjectNode RULES = loadRules();
 
@@ -91,7 +110,8 @@ public final class AiPortfolioProtocol {
         if ("TEAM".equals(request.path("input").path("ownerType").asText())) {
             ((ObjectNode) settings.path("style").path("params")).remove("componentSpacingRpx");
             ((ObjectNode) settings.path("share").path("bindingSlots")).remove("avatarUrl");
-            ((ObjectNode) settings.path("share").path("params")).set("description", object().put("type", "string").put("maxCodePoints", 2000));
+            ((ObjectNode) settings.path("share").path("params")).set("description", object().put("type", "string").put("maxCodePoints", 2000)
+                    .put("description", "团队作品集的整体简介；不替代正文中的团队介绍或文字组件。"));
         }
         result.set("createSettings", "CREATE".equals(mode) ? settings.deepCopy() : object());
         result.set("globalFields", "MODIFY_PAGE".equals(mode) ? settings.deepCopy() : object());
@@ -166,7 +186,8 @@ public final class AiPortfolioProtocol {
         result.put("mode", input.path("mode").asText()).put("ownerType", "TEAM".equals(input.path("ownerType").asText()) ? "TEAM" : "PERSONAL");
         result.put("userIntent", safeText(request.path("facts").path("safePrompt").asText(input.path("prompt").asText())));
         result.putObject("target").put("menuKey", MENU_ALIAS);
-        ArrayNode originals = currentComponents(request);
+        // CREATE 的基准正文仅供服务端校验与编译使用，不能引导模型保留默认资料或复制旧正文。
+        ArrayNode originals = CREATE_MODE.equals(input.path("mode").asText()) ? array() : currentComponents(request);
         ArrayNode components = array();
         for (int i = 0; i < originals.size(); i++) {
             ObjectNode original = (ObjectNode) originals.get(i);
@@ -229,7 +250,7 @@ public final class AiPortfolioProtocol {
         ArrayNode resources = result.putArray("resources");
         for (JsonNode binding : request.path("facts").path("bindings")) {
             ObjectNode safe = object();
-            for (String field : Set.of("ref", "kind", "allowedSlots", "reuseOnly", "label")) {
+            for (String field : Set.of("ref", "kind", "allowedSlots", "reuseOnly", "label", "sourceNo")) {
                 if (binding.has(field)) { safe.set(field, scrub(binding.get(field))); }
             }
             resources.add(safe);
@@ -242,15 +263,14 @@ public final class AiPortfolioProtocol {
         ObjectNode globals = result.putObject("globalState");
         for (String section : Set.of("share", "style", "backgroundAudio")) {
             JsonNode value = baseConfig(request).path(section);
-            if (!value.isMissingNode()) {
-                ObjectNode safe = globals.putObject(section).put("expectedHash", expectedHash(value));
-                ObjectNode params = safe.putObject("params");
-                value.fields().forEachRemaining(field -> {
-                    if (RULES.path("settings").path(section).path("params").has(field.getKey())) {
-                        params.set(field.getKey(), scrub(field.getValue()));
-                    }
-                });
-            }
+            // 基准未配置的设置也提供同一缺失值的 hash；字段按当前归属契约投影，包含团队简介。
+            ObjectNode safe = globals.putObject(section).put("expectedHash", expectedHash(value));
+            ObjectNode params = safe.putObject("params");
+            JsonNode schema = rule.path("CREATE".equals(input.path("mode").asText()) ? "createSettings" : "globalFields")
+                    .path(section).path("params");
+            value.fields().forEachRemaining(field -> {
+                if (schema.has(field.getKey())) { params.set(field.getKey(), scrub(field.getValue())); }
+            });
         }
         JsonNode answer = request.path("facts").get("safeClarificationAnswer");
         if (answer != null) { result.set("clarificationAnswer", scrub(answer)); }
@@ -389,32 +409,38 @@ public final class AiPortfolioProtocol {
         exact(page, Set.of("menuKey", "components", "settings"), Set.of());
         require(MENU_ALIAS.equals(text(page.get("menuKey"))), "INVALID_OUTPUT", "不能生成其它菜单");
         limitedArray(page.get("components"), limit("maxComponents"));
-        for (JsonNode component : page.get("components")) { proposal(component, request, contract); }
+        for (int index = 0; index < page.get("components").size(); index++) {
+            proposal(page.get("components").get(index), request, contract, index, false);
+        }
         exact(page.get("settings"), Set.of(), fieldSet(contract.path("createSettings")));
-        page.get("settings").fields().forEachRemaining(entry -> group(entry.getValue(), contract.path("createSettings").path(entry.getKey()), request, null));
+        page.get("settings").fields().forEachRemaining(entry -> group(entry.getValue(), contract.path("createSettings").path(entry.getKey()), request, null,
+                new BindingContext(PortfolioAiBindingMessage.CREATE_SETTING.formatted(entry.getKey()), CREATE_SETTING_PATH + entry.getKey())));
         require(totalComponents(baseConfig(request)) - currentComponents(request).size() + page.get("components").size() <= limit("maxComponents"),
                 "INVALID_OUTPUT", "全部菜单组件数超过上限");
     }
 
     /** 对组件 params、主来源及槽位独立检查，不接受模型提供真实 ID。 */
-    private static void proposal(JsonNode component, ObjectNode request, ObjectNode contract) {
+    private static void proposal(JsonNode component, ObjectNode request, ObjectNode contract, int index, boolean inserted) {
         exact(component, Set.of("type", "sourceNos", "params", "bindings"), Set.of());
         String type = text(component.get("type")); JsonNode definition = contract.path("componentCatalog").get(type);
         require(definition != null, "INVALID_OUTPUT", "当前归属不支持该组件");
+        BindingContext context = new BindingContext(
+                (inserted ? PortfolioAiBindingMessage.INSERT_COMPONENT : PortfolioAiBindingMessage.CREATE_COMPONENT).formatted(index + 1, type),
+                (inserted ? INSERT_COMPONENT_PATH : CREATE_COMPONENT_PATH).formatted(index));
         params(component.get("params"), definition.path("params"), true);
         for (JsonNode required : definition.path("requiredParams")) {
             require(component.get("params").has(required.asText()), "INVALID_OUTPUT", "新组件缺少必需普通参数");
         }
-        primary(component.get("sourceNos"), definition.path("primarySource"), request, false);
-        bindings(component.get("bindings"), definition.path("bindingSlots"), request, null, null);
+        primaryWithFeedback(component.get("sourceNos"), definition.path("primarySource"), request, false, definition.path("bindingSlots"), context);
+        bindings(component.get("bindings"), definition.path("bindingSlots"), request, null, null, context);
         structures(component.get("params"), type);
     }
 
     /** 校验设置组包装，绑定与普通参数严格分开。 */
-    private static void group(JsonNode group, JsonNode definition, ObjectNode request, ObjectNode original) {
+    private static void group(JsonNode group, JsonNode definition, ObjectNode request, ObjectNode original, BindingContext context) {
         exact(group, Set.of("params", "bindings"), Set.of());
         params(group.get("params"), definition.path("params"), false);
-        bindings(group.get("bindings"), definition.path("bindingSlots"), request, original, null);
+        bindings(group.get("bindings"), definition.path("bindingSlots"), request, original, null, context);
     }
 
     /** 校验操作序列及互斥写集合，所有 hash 都对照同一冻结基准。 */
@@ -422,7 +448,8 @@ public final class AiPortfolioProtocol {
         Set<String> written = new HashSet<>(), removed = new HashSet<>(), moved = new HashSet<>(), insertionPoints = new HashSet<>();
         Set<String> componentWrites = new HashSet<>();
         int count = totalComponents(baseConfig(request));
-        for (JsonNode operation : operations) {
+        for (int operationIndex = 0; operationIndex < operations.size(); operationIndex++) {
+            JsonNode operation = operations.get(operationIndex);
             exact(operation, Set.of("op", "target", "expectedHash", "payload", "reason"), Set.of());
             String op = text(operation.get("op"));
             require(contains(contract.path("allowedOps"), op), "INVALID_OUTPUT", "该模式不支持操作");
@@ -475,7 +502,7 @@ public final class AiPortfolioProtocol {
                     position(payload, request, removed, null);
                     require(insertionPoints.add(payload.path("position").asText() + ":" + payload.path("anchorComponentKey").asText()),
                             "INVALID_OUTPUT", "不能连续插入同一锚点");
-                    proposal(payload.get("component"), request, contract); count++;
+                    proposal(payload.get("component"), request, contract, operationIndex, true); count++;
                 }
                 case "REMOVE_COMPONENT" -> {
                     exact(payload, Set.of(), Set.of());
@@ -484,9 +511,15 @@ public final class AiPortfolioProtocol {
                 }
                 case "BIND_RESOURCES" -> {
                     exact(payload, Set.of("sourceNos", "bindings"), Set.of());
-                    primary(payload.get("sourceNos"), target.size() == 2 ? definition.path("primarySource") : null, request, true);
+                    // 类型只能取已在可信目录中的原组件类型，不能回显模型提供的身份或业务值。
+                    String type = component.path("componentType").asText();
+                    String safeType = contract.path("componentCatalog").has(type) ? type : PortfolioAiBindingMessage.UNKNOWN_COMPONENT;
+                    BindingContext context = new BindingContext(PortfolioAiBindingMessage.BIND_COMPONENT.formatted(operationIndex + 1, safeType),
+                            OPERATION_PAYLOAD_PATH.formatted(operationIndex));
+                    primaryWithFeedback(payload.get("sourceNos"), target.size() == 2 ? definition.path("primarySource") : null, request, true,
+                            target.size() == 2 ? definition.path("bindingSlots") : object(), context);
                     JsonNode bindingSlots = target.size() == 2 ? definition.path("bindingSlots") : fontSlots(component, target);
-                    bindings(payload.get("bindings"), bindingSlots, request, component, resolveNode(request, target));
+                    bindings(payload.get("bindings"), bindingSlots, request, component, resolveNode(request, target), context);
                     if (!payload.get("sourceNos").isEmpty()) { write(written, targetId, "primarySource"); }
                     payload.get("bindings").forEach(binding -> write(written, targetId, binding.path("slot").asText()));
                 }
@@ -497,7 +530,8 @@ public final class AiPortfolioProtocol {
                     ObjectNode settingGroup = object();
                     settingGroup.set("params", payload.get("params"));
                     settingGroup.set("bindings", payload.get("bindings"));
-                    group(settingGroup, setting, request, null);
+                    group(settingGroup, setting, request, null, new BindingContext(
+                            PortfolioAiBindingMessage.UPDATE_SETTING.formatted(operationIndex + 1, section), OPERATION_PAYLOAD_PATH.formatted(operationIndex)));
                     payload.get("params").fieldNames().forEachRemaining(field -> write(written, section, field));
                     payload.get("bindings").forEach(binding -> write(written, section, binding.path("slot").asText()));
                 }
@@ -532,6 +566,38 @@ public final class AiPortfolioProtocol {
         return run || structuredText ? object().set("fontId", object().put("kind", "FONT")) : object();
     }
 
+    /**
+     * 只携带代码构造的位置及可信目录类型的素材反馈上下文。
+     * @param description 可读组件或操作位置
+     * @param path 固定协议字段路径，不接受模型提供的路径
+     */
+    private record BindingContext(String description, String path) {
+        /** 保留原分类及安全摘要，追加字段位置与固定纠正提示。 */
+        private AiProtocolException reject(String field, AiProtocolException failure, String correction) {
+            if (!INVALID_OUTPUT_CODE.equals(failure.getCode())) { return failure; }
+            return new AiProtocolException(failure.getCode(), PortfolioAiBindingMessage.FIELD_CORRECTION
+                    .formatted(description, path + "." + field, failure.getMessage(), correction));
+        }
+    }
+
+    /** 在原主来源校验外补充重试位置，拒绝规则及校验顺序保持不变。 */
+    private static void primaryWithFeedback(JsonNode sourceNos, JsonNode rule, ObjectNode request, boolean mayKeep,
+                                            JsonNode slots, BindingContext context) {
+        try {
+            primary(sourceNos, rule, request, mayKeep);
+        } catch (AiProtocolException failure) {
+            String correction;
+            if (rule == null || rule.isNull() || rule.isMissingNode()) {
+                correction = PortfolioAiBindingMessage.NO_PRIMARY_CORRECTION;
+                if (slots.has(BACKGROUND_WORK_SLOT)) { correction += PortfolioAiBindingMessage.BACKGROUND_CORRECTION; }
+            } else {
+                correction = PortfolioAiBindingMessage.PRIMARY_CORRECTION.formatted(rule.path("kind").asText(),
+                        rule.path("min").asInt(), rule.path("max").asInt(), rule.path("mediaTypes"));
+            }
+            throw context.reject(SOURCE_NUMBERS_FIELD, failure, correction);
+        }
+    }
+
     /** 检查主来源数量、媒体类型、去重与已选可新增状态。 */
     private static void primary(JsonNode sourceNos, JsonNode rule, ObjectNode request, boolean mayKeep) {
         limitedArray(sourceNos, limit("maxSourceCount"));
@@ -561,31 +627,50 @@ public final class AiPortfolioProtocol {
     }
 
     /** 检查槽位、资源句柄、来源与 reuseOnly 的原位置约束。 */
-    private static void bindings(JsonNode bindings, JsonNode slots, ObjectNode request, ObjectNode original, ObjectNode node) {
-        limitedArray(bindings, Math.max(slots.size(), 0)); Set<String> written = new HashSet<>();
-        for (JsonNode binding : bindings) {
-            exact(binding, Set.of("slot"), Set.of("sourceNo", "ref"));
-            String slot = text(binding.get("slot")); JsonNode spec = slots.get(slot);
-            require(spec != null && written.add(slot) && binding.has("ref") != binding.has("sourceNo"), "INVALID_OUTPUT", "槽位未知、重复或绑定身份不唯一");
-            if (binding.has("sourceNo")) {
-                JsonNode selected = source(request, binding.get("sourceNo"));
-                require(spec.path("kind").asText().equals(selected.path("kind").asText()), "INVALID_OUTPUT", "槽位来源类型不符合要求");
-                if (spec.has("mediaTypes")) { require(contains(spec.path("mediaTypes"), selected.path("mediaType").asText()), "INVALID_OUTPUT", "槽位素材媒体类型不符合要求"); }
-            } else {
-                String ref = text(binding.get("ref")); JsonNode found = null;
-                for (JsonNode value : request.path("facts").path("bindings")) {
-                    if (ref.equals(value.path("ref").asText())) { found = value; break; }
-                }
-                require(found != null && contains(found.path("allowedSlots"), slot)
-                        && spec.path("kind").asText().equals(found.path("kind").asText()), "INVALID_OUTPUT", "资源句柄或槽位不合法");
-                if (found.path("reuseOnly").asBoolean()) {
-                    require(original != null && original.path("componentKey").asText().equals(found.path("componentKey").asText()), "INVALID_OUTPUT", "已有引用不能复制到新组件");
-                    if (found.has("nodeKey")) {
-                        require(node != null && containsNodeKey(node, found.path("nodeKey").asText()), "INVALID_OUTPUT", "已有引用不能改变文字位置");
+    private static void bindings(JsonNode bindings, JsonNode slots, ObjectNode request, ObjectNode original, ObjectNode node, BindingContext context) {
+        String correction = bindingCorrection(slots);
+        try {
+            limitedArray(bindings, Math.max(slots.size(), 0));
+        } catch (AiProtocolException failure) {
+            throw context.reject(BINDINGS_FIELD, failure, correction);
+        }
+        Set<String> written = new HashSet<>();
+        for (int bindingIndex = 0; bindingIndex < bindings.size(); bindingIndex++) {
+            JsonNode binding = bindings.get(bindingIndex);
+            try {
+                exact(binding, Set.of("slot"), Set.of("sourceNo", "ref"));
+                String slot = text(binding.get("slot")); JsonNode spec = slots.get(slot);
+                require(spec != null && written.add(slot) && binding.has("ref") != binding.has("sourceNo"), "INVALID_OUTPUT", "槽位未知、重复或绑定身份不唯一");
+                if (binding.has("sourceNo")) {
+                    JsonNode selected = source(request, binding.get("sourceNo"));
+                    require(spec.path("kind").asText().equals(selected.path("kind").asText()), "INVALID_OUTPUT", "槽位来源类型不符合要求");
+                    if (spec.has("mediaTypes")) { require(contains(spec.path("mediaTypes"), selected.path("mediaType").asText()), "INVALID_OUTPUT", "槽位素材媒体类型不符合要求"); }
+                } else {
+                    String ref = text(binding.get("ref")); JsonNode found = null;
+                    for (JsonNode value : request.path("facts").path("bindings")) {
+                        if (ref.equals(value.path("ref").asText())) { found = value; break; }
+                    }
+                    require(found != null && contains(found.path("allowedSlots"), slot)
+                            && spec.path("kind").asText().equals(found.path("kind").asText()), "INVALID_OUTPUT", "资源句柄或槽位不合法");
+                    if (found.path("reuseOnly").asBoolean()) {
+                        require(original != null && original.path("componentKey").asText().equals(found.path("componentKey").asText()), "INVALID_OUTPUT", "已有引用不能复制到新组件");
+                        if (found.has("nodeKey")) {
+                            require(node != null && containsNodeKey(node, found.path("nodeKey").asText()), "INVALID_OUTPUT", "已有引用不能改变文字位置");
+                        }
                     }
                 }
+            } catch (AiProtocolException failure) {
+                throw context.reject(BINDINGS_FIELD + "[" + bindingIndex + "]", failure, correction);
             }
         }
+    }
+
+    /** 只列出可信目录的少量槽位名，不回显模型填写的槽位、来源号或引用值。 */
+    private static String bindingCorrection(JsonNode slots) {
+        if (slots.isEmpty()) { return PortfolioAiBindingMessage.NO_BINDING_CORRECTION; }
+        Set<String> names = new LinkedHashSet<>();
+        slots.fieldNames().forEachRemaining(names::add);
+        return PortfolioAiBindingMessage.BINDING_CORRECTION.formatted(String.join(", ", names));
     }
 
     /** 校验引用原节点的真实稳定 key。 */

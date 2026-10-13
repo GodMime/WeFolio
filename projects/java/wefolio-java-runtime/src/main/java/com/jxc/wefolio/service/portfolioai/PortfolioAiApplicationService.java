@@ -56,6 +56,8 @@ public class PortfolioAiApplicationService {
     private final PortfolioAiConfigService configs;
     /** 多模态任务仅冻结经授权的对象身份，不保存短期签名。 */
     private final PortfolioAiMediaPlanService mediaPlans;
+    /** 已选作品用于分享图片时创建独立素材快照，避免作品变更使作品集封面失效。 */
+    private final PortfolioAiShareImageService shareImages;
 
     /** 返回服务当前能力与本人活动任务，仅包含安全状态。 */
     public Map<String, Object> capabilities() {
@@ -118,7 +120,8 @@ public class PortfolioAiApplicationService {
         frozen.putObject(KEY_MODEL_CONFIG).put(KEY_PROVIDER, PROVIDER_TOKENHUB).put(KEY_MODEL, properties.getModel())
                 .put(KEY_BASE_URL, properties.getBaseUrl()).put(KEY_TEMPERATURE, properties.getTemperature())
                 .put(FROZEN_MEDIA_ENABLED, properties.isMediaEnabled())
-                .put(KEY_MAX_TOKENS, properties.getMaxTokens()).put(KEY_THINKING, THINKING_ENABLED).put(KEY_STREAM, false);
+                .put(KEY_MAX_TOKENS, properties.getMaxTokens()).put(KEY_REASONING_EFFORT, properties.getReasoningEffort())
+                .put(KEY_THINKING, THINKING_ENABLED).put(KEY_STREAM, false);
         // 投影在提交时预检，不能把无法定位的菜单、组件或未支持基准交给 Job。
         AiPortfolioProtocol.project(frozen);
         StrictAiJson.parseObject(frozen.toString(), TASK_MAX_BYTES, properties.getMaxJsonDepth() + WRAPPER_DEPTH);
@@ -132,6 +135,8 @@ public class PortfolioAiApplicationService {
         AiGenerationTaskEntity task = requireTask(taskId, requester);
         PortfolioEntity portfolio = requireTaskOwner(task, requester);
         Map<String, Object> response = status(task);
+        Map<String, Object> usage = PortfolioAiTokenUsage.summarize(task.getId(), task.getMediaBudgetJson(), task.getMediaBudgetUnknownCount());
+        if (usage != null) { response.put(PortfolioAiTokenUsage.RESPONSE_KEY, usage); }
         ObjectNode request;
         try {
             request = parseTask(task);
@@ -174,15 +179,28 @@ public class PortfolioAiApplicationService {
             // 冻结基准已规范化；第二次规范化不能制造未授权变化。
             stage = PortfolioAiFailureDetails.Stage.NORMALIZATION;
             PortfolioAiConfigService.requireExplicitValuesPreserved(candidate, normalized, "");
-            boolean changes = !StrictAiJson.canonicalHash(AiPortfolioProtocol.baseConfig(request)).equals(StrictAiJson.canonicalHash(normalized));
             stage = PortfolioAiFailureDetails.Stage.RENDER;
             Object renderData = JSON.parseObject(JSON.toJSONString(configs.render(input, portfolio, normalized)));
+            // 只有完整普通候选已可展示时才创建图片快照；重新编译仍复用同一授权基准与字段保护规则。
+            stage = PortfolioAiFailureDetails.Stage.SOURCES;
+            ObjectNode effectiveRequest = shareImages.snapshot(task.getId(), request, output);
+            if (!effectiveRequest.equals(request)) {
+                stage = PortfolioAiFailureDetails.Stage.COMPILATION;
+                candidate = PortfolioAiCompiler.compile(task.getId(), effectiveRequest, output);
+                stage = PortfolioAiFailureDetails.Stage.CONFIG;
+                normalized = configs.validate(input, portfolio, candidate);
+                stage = PortfolioAiFailureDetails.Stage.NORMALIZATION;
+                PortfolioAiConfigService.requireExplicitValuesPreserved(candidate, normalized, "");
+                stage = PortfolioAiFailureDetails.Stage.RENDER;
+                renderData = JSON.parseObject(JSON.toJSONString(configs.render(input, portfolio, normalized)));
+            }
+            boolean changes = !StrictAiJson.canonicalHash(AiPortfolioProtocol.baseConfig(request)).equals(StrictAiJson.canonicalHash(normalized));
             // 完整普通渲染也成功后才发布可采用字段，异常不能留下半成功候选。
             result.put(KEY_CANDIDATE, JSON.parseObject(normalized.toString()));
             result.put(KEY_HAS_CHANGES, changes);
             result.put(KEY_AVAILABLE, true);
-            result.put(KEY_SUMMARY, changes ? PortfolioAiCandidateSummary.describe(AiPortfolioProtocol.baseConfig(request), normalized, request) : List.of(PortfolioAiMessage.NO_CHANGES));
-            result.putAll(PortfolioAiCandidateSummary.sources(normalized, request));
+            result.put(KEY_SUMMARY, changes ? PortfolioAiCandidateSummary.describe(AiPortfolioProtocol.baseConfig(request), normalized, effectiveRequest) : List.of(PortfolioAiMessage.NO_CHANGES));
+            result.putAll(PortfolioAiCandidateSummary.sources(normalized, effectiveRequest));
             result.put(KEY_RENDER_DATA, renderData);
         } catch (BusinessException exception) {
             rejectCandidate(response, safeReason(exception), stage, exception);

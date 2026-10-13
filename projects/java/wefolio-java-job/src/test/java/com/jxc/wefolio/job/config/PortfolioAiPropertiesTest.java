@@ -31,12 +31,16 @@ class PortfolioAiPropertiesTest {
                 .withProperty("DEEPSEEK_API_KEY", "test-legacy-key"));
         assertThat(properties.getBaseUrl()).isEqualTo("https://tokenhub.tencentmaas.com/v1");
         assertThat(properties.getModel()).isEqualTo("glm-5.3-flash");
-        assertThat(properties.getTotalTimeoutSeconds()).isEqualTo(180);
+        assertThat(properties.getTotalTimeoutSeconds()).isEqualTo(600);
+        assertThat(properties.getCallTimeoutSeconds()).isEqualTo(180);
         assertThat(properties.getRetentionDays()).isEqualTo(30);
-        assertThat(properties.getRecoverySeconds()).isEqualTo(90);
+        assertThat(properties.getRecoverySeconds()).isEqualTo(240);
         assertThat(properties.getMediaMaxCalls()).isGreaterThanOrEqualTo(51);
         assertThat(new PortfolioAiProperties().getMediaMaxCalls()).isGreaterThanOrEqualTo(51);
-        assertThat(new PortfolioAiProperties().getRecoverySeconds()).isEqualTo(90);
+        PortfolioAiProperties defaults = new PortfolioAiProperties();
+        assertThat(defaults.getTotalTimeoutSeconds()).isEqualTo(600);
+        assertThat(defaults.getCallTimeoutSeconds()).isEqualTo(180);
+        assertThat(defaults.getRecoverySeconds()).isEqualTo(240);
         assertThat(properties.getApiKey()).isEqualTo("test-tokenhub-key");
         assertThatCode(properties::validate).doesNotThrowAnyException();
         assertThat(properties.toString()).doesNotContain("test-tokenhub-key", "test-legacy-key");
@@ -50,15 +54,29 @@ class PortfolioAiPropertiesTest {
         assertThat(audit.isVideoPersistentFramesEnabled()).isTrue();
     }
 
-    /** 与 Runtime 同名的环境变量应覆盖 Job 的任务总期限和终态留存默认值。 */
+    /** 总期限、调用期限和恢复窗口允许按部署环境配套覆盖，终态留存保持原语义。 */
     @Test
     void applicationBindsSharedTimeoutAndRetentionEnvironmentVariables() throws IOException {
         PortfolioAiProperties properties = bind(new MockEnvironment()
-                .withProperty("WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS", "240")
+                .withProperty("WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS", "900")
+                .withProperty("WEFOLIO_AI_CALL_TIMEOUT_SECONDS", "240")
+                .withProperty("WEFOLIO_AI_RECOVERY_SECONDS", "300")
                 .withProperty("WEFOLIO_AI_RETENTION_DAYS", "45"));
-        assertThat(properties.getTotalTimeoutSeconds()).isEqualTo(240);
+        assertThat(properties.getTotalTimeoutSeconds()).isEqualTo(900);
+        assertThat(properties.getCallTimeoutSeconds()).isEqualTo(240);
+        assertThat(properties.getRecoverySeconds()).isEqualTo(300);
         assertThat(properties.getRetentionDays()).isEqualTo(45);
         assertThatCode(properties::validate).doesNotThrowAnyException();
+    }
+
+    /** 单次模型调用不能跨越中断恢复窗口，避免正常执行被其他扫描提前重领。 */
+    @Test
+    void callTimeoutMustRemainShorterThanRecoveryWindow() throws IOException {
+        PortfolioAiProperties properties = bind(new MockEnvironment()
+                .withProperty("WEFOLIO_AI_CALL_TIMEOUT_SECONDS", "240")
+                .withProperty("WEFOLIO_AI_RECOVERY_SECONDS", "240"));
+        assertThatThrownBy(properties::validate).isInstanceOf(IllegalStateException.class)
+                .hasMessage("portfolio-ai 的期限、数量与字节预算不合法");
     }
 
     /** 启用后不能因旧密钥仍在部署环境中而继续启动。 */

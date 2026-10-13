@@ -29,12 +29,59 @@ class PortfolioAiExecutionServiceTest {
     /** 单次模型调用边界。 */ private final PortfolioAiModelClient client = mock(PortfolioAiModelClient.class);
     /** 媒体执行替身，文字测试也保持依赖完整。 */ private final PortfolioAiMediaExecutionService mediaExecution = mock(PortfolioAiMediaExecutionService.class);
     /** 摘要清理替身，不访问数据库。 */ private final PortfolioAiMediaRepository mediaRepository = mock(PortfolioAiMediaRepository.class);
-    /** 开关默认关闭。 */ private final PortfolioAiProperties properties = new PortfolioAiProperties();
+    /** 既有边界场景显式沿用旧预算，不与生产默认值耦合。 */ private final PortfolioAiProperties properties = legacyTimeoutProperties();
     /** 测试冻结时点使用上海口径，不受 Maven JVM 默认时区影响。 */ private final LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
     /** 被测服务。 */ private final PortfolioAiExecutionService service = new PortfolioAiExecutionService(repository, client, properties,
             new JobExecutionLifecycle(), Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")), Executors.newSingleThreadExecutor(), mediaExecution, mediaRepository);
 
     @AfterEach void stop() { service.close(); }
+
+    /** 原三分钟预算仅用于保留既有恢复和迟到回写场景。 */
+    private PortfolioAiProperties legacyTimeoutProperties() {
+        PortfolioAiProperties properties = new PortfolioAiProperties();
+        properties.setTotalTimeoutSeconds(180); properties.setCallTimeoutSeconds(60); properties.setRecoverySeconds(90);
+        return properties;
+    }
+
+    /** 默认十分钟预算下，超过旧三分钟期限的媒体任务仍可通过真实执行入口完成。 */
+    @Test void defaultMediaTaskPastOldDeadlineCanStillSucceed() {
+        PortfolioAiProperties defaults = new PortfolioAiProperties();
+        AiGenerationTaskEntity task = mediaTask(); task.setCreatedAt(now.minusSeconds(599));
+        when(repository.renewMediaLease(eq(task), eq(240), eq(600))).thenReturn(true);
+        when(mediaExecution.generate(eq(task), any(), any())).thenReturn("""
+                {"schemaVersion":"ai-portfolio-v1","promptVersion":"portfolio-ai-2026-10-10.2","status":"CANDIDATE",
+                 "mode":"MODIFY_PAGE","page":null,"operations":[],"questions":[],"notes":[]}
+                """);
+        when(repository.succeedMedia(eq(task), anyString(), eq(now), eq(600), eq(240))).thenReturn(true);
+        var defaultService = new PortfolioAiExecutionService(repository, client, defaults,
+                new JobExecutionLifecycle(), Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")),
+                Executors.newSingleThreadExecutor(), mediaExecution, mediaRepository);
+        try {
+            defaultService.executeClaimed(task, request(task));
+            verify(mediaExecution).generate(eq(task), any(), any());
+            ArgumentCaptor<String> result = ArgumentCaptor.forClass(String.class);
+            verify(repository).succeedMedia(eq(task), result.capture(), eq(now), eq(600), eq(240));
+            assertThat(StrictAiJson.parseObject(result.getValue(), 10000, 16).path("kind").asText()).isEqualTo("CANDIDATE");
+            verify(repository, never()).fail(any(), anyString(), anyString(), any());
+            verify(repository, never()).retryMedia(any(), anyString(), anyString(), any(), anyInt(), anyInt());
+            verifyNoInteractions(client);
+        } finally { defaultService.close(); }
+    }
+
+    /** 新总期限仍有严格上限，到第六百秒时直接失败且不能再次调用付费模型。 */
+    @Test void defaultMediaTaskExpiresAtExactTenMinuteDeadline() {
+        AiGenerationTaskEntity task = mediaTask(); task.setCreatedAt(now.minusSeconds(600));
+        var defaultService = new PortfolioAiExecutionService(repository, client, new PortfolioAiProperties(),
+                new JobExecutionLifecycle(), Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")),
+                Executors.newSingleThreadExecutor(), mediaExecution, mediaRepository);
+        try {
+            defaultService.executeClaimed(task, request(task));
+            verify(repository).fail(eq(task), eq("TIMEOUT"), anyString(), eq(now));
+            verify(repository, never()).succeedMedia(any(), anyString(), any(), anyInt(), anyInt());
+            verify(repository, never()).renewMediaLease(any(), anyInt(), anyInt());
+            verifyNoInteractions(client, mediaExecution);
+        } finally { defaultService.close(); }
+    }
 
     /** UTC 时钟的同一瞬间仍按上海午夜计算恢复截止与清理日期。 */
     @Test void utcClockKeepsShanghaiMidnightDeadlineAndCleanupDay() {
@@ -221,6 +268,32 @@ class PortfolioAiExecutionServiceTest {
         when(client.generate(eq(third), any(), any())).thenThrow(new PortfolioAiCallException("REMOTE_ERROR", "网络失败", true));
         service.executeClaimed(third, request(third));
         verify(repository).fail(eq(third), eq("REMOTE_ERROR"), eq("网络失败"), eq(now));
+    }
+
+    /** 执行入口将精准绑定摘要写入重试与最终失败，拒绝结果不会成为候选。 */
+    @Test
+    void bindingFailurePersistsSafeCorrectionAcrossRetryAndFinalAttempt() {
+        for (int attempts : List.of(1, 3)) {
+            AiGenerationTaskEntity task = task(attempts); ObjectNode frozen = request(task);
+            frozen.withObject("input").put("mode", "CREATE");
+            task.setRequestJson(frozen.toString());
+            when(client.generate(eq(task), any(), any())).thenReturn("""
+                    {"schemaVersion":"ai-portfolio-v1","promptVersion":"portfolio-ai-2026-10-10.2",
+                     "status":"CANDIDATE","mode":"CREATE","page":{"menuKey":"menu_current","components":[
+                     {"type":"TEXT_SECTION","sourceNos":[1],"params":{"content":"被拒正文-secret"},"bindings":[]}
+                     ],"settings":{}},"operations":[],"questions":[],"notes":[]}
+                    """);
+            service.executeClaimed(task, frozen);
+            ArgumentCaptor<String> summary = ArgumentCaptor.forClass(String.class);
+            if (attempts == 1) {
+                verify(repository).retry(eq(task), eq("INVALID_OUTPUT"), summary.capture(), eq(now), eq(180));
+            } else {
+                verify(repository).fail(eq(task), eq("INVALID_OUTPUT"), summary.capture(), eq(now));
+            }
+            assertThat(summary.getValue()).contains("第 1 个组件 TEXT_SECTION", "page.components[0].sourceNos",
+                    "sourceNos=[]", "backgroundWorkId").doesNotContain("被拒正文", "secret").hasSizeLessThanOrEqualTo(500);
+            verify(repository, never()).succeed(eq(task), anyString(), any(), anyInt());
+        }
     }
 
     @Test

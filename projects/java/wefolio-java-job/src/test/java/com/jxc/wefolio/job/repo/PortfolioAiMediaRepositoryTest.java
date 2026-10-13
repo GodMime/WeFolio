@@ -396,9 +396,22 @@ class PortfolioAiMediaRepositoryTest {
         assertThatThrownBy(() -> repository.reserve(task(1), 1, now)).hasMessageContaining("失效");
         jdbc.update("UPDATE wf_ai_generation_task SET attempt_count=2 WHERE id=2");
         assertThatThrownBy(() -> repository.reserve(task(2), 1, now)).hasMessageContaining("失效");
-        jdbc.update("UPDATE wf_ai_generation_task SET created_at=? WHERE id=3", now.minusSeconds(181));
+        jdbc.update("UPDATE wf_ai_generation_task SET created_at=? WHERE id=3",
+                now.minusSeconds(properties.getTotalTimeoutSeconds() + 1L));
         assertThatThrownBy(() -> repository.reserve(task(3), 1, now)).hasMessageContaining("失效");
         assertThat(budget(1).callCount() + budget(2).callCount() + budget(3).callCount()).isZero();
+    }
+
+    /** 媒体任务超过旧三分钟但尚未达到新期限时，真实仓储仍允许预留下一次模型调用。 */
+    @Test
+    void runningTaskPastOldDeadlineCanStillReserveBeforeExtendedDeadline() {
+        jdbc.update("UPDATE wf_ai_generation_task SET created_at=? WHERE id=1", now.minusSeconds(181));
+
+        assertThat(repository.reserve(task(1), 1, now)).isEqualTo(1);
+
+        assertThat(budget(1).callCount()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT status FROM wf_ai_generation_task WHERE id=1", String.class))
+                .isEqualTo("RUNNING");
     }
 
     /** 摘要独立保存和过期，幂等刷新不改变作品业务版本、时间和帧。 */

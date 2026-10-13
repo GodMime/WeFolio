@@ -20,6 +20,8 @@ public class PortfolioAiProperties {
     public static final String TOKENHUB_MODEL = "glm-5.3-flash";
     /** 冻结任务的供应商身份。 */
     public static final String TOKENHUB_PROVIDER = "TOKENHUB";
+    /** 最终生成缺省与冻结参数的有界输出上限，与 Runtime 新任务默认值一致。 */
+    public static final int MAX_OUTPUT_TOKENS = 32_768;
     /** 全局接单开关，启动读取。 */
     private boolean enabled;
     /** 媒体部署预期开关；新任务能力以 Runtime 冻结计划为准，差异会告警。 */
@@ -40,14 +42,14 @@ public class PortfolioAiProperties {
     private String apiKey = "";
     /** 用于供应商隔离标识的服务端 HMAC 密钥，缺省使用 API 密钥。 */
     private String userHmacSecret = "";
-    /** 全任务总期限。 */
-    private int totalTimeoutSeconds = 180;
-    /** 每次 HTTP 绝对截止时间。 */
-    private int callTimeoutSeconds = 60;
+    /** 全任务总期限，覆盖排队、媒体分析、页面生成及全部自动重试。 */
+    private int totalTimeoutSeconds = 600;
+    /** 每次 HTTP 绝对截止时间，为较慢的媒体分析和页面生成保留等待预算。 */
+    private int callTimeoutSeconds = 180;
     /** 连接期限不超过剩余调用时间。 */
     private int connectTimeoutSeconds = 5;
-    /** 进程中断恢复窗口，大于一次 HTTP 期限。 */
-    private int recoverySeconds = 90;
+    /** 进程中断恢复窗口，比一次 HTTP 期限多留一分钟，避免正常文字调用被提前恢复。 */
+    private int recoverySeconds = 240;
     /** 初次及自动重试共用预算。 */
     private int maxAttempts = 3;
     /** 终态主库保留天数。 */

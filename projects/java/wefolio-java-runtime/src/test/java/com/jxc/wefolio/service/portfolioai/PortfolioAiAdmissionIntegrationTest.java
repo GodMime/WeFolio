@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.jxc.wefolio.common.auth.AuthContext;
+import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.config.PortfolioAiProperties;
 import com.jxc.wefolio.dict.AiTaskStatusDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
@@ -13,10 +15,15 @@ import com.jxc.wefolio.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.AiGenerationTaskEntityMapper;
 import com.jxc.wefolio.mapper.UserEntityMapper;
+import com.jxc.wefolio.message.PortfolioAiMessage;
+import com.jxc.wefolio.message.PortfolioAiTaskMessage;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.h2.jdbcx.JdbcDataSource;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -27,8 +34,10 @@ import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import javax.sql.DataSource;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -37,11 +46,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
-/** 真正 Spring 事务与 MyBatis/H2 行锁验证跨请求人容量、本人额度和幂等。 */
+/** 真正 Spring 事务与 MyBatis/H2 行锁验证跨请求人容量、本人额度、幂等及查询超时收口。 */
 @SpringJUnitConfig(PortfolioAiAdmissionIntegrationTest.Config.class)
 class PortfolioAiAdmissionIntegrationTest {
+    /** Runtime 与 Job 共用的任务总期限失败分类。 */
+    private static final String TIMEOUT_ERROR_CODE = "TIMEOUT";
     /** 经过事务代理的实际提交服务。 */
     @Autowired private PortfolioAiTaskTransactionService service;
+    /** 查询入口保留真实过期收口及任务状态映射。 */
+    @Autowired private PortfolioAiApplicationService application;
     /** 临时数据库查询用于验证提交结果。 */
     @Autowired private JdbcTemplate jdbc;
     /** 本次独立服务级队列配置。 */
@@ -52,6 +65,57 @@ class PortfolioAiAdmissionIntegrationTest {
     /** 每个测试使用空的本地任务表，不读写真实环境。 */
     @BeforeEach void clearTasks() {
         jdbc.update("DELETE FROM wf_ai_generation_task"); properties.setMaxActiveTasks(2);
+        AuthContextHolder.set(new AuthContext(101L, "test-token"));
+    }
+
+    /** 查询测试使用的维护者身份不能泄漏到相邻测试。 */
+    @AfterEach void clearIdentity() { AuthContextHolder.clear(); }
+
+    /** 超过原三分钟但仍在十分钟内的任务保持运行，也继续占用本人活动额度。 */
+    @ParameterizedTest
+    @ValueSource(ints = {181, 540})
+    void longerRunningTaskRemainsActiveBeforeExtendedDeadline(int ageSeconds) {
+        AiGenerationTaskEntity task = runningTask(ageSeconds);
+
+        Map<String, Object> response = application.query(task.getId());
+
+        assertThat(response.get(PortfolioAiConstants.KEY_STATUS)).isEqualTo(AiTaskStatusDict.RUNNING.getCode());
+        assertThat(response.get(PortfolioAiConstants.KEY_ERROR_CODE)).isNull();
+        AiGenerationTaskEntity retained = taskMapper.selectById(task.getId());
+        assertThat(retained.getStatus()).isEqualTo(AiTaskStatusDict.RUNNING.getCode());
+        assertThat(retained.getVersion()).isEqualTo(2);
+        assertThat(retained.getCompletedAt()).isNull();
+        assertThatThrownBy(() -> service.submit(101L, "second-active-task", frozen(101L)))
+                .isInstanceOf(BusinessException.class).hasMessage(PortfolioAiMessage.ACTIVE_TASK);
+    }
+
+    /** 到达十分钟后查询仍正常收口失败、作废旧执行代次并释放本人活动额度。 */
+    @ParameterizedTest
+    @ValueSource(ints = {600, 601})
+    void extendedDeadlineStillExpiresTaskAndReleasesRequesterSlot(int ageSeconds) {
+        AiGenerationTaskEntity task = runningTask(ageSeconds);
+        LocalDateTime beforeQuery = PortfolioAiTime.now();
+
+        Map<String, Object> response = application.query(task.getId());
+
+        assertThat(response.get(PortfolioAiConstants.KEY_STATUS)).isEqualTo(AiTaskStatusDict.FAILED.getCode());
+        assertThat(response.get(PortfolioAiConstants.KEY_ERROR_CODE)).isEqualTo(TIMEOUT_ERROR_CODE);
+        assertThat(response.get(PortfolioAiConstants.KEY_ERROR_MESSAGE)).isEqualTo(PortfolioAiTaskMessage.TASK_FAILED_MESSAGE);
+        AiGenerationTaskEntity expired = taskMapper.selectById(task.getId());
+        assertThat(expired.getErrorCode()).isEqualTo(TIMEOUT_ERROR_CODE);
+        assertThat(expired.getVersion()).isEqualTo(3);
+        // H2 时间戳保留微秒，允许纳秒时刻写入后的精度舍入。
+        assertThat(expired.getCompletedAt()).isBetween(beforeQuery.minusNanos(1000), PortfolioAiTime.now());
+        assertThat(service.submit(101L, "after-timeout-task", frozen(101L)).getStatus())
+                .isEqualTo(AiTaskStatusDict.PENDING.getCode());
+    }
+
+    /** 使用真实提交事务创建记录，只调整已执行时间及代次以构造期限场景。 */
+    private AiGenerationTaskEntity runningTask(int ageSeconds) {
+        AiGenerationTaskEntity task = service.submit(101L, "long-running-task", frozen(101L));
+        jdbc.update("UPDATE wf_ai_generation_task SET status=?,created_at=?,version=2 WHERE id=?",
+                AiTaskStatusDict.RUNNING.getCode(), PortfolioAiTime.now().minusSeconds(ageSeconds), task.getId());
+        return task;
     }
 
     /** 两个线程同时提交同一人不同键，实际只创建一个活动任务。 */
@@ -194,6 +258,12 @@ class PortfolioAiAdmissionIntegrationTest {
         /** 由容器生成提交服务事务代理。 */
         @Bean PortfolioAiTaskTransactionService service(UserEntityMapper users, AiGenerationTaskEntityMapper tasks,
                 PortfolioAiProperties properties, PortfolioAiFactsService facts) { return new PortfolioAiTaskTransactionService(users, tasks, properties, facts); }
+        /** 查询保持真实服务及任务 Mapper，候选渲染和远端媒体能力在活动态测试中不使用。 */
+        @Bean PortfolioAiApplicationService application(PortfolioAiProperties properties, AiGenerationTaskEntityMapper tasks,
+                PortfolioAiTaskTransactionService transactions, PortfolioAiFactsService facts) {
+            return new PortfolioAiApplicationService(properties, tasks, transactions, facts,
+                    mock(PortfolioAiConfigService.class), mock(PortfolioAiMediaPlanService.class), mock(PortfolioAiShareImageService.class));
+        }
         /** 查询断言使用相同临时数据源。 */
         @Bean JdbcTemplate jdbc(DataSource source) { return new JdbcTemplate(source); }
     }

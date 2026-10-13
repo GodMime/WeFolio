@@ -43,6 +43,8 @@ class PortfolioAiApplicationServiceTest {
     @Mock private PortfolioAiFactsService facts;
     /** 完整普通业务边界模拟；真实组件校验另由十五类组件测试覆盖。 */
     @Mock private PortfolioAiConfigService configs;
+    /** 独立分享图片快照模拟；没有来源图片的候选仍返回同一冻结请求。 */
+    @Mock private PortfolioAiShareImageService shareImages;
     /** 当前运行配置。 */
     private final PortfolioAiProperties properties = new PortfolioAiProperties();
     /** 待测应用服务。 */
@@ -51,7 +53,8 @@ class PortfolioAiApplicationServiceTest {
     /** 创建请求身份，不依赖真实令牌或环境配置。 */
     @BeforeEach void prepare() {
         AuthContextHolder.set(new AuthContext(101L, "test-token"));
-        service = new PortfolioAiApplicationService(properties, tasks, transactions, facts, configs, mock(PortfolioAiMediaPlanService.class));
+        lenient().when(shareImages.snapshot(anyLong(), any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
+        service = new PortfolioAiApplicationService(properties, tasks, transactions, facts, configs, mock(PortfolioAiMediaPlanService.class), shareImages);
     }
     /** 清理线程身份，避免影响相邻测试。 */
     @AfterEach void clear() { AuthContextHolder.clear(); }
@@ -107,6 +110,183 @@ class PortfolioAiApplicationServiceTest {
         task.setResultJson("{\"kind\":\"CANDIDATE\",\"output\":{\"schemaVersion\":\"ai-portfolio-v1\",\"promptVersion\":\"portfolio-ai-2026-10-10.2\",\"status\":\"CANDIDATE\",\"mode\":\"MODIFY_PAGE\",\"page\":null,\"operations\":[],\"questions\":[],\"notes\":[]}}");
         when(tasks.selectById(7001L)).thenReturn(task);
         return task;
+    }
+
+    /** 构造仅把选中作品用作封面的真实全局修改，原页面和任务快照保持独立。 */
+    private AiGenerationTaskEntity shareCoverTask() {
+        AiGenerationTaskEntity task = succeededTask();
+        ObjectNode request = node(task.getRequestJson());
+        request.withObject("facts").withArray("sources").addObject().put("sourceNo", 1).put("kind", "WORK")
+                .put("sourceId", "201").put("mediaType", "IMAGE").put("canBind", true);
+        ObjectNode binding = request.withObject("facts").withArray("bindings").addObject().put("ref", "source_cover_1")
+                .put("kind", "IMAGE").put("sourceNo", 1).put("reuseOnly", false)
+                .put("value", "https://cdn.test/WFOWNER/work/image/photo.jpg");
+        binding.putArray("allowedSlots").add("coverUrl");
+        task.setRequestJson(request.toString());
+        ObjectNode stored = node(task.getResultJson());
+        ObjectNode operation = stored.withObject("output").withArray("operations").addObject()
+                .put("op", "UPDATE_GLOBAL").put("reason", "调整作品集封面");
+        operation.putObject("target").put("menuKey", "menu_current");
+        operation.put("expectedHash", AiPortfolioProtocol.expectedHash(AiPortfolioProtocol.baseConfig(request).path("share")));
+        operation.set("payload", node("{\"section\":\"share\",\"params\":{},\"bindings\":[{\"slot\":\"coverUrl\",\"ref\":\"source_cover_1\"}]}"));
+        task.setResultJson(stored.toString());
+        return task;
+    }
+
+    /** 可展示的封面候选替换为独立素材快照，二次校验与渲染都使用快照，素材统计仍准确。 */
+    @Test void shareImageSnapshotIsRecompiledValidatedAndRenderedBeforeAdoption() {
+        AiGenerationTaskEntity task = shareCoverTask();
+        String originalRequest = task.getRequestJson();
+        String snapshotUrl = "https://cdn.test/WFOWNER/protfolio/snapshot.jpg";
+        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.render(any(), isNull(), any())).thenAnswer(invocation ->
+                Map.of("coverUrl", ((ObjectNode) invocation.getArgument(2)).path("share").path("coverUrl").asText()));
+        when(shareImages.snapshot(anyLong(), any(), any())).thenAnswer(invocation -> {
+            ObjectNode request = ((ObjectNode) invocation.getArgument(1)).deepCopy();
+            ((ObjectNode) request.path("facts").path("bindings").get(0)).put("value", snapshotUrl);
+            return request;
+        });
+
+        Map<?, ?> result = (Map<?, ?>) service.query(7001L).get("result");
+
+        assertThat(result.get("available")).isEqualTo(true);
+        assertThat(result.get("renderData")).isEqualTo(Map.of("coverUrl", snapshotUrl));
+        assertThat(result.get("usedSourceNos")).isEqualTo(List.of(1));
+        assertThat(result.get("candidate").toString()).contains(snapshotUrl).doesNotContain("work/image/photo.jpg");
+        assertThat(task.getRequestJson()).isEqualTo(originalRequest);
+        var order = inOrder(configs, shareImages);
+        order.verify(configs).validate(any(), isNull(), any());
+        order.verify(configs).render(any(), isNull(), any());
+        order.verify(shareImages).snapshot(eq(7001L), any(), any());
+        order.verify(configs).validate(any(), isNull(), any());
+        order.verify(configs).render(any(), isNull(), any());
+    }
+
+    /** 分享图片复制失败不能把原始作品地址作为可采用候选返回。 */
+    @Test void shareImageSnapshotFailureLeavesCandidateUnavailable() {
+        shareCoverTask();
+        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
+        when(shareImages.snapshot(anyLong(), any(), any())).thenThrow(new IllegalStateException("内部 COS 信息"));
+        Map<?, ?> result = (Map<?, ?>) service.query(7001L).get("result");
+        assertThat(result.get("available")).isEqualTo(false);
+        assertThat(result.get("candidate")).isNull();
+        assertThat(result.toString()).doesNotContain("内部 COS 信息");
+    }
+
+    /** 普通配置校验失败的结果不生成未采用的远端图片快照。 */
+    @Test void invalidCandidateNeverCreatesShareImageSnapshot() {
+        shareCoverTask();
+        when(configs.validate(any(), isNull(), any())).thenThrow(new BusinessException(PortfolioAiMessage.CANDIDATE_INVALID));
+        Map<?, ?> result = (Map<?, ?>) service.query(7001L).get("result");
+        assertThat(result.get("available")).isEqualTo(false);
+        verifyNoInteractions(shareImages);
+        verify(configs, never()).render(any(), any(), any());
+    }
+
+    /** 安全调用账本仅用于验证 query 的可选用量字段，不保存费用原文到响应。 */
+    private String knownUsageLedger() {
+        return """
+                {"version":"media-budget-v1","calls":[
+                 {"attemptNo":1,"callNo":1,"budgetDay":"2026-10-13","reservedCents":20,
+                  "chargedCents":1,"usageKnown":true,"promptTokens":100,"completionTokens":40},
+                 {"attemptNo":2,"callNo":2,"budgetDay":"2026-10-13","reservedCents":30,
+                  "chargedCents":2,"usageKnown":true,"promptTokens":200,"completionTokens":60}]}
+                """;
+    }
+
+    /** 可采用的成功候选新增安全用量，既有候选、渲染和修订语义不变。 */
+    @Test void succeededCandidateAddsOptionalSafeTokenUsage() {
+        AiGenerationTaskEntity task = succeededTask(); task.setMediaBudgetJson(knownUsageLedger());
+        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
+        Map<String, Object> response = service.query(7001L);
+        assertThat(response.get("usage")).isEqualTo(Map.of("complete", true, "totalTokens", 400L));
+        assertThat(response.get("status")).isEqualTo(AiTaskStatusDict.SUCCEEDED.getCode());
+        Map<?, ?> result = (Map<?, ?>) response.get("result");
+        assertThat(result.get("available")).isEqualTo(true);
+        assertThat(result.get("hasChanges")).isEqualTo(false);
+        assertThat(result.get("renderData")).isEqualTo(Map.of("preview", true));
+        assertThat(response.toString()).doesNotContain("chargedCents", "reservedCents", "promptTokens",
+                "completionTokens", "calls", "mediaBudgetJson", "私密用户描述");
+    }
+
+    /** 失败任务仍有真实调用用量，原失败分类及固定提示继续保留。 */
+    @Test void failedTaskAddsUsageWithoutChangingFailureContract() {
+        AiGenerationTaskEntity task = task(); task.setStatus(AiTaskStatusDict.FAILED.getCode());
+        task.setMediaBudgetJson(knownUsageLedger()); task.setErrorCode("REMOTE_TIMEOUT");
+        when(tasks.selectById(7001L)).thenReturn(task);
+        Map<String, Object> response = service.query(7001L);
+        assertThat(response.get("usage")).isEqualTo(Map.of("complete", true, "totalTokens", 400L));
+        assertThat(response.get("errorMessage")).isEqualTo(PortfolioAiTaskMessage.TASK_FAILED_MESSAGE);
+        assertThat(response.get("error")).isEqualTo(Map.of("code", "REMOTE_TIMEOUT", "message", "AI 服务响应超时，请重新生成"));
+        assertThat(response).doesNotContainKey("result");
+        verifyNoInteractions(configs);
+    }
+
+    /** 候选因来源失效不可用时用量仍可查询，任务终态和来源错误语义不变。 */
+    @Test void unavailableCandidateKeepsUsageAndOriginalRejection() {
+        AiGenerationTaskEntity task = succeededTask(); task.setMediaBudgetJson(knownUsageLedger());
+        doThrow(new BusinessException(PortfolioAiMessage.SOURCE_UNAVAILABLE)).when(facts).revalidate(any(), any());
+        Map<String, Object> response = service.query(7001L);
+        assertThat(response.get("usage")).isEqualTo(Map.of("complete", true, "totalTokens", 400L));
+        Map<?, ?> result = (Map<?, ?>) response.get("result");
+        assertThat(result.get("available")).isEqualTo(false);
+        assertThat(result.get("unavailableReason")).isEqualTo(PortfolioAiMessage.SOURCE_UNAVAILABLE);
+        assertThat(result.get("candidate")).isNull();
+        verifyNoInteractions(configs);
+    }
+
+    /** 损坏费用账本降级为未知用量，不影响合法候选重验和可采用状态。 */
+    @Test void malformedUsageNeverBreaksSuccessfulCandidate() {
+        AiGenerationTaskEntity task = succeededTask(); task.setMediaBudgetJson("{不展示的内部账本");
+        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
+        Map<String, Object> response = service.query(7001L);
+        Map<?, ?> usage = (Map<?, ?>) response.get("usage");
+        assertThat(usage.get("complete")).isEqualTo(false); assertThat(usage.get("totalTokens")).isNull();
+        assertThat(((Map<?, ?>) response.get("result")).get("available")).isEqualTo(true);
+        assertThat(response.toString()).doesNotContain("不展示的内部账本");
+    }
+
+    /** 账本未知索引损坏同样只降级用量，不把合法候选改为不可用。 */
+    @Test void inconsistentUsageIndexDoesNotRejectCandidate() {
+        AiGenerationTaskEntity task = succeededTask(); task.setMediaBudgetJson(knownUsageLedger());
+        task.setMediaBudgetUnknownCount(1);
+        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
+        Map<String, Object> response = service.query(7001L);
+        Map<?, ?> usage = (Map<?, ?>) response.get("usage");
+        assertThat(usage.get("complete")).isEqualTo(false); assertThat(usage.get("totalTokens")).isNull();
+        assertThat(((Map<?, ?>) response.get("result")).get("available")).isEqualTo(true);
+    }
+
+    /** 请求 JSON 损坏仅拒绝候选，用量在授权后仍保留，不干扰原降级流程。 */
+    @Test void malformedRequestStillReturnsAuthorizedUsage() {
+        AiGenerationTaskEntity task = succeededTask(); task.setMediaBudgetJson(knownUsageLedger());
+        task.setRequestJson("{不完整的冻结请求");
+        Map<String, Object> response = service.query(7001L);
+        assertThat(response.get("usage")).isEqualTo(Map.of("complete", true, "totalTokens", 400L));
+        assertThat(((Map<?, ?>) response.get("result")).get("available")).isEqualTo(false);
+        assertThat(response).doesNotContainKeys("baseDraftRevision", "localEditRevision");
+        verifyNoInteractions(configs);
+    }
+
+    /** 历史任务没有账本时保持原响应，不新增假零用量。 */
+    @Test void legacyQueryDoesNotAddUsage() {
+        AiGenerationTaskEntity task = task(); when(tasks.selectById(7001L)).thenReturn(task);
+        assertThat(service.query(7001L)).doesNotContainKey("usage");
+    }
+
+    /** 用量限定在授权后的单任务 query，能力查询、幂等提交与取消不扩散该字段。 */
+    @Test void usageIsAddedOnlyToTaskQuery() {
+        AiGenerationTaskEntity task = task(); task.setMediaBudgetJson(knownUsageLedger());
+        when(tasks.selectList(any())).thenReturn(List.of(task));
+        assertThat(((Map<?, ?>) service.capabilities().get("activeTask")).containsKey("usage")).isFalse();
+        when(transactions.find(101L, "test-key")).thenReturn(task);
+        assertThat(service.submit(http().toString())).doesNotContainKey("usage");
+        task.setStatus(AiTaskStatusDict.CANCELLED.getCode()); when(tasks.selectById(7001L)).thenReturn(task);
+        assertThat(service.cancel(7001L)).doesNotContainKey("usage");
     }
 
     /** 失败任务新增受控分类原因，既有失败文案保留且存库原文不外传。 */
@@ -286,16 +466,23 @@ class PortfolioAiApplicationServiceTest {
 
         ArgumentCaptor<ObjectNode> frozen = ArgumentCaptor.forClass(ObjectNode.class);
         verify(transactions).submit(eq(101L), eq("test-key"), frozen.capture());
-        properties.setTemperature(0.5);
         ObjectNode snapshot = frozen.getValue();
-        assertThat(snapshot.path("modelConfig").size()).isEqualTo(8);
+        String frozenJson = snapshot.toString();
+        properties.setTemperature(0.5);
+        properties.setMaxTokens(8192);
+        properties.setReasoningEffort("low");
+        assertThat(properties.getMaxTokens()).isEqualTo(8192);
+        assertThat(properties.getReasoningEffort()).isEqualTo("low");
+        assertThat(snapshot.toString()).isEqualTo(frozenJson);
+        assertThat(snapshot.path("modelConfig").size()).isEqualTo(9);
         assertThat(snapshot.path("modelConfig").path("mediaEnabled").isBoolean()).isTrue();
         assertThat(snapshot.path("modelConfig").path("mediaEnabled").asBoolean()).isFalse();
         assertThat(snapshot.path("modelConfig").path("provider").asText()).isEqualTo("TOKENHUB");
         assertThat(snapshot.path("modelConfig").path("model").asText()).isEqualTo("glm-5.3-flash");
         assertThat(snapshot.path("modelConfig").path("baseUrl").asText()).isEqualTo("https://tokenhub.tencentmaas.com/v1");
         assertThat(snapshot.path("modelConfig").path("temperature").asDouble()).isEqualTo(1.0);
-        assertThat(snapshot.path("modelConfig").path("maxTokens").asInt()).isEqualTo(8192);
+        assertThat(snapshot.path("modelConfig").path("maxTokens").asInt()).isEqualTo(32768);
+        assertThat(snapshot.path("modelConfig").path("reasoningEffort").asText()).isEqualTo("high");
         assertThat(snapshot.path("modelConfig").path("thinking").asText()).isEqualTo("enabled");
         assertThat(snapshot.path("modelConfig").path("stream").asBoolean()).isFalse();
         assertThat(snapshot.path("contractVersion").asText()).isEqualTo(AiPortfolioProtocol.CONTRACT_VERSION);
@@ -330,7 +517,7 @@ class PortfolioAiApplicationServiceTest {
 
     /** 请求人不同不能读取原文，即使同为团队维护者。 */
     @Test void anotherRequesterCannotReadTask() {
-        AiGenerationTaskEntity task = task(); task.setRequestedBy(102L);
+        AiGenerationTaskEntity task = task(); task.setRequestedBy(102L); task.setMediaBudgetJson(knownUsageLedger());
         when(tasks.selectById(7001L)).thenReturn(task);
         assertThatThrownBy(() -> service.query(7001L)).isInstanceOf(BusinessException.class).hasMessage(PortfolioAiMessage.TASK_NOT_FOUND);
         verifyNoInteractions(facts, configs);
@@ -441,7 +628,7 @@ class PortfolioAiApplicationServiceTest {
 
     /** 请求损坏不能绕过当前维护权；查询和取消均在降级前拒绝撤权用户。 */
     @Test void malformedRequestDoesNotHideRevokedOwnership() {
-        AiGenerationTaskEntity task = task(); task.setRequestJson("{不完整");
+        AiGenerationTaskEntity task = task(); task.setRequestJson("{不完整"); task.setMediaBudgetJson(knownUsageLedger());
         when(tasks.selectById(7001L)).thenReturn(task);
         when(facts.requireOwner(any(), eq(101L))).thenThrow(new BusinessException(PortfolioAiMessage.SOURCE_UNAVAILABLE));
         assertThatThrownBy(() -> service.query(7001L)).hasMessage(PortfolioAiMessage.SOURCE_UNAVAILABLE);

@@ -46,6 +46,169 @@ class AiPortfolioProtocolTest {
         result.putObject("payload").put("field", "content").put("value", "新内容"); return result;
     }
 
+
+    /** 构造完整首次生成信封，便于重现第二个组件误用主素材的真实校验入口。 */
+    private ObjectNode bindingPage(ObjectNode output) {
+        ObjectNode page = output.putObject("page").put("menuKey", AiPortfolioProtocol.MENU_ALIAS);
+        page.putObject("settings");
+        page.putArray("components").add(bindingProposal("SINGLE_WORK", 3));
+        return page;
+    }
+
+    /** 组件提案仅使用当前可信契约允许的普通参数。 */
+    private ObjectNode bindingProposal(String type, int... sourceNos) {
+        ObjectNode component = StrictAiJson.mapper().createObjectNode().put("type", type);
+        var numbers = component.putArray("sourceNos");
+        for (int sourceNo : sourceNos) { numbers.add(sourceNo); }
+        ObjectNode params = component.putObject("params");
+        if ("TEXT_SECTION".equals(type)) { params.put("content", "主持描述"); }
+        component.putArray("bindings");
+        return component;
+    }
+
+    /** 首次生成的无主素材组件必须反馈准确位置，且不泄露被拒字段中的业务值。 */
+    @Test
+    void createPrimaryBindingFailureIdentifiesComponentFieldAndCorrection() {
+        for (String type : List.of("TEXT_SECTION", "SCHEDULE_QUERY", "CONTACT_FORM")) {
+            ObjectNode request = request("CREATE"); ObjectNode output = envelope("CREATE");
+            ObjectNode component = bindingProposal(type, 3);
+            component.withArray("sourceNos").add("private-value-13800138000");
+            bindingPage(output).withArray("components").add(component);
+            assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                    .isInstanceOf(AiProtocolException.class)
+                    .hasMessageContaining("第 2 个组件 " + type)
+                    .hasMessageContaining("page.components[1].sourceNos")
+                    .hasMessageContaining("sourceNos=[]")
+                    .hasMessageNotContaining("private-value")
+                    .hasMessageNotContaining("13800138000")
+                    .satisfies(error -> {
+                        assertThat(((AiProtocolException) error).getCode()).isEqualTo("INVALID_OUTPUT");
+                        assertThat(error.getMessage().length()).isLessThanOrEqualTo(500);
+                    });
+            if ("TEXT_SECTION".equals(type)) {
+                assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                        .hasMessageContaining("backgroundWorkId");
+            }
+        }
+    }
+
+    /** 背景必须使用独立背景槽位，改正同一输入后真实校验可以通过。 */
+    @Test
+    void textBackgroundBecomesValidWhenMovedFromPrimaryToBackgroundSlot() {
+        ObjectNode request = request("CREATE"); ObjectNode output = envelope("CREATE");
+        ObjectNode component = bindingProposal("TEXT_SECTION", 3);
+        bindingPage(output).withArray("components").add(component);
+        assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                .hasMessageContaining("page.components[1].sourceNos");
+        component.withArray("sourceNos").removeAll();
+        component.withObject("params").put("backgroundEnabled", true);
+        component.withArray("bindings").addObject().put("slot", "backgroundWorkId").put("sourceNo", 3);
+        assertThat(AiPortfolioProtocol.validate(request, output.toString())).isEqualTo(output);
+    }
+
+    /** 新建组件操作反馈操作序号和新组件路径，不依赖模型填写真实身份。 */
+    @Test
+    void insertedPrimaryBindingFailureIdentifiesOperationAndComponent() {
+        ObjectNode request = request("MODIFY_PAGE"); ObjectNode output = envelope("MODIFY_PAGE");
+        output.withArray("operations").add(operation(request, "UPDATE_TEXT"));
+        ObjectNode insert = output.withArray("operations").addObject().put("op", "INSERT_COMPONENT")
+                .put("reason", "加入主持介绍")
+                .put("expectedHash", AiPortfolioProtocol.expectedHash(AiPortfolioProtocol.currentComponents(request)));
+        insert.putObject("target").put("menuKey", AiPortfolioProtocol.MENU_ALIAS);
+        insert.putObject("payload").put("position", "END").putNull("anchorComponentKey")
+                .set("component", bindingProposal("TEXT_SECTION", 3));
+        assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                .hasMessageContaining("第 2 个操作 INSERT_COMPONENT")
+                .hasMessageContaining("TEXT_SECTION")
+                .hasMessageContaining("operations[1].payload.component.sourceNos")
+                .hasMessageContaining("backgroundWorkId");
+    }
+
+    /** 已有组件重绑与新建组件共用主素材约束，空数组仍保留原有合法资源语义。 */
+    @Test
+    void rebindingPrimaryFailureIdentifiesExistingComponentAndPayloadField() {
+        ObjectNode request = request("MODIFY_PAGE"); ObjectNode output = envelope("MODIFY_PAGE");
+        ObjectNode bind = operation(request, "BIND_RESOURCES");
+        ObjectNode payload = bind.putObject("payload"); payload.putArray("sourceNos").add(3); payload.putArray("bindings");
+        output.withArray("operations").add(bind);
+        assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                .hasMessageContaining("第 1 个操作 BIND_RESOURCES")
+                .hasMessageContaining("TEXT_SECTION")
+                .hasMessageContaining("operations[0].payload.sourceNos")
+                .hasMessageContaining("sourceNos=[]");
+        payload.withArray("sourceNos").removeAll();
+        assertThat(AiPortfolioProtocol.validate(request, output.toString())).isEqualTo(output);
+    }
+
+    /** 槽位反馈包含绑定数组位置，仅列出可信槽位而不回显模型填写的非法槽位值。 */
+    @Test
+    void invalidBindingSlotIdentifiesFieldWithoutReflectingUntrustedSlot() {
+        ObjectNode request = request("CREATE"); ObjectNode output = envelope("CREATE");
+        ObjectNode component = bindingProposal("TEXT_SECTION");
+        component.withArray("bindings").addObject().put("slot", "private-slot-13800138000").put("sourceNo", 3);
+        bindingPage(output).withArray("components").add(component);
+        assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                .hasMessageContaining("第 2 个组件 TEXT_SECTION")
+                .hasMessageContaining("page.components[1].bindings[0]")
+                .hasMessageContaining("backgroundWorkId")
+                .hasMessageNotContaining("private-slot")
+                .hasMessageNotContaining("13800138000");
+    }
+
+    /** 主素材类型和数量错误同样标识字段，既有合法单作品绑定继续通过。 */
+    @Test
+    void primaryTypeFailureIdentifiesFieldAndPreservesLegalBindings() {
+        ObjectNode request = request("CREATE"); ObjectNode output = envelope("CREATE");
+        ObjectNode component = bindingProposal("CAROUSEL", 3);
+        bindingPage(output).withArray("components").add(component);
+        assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                .hasMessageContaining("第 2 个组件 CAROUSEL")
+                .hasMessageContaining("page.components[1].sourceNos")
+                .hasMessageContaining("IMAGE");
+        component.put("type", "SINGLE_WORK");
+        assertThat(AiPortfolioProtocol.validate(request, output.toString())).isEqualTo(output);
+    }
+
+
+    /** 内部文字节点不能借用父组件主素材，空数组的保留语义继续有效。 */
+    @Test
+    void nestedResourceBindingFailureKeepsNodeScopeAndEmptyPrimarySemantics() {
+        ObjectNode request = request("MODIFY_PAGE"); ObjectNode output = envelope("MODIFY_PAGE");
+        ObjectNode component = (ObjectNode) AiPortfolioProtocol.currentComponents(request).get(0);
+        component.put("componentType", "TEXT_GRID");
+        ObjectNode cell = component.withObject("config").putArray("cells").addObject().put("cellKey", "real-cell");
+        ObjectNode block = cell.putArray("blocks").addObject().put("blockKey", "real-block");
+        block.putArray("runs").addObject().put("runKey", "real-run").put("text", "原有主持文字");
+        ObjectNode bind = operation(request, "BIND_RESOURCES");
+        ObjectNode target = bind.withObject("target").put("cellKey", "cell_1").put("blockKey", "block_1").put("runKey", "run_1");
+        bind.put("expectedHash", AiPortfolioProtocol.expectedHash(AiPortfolioProtocol.resolveNode(request, target)));
+        ObjectNode payload = bind.putObject("payload"); payload.putArray("sourceNos").add(3); payload.putArray("bindings");
+        output.withArray("operations").add(bind);
+        assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                .hasMessageContaining("TEXT_GRID").hasMessageContaining("operations[0].payload.sourceNos")
+                .hasMessageContaining("sourceNos=[]").hasMessageNotContaining("real-cell");
+        payload.withArray("sourceNos").removeAll();
+        assertThat(AiPortfolioProtocol.validate(request, output.toString())).isEqualTo(output);
+    }
+
+    /** 全局背景音乐错误能定位到音频槽位，改用音频来源后相同提案通过。 */
+    @Test
+    void backgroundAudioFailureIdentifiesGlobalBindingField() {
+        ObjectNode request = request("CREATE"); ObjectNode output = envelope("CREATE");
+        ObjectNode page = output.putObject("page").put("menuKey", AiPortfolioProtocol.MENU_ALIAS);
+        page.putArray("components");
+        ObjectNode audio = page.putObject("settings").putObject("backgroundAudio");
+        audio.putObject("params").put("enabled", true);
+        audio.putArray("bindings").addObject().put("slot", "workId").put("sourceNo", 3);
+        assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                .hasMessageContaining("全局设置 backgroundAudio")
+                .hasMessageContaining("page.settings.backgroundAudio.bindings[0]")
+                .hasMessageContaining("workId")
+                .satisfies(error -> assertThat(error.getMessage().length()).isLessThanOrEqualTo(500));
+        ((ObjectNode) request.path("facts").path("sources").get(0)).put("mediaType", "AUDIO");
+        assertThat(AiPortfolioProtocol.validate(request, output.toString())).isEqualTo(output);
+    }
+
     @Test
     void rejectsDuplicateTrailingLenientAndInvalidUnicodeWhilePreservingValidUnicode() {
         for (String raw : List.of("{\"a\":1,\"a\":2}", "{\"a\":{\"b\":1,\"b\":2}}", "{} {}", "{}text", "```json\n{}\n```",

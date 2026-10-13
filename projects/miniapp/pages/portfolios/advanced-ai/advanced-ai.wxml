@@ -1,5 +1,5 @@
 <template name="selected-strip">
-  <scroll-view class="selected-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+  <scroll-view class="selected-scroll" wx:if="{{selectedSources.length}}" scroll-x enhanced show-scrollbar="{{false}}">
     <view class="selected-strip">
       <view wx:for="{{selectedSources}}" wx:key="sourceNo" class="selected-item {{item.available === false ? 'unavailable' : ''}}">
         <button class="selected-source" data-no="{{item.sourceNo}}" bindtap="handleSelectedSourceTap" disabled="{{waiting || adopting || submitting || submissionUncertain}}" aria-label="{{item.sourceNo}}号 {{item.title}}">
@@ -80,13 +80,14 @@
               <button wx:if="{{result.available && result.renderData}}" class="secondary-button full-width" bindtap="handleCandidatePreview">查看完整效果 →</button>
               <text class="help-text">采用只更新编辑内容，保存与发布仍由你决定。</text>
             </block>
+            <view wx:if="{{tokenUsageText}}" class="token-usage">{{tokenUsageText}}</view>
           </view>
         </block>
         <block wx:else>
           <view class="selection-heading"><view class="selection-title">{{task.status === 'FAILED' && taskError ? '生成失败' : mode === 'CREATE' ? '你想怎样展示？' : '想怎样调整作品集？'}}</view><text class="help-text">{{mode === 'CREATE' ? '说出重点、顺序和风格就好。' : '描述整体修改需求，AI 会基于当前编辑内容调整，包括未保存的修改。'}}</text></view>
-          <view wx:if="{{task.status === 'FAILED' && taskError}}" class="panel failure-panel"><view class="field-label">失败原因</view><view class="notice error">{{taskError}}</view><text class="help-text">已选内容与描述已保留，可修改描述后再生成。</text></view>
+          <view wx:if="{{task.status === 'FAILED' && taskError}}" class="panel failure-panel"><view class="field-label">失败原因</view><view class="notice error">{{taskError}}</view><text class="help-text">已选内容与描述已保留，可修改描述后再生成。</text><view wx:if="{{tokenUsageText}}" class="token-usage">{{tokenUsageText}}</view></view>
           <view class="panel selected-panel"><view class="card-heading"><view class="section-title">{{mode === 'CREATE' ? '已选内容' : '可引用的内容'}}</view><button class="text-button" bindtap="handleBackToSources" disabled="{{waiting || adopting || submitting || submissionUncertain}}">{{mode === 'CREATE' ? '调整' : '管理内容'}}</button></view><template is="selected-strip" data="{{selectedSources, step, waiting, adopting, submitting, submissionUncertain}}"></template><text wx:if="{{!selectedSources.length}}" class="help-text">尚未选内容；修改已有文字、样式与顺序可以不选来源。</text><text wx:else class="help-text">点击缩略图，将序号插入描述。</text></view>
-          <view wx:if="{{waiting}}" class="panel generation-panel"><view class="generation-mark">✦</view><view class="section-title">{{statusText}}</view><text class="help-text">已选内容与描述已保留，完成后先查看候选效果。</text><view wx:if="{{taskError}}" class="notice error">{{taskError}}</view></view>
+          <view wx:if="{{waiting}}" class="panel generation-panel"><view class="generation-mark"><image class="generation-mark-icon" src="/assets/system/ai-sparkle.svg" mode="aspectFit"></image></view><view class="section-title">{{statusText}}</view><text class="help-text">已选内容与描述已保留，完成后先查看候选效果。</text><view wx:if="{{taskError}}" class="notice error">{{taskError}}</view></view>
           <view wx:else class="panel prompt-panel">
             <view class="field-label">{{mode === 'CREATE' ? '描述你的想法' : '描述整体修改需求'}}</view>
             <textarea class="prompt-input" placeholder-class="input-placeholder" value="{{prompt}}" bindinput="handlePromptInput" disabled="{{adopting || submitting || submissionUncertain}}" maxlength="-1" placeholder="例如：把1号放在顶部，再放一段简短介绍，最后放档期查询。"></textarea>

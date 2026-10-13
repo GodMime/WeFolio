@@ -218,6 +218,11 @@ public final class PortfolioAiCompiler {
                 JsonNode original = before.path(section);
                 for (JsonNode key : operation.path(KEY_PAYLOAD).path(KEY_BINDINGS)) { restore(restored, original, key.path(KEY_SLOT).asText()); }
                 operation.path(KEY_PAYLOAD).path(KEY_PARAMS).fieldNames().forEachRemaining(key -> restore(restored, original, key));
+                // 原来没有设置组时，撤销获准字段后必须还原缺失/空值，不能把新建空对象误判为越界。
+                if (restored.isEmpty()) {
+                    if (original.isMissingNode()) { after.remove(section); }
+                    else if (original.isNull()) { after.set(section, original); }
+                }
             }
         }
         if (!before.equals(after)) { throw invalid(); }

@@ -1,6 +1,7 @@
 package com.jxc.wefolio.job.service;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
+import java.time.Duration;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,6 +25,7 @@ import static org.mockito.Mockito.*;
 class PortfolioAiMediaAccessServiceTest {
     /** 本地内存当前业务资料。 */ private JdbcTemplate jdbc;
     /** COS只读替身，禁止任何原媒体下载。 */ private VideoFrameStorageService storage;
+    /** 单次模型调用期限，不读取真实环境配置。 */ private final PortfolioAiProperties properties = new PortfolioAiProperties();
     /** 被测授权服务。 */ private PortfolioAiMediaAccessService service;
     /** 初始化当前账号、作品及团队权限，不连接生产数据库。 */
     @BeforeEach void prepare() {
@@ -33,7 +36,7 @@ class PortfolioAiMediaAccessServiceTest {
         jdbc.execute("CREATE TABLE wf_work(id BIGINT PRIMARY KEY,user_id BIGINT,media_type VARCHAR(32),media_object_key VARCHAR(512),media_sha256 VARCHAR(64),duration_ms INT,video_frames_json VARCHAR(16000),status VARCHAR(32),audit_status VARCHAR(32),deleted BIGINT)");
         jdbc.update("INSERT INTO wf_user VALUES(2,'OWNER','ACTIVE',0),(3,'MEMBER','ACTIVE',0)");
         jdbc.update("INSERT INTO wf_work VALUES(9,2,'VIDEO','OWNER/work/video/test.mp4','sha',10000,NULL,'ACTIVE','PASSED',0)");
-        storage = mock(VideoFrameStorageService.class); service = new PortfolioAiMediaAccessService(jdbc, storage);
+        storage = mock(VideoFrameStorageService.class); service = new PortfolioAiMediaAccessService(jdbc, storage, properties);
         var head = new ObjectMetadata(); head.setContentLength(1000); head.setHeader("ETag", "ETAG"); head.setContentType("video/mp4");
         when(storage.head("OWNER/work/video/test.mp4")).thenReturn(head);
         when(storage.signedGet(anyString(), any())).thenReturn("https://private.example/video?signature=fake");
@@ -52,6 +55,27 @@ class PortfolioAiMediaAccessServiceTest {
         var signed = service.signed(task(), entry()); assertThat(signed).hasSize(1);
         assertThat(signed.getFirst().type()).isEqualTo("video_url");
         verify(storage).signedGet(eq("OWNER/work/video/test.mp4"), any());
+    }
+
+    /** 默认三分钟模型调用保留一分钟签名前置与读取余量。 */
+    @Test void defaultThreeMinuteCallHasOneMinuteSignedLinkMargin() {
+        assertThat(service.signed(task(), entry())).hasSize(1);
+        verify(storage).signedGet(eq("OWNER/work/video/test.mp4"), eq(Duration.ofSeconds(240)));
+    }
+
+    /** 覆写四分钟调用期限后，持久帧链接同样增加一分钟读取余量。 */
+    @Test void overriddenFourMinuteCallExtendsEveryFrameLinkToFiveMinutes() {
+        properties.setCallTimeoutSeconds(240);
+        ObjectNode entry = frameEntry(8);
+        assertThat(service.signedAfterVerification(task(), entry)).hasSize(8);
+        verify(storage, times(8)).signedGet(anyString(), eq(Duration.ofSeconds(300)));
+    }
+
+    /** 旧一分钟短调用仍保持既有三分钟链接有效期。 */
+    @Test void shortCallRetainsExistingThreeMinuteSignedLinkMinimum() {
+        properties.setCallTimeoutSeconds(60);
+        assertThat(service.signed(task(), entry())).hasSize(1);
+        verify(storage).signedGet(eq("OWNER/work/video/test.mp4"), eq(Duration.ofSeconds(180)));
     }
 
     /** 同次执行阶段仍实时校验授权和 digest，签名时不会重复读取 COS。 */

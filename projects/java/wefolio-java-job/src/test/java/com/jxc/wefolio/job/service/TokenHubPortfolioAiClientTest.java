@@ -4,12 +4,14 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
+import com.jxc.wefolio.service.portfolioai.AiPortfolioProtocol;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import java.io.ByteArrayOutputStream;
@@ -34,6 +36,7 @@ import static com.jxc.wefolio.job.service.PortfolioAiModelClient.CacheStatus.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -214,12 +217,15 @@ class TokenHubPortfolioAiClientTest {
         return client;
     }
 
-    /** 官方结构化媒体字段及图片/视频互斥，链接不藏在文字content。 */
+    /** 最终输出扩大到 32768 时摘要仍为 4096；官方媒体字段及图片/视频互斥保持原约束。 */
     @Test void multimediaPayloadUsesTypedContentAndRejectsMixedInput() {
         var client = new TokenHubPortfolioAiClient(properties());
         var frame = new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame?signature=fake", 1000L);
-        ObjectNode body = client.mediaPayload(task(), request(), List.of(frame));
+        ObjectNode frozen = request();
+        frozen.withObject("modelConfig").put("maxTokens", 32768).put("reasoningEffort", "high");
+        ObjectNode body = client.mediaPayload(task(), frozen, List.of(frame));
         assertThat(body.path("max_tokens").asInt()).isEqualTo(4096);
+        assertThat(body.path("reasoning_effort").asText()).isEqualTo("high");
         var content = body.path("messages").get(1).path("content");
         assertThat(content.isArray()).isTrue();
         assertThat(content.get(2).path("type").asText()).isEqualTo("image_url");
@@ -260,6 +266,26 @@ class TokenHubPortfolioAiClientTest {
         PortfolioAiProperties properties = new PortfolioAiProperties(); properties.setApiKey("test-fake-key"); return properties;
     }
 
+    /** 真实 HTTP 请求使用延长后的单调用预算，剩余任务时间不足时仍按总截止收紧。 */
+    @Test void transportUsesExtendedDefaultCallBudgetWithoutExceedingRemainingTaskTime() {
+        TokenHubPortfolioAiClient client = spy(new TokenHubPortfolioAiClient(properties()));
+        HttpClient transport = mock(HttpClient.class); doReturn(transport).when(client).createHttpClient(any());
+        HttpResponse<byte[]> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.headers()).thenReturn(HttpHeaders.of(Map.of(), (name, value) -> true));
+        when(response.body()).thenReturn(responseWithUsage(null).getBytes(StandardCharsets.UTF_8));
+        when(transport.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
+
+        assertThat(client.generate(task(), request(), Duration.ofSeconds(600))).isEqualTo("{}");
+        assertThat(client.generate(task(), request(), Duration.ofSeconds(120))).isEqualTo("{}");
+
+        ArgumentCaptor<HttpRequest> requests = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(transport, times(2)).sendAsync(requests.capture(), any(HttpResponse.BodyHandler.class));
+        assertThat(requests.getAllValues()).extracting(http -> http.timeout().orElseThrow())
+                .containsExactly(Duration.ofSeconds(180), Duration.ofSeconds(120));
+    }
+
     /** 代表性已冻结请求。 */
     private ObjectNode request() {
         return StrictAiJson.parseObject("""
@@ -291,6 +317,84 @@ class TokenHubPortfolioAiClientTest {
         assertThat(payload.toString()).doesNotContain("test-fake-key", "987654", "原始秘密", "13800138000");
         assertThat(payload.path("messages").get(0).path("content").asText()).contains("协议版本：ai-portfolio-v1", "可信能力契约");
         assertThat(payload.path("messages").get(1).path("content").asText()).contains("精简文字");
+    }
+
+    /** 同一基础提示词共享缓存路由，业务内容、身份隔离与结构重试只改变动态后缀。 */
+    @Test
+    void generationCacheKeyKeepsSamePrefixGroupAcrossTasksUsersAndRetrySuffixes() {
+        TokenHubPortfolioAiClient client = new TokenHubPortfolioAiClient(properties());
+        ObjectNode original = request(); original.withObject("input").put("mode", "CREATE");
+        ObjectNode first = client.payload(task(), original);
+        String key = first.path("prompt_cache_key").asText();
+        String systemPrefix = first.path("messages").get(0).path("content").asText();
+        assertThat(key).matches("[0-9a-f]{64}");
+
+        ObjectNode changed = original.deepCopy();
+        changed.withObject("input").put("prompt", "第二位用户的原始描述");
+        changed.withObject("facts").put("safePrompt", "另一个作品集，背景使用蓝色");
+        changed.withObject("facts").putObject("mediaPlan").put("stage", "SUMMARIZED");
+        changed.withObject("facts").withArray("sources").addObject()
+                .put("sourceNo", 7).put("kind", "WORK").put("canBind", true)
+                .putObject("mediaSummary").put("summary", "另一件作品的媒体摘要");
+        AiGenerationTaskEntity retryTask = task();
+        retryTask.setId(2L); retryTask.setRequestedBy(123456L); retryTask.setAttemptCount(3);
+        retryTask.setErrorCode("INVALID_OUTPUT"); retryTask.setErrorMessage("notes 应为字符串数组");
+        PortfolioAiProperties otherProperties = properties();
+        otherProperties.setUserHmacSecret("another-test-only-user-hmac-secret");
+        ObjectNode retried = new TokenHubPortfolioAiClient(otherProperties).payload(retryTask, changed);
+
+        assertThat(retried.path("prompt_cache_key").asText()).isEqualTo(key);
+        assertThat(retried.path("user").asText()).isNotEqualTo(first.path("user").asText());
+        assertThat(retried.path("messages").get(0).path("content").asText())
+                .startsWith(systemPrefix).contains("本次是同一任务因输出结构错误而重试");
+        assertThat(retried.path("messages").get(1).path("content").asText())
+                .contains("另一个作品集", "另一件作品的媒体摘要", "notes 应为字符串数组");
+        assertThat(key).doesNotContain("第二位用户", "123456", "notes", "another-test-only");
+    }
+
+    /** 创建、修改及个人、团队各自的真实契约不同，不能共用完整前缀缓存分组。 */
+    @Test
+    void generationCacheKeySeparatesModeAndOwnerContractGroups() {
+        TokenHubPortfolioAiClient client = new TokenHubPortfolioAiClient(properties());
+        List<String> keys = new ArrayList<>();
+        List<String> systems = new ArrayList<>();
+        for (String owner : List.of("USER", "TEAM")) {
+            for (String mode : List.of("CREATE", "MODIFY_PAGE")) {
+                ObjectNode frozen = request(); frozen.withObject("input").put("ownerType", owner).put("mode", mode);
+                ObjectNode payload = client.payload(task(), frozen);
+                String key = payload.path("prompt_cache_key").asText();
+                assertThat(key).matches("[0-9a-f]{64}");
+                keys.add(key); systems.add(payload.path("messages").get(0).path("content").asText());
+            }
+        }
+        assertThat(keys).doesNotHaveDuplicates();
+        assertThat(systems).doesNotHaveDuplicates();
+    }
+
+    /** 媒体摘要使用自己的固定提示词分组，签名、抽帧与最终布局契约不会打散此缓存。 */
+    @Test
+    void mediaCacheKeyUsesSeparateStablePromptAcrossDynamicFramesAndGenerationContracts() {
+        TokenHubPortfolioAiClient client = new TokenHubPortfolioAiClient(properties());
+        ObjectNode original = request(); original.withObject("input").put("mode", "CREATE");
+        ObjectNode first = client.mediaPayload(task(), original,
+                List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame?signature=first", 1000L)));
+        ObjectNode changed = request();
+        changed.withObject("input").put("ownerType", "TEAM").put("mode", "MODIFY_PAGE");
+        changed.withObject("facts").put("safePrompt", "另一场演出的说明");
+        changed.withObject("facts").putObject("mediaPlan").put("stage", "SUMMARIZED");
+        AiGenerationTaskEntity retryTask = task();
+        retryTask.setRequestedBy(123456L); retryTask.setAttemptCount(2);
+        retryTask.setErrorCode("INVALID_OUTPUT"); retryTask.setErrorMessage("notes 应为字符串数组");
+        ObjectNode second = client.mediaPayload(retryTask, changed,
+                List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/new-frame?signature=second", 9000L)));
+
+        String key = first.path("prompt_cache_key").asText();
+        assertThat(key).matches("[0-9a-f]{64}");
+        assertThat(second.path("prompt_cache_key").asText()).isEqualTo(key);
+        assertThat(key).isNotEqualTo(client.payload(task(), original).path("prompt_cache_key").asText());
+        assertThat(second.path("messages").get(0)).isEqualTo(first.path("messages").get(0));
+        assertThat(second.path("messages").get(1)).isNotEqualTo(first.path("messages").get(1));
+        assertThat(second.path("user").asText()).isNotEqualTo(first.path("user").asText());
     }
 
     /** 实际 HTTP 请求只使用 TokenHub 端点和密钥，授权 COS 链接进入安全投影。 */
@@ -336,6 +440,8 @@ class TokenHubPortfolioAiClientTest {
         assertThat(payload.path("thinking").path("type").asText()).isEqualTo("enabled");
         assertThat(payload.path("response_format").path("type").asText()).isEqualTo("json_object");
         assertThat(payload.path("user").asText()).matches("wf_[0-9a-f]{64}");
+        assertThat(payload.path("prompt_cache_key").asText()).matches("[0-9a-f]{64}");
+        assertThat(client.textRequestBytes(task(), request)).isEqualTo(body(http).getBytes(StandardCharsets.UTF_8).length);
         assertThat(payload.has("user_id")).isFalse();
         assertThat(payload.toString()).contains("selected.mp4", "selected.jpg")
                 .doesNotContain("test-fake-key", "private-work-id", "unavailable.mp4", "private-member", "13800138000");
@@ -364,7 +470,74 @@ class TokenHubPortfolioAiClientTest {
         ObjectNode request = request(); request.withObject("modelConfig").remove(List.of("temperature", "maxTokens"));
         ObjectNode payload = new TokenHubPortfolioAiClient(properties()).payload(task(), request);
         assertThat(payload.path("temperature").asDouble()).isEqualTo(1.0);
-        assertThat(payload.path("max_tokens").asInt()).isEqualTo(8192);
+        assertThat(payload.path("max_tokens").asInt()).isEqualTo(32768);
+    }
+
+    /** 扩大后的冻结预算与思考深度进入真实 HTTP 请求，历史冻结预算保持原值。 */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("frozenGenerationBudgetCases")
+    void actualTransportPreservesFrozenGenerationBudgetAndOptionalReasoningEffort(
+            String label, Integer maxTokens, String reasoningEffort, int expectedTokens) throws Exception {
+        TokenHubPortfolioAiClient client = spy(new TokenHubPortfolioAiClient(properties()));
+        HttpClient transport = mock(HttpClient.class);
+        doReturn(transport).when(client).createHttpClient(any());
+        HttpResponse<byte[]> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.headers()).thenReturn(HttpHeaders.of(Map.of(), (name, value) -> true));
+        when(response.body()).thenReturn(responseWithUsage(null).getBytes(StandardCharsets.UTF_8));
+        when(transport.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenReturn(CompletableFuture.completedFuture(response));
+        ObjectNode frozen = request(); ObjectNode model = frozen.withObject("modelConfig");
+        if (maxTokens == null) { model.remove("maxTokens"); }
+        else { model.put("maxTokens", maxTokens); }
+        if (reasoningEffort != null) { model.put("reasoningEffort", reasoningEffort); }
+
+        assertThat(client.generate(task(), frozen, Duration.ofSeconds(2))).isEqualTo("{}");
+
+        ArgumentCaptor<HttpRequest> captured = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(transport).sendAsync(captured.capture(), any(HttpResponse.BodyHandler.class));
+        ObjectNode sent = StrictAiJson.parseObject(body(captured.getValue()), 200000, 24);
+        assertThat(sent.path("max_tokens").asInt()).isEqualTo(expectedTokens);
+        assertThat(sent.path("thinking").path("type").asText()).isEqualTo("enabled");
+        if (reasoningEffort == null) { assertThat(sent.has("reasoning_effort")).isFalse(); }
+        else { assertThat(sent.path("reasoning_effort").asText()).isEqualTo(reasoningEffort); }
+    }
+
+    /** 新任务有明确思考深度；缺失字段的历史任务沿用供应商原缺省行为。 */
+    private static Stream<Arguments> frozenGenerationBudgetCases() {
+        return Stream.of(
+                Arguments.of("新冻结预算和思考深度", 32768, "high", 32768),
+                Arguments.of("历史一万六千预算和思考深度", 16384, "high", 16384),
+                Arguments.of("历史八千预算不添加思考深度", 8192, null, 8192),
+                Arguments.of("缺失可选预算使用新缺省值", null, null, 32768),
+                Arguments.of("允许固定最大思考深度", 16384, "max", 16384),
+                Arguments.of("允许固定最低思考深度", 16384, "low", 16384));
+    }
+
+    /** 无效预算不能进入 HTTP 传输，应用上限不扩大到供应商最大值。 */
+    @ParameterizedTest
+    @ValueSource(ints = {-1, 0, 32769, Integer.MAX_VALUE})
+    void invalidFrozenGenerationBudgetIsRejectedBeforeTransport(int maxTokens) {
+        TokenHubPortfolioAiClient client = respondingClient(responseWithUsage(null));
+        ObjectNode frozen = request(); frozen.withObject("modelConfig").put("maxTokens", maxTokens);
+        assertThatThrownBy(() -> client.generate(task(), frozen, Duration.ofSeconds(2)))
+                .isInstanceOfSatisfying(PortfolioAiCallException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("AI_UNAVAILABLE"));
+        verify(client, never()).createHttpClient(any());
+    }
+
+    /** 思考深度只接受服务端白名单，不允许任意字符串或非文本值被传给供应商。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"\"\"", "\"HIGH\"", "\"medium\"", "\"disabled\"", "null", "1", "[]", "{}"})
+    void invalidFrozenReasoningEffortIsRejectedBeforeTransport(String reasoningEffort) {
+        TokenHubPortfolioAiClient client = respondingClient(responseWithUsage(null));
+        ObjectNode frozen = request();
+        frozen.withObject("modelConfig").set("reasoningEffort",
+                StrictAiJson.parseObject("{\"value\":" + reasoningEffort + "}", 1000, 8).get("value"));
+        assertThatThrownBy(() -> client.generate(task(), frozen, Duration.ofSeconds(2)))
+                .isInstanceOfSatisfying(PortfolioAiCallException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("AI_UNAVAILABLE"));
+        verify(client, never()).createHttpClient(any());
     }
 
     /** 统一核对供应商契约失效分类，不把历史请求转给当前模型。 */
@@ -406,6 +579,29 @@ class TokenHubPortfolioAiClientTest {
         assertThat(client.payload(task, request()).toString()).contains("本次是同一任务因输出结构错误而重试", "notes 应为字符串数组");
         task.setErrorCode("REMOTE_BUSY");
         assertThat(client.payload(task, request()).toString()).doesNotContain("notes 应为字符串数组");
+    }
+
+    /** 真实校验产生的组件、字段和修正提示原样进入下一轮用户消息，不附被拒正文。 */
+    @Test
+    void bindingValidationFeedbackReachesNextModelRequest() {
+        ObjectNode frozen = request(); frozen.withObject("input").put("mode", "CREATE");
+        ObjectNode rejected = StrictAiJson.parseObject("""
+                {"schemaVersion":"ai-portfolio-v1","promptVersion":"portfolio-ai-2026-10-10.2",
+                 "status":"CANDIDATE","mode":"CREATE",
+                 "page":{"menuKey":"menu_current","components":[
+                   {"type":"TEXT_SECTION","sourceNos":[1],"params":{"content":"被拒的主持描述-secret"},"bindings":[]}
+                 ],"settings":{}},"operations":[],"questions":[],"notes":[]}
+                """, 10000, 16);
+        AiProtocolException failure = catchThrowableOfType(() -> AiPortfolioProtocol.validate(frozen, rejected.toString()), AiProtocolException.class);
+        AiGenerationTaskEntity task = task(); task.setAttemptCount(2);
+        task.setErrorCode(failure.getCode()); task.setErrorMessage(failure.getMessage());
+        ObjectNode payload = new TokenHubPortfolioAiClient(properties()).payload(task, frozen);
+        ObjectNode user = StrictAiJson.parseObject(payload.path("messages").get(1).path("content").asText(), 100000, 20);
+        assertThat(user.path("retry").path("error_message").asText()).isEqualTo(failure.getMessage())
+                .contains("第 1 个组件 TEXT_SECTION", "page.components[0].sourceNos", "sourceNos=[]", "backgroundWorkId");
+        assertThat(payload.toString()).doesNotContain("被拒的主持描述", "secret");
+        task.setErrorCode("REMOTE_BUSY");
+        assertThat(new TokenHubPortfolioAiClient(properties()).payload(task, frozen).toString()).doesNotContain(failure.getMessage());
     }
 
     @Test

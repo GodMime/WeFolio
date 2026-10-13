@@ -3,12 +3,15 @@ package com.jxc.wefolio.service;
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.common.upload.AvatarImageFormat;
 import com.jxc.wefolio.config.CosProperties;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.message.CosMessage;
+import com.qcloud.cos.COS;
 import com.qcloud.cos.exception.CosServiceException;
 import com.qcloud.cos.auth.COSSigner;
 import com.qcloud.cos.model.CannedAccessControlList;
 import com.qcloud.cos.model.BucketVersioningConfiguration;
 import com.qcloud.cos.model.COSObject;
+import com.qcloud.cos.model.CopyObjectRequest;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectRequest;
@@ -163,6 +166,9 @@ public class CosService {
 
     /** 未识别文件类型的默认 MIME */
     private static final String DEFAULT_CONTENT_TYPE = "application/octet-stream";
+
+    /** 同桶复制保留 ContentType 等源对象元数据，不重新推断媒体类型。 */
+    private static final String COPY_METADATA_DIRECTIVE = "COPY";
 
     /** 毫秒转秒的除数 */
     private static final double MILLIS_PER_SECOND = 1000D;
@@ -647,6 +653,30 @@ public class CosService {
             return key;
         }
         return baseUrl.replaceAll(TRAILING_SLASH_REGEX, "") + "/" + key.replaceAll("^/+", "");
+    }
+
+    /** 仅在目标不存在时复制同桶对象，保留原始媒体元数据并提供公有读访问。 */
+    public void copyObjectIfAbsent(String sourceKey, String targetKey) {
+        if (sourceKey == null || sourceKey.isBlank() || targetKey == null || targetKey.isBlank()) {
+            throw new BusinessException(CosMessage.OBJECT_KEY_REQUIRED_MESSAGE);
+        }
+        try {
+            COS client = transferManager.getCOSClient();
+            String bucket = cosProperties.getBucketName();
+            if (client.doesObjectExist(bucket, targetKey)) {
+                log.info("COS 同桶复制复用已有目标: sourceKey={}, targetKey={}", sourceKey, targetKey);
+                return;
+            }
+            CopyObjectRequest request = new CopyObjectRequest(bucket, sourceKey, bucket, targetKey);
+            request.setMetadataDirective(COPY_METADATA_DIRECTIVE);
+            request.setCannedAccessControlList(CannedAccessControlList.PublicRead);
+            log.info("COS 同桶复制入参: sourceKey={}, targetKey={}", sourceKey, targetKey);
+            client.copyObject(request);
+            log.info("COS 同桶复制成功: sourceKey={}, targetKey={}", sourceKey, targetKey);
+        } catch (Exception exception) {
+            log.error("COS 同桶复制失败: sourceKey={}, targetKey={}", sourceKey, targetKey, exception);
+            throw new BusinessException(CosMessage.OBJECT_COPY_FAILED_MESSAGE, exception);
+        }
     }
 
     /**

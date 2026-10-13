@@ -25,13 +25,15 @@ portfolio-ai:
   base-url: ${WEFOLIO_AI_BASE_URL:https://tokenhub.tencentmaas.com/v1}
   model: ${WEFOLIO_AI_MODEL:glm-5.3-flash}
   temperature: ${WEFOLIO_AI_TEMPERATURE:1.0}
-  max-tokens: ${WEFOLIO_AI_MAX_TOKENS:8192}
+  # 思考与正文共享额度；新任务冻结明确思考深度，避免供应商默认 max。
+  max-tokens: ${WEFOLIO_AI_MAX_TOKENS:32768}
+  reasoning-effort: ${WEFOLIO_AI_REASONING_EFFORT:high}
   max-active-tasks: ${WEFOLIO_AI_MAX_ACTIVE_TASKS:100}
   max-prompt-code-points: ${WEFOLIO_AI_MAX_PROMPT_CODE_POINTS:2000}
   max-config-bytes: ${WEFOLIO_AI_MAX_CONFIG_BYTES:262144}
   max-context-bytes: ${WEFOLIO_AI_MAX_CONTEXT_BYTES:131072}
   max-json-depth: ${WEFOLIO_AI_MAX_JSON_DEPTH:16}
-  total-timeout-seconds: ${WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS:180}
+  total-timeout-seconds: ${WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS:600}
   retention-days: ${WEFOLIO_AI_RETENTION_DAYS:30}
 
 mybatis-plus:

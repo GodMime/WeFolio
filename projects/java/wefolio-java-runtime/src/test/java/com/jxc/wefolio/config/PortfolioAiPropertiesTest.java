@@ -27,8 +27,36 @@ class PortfolioAiPropertiesTest {
             assertThat(properties.getBaseUrl()).isEqualTo("https://tokenhub.tencentmaas.com/v1");
             assertThat(properties.getModel()).isEqualTo("glm-5.3-flash");
             assertThat(properties.getTemperature()).isEqualTo(1.0);
-            assertThat(properties.getMaxTokens()).isEqualTo(8192);
+            assertThat(properties.getMaxTokens()).isEqualTo(32768);
+            assertThat(properties.getReasoningEffort()).isEqualTo("high");
+            PortfolioAiProperties defaults = new PortfolioAiProperties();
+            assertThat(defaults.getMaxTokens()).isEqualTo(32768);
+            assertThat(defaults.getReasoningEffort()).isEqualTo("high");
+            assertThat(properties.getTotalTimeoutSeconds()).isEqualTo(600);
+            assertThat(new PortfolioAiProperties().getTotalTimeoutSeconds()).isEqualTo(600);
         });
+    }
+
+    /** Runtime 与 Job 共用总期限环境变量，查询过期收口应服从部署配置。 */
+    @Test
+    void sharedTimeoutEnvironmentVariableOverridesDefault() {
+        contextRunner.withPropertyValues("WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS=900").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(PortfolioAiProperties.class).getTotalTimeoutSeconds()).isEqualTo(900);
+        });
+    }
+
+    /** 部署环境可以覆盖思考强度和输出预算，新任务不能静默沿用默认值。 */
+    @Test
+    void reasoningAndOutputEnvironmentVariablesOverrideDefaults() {
+        contextRunner.withPropertyValues("portfolio-ai.enabled=true", "WEFOLIO_AI_REASONING_EFFORT=low",
+                        "WEFOLIO_AI_MAX_TOKENS=32768")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    PortfolioAiProperties properties = context.getBean(PortfolioAiProperties.class);
+                    assertThat(properties.getMaxTokens()).isEqualTo(32768);
+                    assertThat(properties.getReasoningEffort()).isEqualTo("low");
+                });
     }
 
     /** 启用时拒绝旧供应商、相似主机、附加路径和鉴权信息，防止任务冻结错误端点。 */
@@ -57,17 +85,17 @@ class PortfolioAiPropertiesTest {
                 .run(context -> assertThat(context).hasFailed());
     }
 
-    /** 输出预算与客户端保持同一上限，关闭前不能接收无法调用模型的任务。 */
+    /** 思考与正文共用的输出预算不能超出应用约定上限。 */
     @ParameterizedTest
-    @ValueSource(ints = {-1, 0, 8193, Integer.MAX_VALUE})
+    @ValueSource(ints = {-1, 0, 32769, Integer.MAX_VALUE})
     void enabledConfigurationRejectsInvalidOutputBudget(int maxTokens) {
         contextRunner.withPropertyValues("portfolio-ai.enabled=true", "portfolio-ai.max-tokens=" + maxTokens)
                 .run(context -> assertThat(context).hasFailed());
     }
 
-    /** 采样温度与输出预算的上下边界都能完成启动绑定。 */
+    /** 采样温度、旧输出预算及扩展后的上下边界均能完成启动绑定。 */
     @ParameterizedTest
-    @CsvSource({"0.0,1", "2.0,8192"})
+    @CsvSource({"0.0,1", "1.0,8192", "1.0,16384", "2.0,32768"})
     void enabledConfigurationAcceptsSamplingBudgetBoundaries(double temperature, int maxTokens) {
         contextRunner.withPropertyValues("portfolio-ai.enabled=true", "portfolio-ai.temperature=" + temperature,
                         "portfolio-ai.max-tokens=" + maxTokens)
@@ -76,6 +104,25 @@ class PortfolioAiPropertiesTest {
                     PortfolioAiProperties properties = context.getBean(PortfolioAiProperties.class);
                     assertThat(properties.getTemperature()).isEqualTo(temperature);
                     assertThat(properties.getMaxTokens()).isEqualTo(maxTokens);
+                });
+    }
+
+    /** 思考强度仅允许供应商明确支持的枚举值，错误部署配置不得生成任务。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"medium", "MAX", "none", ""})
+    void enabledConfigurationRejectsInvalidReasoningEffort(String effort) {
+        contextRunner.withPropertyValues("portfolio-ai.enabled=true", "portfolio-ai.reasoning-effort=" + effort)
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    /** 三档合法思考强度均可启用，后续提交按当前配置冻结。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"max", "high", "low"})
+    void enabledConfigurationAcceptsSupportedReasoningEffort(String effort) {
+        contextRunner.withPropertyValues("portfolio-ai.enabled=true", "portfolio-ai.reasoning-effort=" + effort)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(PortfolioAiProperties.class).getReasoningEffort()).isEqualTo(effort);
                 });
     }
 

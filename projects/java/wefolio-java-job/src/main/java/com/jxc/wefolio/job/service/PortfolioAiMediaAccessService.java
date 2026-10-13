@@ -1,6 +1,7 @@
 package com.jxc.wefolio.job.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
@@ -34,8 +35,12 @@ public class PortfolioAiMediaAccessService {
     private final JdbcTemplate jdbc;
     /** SDK只发HEAD及签名，不下载原图片/视频。 */
     private final VideoFrameStorageService storage;
-    /** 读取链接有效期，覆盖单次HTTP期限，不进入数据库。 */
-    private static final int SIGN_SECONDS = 180;
+    /** 单次模型调用期限，用于覆盖读取链接有效期，不进入数据库。 */
+    private final PortfolioAiProperties properties;
+    /** 短调用沿用既有读取链接有效期下限，单位为秒。 */
+    private static final long MIN_SIGN_SECONDS = 180;
+    /** 签名到发送及模型读取的前置余量，单位为秒。 */
+    private static final long SIGN_MARGIN_SECONDS = 60;
 
     /** 每个来源始终验证当前授权和当前源；即使缓存命中也不跳过HEAD。 */
     public void verify(AiGenerationTaskEntity task, JsonNode entry) {
@@ -170,7 +175,8 @@ public class PortfolioAiMediaAccessService {
     }
     /** 官方COS签名默认主机，禁止业务自带URL。 */
     private String sign(String key) {
-        try { return storage.signedGet(key, Duration.ofSeconds(SIGN_SECONDS)); }
+        long seconds = Math.max(MIN_SIGN_SECONDS, (long) properties.getCallTimeoutSeconds() + SIGN_MARGIN_SECONDS);
+        try { return storage.signedGet(key, Duration.ofSeconds(seconds)); }
         catch (RuntimeException exception) { throw temporary(); }
     }
 

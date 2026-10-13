@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.JoinStatusDict;
+import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
@@ -144,6 +145,40 @@ class PortfolioAiFactsServiceTest {
     private JsonNode binding(ObjectNode facts, String kind) {
         for (JsonNode value : facts.path("bindings")) { if (kind.equals(value.path("kind").asText())) { return value; } }
         throw new AssertionError("预期隐藏句柄未生成：" + kind);
+    }
+
+    /** 本人公开 HTTPS 头像可提供分享头像句柄，原值只保留于冻结事实。 */
+    @Test void personalProfileAvatarProvidesHiddenShareAvatarBinding() {
+        UserEntity owner = user(101); owner.setAvatarUrl("https://cdn.test/WFOWNER/others/avatar.jpg");
+        when(users.selectById(101L)).thenReturn(owner);
+
+        ObjectNode facts = service.freeze(input(), base());
+        JsonNode image = binding(facts, MediaTypeDict.IMAGE.getCode());
+
+        assertThat(image.path("ref").asText()).isEqualTo("profile_share_avatar");
+        assertThat(image.path("allowedSlots").toString()).isEqualTo("[\"avatarUrl\"]");
+        assertThat(image.path("label").asText()).isEqualTo("本人头像（分享头像）");
+        assertThat(image.path("value").asText()).isEqualTo(owner.getAvatarUrl());
+        assertThat(image.path("reuseOnly").asBoolean()).isFalse();
+        assertThat(image.has("sourceNo")).isFalse();
+        assertThat(projected(input(), facts).path("resources").toString())
+                .contains("profile_share_avatar").doesNotContain(owner.getAvatarUrl(), "\"value\"");
+    }
+
+    /** 缺少公开地址、HTTP 或带凭据和签名的头像均不能作为可新增的分享头像。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"", "WFOWNER/others/avatar.jpg", "http://cdn.test/avatar.jpg",
+            "https://user:secret@cdn.test/avatar.jpg", "https://cdn.test/avatar.jpg?signature=secret",
+            "https://cdn.test/avatar.jpg#secret", "https:///missing-host"})
+    void invalidProfileAvatarDoesNotProvideShareAvatarBinding(String avatarUrl) {
+        UserEntity owner = user(101); owner.setAvatarUrl(avatarUrl);
+        when(users.selectById(101L)).thenReturn(owner);
+
+        ObjectNode facts = service.freeze(input(), base());
+
+        for (JsonNode resource : facts.path("bindings")) {
+            assertThat(resource.path("ref").asText()).isNotEqualTo("profile_share_avatar");
+        }
     }
 
     /** 已设置资料的两项联系原值可用于新组件，模型只能看到受控句柄。 */
@@ -389,6 +424,132 @@ class PortfolioAiFactsServiceTest {
         verify(cos).publicUrl(work.getMediaObjectKey()); verify(cos).publicUrl(work.getCoverObjectKey());
     }
 
+    /** 图片作品封面句柄绑定原图，视频与动图只绑定已有静态封面。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"IMAGE", "VIDEO", "ANIMATION"})
+    void personalWorkProvidesShareCoverBindingFromAuthorizedImage(String mediaType) {
+        ObjectNode input = input(); source(input, 3, "WORK", 201);
+        WorkEntity work = work(201, 101); work.setMediaType(mediaType);
+        work.setMediaObjectKey("WFOWNER/work/image/original.jpg"); work.setCoverObjectKey("WFOWNER/work/image/cover.jpg");
+        when(users.selectById(101L)).thenReturn(user(101)); when(works.selectById(201L)).thenReturn(work);
+        when(cos.publicUrl(work.getMediaObjectKey())).thenReturn("https://cdn.test/WFOWNER/work/image/original.jpg");
+        when(cos.publicUrl(work.getCoverObjectKey())).thenReturn("https://cdn.test/WFOWNER/work/image/cover.jpg");
+
+        ObjectNode facts = service.freeze(input, base());
+        JsonNode image = binding(facts, MediaTypeDict.IMAGE.getCode());
+
+        assertThat(image.path("ref").asText()).isEqualTo("source_cover_3");
+        assertThat(image.path("sourceNo").intValue()).isEqualTo(3);
+        assertThat(image.path("allowedSlots").toString()).isEqualTo("[\"coverUrl\",\"avatarUrl\"]");
+        assertThat(image.path("reuseOnly").asBoolean()).isFalse();
+        assertThat(image.path("value").asText()).isEqualTo(MediaTypeDict.IMAGE.getCode().equals(mediaType)
+                ? "https://cdn.test/WFOWNER/work/image/original.jpg" : "https://cdn.test/WFOWNER/work/image/cover.jpg");
+        assertThat(image.has("sourceId")).isFalse();
+    }
+
+    /** 图片缺少原图公开地址时可使用服务端已确认的封面，不能使用客户端提供的地址。 */
+    @Test void imageShareCoverFallsBackToAuthorizedCover() {
+        ObjectNode input = input(); source(input, 1, "WORK", 201);
+        ((ObjectNode) input.path("aiContext").path("sources").get(0)).put("coverUrl", "https://untrusted.test/cover.jpg");
+        WorkEntity work = work(201, 101); work.setCoverObjectKey("WFOWNER/work/image/cover.jpg");
+        when(users.selectById(101L)).thenReturn(user(101)); when(works.selectById(201L)).thenReturn(work);
+        when(cos.publicUrl(work.getCoverObjectKey())).thenReturn("https://cdn.test/WFOWNER/work/image/cover.jpg");
+
+        ObjectNode facts = service.freeze(input, base());
+
+        assertThat(binding(facts, MediaTypeDict.IMAGE.getCode()).path("value").asText())
+                .isEqualTo("https://cdn.test/WFOWNER/work/image/cover.jpg");
+        assertThat(facts.toString()).doesNotContain("untrusted.test");
+    }
+
+    /** 视频和动图没有静态图片封面时，不得把播放地址绑定为分享封面。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"VIDEO", "ANIMATION"})
+    void motionWorkWithoutImageCoverDoesNotProvideShareCoverBinding(String mediaType) {
+        ObjectNode input = input(); source(input, 1, "WORK", 201);
+        WorkEntity work = work(201, 101); work.setMediaType(mediaType);
+        work.setMediaObjectKey("WFOWNER/work/video/film.mp4");
+        when(users.selectById(101L)).thenReturn(user(101)); when(works.selectById(201L)).thenReturn(work);
+        when(cos.publicUrl(work.getMediaObjectKey())).thenReturn("https://cdn.test/WFOWNER/work/video/film.mp4");
+
+        ObjectNode facts = service.freeze(input, base());
+
+        assertThat(facts.path("sources").get(0).path("canBind").asBoolean()).isTrue();
+        for (JsonNode resource : facts.path("bindings")) {
+            assertThat(resource.path("kind").asText()).isNotEqualTo(MediaTypeDict.IMAGE.getCode());
+        }
+    }
+
+    /** 音频自选封面有独立的图片失效规则，未复用该规则前不作为新分享封面句柄。 */
+    @Test void audioCoverDoesNotProvideShareCoverBinding() {
+        ObjectNode input = input(); source(input, 1, "WORK", 201);
+        WorkEntity work = work(201, 101); work.setMediaType(MediaTypeDict.AUDIO.getCode());
+        work.setCoverObjectKey("WFOWNER/work/image/cover.jpg");
+        when(users.selectById(101L)).thenReturn(user(101)); when(works.selectById(201L)).thenReturn(work);
+        when(cos.publicUrl(work.getCoverObjectKey())).thenReturn("https://cdn.test/WFOWNER/work/image/cover.jpg");
+
+        ObjectNode facts = service.freeze(input, base());
+
+        for (JsonNode resource : facts.path("bindings")) {
+            assertThat(resource.path("kind").asText()).isNotEqualTo(MediaTypeDict.IMAGE.getCode());
+        }
+    }
+
+    /** 被候选使用的封面句柄必须回溯实际素材号，冻结之后删除的作品不能继续绑定。 */
+    @Test void usedShareCoverReferenceRevalidatesItsCurrentWorkSource() {
+        ObjectNode input = input(); source(input, 1, "WORK", 201); source(input, 7, "WORK", 404);
+        WorkEntity work = work(201, 101); work.setMediaObjectKey("WFOWNER/work/image/photo.jpg");
+        when(users.selectById(101L)).thenReturn(user(101)); when(works.selectById(201L)).thenReturn(work);
+        when(cos.publicUrl(work.getMediaObjectKey())).thenReturn("https://cdn.test/WFOWNER/work/image/photo.jpg");
+        ObjectNode facts = service.freeze(input, base()), request = node("{}");
+        request.set("input", input); request.set("facts", facts);
+        ObjectNode output = node("{\"page\":{\"settings\":{\"share\":{\"bindings\":[{\"slot\":\"coverUrl\",\"ref\":\"source_cover_1\"}]}}}}");
+        clearInvocations(works);
+
+        service.revalidate(request, output);
+
+        verify(works).selectById(201L); verify(works, never()).selectById(404L);
+        work.setDeleted(201L);
+        assertThatThrownBy(() -> service.revalidate(request, output)).isInstanceOf(BusinessException.class);
+    }
+
+    /** 输出未使用的封面句柄不触发失效素材复核，保留候选的既有按需校验语义。 */
+    @Test void unusedShareCoverReferenceDoesNotRevalidateItsSource() {
+        ObjectNode input = input(); source(input, 1, "WORK", 201);
+        WorkEntity work = work(201, 101); work.setMediaObjectKey("WFOWNER/work/image/photo.jpg");
+        when(users.selectById(101L)).thenReturn(user(101)); when(works.selectById(201L)).thenReturn(work);
+        when(cos.publicUrl(work.getMediaObjectKey())).thenReturn("https://cdn.test/WFOWNER/work/image/photo.jpg");
+        ObjectNode facts = service.freeze(input, base()), request = node("{}");
+        request.set("input", input); request.set("facts", facts);
+        work.setDeleted(201L); clearInvocations(works);
+
+        service.revalidate(request, node("{\"operations\":[],\"notes\":[\"保留 source_cover_1\"]}"));
+
+        verify(works, never()).selectById(201L);
+    }
+
+    /** 团队分享封面仍要求自有作品集上传素材，不能生成不可保存的成员作品封面句柄。 */
+    @Test void authorizedTeamMemberImageDoesNotProvideShareCoverBinding() {
+        ObjectNode input = input().put("ownerType", PortfolioOwnerTypeDict.TEAM.getCode()).put("ownerId", "9");
+        source(input, 1, "WORK", 201);
+        TeamEntity team = new TeamEntity(); team.setId(9L); team.setName("公开团队");
+        team.setAvatarUrl("https://cdn.test/WFTEAM/others/avatar.jpg");
+        when(teams.selectById(9L)).thenReturn(team); when(users.selectById(12L)).thenReturn(user(12));
+        TeamMemberEntity member = new TeamMemberEntity(); member.setTeamId(9L); member.setUserId(12L);
+        member.setJoinStatus(JoinStatusDict.JOINED.getCode()); member.setAllowWorks(1);
+        when(members.selectList(any())).thenReturn(List.of(member));
+        WorkEntity work = work(201, 12); work.setMediaObjectKey("WFMEMBER/work/image/photo.jpg");
+        when(works.selectById(201L)).thenReturn(work);
+        when(cos.publicUrl(work.getMediaObjectKey())).thenReturn("https://cdn.test/WFMEMBER/work/image/photo.jpg");
+
+        ObjectNode facts = service.freeze(input, base());
+
+        assertThat(facts.path("sources").get(0).path("canBind").asBoolean()).isTrue();
+        for (JsonNode resource : facts.path("bindings")) {
+            assertThat(resource.path("kind").asText()).isNotEqualTo(MediaTypeDict.IMAGE.getCode());
+        }
+    }
+
     /** 审核未通过、处理中、已删除、非本人或作者注销时都不能生成媒体地址。 */
     @Test void unavailablePersonalWorkNeverGeneratesCosUrls() {
         ObjectNode input = input(); source(input, 1, "WORK", 201);
@@ -423,9 +584,13 @@ class PortfolioAiFactsServiceTest {
         WorkEntity work = work(201, 101); work.setMediaObjectKey("WFOWNER/work/image/photo.jpg");
         when(users.selectById(101L)).thenReturn(user(101)); when(works.selectById(201L)).thenReturn(work);
         when(cos.publicUrl(work.getMediaObjectKey())).thenReturn(url);
-        JsonNode frozen = service.freeze(input, base()).path("sources").get(0);
+        ObjectNode facts = service.freeze(input, base());
+        JsonNode frozen = facts.path("sources").get(0);
         assertThat(frozen.path("canBind").asBoolean()).isTrue();
         assertThat(frozen.has("mediaUrl")).isFalse(); assertThat(frozen.has("coverUrl")).isFalse();
+        for (JsonNode resource : facts.path("bindings")) {
+            assertThat(resource.path("kind").asText()).isNotEqualTo(MediaTypeDict.IMAGE.getCode());
+        }
     }
 
     /** 团队成员作品在当前 allowWorks 授权后提供视频链接，权限撤回后不继续冻结旧链接。 */
