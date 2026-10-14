@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.Set;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Date;
@@ -68,6 +70,12 @@ public class VideoFrameSnapshotClient {
     private static final String TERMINAL_STATES = "Success,Failed,Cancel";
     private static final String ASCENDING_TIME = "Asc";
     private static final String FRAME_CLEANUP = "FRAME_CLEANUP";
+    /** 媒体任务列表要求数字时区；UTC 也必须输出 +0000，不能使用 Instant 默认的 Z。 */
+    private static final DateTimeFormatter CLEANUP_TIME_FORMAT = DateTimeFormatter
+            .ofPattern("yyyy-MM-dd'T'HH:mm:ssZ").withZone(ZoneOffset.UTC);
+    /** 安全诊断区分任务列表查询与已确认终态后的对象清理。 */
+    private static final String CLEANUP_QUERY_STAGE = "FRAME_CLEANUP_QUERY";
+    private static final String CLEANUP_OUTPUT_STAGE = "FRAME_CLEANUP_OUTPUT";
     /** 普通媒体队列的官方状态与类型，不使用倍速转码队列。 */
     private static final String QUEUE_ACTIVE_STATE = "Active";
     private static final String QUEUE_CATEGORY = "Transcoding";
@@ -269,8 +277,9 @@ public class VideoFrameSnapshotClient {
         request.setOrderByTime(ASCENDING_TIME);
         request.setSize(CLEANUP_PAGE_SIZE);
         request.setNextToken(cleanupNextToken);
-        request.setStartCreationTime(cleanupWatermark.minus(Duration.ofDays(CLEANUP_LOOKBACK_DAYS)).toString());
-        request.setEndCreationTime(cleanupWatermark.toString());
+        request.setStartCreationTime(CLEANUP_TIME_FORMAT.format(cleanupWatermark.minus(Duration.ofDays(CLEANUP_LOOKBACK_DAYS))));
+        request.setEndCreationTime(CLEANUP_TIME_FORMAT.format(cleanupWatermark));
+        String stage = CLEANUP_QUERY_STAGE;
         try {
             MediaListJobResponse page = client.describeMediaJobs(request);
             if (page == null || page.getJobsDetailList() == null || page.getJobsDetailList().size() > CLEANUP_PAGE_SIZE
@@ -282,6 +291,7 @@ public class VideoFrameSnapshotClient {
                 String prefix = ownedTerminalOutput(job);
                 if (prefix == null) { continue; }
                 int count = Integer.parseInt(job.getOperation().getSnapshot().getCount());
+                stage = CLEANUP_OUTPUT_STAGE;
                 if (!cleanupOutput(prefix, count, lock, deadline)) { return; }
                 log.info("历史 Snapshot 终态补偿清理: jobId={}, state={}, prefix={}", job.getJobId(), job.getState(), prefix);
             }
@@ -290,6 +300,11 @@ public class VideoFrameSnapshotClient {
                 cleanupNextToken = null; cleanupWatermark = null;
             }
         } catch (Exception exception) {
+            // 只保留白名单字段，不传递供应商消息、响应正文或可能含签名地址的异常堆栈。
+            CosServiceException remote = exception instanceof CosServiceException value ? value : null;
+            log.warn("历史 Snapshot 终态补偿失败详情: stage={}, httpStatus={}, errorCode={}, exceptionType={}",
+                    stage, remote == null ? null : remote.getStatusCode(),
+                    safeCode(remote == null ? null : remote.getErrorCode()), exception.getClass().getSimpleName());
             // 失败回到安全的首屏；下一轮不继续消费供应商可能已经失效的游标。
             cleanupNextToken = null; cleanupWatermark = null;
             throw failure(FRAME_CLEANUP, "历史截图终态扫尾失败，保留输出等待下轮重试");

@@ -23,6 +23,7 @@ portfolio-ai:
   enabled: ${WEFOLIO_AI_ENABLED:false}
   media-enabled: ${WEFOLIO_AI_MEDIA_ENABLED:false}
   media-audio-text-enabled: ${WEFOLIO_AI_MEDIA_AUDIO_TEXT_ENABLED:false}
+  media-stored-video-summary-enabled: ${WEFOLIO_AI_MEDIA_STORED_VIDEO_SUMMARY_ENABLED:false}
   base-url: ${WEFOLIO_AI_BASE_URL:https://tokenhub.tencentmaas.com/v1}
   model: ${WEFOLIO_AI_MODEL:glm-5.3-flash}
   temperature: ${WEFOLIO_AI_TEMPERATURE:1.0}

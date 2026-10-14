@@ -105,7 +105,7 @@ class VideoFrameRebuildIntegrationTest {
         when(snapshots.ready(PROVIDER_JOB)).thenReturn(true);
         when(snapshots.outputFrames(anyString(), eq(24))).thenReturn(inputs());
         lock = mock(VideoFrameBackfillLock.ExecutionLock.class);
-        service = new VideoFrameBackfillService(repository, storage, snapshots, properties, VideoAudioTestSupport.disabled());
+        service = new VideoFrameBackfillService(repository, storage, snapshots, properties, VideoAudioTestSupport.disabled(), VideoSummaryTestSupport.disabled());
         events.clear(); clearInvocations(cos, storage);
     }
 

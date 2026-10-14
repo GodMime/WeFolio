@@ -417,6 +417,29 @@ class VideoFrameStorageServiceTest {
         assertDoesNotThrow(() -> storage.cleanupOwnedManifest(manifest, source, 7L));
         verify(cos, times(8)).deleteObject(eq("bucket-1"), startsWith("OWNER/others/video-frames/7/"));
     }
+    /** 原视频摘要 HEAD 必须预留真实 SDK 超时，时间不足时不发送，也没有隐藏重试。 */
+    @Test void directSummaryHeadRequiresFullCallBudgetAndDoesNotRetry() {
+        clearInvocations(cos);
+        assertEquals(5, storage.headTimeoutSeconds());
+        assertThrows(VideoFrameProcessingException.class,
+                () -> storage.head(source.objectKey(), Instant.now().plusSeconds(4)));
+        verifyNoInteractions(cos);
+        when(cos.getObjectMetadata("bucket-1", source.objectKey())).thenThrow(new IllegalStateException("临时远端错误"));
+        assertThrows(IllegalStateException.class, () -> storage.head(source.objectKey(), deadline));
+        verify(cos, times(1)).getObjectMetadata("bucket-1", source.objectKey());
+    }
+
+    /** 远端完成后收到中断，最终源复验不能将该结果当作仍有效。 */
+    @Test void directSummaryHeadChecksInterruptionAfterResponse() {
+        when(cos.getObjectMetadata("bucket-1", source.objectKey())).thenAnswer(call -> {
+            Thread.currentThread().interrupt(); return new ObjectMetadata();
+        });
+        try {
+            assertThrows(VideoFrameProcessingException.class, () -> storage.head(source.objectKey(), deadline));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally { Thread.interrupted(); }
+    }
+
     /** 故意倒序输入，验证清单按真实时间排序。 */
     private List<VideoFrameInput> inputs() { return IntStream.range(0, 8).mapToObj(i ->
             new VideoFrameInput((7L - i) * 1000, "https://bucket.cos.ap-guangzhou.myqcloud.com/frame-" + i, null)).toList(); }

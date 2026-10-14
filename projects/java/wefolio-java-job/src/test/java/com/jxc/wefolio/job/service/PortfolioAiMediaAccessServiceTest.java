@@ -8,6 +8,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiStoredVideoSummary;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import com.qcloud.cos.model.ObjectMetadata;
@@ -19,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.UUID;
@@ -44,9 +46,9 @@ class PortfolioAiMediaAccessServiceTest {
         jdbc.execute("CREATE TABLE wf_user(id BIGINT PRIMARY KEY,unique_code VARCHAR(16),status VARCHAR(32),deleted BIGINT)");
         jdbc.execute("CREATE TABLE wf_team(id BIGINT PRIMARY KEY,status VARCHAR(32),deleted BIGINT)");
         jdbc.execute("CREATE TABLE wf_team_member(team_id BIGINT,user_id BIGINT,role VARCHAR(32),join_status VARCHAR(32),allow_works INT,deleted BIGINT)");
-        jdbc.execute("CREATE TABLE wf_work(id BIGINT PRIMARY KEY,user_id BIGINT,media_type VARCHAR(32),media_object_key VARCHAR(512),media_sha256 VARCHAR(64),duration_ms INT,video_frames_json VARCHAR(16000),status VARCHAR(32),audit_status VARCHAR(32),deleted BIGINT)");
+        jdbc.execute("CREATE TABLE wf_work(id BIGINT PRIMARY KEY,user_id BIGINT,media_type VARCHAR(32),media_object_key VARCHAR(512),media_sha256 VARCHAR(64),duration_ms INT,video_frames_json VARCHAR(16000),status VARCHAR(32),audit_status VARCHAR(32),deleted BIGINT,audit_round INT)");
         jdbc.update("INSERT INTO wf_user VALUES(2,'OWNER','ACTIVE',0),(3,'MEMBER','ACTIVE',0)");
-        jdbc.update("INSERT INTO wf_work VALUES(9,2,'VIDEO','OWNER/work/video/test.mp4','sha',10000,NULL,'ACTIVE','PASSED',0)");
+        jdbc.update("INSERT INTO wf_work VALUES(9,2,'VIDEO','OWNER/work/video/test.mp4','sha',10000,NULL,'ACTIVE','PASSED',0,1)");
         storage = mock(VideoFrameStorageService.class); service = new PortfolioAiMediaAccessService(jdbc, storage, properties);
         var head = new ObjectMetadata(); head.setContentLength(1000); head.setHeader("ETag", "ETAG"); head.setContentType("video/mp4");
         when(storage.head("OWNER/work/video/test.mp4")).thenReturn(head);
@@ -372,4 +374,43 @@ class PortfolioAiMediaAccessServiceTest {
         assertThatThrownBy(() -> service.signed(task(), entry)).hasMessageContaining("持久帧");
         verify(storage, never()).signedGet(anyString(), any());
     }
+    /** 原视频摘要可在持久帧缺失或损坏时使用，只检查源身份与实时权限。 */
+    @Test void storedSummaryRequiresNoFramesOrSignedMedia() {
+        ObjectNode entry = storedEntry();
+        jdbc.update("UPDATE wf_work SET video_frames_json='broken',duration_ms=600000 WHERE id=9");
+        service.verify(task(), entry);
+        service.verifyCurrent(task(), entry);
+        assertThat(service.signedAfterVerification(task(), entry)).isEmpty();
+        verify(storage).head("OWNER/work/video/test.mp4");
+        verify(storage, never()).signedGet(anyString(), any());
+    }
+
+    /** 旧摘要冻结后重新通过审核也不能重新授权同一在途任务。 */
+    @Test void storedSummaryRejectsChangedAuditRoundAndSourceReplacement() {
+        ObjectNode entry = storedEntry();
+        jdbc.update("UPDATE wf_work SET audit_round=2 WHERE id=9");
+        assertThatThrownBy(() -> service.verifyCurrent(task(), entry)).hasMessageContaining("失效");
+        jdbc.update("UPDATE wf_work SET audit_round=1,media_sha256='changed' WHERE id=9");
+        assertThatThrownBy(() -> service.verifyCurrent(task(), entry)).hasMessageContaining("失效");
+        verify(storage, never()).signedGet(anyString(), any());
+    }
+
+    /** 摘要包装源身份不符时拒绝，不能用冻结文字代替权限或真实源校验。 */
+    @Test void corruptFrozenStoredSummaryCannotGrantAccess() {
+        ObjectNode entry = storedEntry();
+        ((ObjectNode) entry.path(PortfolioAiStoredVideoSummary.FIELD)).put("sourceVersion", "b".repeat(64));
+        assertThatThrownBy(() -> service.verify(task(), entry)).isInstanceOf(PortfolioAiCallException.class);
+        verify(storage, never()).signedGet(anyString(), any());
+    }
+
+    /** 构造不带帧字段的 v3 持久摘要路线。 */
+    private ObjectNode storedEntry() {
+        ObjectNode entry = entry().put("route", PortfolioAiMediaContract.ROUTE_STORED_VIDEO_SUMMARY).put("auditRound", 1);
+        ObjectNode content = StrictAiJson.mapper().createObjectNode().put("summary", "原视频婚礼画面");
+        content.putArray("observations"); content.putArray("limitations");
+        entry.set(PortfolioAiStoredVideoSummary.FIELD, PortfolioAiStoredVideoSummary.create(entry.path("sourceVersion").asText(),
+                "a".repeat(64), "glm-5.3-flash", "direct-v1", Instant.parse("2020-01-01T00:00:00Z"), content));
+        return entry;
+    }
+
 }

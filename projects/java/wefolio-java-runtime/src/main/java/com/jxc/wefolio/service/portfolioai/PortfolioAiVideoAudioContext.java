@@ -113,7 +113,7 @@ public final class PortfolioAiVideoAudioContext {
             boolean any = FIELDS.stream().anyMatch(entry::has);
             if (!any) { continue; }
             String route = entry.path(KEY_ROUTE).asText();
-            if ((!ROUTE_VIDEO.equals(route) && !ROUTE_FRAMES.equals(route))
+            if ((!ROUTE_VIDEO.equals(route) && !ROUTE_FRAMES.equals(route) && !ROUTE_STORED_VIDEO_SUMMARY.equals(route))
                     || !POLICY_VERSION.equals(entry.path(POLICY).asText())
                     || !entry.path(FULL_HASH).isTextual() || !entry.path(FULL_HASH).asText().matches("[0-9a-f]{64}")) { throw invalid(); }
             String text = entry.path(TEXT).asText("");

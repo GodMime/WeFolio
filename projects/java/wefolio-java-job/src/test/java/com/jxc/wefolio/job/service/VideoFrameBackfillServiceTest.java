@@ -32,6 +32,8 @@ class VideoFrameBackfillServiceTest {
     private VideoFrameBackfillService service;
     /** 默认关闭模拟生产灰度开关，转写用例显式改为所需结果。 */
     private VideoAudioTranscriptionService audio;
+    /** 与音频无关的原视频摘要入口及本轮预算。 */
+    private VideoSummaryService videoSummary;
     /** 可配置单件期限，用于验证清空及付费前的时间边界。 */
     private VideoFrameProperties properties;
     private ListAppender<ILoggingEvent> events;
@@ -46,7 +48,8 @@ class VideoFrameBackfillServiceTest {
         executionLock = mock(VideoFrameBackfillLock.ExecutionLock.class);
         properties = new VideoFrameProperties();
         audio = VideoAudioTestSupport.disabled();
-        service = new VideoFrameBackfillService(repository, storage, snapshots, properties, audio);
+        videoSummary = VideoSummaryTestSupport.disabled();
+        service = new VideoFrameBackfillService(repository, storage, snapshots, properties, audio, videoSummary);
         when(repository.highWatermark()).thenReturn(1L);
         when(repository.scan(0, 1, 20)).thenReturn(List.of(work));
         when(repository.scan(1, 1, 20)).thenReturn(List.of());
@@ -490,6 +493,169 @@ class VideoFrameBackfillServiceTest {
         verify(repository, never()).scan(eq(0L), anyLong(), anyInt());
         verifyNoInteractions(storage, snapshots);
         assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "afterWorkId=20", "highWatermark=30", "nextAfterWorkId=20"));
+    }
+
+    /** 帧和音频已齐全时只进入原视频摘要，不重复截图或重新提取音轨。 */
+    @Test
+    void onlyMissingSummaryUsesOriginalVideoWithExpectedSource() {
+        when(storage.hasValidManifest(any(), eq(source), eq(1L), any())).thenReturn(true);
+        when(audio.transcribe(eq(1L), any(), any(), any())).thenReturn(VideoAudioTranscriptionService.Outcome.ALREADY_COMPLETE);
+        when(videoSummary.summarize(eq(1L), eq(work.objectKey()), eq(work.sha256()), any(), any(), any()))
+                .thenReturn(VideoSummaryService.Outcome.SAVED);
+        var result = service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID);
+        assertEquals(1, result.succeeded());
+        assertEquals(0, result.chargedFrames());
+        verifyNoInteractions(snapshots);
+        verify(videoSummary).summarize(eq(1L), eq(work.objectKey()), eq(work.sha256()), any(), any(), any());
+        assertTrue(logged(Level.INFO, "历史视频摘要处理汇总", "summarySaved=1", "summaryFailed=0"));
+    }
+
+    /** 帧上传普通失败后原视频摘要仍可独立完成，部分失败保留补偿含义。 */
+    @Test
+    void ordinaryFrameFailureStillGeneratesOriginalVideoSummary() {
+        when(storage.persist(eq(source), eq(1L), anyString(), any(), eq(8), anyList(), any()))
+                .thenThrow(new VideoFrameProcessingException("FRAME_UPLOAD", "上传失败"));
+        when(videoSummary.summarize(eq(1L), anyString(), any(), any(), any(), any()))
+                .thenReturn(VideoSummaryService.Outcome.SAVED);
+        var result = service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID);
+        assertEquals(1, result.failed());
+        assertEquals(0, result.succeeded());
+        verify(videoSummary).summarize(eq(1L), eq(work.objectKey()), eq(work.sha256()), any(), any(), any());
+        assertTrue(logged(Level.INFO, "历史视频摘要处理汇总", "summarySaved=1"));
+    }
+
+    /** 关闭音频或普通转写失败均可生成原视频摘要，音频失败不会被摘要成功掩盖。 */
+    @Test
+    void disabledAndFailedAudioStillGenerateSummaryWithIndependentStatistics() {
+        when(storage.hasValidManifest(any(), eq(source), eq(1L), any())).thenReturn(true);
+        when(videoSummary.summarize(eq(1L), anyString(), any(), any(), any(), any()))
+                .thenReturn(VideoSummaryService.Outcome.SAVED);
+        when(audio.transcribe(eq(1L), any(), any(), any())).thenReturn(VideoAudioTranscriptionService.Outcome.DISABLED);
+        assertEquals(1, service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID).succeeded());
+        when(audio.transcribe(eq(1L), any(), any(), any())).thenReturn(VideoAudioTranscriptionService.Outcome.FAILED);
+        assertEquals(1, service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID).failed());
+        verify(videoSummary, times(2)).summarize(eq(1L), anyString(), any(), any(), any(), any());
+        assertTrue(logged(Level.INFO, "历史视频音频处理汇总", "audioFailed=1"));
+        assertTrue(logged(Level.INFO, "历史视频摘要处理汇总", "summarySaved=1"));
+    }
+
+    /** 源过期、另一个入口持锁和额度不足均不能直接进入下一次摘要收费。 */
+    @Test
+    void staleBusyAndBudgetLimitedAudioDoNotContinueIntoSummary() {
+        when(storage.hasValidManifest(any(), eq(source), eq(1L), any())).thenReturn(true);
+        for (var outcome : List.of(VideoAudioTranscriptionService.Outcome.STALE,
+                VideoAudioTranscriptionService.Outcome.BUSY, VideoAudioTranscriptionService.Outcome.BUDGET_EXHAUSTED)) {
+            when(audio.transcribe(eq(1L), any(), any(), any())).thenReturn(outcome);
+            service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID);
+        }
+        verify(videoSummary, never()).summarize(anyLong(), anyString(), any(), any(), any(), any());
+    }
+
+    /** 原视频改变或帧发布CAS冲突属于过期结果，不能继续以旧扫描项收费。 */
+    @Test
+    void staleFrameResultDoesNotContinueIntoSummary() {
+        doThrow(new VideoFrameSourceChangedException()).when(storage).verifySource(eq(source), any());
+        assertEquals(1, service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID).failed());
+        verify(videoSummary, never()).summarize(anyLong(), anyString(), any(), any(), any(), any());
+    }
+
+    /** 摘要额度不足在已完成帧、音频后仍停在本件前，接续时复用已有阶段。 */
+    @Test
+    void summaryBudgetExhaustionKeepsCurrentCursor() {
+        when(storage.hasValidManifest(any(), eq(source), eq(1L), any())).thenReturn(true);
+        when(videoSummary.summarize(eq(1L), anyString(), any(), any(), any(), any()))
+                .thenReturn(VideoSummaryService.Outcome.BUDGET_EXHAUSTED);
+        var result = service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID);
+        assertTrue(result.budgetExhausted());
+        verify(repository, never()).scan(1, 1, 20);
+        assertTrue(logged(Level.INFO, "历史视频补帧执行结束", "cursor=0", "status=BUDGET_EXHAUSTED"));
+    }
+
+    /** 大小或时长超限及预检异常都保留旧内容并停在当前作品，不把拒绝当执行失败越过游标。 */
+    @Test
+    void rebuildSummaryPreflightRefusalPreservesDataAndCursor() {
+        Work previous = existingWork();
+        for (var outcome : List.of(VideoSummaryService.Outcome.NOT_SUPPORTED, VideoSummaryService.Outcome.FAILED,
+                VideoSummaryService.Outcome.STALE, VideoSummaryService.Outcome.BUSY)) {
+            var preparation = mock(VideoSummaryService.Preparation.class);
+            when(preparation.outcome()).thenReturn(outcome);
+            when(videoSummary.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(preparation);
+            var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+            assertEquals(1, result.failed());
+            assertFalse(result.budgetExhausted());
+            verify(preparation).close();
+        }
+        verify(repository, never()).clearManifestForRebuild(previous);
+        verify(repository, never()).scan(1, 1, 20);
+        verify(videoSummary, never()).complete(any(), any());
+        verifyNoInteractions(snapshots);
+        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "status=PREFLIGHT_REFUSED", "nextAfterWorkId=0"));
+    }
+
+    /** 原视频摘要费用不足也必须在清空前拒绝，保留原帧、文字和摘要。 */
+    @Test
+    void rebuildSummaryBudgetRefusalDoesNotClearExistingWork() {
+        Work previous = existingWork();
+        var preparation = mock(VideoSummaryService.Preparation.class);
+        when(preparation.outcome()).thenReturn(VideoSummaryService.Outcome.BUDGET_EXHAUSTED);
+        when(videoSummary.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(preparation);
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertTrue(result.budgetExhausted());
+        verify(repository, never()).clearManifestForRebuild(previous);
+        verify(videoSummary, never()).complete(any(), any());
+        verify(preparation).close();
+        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "nextAfterWorkId=0"));
+    }
+
+    /** 预留凭证只生成一次，且音频持有的作品锁在摘要领取同一锁之前释放。 */
+    @Test
+    void rebuildReusesSummaryReservationAndClosesAudioBeforeSummary() {
+        Work previous = existingWork();
+        var audioPrepared = mock(VideoAudioTranscriptionService.Preparation.class);
+        when(audioPrepared.ready()).thenReturn(true);
+        when(audio.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(audioPrepared);
+        when(audio.complete(eq(audioPrepared), any())).thenReturn(VideoAudioTranscriptionService.Outcome.SAVED);
+        var summaryPrepared = mock(VideoSummaryService.Preparation.class);
+        when(summaryPrepared.ready()).thenReturn(true);
+        when(videoSummary.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(summaryPrepared);
+        when(videoSummary.complete(eq(summaryPrepared), any())).thenAnswer(invocation -> {
+            verify(audioPrepared).close();
+            return VideoSummaryService.Outcome.SAVED;
+        });
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertEquals(1, result.succeeded());
+        var order = inOrder(audio, videoSummary, repository, audioPrepared, summaryPrepared);
+        order.verify(audio).prepare(eq(1L), eq(true), any(), any(), any());
+        order.verify(videoSummary).prepare(eq(1L), eq(true), any(), any(), any());
+        order.verify(repository).clearManifestForRebuild(previous);
+        order.verify(repository).saveManifest(cleared(previous), MANIFEST);
+        order.verify(audio).complete(eq(audioPrepared), any());
+        order.verify(audioPrepared).close();
+        order.verify(videoSummary).complete(eq(summaryPrepared), any());
+        order.verify(summaryPrepared).close();
+        verify(videoSummary, never()).summarize(anyLong(), anyString(), any(), any(), any(), any());
+    }
+
+    /** 重建已清空后的普通帧失败仍可保存原视频摘要，音频预检锁同样先释放。 */
+    @Test
+    void failedRebuiltFramesCanStillSaveReservedSummaryAfterClosingAudio() {
+        existingWork();
+        var audioPrepared = mock(VideoAudioTranscriptionService.Preparation.class);
+        when(audioPrepared.ready()).thenReturn(true);
+        when(audio.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(audioPrepared);
+        var summaryPrepared = mock(VideoSummaryService.Preparation.class);
+        when(summaryPrepared.ready()).thenReturn(true);
+        when(videoSummary.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(summaryPrepared);
+        when(videoSummary.complete(eq(summaryPrepared), any())).thenReturn(VideoSummaryService.Outcome.SAVED);
+        when(storage.persist(eq(source), eq(1L), anyString(), any(), eq(8), anyList(), any()))
+                .thenThrow(new VideoFrameProcessingException("FRAME_UPLOAD", "上传失败"));
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertEquals(1, result.failed());
+        var order = inOrder(audioPrepared, videoSummary);
+        order.verify(audioPrepared).close();
+        order.verify(videoSummary).complete(eq(summaryPrepared), any());
+        verify(audio, never()).complete(any(), any());
+        assertTrue(logged(Level.INFO, "历史视频摘要处理汇总", "summarySaved=1"));
     }
 
     /** 为重建用例准备一份旧清单及成功CAS返回的已清空快照。 */

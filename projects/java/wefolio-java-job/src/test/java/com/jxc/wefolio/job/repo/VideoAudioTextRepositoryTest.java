@@ -29,13 +29,13 @@ class VideoAudioTextRepositoryTest {
                 CREATE TABLE wf_work(id bigint primary key,user_id bigint,media_type varchar(32),status varchar(32),
                   media_object_key varchar(255),media_sha256 varchar(64),audit_round int,version int default 0,
                   audit_status varchar(32),deleted int default 0,video_frames_json varchar(4000),
-                  video_audio_text clob,ai_media_summary_json varchar(4000),ai_media_summary_expires_at timestamp,updated_at timestamp)
+                  video_audio_text clob,video_summary_json varchar(4000),ai_media_summary_json varchar(4000),ai_media_summary_expires_at timestamp,updated_at timestamp)
                 """);
         jdbc.update("INSERT INTO wf_user(id,unique_code,status) VALUES(1,'OWNER','ACTIVE')");
         jdbc.update("""
                 INSERT INTO wf_work(id,user_id,media_type,status,media_object_key,media_sha256,audit_round,audit_status,
-                  video_frames_json,ai_media_summary_json,ai_media_summary_expires_at)
-                VALUES(1,1,'VIDEO','ACTIVE','OWNER/work/video/a.mp4','sha',2,'PASSED','{"frames":1}','旧摘要',CURRENT_TIMESTAMP)
+                  video_frames_json,video_summary_json,ai_media_summary_json,ai_media_summary_expires_at)
+                VALUES(1,1,'VIDEO','ACTIVE','OWNER/work/video/a.mp4','sha',2,'PASSED','{"frames":1}','原视频摘要','旧摘要',CURRENT_TIMESTAMP)
                 """);
         repository = new VideoAudioTextRepository(jdbc);
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
@@ -48,6 +48,7 @@ class VideoAudioTextRepositoryTest {
         assertTrue(Boolean.TRUE.equals(transaction.execute(status -> repository.save(snapshot, "完整口播\n第二句"))));
         assertEquals("完整口播\n第二句", repository.find(1).text());
         assertEquals(1, repository.find(1).version());
+        assertEquals("原视频摘要", jdbc.queryForObject("SELECT video_summary_json FROM wf_work WHERE id=1", String.class));
         assertNull(jdbc.queryForObject("SELECT ai_media_summary_json FROM wf_work WHERE id=1", String.class));
         assertNull(jdbc.queryForObject("SELECT ai_media_summary_expires_at FROM wf_work WHERE id=1", Object.class));
         assertTrue(Boolean.TRUE.equals(transaction.execute(status -> repository.save(repository.find(1), ""))));

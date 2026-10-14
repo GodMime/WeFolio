@@ -55,6 +55,11 @@ public class WorkEntity extends BaseEntity {
     @TableField(select = false, updateStrategy = FieldStrategy.NEVER)
     private String videoAudioText;
 
+    /** 原视频直接理解生成的版本化摘要；可空且无有效期，仅由专用仓储写入。 */
+    @ToString.Exclude
+    @TableField(select = false, updateStrategy = FieldStrategy.NEVER)
+    private String videoSummaryJson;
+
     /** 视频完整持久帧清单，由 Job 显式写入；普通作品修改不得覆盖清单，不保存临时签名。 */
     @TableField(updateStrategy = FieldStrategy.NEVER)
     private String videoFramesJson;

@@ -88,16 +88,19 @@ class VideoAudioTextMigrationTest {
                 .append(sqlType(field.getPropertyType())));
         new JdbcTemplate(source).execute(ddl.append(')').toString());
         JdbcTemplate jdbc = new JdbcTemplate(source);
-        jdbc.update("INSERT INTO wf_work (id,media_type,title,video_audio_text,deleted,version) VALUES (1,'VIDEO','原标题','保留的全文',0,0)");
+        jdbc.update("INSERT INTO wf_work (id,media_type,title,video_audio_text,video_summary_json,deleted,version) VALUES (1,'VIDEO','原标题','保留的全文','保留摘要',0,0)");
         try (var session = sessions.openSession(true)) {
             WorkEntityMapper mapper = session.getMapper(WorkEntityMapper.class);
             WorkEntity work = mapper.selectById(1L);
             assertThat(work.getVideoAudioText()).isNull();
+            assertThat(work.getVideoSummaryJson()).isNull();
             work.setTitle("新标题");
             work.setVideoAudioText("过期的转写");
+            work.setVideoSummaryJson("过期的摘要");
             assertThat(mapper.updateById(work)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT video_audio_text FROM wf_work WHERE id=1", String.class)).isEqualTo("保留的全文");
-            assertThat(work.toString()).doesNotContain("videoAudioText", "过期的转写");
+            assertThat(jdbc.queryForObject("SELECT video_summary_json FROM wf_work WHERE id=1", String.class)).isEqualTo("保留摘要");
+            assertThat(work.toString()).doesNotContain("videoAudioText", "过期的转写", "videoSummaryJson", "过期的摘要");
         }
     }
 

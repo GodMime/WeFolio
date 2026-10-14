@@ -30,6 +30,8 @@ public class PortfolioAiProperties {
     private boolean mediaEnabled;
     /** 全部 Job 消费者升级后才开启 v2 音频文字冻结。 */
     private boolean mediaAudioTextEnabled;
+    /** 全部 Job 消费者升级后才开启 v3，优先冻结持久摘要并同时包含音频文字。 */
+    private boolean mediaStoredVideoSummaryEnabled;
     /** 单次描述的 Unicode 码点上限。 */
     private int maxPromptCodePoints = 2000;
     /** 完整普通配置的字节上限。 */

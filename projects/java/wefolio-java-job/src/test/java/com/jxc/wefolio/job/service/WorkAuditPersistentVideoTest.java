@@ -31,16 +31,17 @@ class WorkAuditPersistentVideoTest {
     private final TencentCiAuditClient client = mock(TencentCiAuditClient.class);
     private final VideoFrameStorageService storage = mock(VideoFrameStorageService.class);
     private final VideoAudioTranscriptionService audio = mock(VideoAudioTranscriptionService.class);
+    private final VideoSummaryService summary = VideoSummaryTestSupport.disabled();
     private final WorkAuditProperties properties = new WorkAuditProperties();
     private final WorkAuditService service = new WorkAuditService(works, tasks, claims, client, properties,
-            new AnimationFrameSampler(), new AnimationAuditResultAggregator(), mock(AnimationFrameCosService.class), storage, audio);
+            new AnimationFrameSampler(), new AnimationAuditResultAggregator(), mock(AnimationFrameCosService.class), storage, audio, summary);
 
     /** 缺少帧存储依赖时构造即失败，不留下可能在新调用点产生空指针的服务。 */
     @Test
     void constructorShouldRejectMissingVideoFrameStorage() {
         assertThatThrownBy(() -> new WorkAuditService(works, tasks, claims, client, properties,
                 new AnimationFrameSampler(), new AnimationAuditResultAggregator(),
-                mock(AnimationFrameCosService.class), null, audio))
+                mock(AnimationFrameCosService.class), null, audio, summary))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("持久视频审核需要注入 VideoFrameStorageService");
         verifyNoInteractions(works, tasks, claims, client, storage);
@@ -107,11 +108,13 @@ class WorkAuditPersistentVideoTest {
                 .thenReturn(new PersistentVideoCompletion(true, null));
         service.queryPendingVideoResults(1);
         if (resultCodeValue == AuditResultDict.PASS) {
-            var order = inOrder(claims, audio);
+            var order = inOrder(claims, audio, summary);
             order.verify(claims).completePersistentVideoWithFrames(eq(task), any(), eq(WorkAuditStatusDict.PASSED), any(), eq("manifest"));
             order.verify(audio).transcribe(eq(11L), eq(task.getAuditRound()), eq(OBJECT_KEY), eq(task.getMediaSha256()), any(), any());
+            order.verify(summary).summarize(eq(11L), eq(task.getAuditRound()), eq(OBJECT_KEY), eq(task.getMediaSha256()), any(), any());
         } else {
             verify(audio, never()).transcribe(anyLong(), any(), any(), any(), any(), any());
+            verify(summary, never()).summarize(anyLong(), nullable(Integer.class), any(), any(), any(), any());
         }
     }
 
@@ -129,6 +132,59 @@ class WorkAuditPersistentVideoTest {
         verify(claims, never()).failPersistentVideo(any(), any(), any());
         verify(claims, never()).markVideoQueryFailureForNextRunAndKeepWorkAuditing(any(), any(), any(), any(), any(), any());
         verify(storage, never()).cleanupOwnedManifest(eq("manifest"), any(), any());
+    }
+
+    /** 音频普通失败后仍调用原视频摘要，两个模型的异常都不能回退已提交审核。 */
+    @Test
+    void originalVideoSummaryContinuesAfterAudioFailureWithoutChangingAudit() {
+        WorkAuditTaskEntity task = prepareQuery();
+        when(client.queryVideo("ci-job", true)).thenReturn(result(AuditResultDict.PASS, true));
+        when(storage.persist(any(), any(), any(), any(), anyInt(), any(), any())).thenReturn("manifest");
+        when(claims.completePersistentVideoWithFrames(eq(task), any(), any(), any(), any()))
+                .thenReturn(new PersistentVideoCompletion(true, null));
+        when(audio.transcribe(anyLong(), any(), any(), any(), any(), any()))
+                .thenReturn(VideoAudioTranscriptionService.Outcome.FAILED);
+        when(summary.summarize(anyLong(), nullable(Integer.class), any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("模拟原视频摘要失败"));
+        service.queryPendingVideoResults(1);
+        verify(summary).summarize(eq(11L), eq(task.getAuditRound()), eq(OBJECT_KEY), eq(task.getMediaSha256()), any(), any());
+        verify(claims, never()).failPersistentVideo(any(), any(), any());
+        verify(claims, never()).markVideoQueryFailureForNextRunAndKeepWorkAuditing(any(), any(), any(), any(), any(), any());
+    }
+
+    /** 源过期和持锁竞争不能让同一个审核回调继续进入摘要收费。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"STALE", "BUSY", "BUDGET_EXHAUSTED"})
+    void staleOrBusyAudioDoesNotContinueSummary(String outcome) {
+        WorkAuditTaskEntity task = prepareQuery();
+        when(client.queryVideo("ci-job", true)).thenReturn(result(AuditResultDict.PASS, true));
+        when(storage.persist(any(), any(), any(), any(), anyInt(), any(), any())).thenReturn("manifest");
+        when(claims.completePersistentVideoWithFrames(eq(task), any(), any(), any(), any()))
+                .thenReturn(new PersistentVideoCompletion(true, null));
+        when(audio.transcribe(anyLong(), any(), any(), any(), any(), any()))
+                .thenReturn(VideoAudioTranscriptionService.Outcome.valueOf(outcome));
+        service.queryPendingVideoResults(1);
+        verify(summary, never()).summarize(anyLong(), nullable(Integer.class), any(), any(), any(), any());
+    }
+
+    /** 审核已提交但原视频摘要未结束时，部署排空仍应看见活跃任务。 */
+    @Test
+    void summaryRemainsInsideScheduledLifecycleAfterAuditCommit() {
+        WorkAuditTaskEntity task = prepareQuery();
+        when(client.queryVideo("ci-job", true)).thenReturn(result(AuditResultDict.PASS, true));
+        when(storage.persist(any(), any(), any(), any(), anyInt(), any(), any())).thenReturn("manifest");
+        when(claims.completePersistentVideoWithFrames(eq(task), any(), any(), any(), any()))
+                .thenReturn(new PersistentVideoCompletion(true, null));
+        JobExecutionLifecycle lifecycle = new JobExecutionLifecycle();
+        when(summary.summarize(anyLong(), nullable(Integer.class), any(), any(), any(), any())).thenAnswer(invocation -> {
+            var paused = lifecycle.pause(java.time.Duration.ofMinutes(5));
+            assertThat(paused.status()).isEqualTo(JobExecutionLifecycle.Status.DRAINING);
+            assertThat(paused.activeTaskCount()).isEqualTo(1);
+            return VideoSummaryService.Outcome.SAVED;
+        });
+        assertThat(lifecycle.runScheduled(() -> service.queryPendingVideoResults(1))).isTrue();
+        assertThat(lifecycle.snapshot().status()).isEqualTo(JobExecutionLifecycle.Status.DISABLED);
+        assertThat(lifecycle.snapshot().activeTaskCount()).isZero();
     }
 
     /** 排空必须等同一调度回调内的转写结束，不能在审核提交后提前报告空闲。 */
@@ -153,7 +209,7 @@ class WorkAuditPersistentVideoTest {
 
     /** 失效审核终态提交未成功时不能触发任何音频收费链路。 */
     @Test
-    void staleCompletionDoesNotTranscribe() {
+    void staleCompletionDoesNotTranscribeOrSummarize() {
         WorkAuditTaskEntity task = prepareQuery();
         when(client.queryVideo("ci-job", true)).thenReturn(result(AuditResultDict.PASS, true));
         when(storage.persist(any(), any(), any(), any(), anyInt(), any(), any())).thenReturn("manifest");
@@ -161,6 +217,7 @@ class WorkAuditPersistentVideoTest {
                 .thenReturn(new PersistentVideoCompletion(false, null));
         service.queryPendingVideoResults(1);
         verify(audio, never()).transcribe(anyLong(), any(), any(), any(), any(), any());
+        verify(summary, never()).summarize(anyLong(), nullable(Integer.class), any(), any(), any(), any());
     }
 
     /** 明确违规沿现有 REJECTED，不为 AI 上传帧。 */

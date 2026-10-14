@@ -51,7 +51,7 @@ class WorkEntityMapperContractTest {
     @Test void mediaSnapshotReadsAllDerivedInputsInOneStatement() throws Exception {
         Method method = WorkEntityMapper.class.getDeclaredMethod("selectPortfolioAiMediaSnapshot", Long.class);
         String sql = String.join("\n", method.getAnnotation(Select.class).value());
-        assertThat(sql).contains("media_object_key", "media_sha256", "video_frames_json", "video_audio_text", "audit_status", "deleted=0");
+        assertThat(sql).contains("media_object_key", "media_sha256", "video_frames_json", "video_audio_text", "video_summary_json", "audit_round", "audit_status", "deleted=0");
         assertThat(sql).doesNotContain("SELECT *");
     }
 }

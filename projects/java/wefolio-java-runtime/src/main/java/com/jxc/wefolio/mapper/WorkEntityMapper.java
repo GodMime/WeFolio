@@ -18,10 +18,10 @@ import java.util.List;
 @Mapper
 public interface WorkEntityMapper extends BaseMapper<WorkEntity> {
 
-    /** 同一数据库快照冻结源、审核状态、持久帧与音频文字，普通作品查询不加载长文本。 */
+    /** 同一数据库快照冻结源、审核状态、持久帧、音频文字与原视频摘要，普通作品查询不加载长文本。 */
     @Select("""
             SELECT id,user_id,media_type,media_object_key,media_sha256,duration_ms,
-                   video_frames_json,video_audio_text,status,audit_status,deleted,version
+                   video_frames_json,video_audio_text,video_summary_json,status,audit_status,audit_round,deleted,version
             FROM wf_work WHERE id=#{workId} AND deleted=0
             """)
     WorkEntity selectPortfolioAiMediaSnapshot(@Param("workId") Long workId);

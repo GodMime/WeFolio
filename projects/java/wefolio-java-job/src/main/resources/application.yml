@@ -186,6 +186,23 @@ video-audio:
   max-requests-per-run: ${WEFOLIO_VIDEO_AUDIO_MAX_REQUESTS_PER_RUN:100}
   max-audio-seconds-per-run: ${WEFOLIO_VIDEO_AUDIO_MAX_SECONDS_PER_RUN:3600}
 
+video-summary:
+  # 先执行 Runtime 的新摘要列迁移再开启，原视频摘要与作品集生成开关独立。
+  enabled: ${WEFOLIO_VIDEO_SUMMARY_ENABLED:false}
+  api-key: ${TOKENHUB_API_KEY:}
+  total-timeout-seconds: ${WEFOLIO_VIDEO_SUMMARY_TOTAL_TIMEOUT_SECONDS:180}
+  connect-timeout-seconds: 10
+  max-response-bytes: 1048576
+  # 时长是应用准入上限，不承诺所有十分钟视频均符合模型上下文限制。
+  max-duration-seconds: ${WEFOLIO_VIDEO_SUMMARY_MAX_DURATION_SECONDS:600}
+  # 默认按十进制 100 MB；仅对已验证范围可配置至 100 MiB 硬上限。
+  max-video-bytes: ${WEFOLIO_VIDEO_SUMMARY_MAX_VIDEO_BYTES:100000000}
+  concurrency: ${WEFOLIO_VIDEO_SUMMARY_CONCURRENCY:1}
+  max-requests-per-run: ${WEFOLIO_VIDEO_SUMMARY_MAX_REQUESTS_PER_RUN:100}
+  max-cost-fen-per-run: ${WEFOLIO_VIDEO_SUMMARY_MAX_COST_FEN_PER_RUN:500}
+  # 包含模型思考用量，轻度思考时也为最终正文留足空间；不与 reasoning_tokens 重复相加。
+  max-output-tokens: 16384
+
 portfolio-ai:
   # 与 Runtime 共用全局开关，默认关闭；启动读取，重启生效。
   enabled: ${WEFOLIO_AI_ENABLED:false}

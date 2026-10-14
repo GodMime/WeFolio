@@ -9,10 +9,12 @@ import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
 import com.jxc.wefolio.job.service.PortfolioAiModelClient.CacheStatus;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiStoredVideoSummary;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -501,4 +503,96 @@ class PortfolioAiMediaExecutionServiceTest {
         assertThatThrownBy(() -> service.generate(task(), request, checkOwned)).hasMessageContaining("音频文字上下文不合法");
         verifyNoInteractions(repository, access, client);
     }
+    /** 命中持久摘要只产生最终生成费用，完整冻结摘要与转写直接进入最终上下文。 */
+    @Test void v3StoredSummarySkipsCacheSigningAndSummaryBilling() {
+        AiGenerationTaskEntity task = task(); ObjectNode request = storedRequest();
+        when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
+        when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1);
+        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 1000L, 100L));
+        assertThat(service.generate(task, request, checkOwned)).isEqualTo("final");
+        verify(repository).checkCapacity(eq(task), eq(3), eq(1), any());
+        verify(repository, times(1)).reserve(eq(task), eq(3), any());
+        verify(repository, never()).cached(anyLong(), any(), any());
+        verify(repository, never()).cache(anyLong(), any(), anyString(), any());
+        verify(access, never()).signedAfterVerification(any(), any());
+        verify(client, never()).summarize(any(), any(), any(), any(), any());
+        verify(client).generateWithUsage(eq(task), argThat(value ->
+                "婚礼舞台".equals(value.path("facts").path("sources").get(0).path("mediaSummary").path("summary").asText())
+                && "完整口播文字".equals(value.path("facts").path("sources").get(0).path(PortfolioAiVideoAudioContext.TEXT).asText())), any());
+        verify(access, times(2)).verify(eq(task), any());
+        assertThat(request.path("facts").path("sources").get(0).has("mediaSummary")).isFalse();
+    }
+
+    /** v3 缺少摘要的帧兜底沿用缓存与原调用次数预算，冻结文字进入摘要和最终上下文。 */
+    @Test void v3FrameFallbackGeneratesWithAudioAndOnlyWritesExistingCache() {
+        AiGenerationTaskEntity task = task(); ObjectNode request = request();
+        request.withObject("facts").withObject("mediaPlan").put("version", PortfolioAiMediaContract.STORED_SUMMARY_PLAN_VERSION);
+        ObjectNode entry = (ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0);
+        entry.put("auditRound", 1);
+        PortfolioAiVideoAudioContext.freeze(List.of(new PortfolioAiVideoAudioContext.Source(entry, "冻结口播")));
+        when(access.signedAfterVerification(eq(task), any())).thenReturn(List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://example.test/frame", 1000L)));
+        when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
+        when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1, 2);
+        when(client.summarize(eq(task), any(), any(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion(SUMMARY, 1000L, 100L));
+        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 1000L, 100L));
+        assertThat(service.generate(task, request, checkOwned)).isEqualTo("final");
+        verify(repository).checkCapacity(eq(task), anyInt(), eq(2), any());
+        verify(client).summarize(eq(task), any(), any(), argThat(value -> "冻结口播".equals(value.path(PortfolioAiVideoAudioContext.TEXT).asText())), any());
+        verify(repository).cache(eq(9L), argThat(identity -> "FRAMES".equals(identity.route())), contains("婚礼舞台"), any());
+        verify(client).generateWithUsage(eq(task), argThat(value -> "冻结口播".equals(value.path("facts").path("sources").get(0).path(PortfolioAiVideoAudioContext.TEXT).asText())), any());
+    }
+
+    /** v3 帧缓存命中仍只产生一次最终调用，不读取后补的新持久摘要来切换路线。 */
+    @Test void v3FrameFallbackCacheHitAvoidsAdditionalSummaryCall() {
+        ObjectNode request = request();
+        request.withObject("facts").withObject("mediaPlan").put("version", PortfolioAiMediaContract.STORED_SUMMARY_PLAN_VERSION);
+        ((ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0)).put("auditRound", 1);
+        when(repository.cached(eq(9L), any(), any())).thenReturn(SUMMARY);
+        when(client.textRequestBytes(any(), any())).thenReturn(1000);
+        when(client.generateWithUsage(any(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 1000L, 100L));
+        assertThat(service.generate(task(), request, checkOwned)).isEqualTo("final");
+        verify(repository).checkCapacity(any(), eq(3), eq(1), any());
+        verify(client, never()).summarize(any(), any(), any(), any(), any());
+        verify(access, never()).signedAfterVerification(any(), any());
+    }
+
+    /** 新路线不能伪装成旧合同，新合同也不能绕回原短视频路线。 */
+    @Test void v3RoutesAndAuditRoundAreValidatedBeforeAnyModelOrCacheAccess() {
+        for (String version : List.of(PortfolioAiMediaContract.LEGACY_PLAN_VERSION, PortfolioAiMediaContract.PLAN_VERSION)) {
+            ObjectNode value = storedRequest(); value.withObject("facts").withObject("mediaPlan").put("version", version);
+            assertThatThrownBy(() -> service.generate(task(), value, checkOwned)).isInstanceOf(PortfolioAiCallException.class);
+        }
+        for (String route : List.of("VIDEO", "FRAMES")) {
+            ObjectNode value = storedRequest(); ObjectNode entry = (ObjectNode) value.path("facts").path("mediaPlan").path("entries").get(0);
+            entry.put("route", route);
+            assertThatThrownBy(() -> service.generate(task(), value, checkOwned)).isInstanceOf(PortfolioAiCallException.class);
+        }
+        ObjectNode value = storedRequest(); ((ObjectNode) value.path("facts").path("mediaPlan").path("entries").get(0)).remove("auditRound");
+        assertThatThrownBy(() -> service.generate(task(), value, checkOwned)).isInstanceOf(PortfolioAiCallException.class);
+        verifyNoInteractions(repository, client, access);
+    }
+
+    /** 包装损坏不触发付费模型自救，当前授权失效也不能消费曾经合法的摘要。 */
+    @Test void corruptOrUnauthorizedStoredSummaryFailsBeforeBilling() {
+        ObjectNode value = storedRequest();
+        ((ObjectNode) value.path("facts").path("mediaPlan").path("entries").get(0).path(PortfolioAiStoredVideoSummary.FIELD)).put("inputMode", "FRAMES");
+        assertThatThrownBy(() -> service.generate(task(), value, checkOwned)).isInstanceOf(PortfolioAiCallException.class);
+        doThrow(new PortfolioAiCallException("SOURCE_UNAVAILABLE", "已撤权", false)).when(access).verify(any(), any());
+        assertThatThrownBy(() -> service.generate(task(), storedRequest(), checkOwned)).hasMessage("已撤权");
+        verifyNoInteractions(repository, client);
+    }
+
+    /** 原视频摘要来源独立于帧清单和音频全文哈希，音频只冻结给最终生成。 */
+    private ObjectNode storedRequest() {
+        ObjectNode request = request();
+        request.withObject("facts").withObject("mediaPlan").put("version", PortfolioAiMediaContract.STORED_SUMMARY_PLAN_VERSION);
+        ObjectNode entry = (ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0);
+        entry.remove(List.of("frames", "manifestHash"));
+        entry.put("route", PortfolioAiMediaContract.ROUTE_STORED_VIDEO_SUMMARY).put("sourceVersion", "a".repeat(64)).put("auditRound", 1);
+        entry.set(PortfolioAiStoredVideoSummary.FIELD, PortfolioAiStoredVideoSummary.create("a".repeat(64), "b".repeat(64), "glm-5.3-flash", "direct-v1",
+                Instant.parse("2020-01-01T00:00:00Z"), StrictAiJson.parseObject(SUMMARY, 4096, 8)));
+        PortfolioAiVideoAudioContext.freeze(List.of(new PortfolioAiVideoAudioContext.Source(entry, "完整口播文字")));
+        return request;
+    }
+
 }

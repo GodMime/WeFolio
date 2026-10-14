@@ -625,28 +625,27 @@ class TokenHubPortfolioAiClientTest {
 
     @Test
     void onlyUniqueAssistantStopWithoutToolsIsAcceptedAndReasoningIsIgnored() {
-        TokenHubPortfolioAiClient client = new TokenHubPortfolioAiClient(properties());
         ObjectNode completion = StrictAiJson.parseObject("""
                 {"id":"completion-1","model":"glm-5.3-flash","choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"{}","reasoning_content":"private thoughts"}}]}
                 """, 10000, 16);
-        assertThat(client.content(completion, task())).isEqualTo("{}");
+        assertThat(TokenHubCompletionTransport.content(completion, "offline-test")).isEqualTo("{}");
         for (String reason : List.of("length", "content_filter", "tool_calls", "aborted", "insufficient_system_resource")) {
             ObjectNode invalid = completion.deepCopy(); ((ObjectNode) invalid.path("choices").get(0)).put("finish_reason", reason);
-            assertThatThrownBy(() -> client.content(invalid, task())).isInstanceOf(PortfolioAiCallException.class);
+            assertThatThrownBy(() -> TokenHubCompletionTransport.content(invalid, "offline-test")).isInstanceOf(PortfolioAiCallException.class);
         }
         ((ObjectNode) completion.path("choices").get(0).path("message")).putArray("tool_calls");
-        assertThatThrownBy(() -> client.content(completion, task())).isInstanceOf(PortfolioAiCallException.class);
+        assertThatThrownBy(() -> TokenHubCompletionTransport.content(completion, "offline-test")).isInstanceOf(PortfolioAiCallException.class);
     }
 
     @Test
     void transportCancelsSubscriptionAsSoonAsReadBytesExceedLimit() {
-        TokenHubPortfolioAiClient.BoundedSubscriber subscriber = new TokenHubPortfolioAiClient.BoundedSubscriber(10);
+        TokenHubCompletionTransport.BoundedSubscriber subscriber = new TokenHubCompletionTransport.BoundedSubscriber(10);
         Flow.Subscription subscription = mock(Flow.Subscription.class); subscriber.onSubscribe(subscription);
         subscriber.onNext(List.of(ByteBuffer.wrap(new byte[6]))); subscriber.onNext(List.of(ByteBuffer.wrap(new byte[5])));
         verify(subscription).cancel();
         assertThatThrownBy(() -> subscriber.getBody().toCompletableFuture().join())
                 .hasCauseInstanceOf(PortfolioAiCallException.class);
-        TokenHubPortfolioAiClient.BoundedSubscriber exact = new TokenHubPortfolioAiClient.BoundedSubscriber(10);
+        TokenHubCompletionTransport.BoundedSubscriber exact = new TokenHubCompletionTransport.BoundedSubscriber(10);
         exact.onSubscribe(mock(Flow.Subscription.class)); exact.onNext(List.of(ByteBuffer.wrap(new byte[10]))); exact.onComplete();
         assertThat(exact.getBody().toCompletableFuture().join()).hasSize(10);
     }
@@ -656,9 +655,9 @@ class TokenHubPortfolioAiClientTest {
         ByteArrayOutputStream compressed = new ByteArrayOutputStream();
         try (GZIPOutputStream gzip = new GZIPOutputStream(compressed)) { gzip.write(new byte[1000]); }
         assertThat(compressed.size()).isLessThan(100);
-        assertThatThrownBy(() -> TokenHubPortfolioAiClient.decode(compressed.toByteArray(), "gzip", 100))
+        assertThatThrownBy(() -> TokenHubCompletionTransport.decode(compressed.toByteArray(), "gzip", 100))
                 .isInstanceOf(PortfolioAiCallException.class).hasMessage("模型响应字节数超过上限");
-        assertThat(TokenHubPortfolioAiClient.decode(compressed.toByteArray(), "gzip", 1000)).hasSize(1000);
+        assertThat(TokenHubCompletionTransport.decode(compressed.toByteArray(), "gzip", 1000)).hasSize(1000);
     }
 
     @Test

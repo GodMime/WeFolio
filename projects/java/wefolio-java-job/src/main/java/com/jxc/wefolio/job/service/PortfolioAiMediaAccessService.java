@@ -5,6 +5,8 @@ import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiStoredVideoSummary;
+import com.jxc.wefolio.service.portfolioai.AiProtocolException;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.exception.CosServiceException;
@@ -25,7 +27,6 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Comparator;
 import java.util.Set;
-import java.util.Locale;
 
 /** 缓存命中及模型调用前实时检查当前账号、团队授权、作品状态及真实COS身份。 */
 @Service
@@ -61,13 +62,13 @@ public class PortfolioAiMediaAccessService {
     private void verify(AiGenerationTaskEntity task, JsonNode entry, boolean inspectObjects) {
         requireOwner(task);
         List<CurrentWork> rows = jdbc.query("""
-                SELECT w.id,w.user_id,w.media_type,w.media_object_key,w.media_sha256,w.duration_ms,w.video_frames_json,u.unique_code
+                SELECT w.id,w.user_id,w.media_type,w.media_object_key,w.media_sha256,w.duration_ms,w.video_frames_json,w.audit_round,u.unique_code
                 FROM wf_work w JOIN wf_user u ON u.id=w.user_id
                 WHERE w.id=? AND w.deleted=0 AND w.status=? AND w.audit_status=?
                 AND u.deleted=0 AND u.status=?
                 """, (rs, index) -> new CurrentWork(rs.getLong("id"), rs.getLong("user_id"), rs.getString("media_type"),
                 rs.getString("media_object_key"), rs.getString("media_sha256"), rs.getObject("duration_ms", Integer.class),
-                rs.getString("video_frames_json"), rs.getString("unique_code")), entry.path(KEY_WORK_ID).asLong(), WORK_ACTIVE,
+                rs.getString("video_frames_json"), rs.getString("unique_code"), rs.getObject("audit_round", Integer.class)), entry.path(KEY_WORK_ID).asLong(), WORK_ACTIVE,
                 WorkAuditStatusDict.PASSED.getCode(), USER_ACTIVE);
         if (rows.size() != 1) { throw unavailable(); }
         CurrentWork work = rows.getFirst();
@@ -92,10 +93,17 @@ public class PortfolioAiMediaAccessService {
         }
         if (bytes <= 0 || etag == null
                 || !fingerprint(work.key(), etag, bytes, work.sha()).equals(entry.path(KEY_SOURCE_VERSION).asText())) { throw unavailable(); }
+        if (entry.has(KEY_AUDIT_ROUND) && (!entry.path(KEY_AUDIT_ROUND).isIntegralNumber()
+                || !entry.path(KEY_AUDIT_ROUND).canConvertToInt()
+                || work.auditRound() == null || work.auditRound() != entry.path(KEY_AUDIT_ROUND).asInt())) { throw unavailable(); }
         String route = entry.path(KEY_ROUTE).asText();
         if (entry.has(PortfolioAiFrameSelection.FIELD) && !ROUTE_FRAMES.equals(route)) { throw invalidSelection(); }
         if (ROUTE_FRAMES.equals(route)) { verifyFrames(task, work, entry, inspectObjects); }
-        else if (ROUTE_VIDEO.equals(route)) {
+        else if (ROUTE_STORED_VIDEO_SUMMARY.equals(route)) {
+            if (!ROUTE_VIDEO.equals(work.type())) { throw unavailable(); }
+            try { PortfolioAiStoredVideoSummary.frozenContent(entry); }
+            catch (AiProtocolException exception) { throw invalidSelection(); }
+        } else if (ROUTE_VIDEO.equals(route)) {
             if (!ROUTE_VIDEO.equals(work.type()) || !withinDirectVideoLimits(bytes, work.duration())) { throw unavailable(); }
         } else if (!ROUTE_IMAGE.equals(route) || !ROUTE_IMAGE.equals(work.type()) || bytes > DIRECT_MEDIA_MAX_BYTES) { throw unavailable(); }
     }
@@ -188,6 +196,7 @@ public class PortfolioAiMediaAccessService {
 
     /** 从刚复核的受限对象列表构造临时媒体输入。 */
     private List<PortfolioAiModelClient.MediaInput> signedInputs(JsonNode entry) {
+        if (ROUTE_STORED_VIDEO_SUMMARY.equals(entry.path(KEY_ROUTE).asText())) { return List.of(); }
         List<PortfolioAiModelClient.MediaInput> result = new ArrayList<>();
         if (ROUTE_FRAMES.equals(entry.path(KEY_ROUTE).asText())) {
             JsonNode selected = entry.has(PortfolioAiFrameSelection.FIELD)
@@ -222,14 +231,14 @@ public class PortfolioAiMediaAccessService {
         }
     }
     /** 与帧保存源身份相同的算法。 */
-    public static String fingerprint(String key, String etag, long bytes, String sha) { return hash(key + "\n" + (etag == null ? "" : etag.replace("\"", "").strip().toLowerCase(Locale.ROOT)) + "\n" + bytes + "\n" + (sha == null ? "" : sha)); }
+    public static String fingerprint(String key, String etag, long bytes, String sha) { return PortfolioAiStoredVideoSummary.sourceVersion(key, etag, bytes, sha); }
     /** 不可逆身份及缓存摘要。 */
     public static String hash(String value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance(SHA256_ALGORITHM).digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (NoSuchAlgorithmException exception) { throw new IllegalStateException("SHA-256不可用", exception); }
     }
     /** 当前作品数据库事实。 */
-    private record CurrentWork(long id, long userId, String type, String key, String sha, Integer duration, String frames, String ownerCode) { }
+    private record CurrentWork(long id, long userId, String type, String key, String sha, Integer duration, String frames, String ownerCode, Integer auditRound) { }
     /** 当前访问无权或源变化。 */
     private static PortfolioAiCallException unavailable() { return new PortfolioAiCallException(ERROR_SOURCE_UNAVAILABLE, "所选作品或团队授权已失效", false); }
     /** 已有帧缺失或不合格。 */

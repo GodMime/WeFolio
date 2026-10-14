@@ -1,5 +1,7 @@
 package com.jxc.wefolio.job.repo;
 
+import com.jxc.wefolio.job.service.TokenHubTokenPricing;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.job.config.PortfolioAiProperties;
@@ -18,7 +20,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -37,12 +38,6 @@ public class PortfolioAiMediaRepository {
     private static final String PRICE_VERSION = "tokenhub-guangzhou-2026-10-12";
     /** 广州模型计价地域。 */
     private static final String PRICE_REGION = "ap-guangzhou";
-    /** 普通输入、缓存输入及输出每百万 token 的整数分单价。 */
-    private static final BigInteger INPUT_PRICE_CENTS = BigInteger.valueOf(80);
-    private static final BigInteger CACHED_INPUT_PRICE_CENTS = BigInteger.valueOf(23);
-    private static final BigInteger OUTPUT_PRICE_CENTS = BigInteger.valueOf(280);
-    /** 各项合并后仅对整次调用向上取整一次。 */
-    private static final BigInteger TOKEN_PRICE_UNIT = BigInteger.valueOf(1_000_000);
     /** SQL 访问器及全局硬预算。 */
     private final JdbcTemplate jdbc;
     private final PortfolioAiProperties properties;
@@ -224,11 +219,7 @@ public class PortfolioAiMediaRepository {
 
     /** 广州普通输入0.8、缓存输入0.23、输出2.8元每百万token，未知或非法缓存保守按全价。 */
     public static long costCents(long prompt, long completion, Long cachedTokens) {
-        long cached = cachedTokens != null && cachedTokens >= 0 && cachedTokens <= prompt ? cachedTokens : 0;
-        BigInteger units = BigInteger.valueOf(prompt - cached).multiply(INPUT_PRICE_CENTS)
-                .add(BigInteger.valueOf(cached).multiply(CACHED_INPUT_PRICE_CENTS))
-                .add(BigInteger.valueOf(completion).multiply(OUTPUT_PRICE_CENTS));
-        return units.add(TOKEN_PRICE_UNIT.subtract(BigInteger.ONE)).divide(TOKEN_PRICE_UNIT).longValueExact();
+        return TokenHubTokenPricing.costCents(prompt, completion, cachedTokens);
     }
 
     /** 内部替代客户端同样不能用越界缓存量或不一致的诊断状态制造折扣。 */

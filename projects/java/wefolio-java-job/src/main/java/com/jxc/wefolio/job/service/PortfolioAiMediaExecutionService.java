@@ -7,6 +7,7 @@ import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
 import com.jxc.wefolio.job.model.PortfolioAiMediaSummaryIdentity;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiStoredVideoSummary;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import com.jxc.wefolio.service.portfolioai.AiPortfolioProtocol;
@@ -40,10 +41,10 @@ public class PortfolioAiMediaExecutionService {
     /** 摘要缓存身份同时保留结构版本与实际请求提示词身份。 */
     private static final String SUMMARY_PROMPT_VERSION_FIELD = "promptVersion";
     /** 摘要协议中的文本与条目上限，准入上界与实际校验保持一致。 */
-    private static final int SUMMARY_MAX_CODE_POINTS = 600;
-    private static final int ITEM_MAX_CODE_POINTS = 120;
-    private static final int OBSERVATIONS_MAX_COUNT = 8;
-    private static final int LIMITATIONS_MAX_COUNT = 4;
+    private static final int SUMMARY_MAX_CODE_POINTS = PortfolioAiStoredVideoSummary.SUMMARY_MAX_CODE_POINTS;
+    private static final int ITEM_MAX_CODE_POINTS = PortfolioAiStoredVideoSummary.ITEM_MAX_CODE_POINTS;
+    private static final int OBSERVATIONS_MAX_COUNT = PortfolioAiStoredVideoSummary.OBSERVATIONS_MAX_COUNT;
+    private static final int LIMITATIONS_MAX_COUNT = PortfolioAiStoredVideoSummary.LIMITATIONS_MAX_COUNT;
     /** 此码点在内层 JSON 和 HTTP JSON 中双重转义，形成每码点字节数的保守上界。 */
     private static final String MAX_ESCAPED_CODE_POINT = String.valueOf((char) 1);
     /** 缓存及预算短事务访问器。 */
@@ -59,14 +60,15 @@ public class PortfolioAiMediaExecutionService {
     public String generate(AiGenerationTaskEntity task, ObjectNode frozen, Runnable checkOwned) {
         checkOwned.run();
         String planVersion = frozen.path(KEY_FACTS).path(KEY_MEDIA_PLAN).path(KEY_VERSION).asText();
-        if (!PLAN_VERSION.equals(planVersion) && !LEGACY_PLAN_VERSION.equals(planVersion)) {
+        if (!STORED_SUMMARY_PLAN_VERSION.equals(planVersion) && !PLAN_VERSION.equals(planVersion) && !LEGACY_PLAN_VERSION.equals(planVersion)) {
             throw failed(ERROR_CONTRACT_UNAVAILABLE, "真实媒体读取暂未启用");
         }
         ObjectNode request = frozen.deepCopy();
         JsonNode entries = request.path(KEY_FACTS).path(KEY_MEDIA_PLAN).path(KEY_ENTRIES);
         if (!entries.isArray() || entries.size() > AiPortfolioProtocol.limits().path(KEY_MAX_SOURCE_COUNT).asInt()) { throw failed(ERROR_MEDIA_INVALID, "媒体输入计划不合法"); }
         validateSelectedSources(request, entries);
-        try { PortfolioAiVideoAudioContext.validateAndNormalize(entries, PLAN_VERSION.equals(planVersion)); }
+        validateRoutes(entries, STORED_SUMMARY_PLAN_VERSION.equals(planVersion));
+        try { PortfolioAiVideoAudioContext.validateAndNormalize(entries, !LEGACY_PLAN_VERSION.equals(planVersion)); }
         catch (AiProtocolException exception) { throw failed(ERROR_MEDIA_INVALID, exception.getMessage()); }
         for (JsonNode entry : entries) { attachAudio(request, entry); }
         List<PreparedMedia> prepared = new ArrayList<>();
@@ -78,10 +80,11 @@ public class PortfolioAiMediaExecutionService {
             checkOwned.run();
             remaining(task);
             access.verify(task, entry);
-            PortfolioAiMediaSummaryIdentity identity = cacheIdentity(entry, request);
+            boolean stored = ROUTE_STORED_VIDEO_SUMMARY.equals(entry.path(KEY_ROUTE).asText());
+            PortfolioAiMediaSummaryIdentity identity = stored ? null : cacheIdentity(entry, request);
             long workId = entry.path(KEY_WORK_ID).asLong();
-            String cached = repository.cached(workId, identity, now());
-            ObjectNode summary = cached == null ? null : validateSummary(cached);
+            String cached = stored ? null : repository.cached(workId, identity, now());
+            ObjectNode summary = stored ? storedContent(entry) : cached == null ? null : validateSummary(cached);
             int cents = summary == null ? (int) PortfolioAiMediaRepository.costCents(
                     estimatedSummaryInputTokens(entry), SUMMARY_OUTPUT_MAX_TOKENS) : 0;
             prepared.add(new PreparedMedia(entry, identity, summary, cents));
@@ -286,30 +289,39 @@ public class PortfolioAiMediaExecutionService {
         throw failed(ERROR_MEDIA_INVALID, "媒体摘要来源不存在");
     }
 
-    /** 封闭摘要结构和字符串预算，剥离不可信画面中的资源地址与联系方式。 */
+    /** 共用原视频与帧兜底的内容校验，应用层保留既有摘要失败分类。 */
     static ObjectNode validateSummary(String raw) {
-        ObjectNode value;
-        try { value = StrictAiJson.parseObject(raw, 16 * 1024, 8); }
-        catch (AiProtocolException exception) { throw failed(ERROR_INVALID_SUMMARY, "媒体摘要JSON不合法"); }
-        Set<String> fields = Set.of(SUMMARY, OBSERVATIONS, LIMITATIONS);
-        if (value.size() != fields.size()) { throw failed(ERROR_INVALID_SUMMARY, "媒体摘要结构不合法"); }
-        value.fieldNames().forEachRemaining(name -> { if (!fields.contains(name)) { throw failed(ERROR_INVALID_SUMMARY, "媒体摘要字段不合法"); } });
-        ObjectNode clean = StrictAiJson.mapper().createObjectNode().put(SUMMARY, safeText(value.path(SUMMARY), SUMMARY_MAX_CODE_POINTS));
-        for (String field : Set.of(OBSERVATIONS, LIMITATIONS)) {
-            JsonNode values = value.path(field); int maximum = OBSERVATIONS.equals(field) ? OBSERVATIONS_MAX_COUNT : LIMITATIONS_MAX_COUNT;
-            if (!values.isArray() || values.size() > maximum) { throw failed(ERROR_INVALID_SUMMARY, "媒体摘要条目不合法"); }
-            var array = clean.putArray(field);
-            for (JsonNode item : values) { array.add(safeText(item, ITEM_MAX_CODE_POINTS)); }
-        }
-        return clean;
+        try { return PortfolioAiStoredVideoSummary.validateContent(raw); }
+        catch (AiProtocolException exception) { throw failed(ERROR_INVALID_SUMMARY, exception.getMessage()); }
     }
 
-    /** 原始媒体识别文本不得附带新外链或联系方式，仍由可信能力句柄绑定。 */
-    private static String safeText(JsonNode node, int maximum) {
-        if (!node.isTextual() || node.asText().codePointCount(0, node.asText().length()) > maximum) {
-            throw failed(ERROR_INVALID_SUMMARY, "媒体摘要文本超过限制");
+    /** 冻结摘要只按任务内容读取，不能临时改用更新后的字段或调用模型补救。 */
+    private static ObjectNode storedContent(JsonNode entry) {
+        try { return PortfolioAiStoredVideoSummary.frozenContent(entry); }
+        catch (AiProtocolException exception) { throw failed(ERROR_INVALID_SUMMARY, "冻结视频摘要不合法"); }
+    }
+
+    /** 新路线只属于 v3；v3 视频缺少摘要只能使用帧，审核轮次不得缺失。 */
+    private static void validateRoutes(JsonNode entries, boolean storedVersion) {
+        for (JsonNode entry : entries) {
+            String route = entry.path(KEY_ROUTE).asText();
+            if (storedVersion) {
+                if (ROUTE_VIDEO.equals(route) || !entry.path(KEY_AUDIT_ROUND).isIntegralNumber()
+                        || !entry.path(KEY_AUDIT_ROUND).canConvertToInt() || entry.path(KEY_AUDIT_ROUND).asInt() < 0) {
+                    throw failed(ERROR_MEDIA_INVALID, "视频摘要媒体合同不合法");
+                }
+            } else if (ROUTE_STORED_VIDEO_SUMMARY.equals(route) || entry.has(PortfolioAiStoredVideoSummary.FIELD)) {
+                throw failed(ERROR_MEDIA_INVALID, "旧媒体合同不可使用持久视频摘要");
+            }
+            if (ROUTE_STORED_VIDEO_SUMMARY.equals(route)) {
+                if (entry.has(KEY_FRAMES) || entry.has(KEY_MANIFEST_HASH) || entry.has(PortfolioAiFrameSelection.FIELD)) {
+                    throw failed(ERROR_MEDIA_INVALID, "持久视频摘要不能混入帧输入");
+                }
+                storedContent(entry);
+            } else if (entry.has(PortfolioAiStoredVideoSummary.FIELD)) {
+                throw failed(ERROR_MEDIA_INVALID, "媒体路线与持久视频摘要不一致");
+            }
         }
-        return PortfolioAiVideoAudioContext.sanitize(node.asText());
     }
 
     /** 每个远端阶段重新计算不可延期的剩余期限。 */

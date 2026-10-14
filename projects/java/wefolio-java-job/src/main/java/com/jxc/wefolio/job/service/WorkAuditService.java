@@ -129,8 +129,14 @@ public class WorkAuditService {
     /** 审核成功提交之后补充文字，不能让音频异常进入审核失败分支。 */
     private final VideoAudioTranscriptionService videoAudioTranscriptionService;
 
+    /** 通过后直接理解原视频，独立于音轨是否成功。 */
+    private final VideoSummaryService videoSummaryService;
+
     /** 同一调度轮次的所有视频共用收费预算，线程结束必须释放上下文。 */
     private final ThreadLocal<VideoAudioTranscriptionService.RunBudget> audioRunBudget = new ThreadLocal<>();
+
+    /** 原视频摘要的请求和费用不借用音频预算或作品集任务账本。 */
+    private final ThreadLocal<VideoSummaryService.RunBudget> summaryRunBudget = new ThreadLocal<>();
 
     /** 本服务专用时钟，默认使用系统时区，可在包内测试注入。 */
     private Clock clock = Clock.systemDefaultZone();
@@ -154,7 +160,8 @@ public class WorkAuditService {
             AnimationAuditResultAggregator animationResultAggregator,
             AnimationFrameCosService animationFrameCosService,
             VideoFrameStorageService videoFrameStorageService,
-            VideoAudioTranscriptionService videoAudioTranscriptionService
+            VideoAudioTranscriptionService videoAudioTranscriptionService,
+            VideoSummaryService videoSummaryService
     ) {
         if (videoFrameStorageService == null) {
             throw new IllegalArgumentException(VIDEO_FRAME_STORAGE_REQUIRED);
@@ -169,6 +176,7 @@ public class WorkAuditService {
         this.animationFrameCosService = animationFrameCosService;
         this.videoFrameStorageService = videoFrameStorageService;
         this.videoAudioTranscriptionService = Objects.requireNonNull(videoAudioTranscriptionService);
+        this.videoSummaryService = Objects.requireNonNull(videoSummaryService);
     }
 
     /**
@@ -177,6 +185,7 @@ public class WorkAuditService {
     public void runOneRound() {
         long startNanos = System.nanoTime();
         audioRunBudget.set(videoAudioTranscriptionService.newRun());
+        summaryRunBudget.set(videoSummaryService.newRun());
         log.info("作品审核任务开始: 单轮视频查询任务上限={}, 单轮视频提交作品上限={}, 视频提交最大尝试次数={}, "
                         + "单轮图片审核作品上限={}, 图片最大尝试次数={}, 单轮动图审核任务上限={}, 动图最大尝试次数={}, "
                         + "视频主动查询最大次数={}",
@@ -198,6 +207,8 @@ public class WorkAuditService {
         } finally {
             logAudioRunBudget();
             audioRunBudget.remove();
+            logSummaryRunBudget();
+            summaryRunBudget.remove();
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
             log.info("作品审核任务结束: 任务总耗时毫秒={}", durationMs);
         }
@@ -221,11 +232,14 @@ public class WorkAuditService {
     void queryPendingVideoResults(int limit, LocalDateTime now) {
         boolean ownsBudget = audioRunBudget.get() == null;
         if (ownsBudget) { audioRunBudget.set(videoAudioTranscriptionService.newRun()); }
+        boolean ownsSummaryBudget = summaryRunBudget.get() == null;
+        if (ownsSummaryBudget) { summaryRunBudget.set(videoSummaryService.newRun()); }
         try {
             taskRepository.findQueryableVideoTasks(limit, properties.getVideoQueryMaxAttempts(), now)
                     .forEach(this::queryOneVideoResult);
         } finally {
             if (ownsBudget) { logAudioRunBudget(); audioRunBudget.remove(); }
+            if (ownsSummaryBudget) { logSummaryRunBudget(); summaryRunBudget.remove(); }
         }
     }
 
@@ -236,6 +250,17 @@ public class WorkAuditService {
             log.info("作品审核音频计量汇总: reservedRequests={}, reservedSeconds={}, sentRequests={}, "
                             + "knownTokens={}, usageUnknownCount={}, accountStopped={}", run.requests(), run.seconds(),
                     run.sentRequests(), run.knownTokens(), run.unknownUsageCount(), run.stopped());
+        }
+    }
+
+    /** 摘要计量仅输出安全汇总，不输出临时签名或供应商响应正文。 */
+    private void logSummaryRunBudget() {
+        VideoSummaryService.RunBudget run = summaryRunBudget.get();
+        if (run != null) {
+            log.info("作品审核视频摘要计量汇总: reservedRequests={}, reservedCostFen={}, sentRequests={}, "
+                            + "knownTokens={}, knownCostFen={}, usageUnknownCount={}, accountStopped={}", run.requests(),
+                    run.reservedCostFen(), run.sentRequests(), run.knownTokens(), run.knownCostFen(),
+                    run.unknownUsageCount(), run.stopped());
         }
     }
 
@@ -1039,22 +1064,38 @@ public class WorkAuditService {
         }
         // Spring 短事务代理已经返回，审核终态已提交；此处不再使用终态审核租约。
         if (committed && result != null && result.auditResult() == AuditResultDict.PASS) {
-            transcribePassedVideo(task);
+            enrichPassedVideo(task);
         }
     }
 
-    /** 独立截止时间仍在原调度生命周期内，任何 ASR 异常都不能回退已通过的审核。 */
-    private void transcribePassedVideo(WorkAuditTaskEntity task) {
+    /** 两个派生阶段都在原调度生命周期内，异常不能回退已提交的审核结论。 */
+    private void enrichPassedVideo(WorkAuditTaskEntity task) {
         if (!MediaTypeDict.VIDEO.getCode().equals(task.getMediaType())) { return; }
+        VideoAudioTranscriptionService.Outcome audioOutcome = VideoAudioTranscriptionService.Outcome.FAILED;
         try {
             VideoAudioTranscriptionService.RunBudget run = audioRunBudget.get();
             if (run == null) { run = videoAudioTranscriptionService.newRun(); }
-            VideoAudioTranscriptionService.Outcome outcome = videoAudioTranscriptionService.transcribe(
+            audioOutcome = videoAudioTranscriptionService.transcribe(
                     task.getWorkId(), task.getAuditRound(), task.getMediaObjectKey(), task.getMediaSha256(),
                     run, videoAudioTranscriptionService.audioDeadline());
-            log.info("审核通过后视频转写结束: workId={}, taskId={}, outcome={}", task.getWorkId(), task.getId(), outcome);
+            log.info("审核通过后视频转写结束: workId={}, taskId={}, outcome={}", task.getWorkId(), task.getId(), audioOutcome);
         } catch (RuntimeException exception) {
             log.warn("审核通过后视频转写失败，保持原审核结论: workId={}, taskId={}, exceptionType={}",
+                    task.getWorkId(), task.getId(), exception.getClass().getSimpleName());
+        }
+        // 已确认来源过期或竞争时不继续收费；音轨缺失、关闭和普通失败仍允许原视频摘要。
+        if (audioOutcome == VideoAudioTranscriptionService.Outcome.STALE
+                || audioOutcome == VideoAudioTranscriptionService.Outcome.BUSY
+                || audioOutcome == VideoAudioTranscriptionService.Outcome.BUDGET_EXHAUSTED
+                || Thread.currentThread().isInterrupted()) { return; }
+        try {
+            VideoSummaryService.RunBudget run = summaryRunBudget.get();
+            if (run == null) { run = videoSummaryService.newRun(); }
+            VideoSummaryService.Outcome outcome = videoSummaryService.summarize(task.getWorkId(), task.getAuditRound(),
+                    task.getMediaObjectKey(), task.getMediaSha256(), run, videoSummaryService.summaryDeadline());
+            log.info("审核通过后视频摘要结束: workId={}, taskId={}, outcome={}", task.getWorkId(), task.getId(), outcome);
+        } catch (RuntimeException exception) {
+            log.warn("审核通过后视频摘要失败，保持原审核结论: workId={}, taskId={}, exceptionType={}",
                     task.getWorkId(), task.getId(), exception.getClass().getSimpleName());
         }
     }
@@ -1200,7 +1241,7 @@ public class WorkAuditService {
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), result.ciState(),
                     result.auditResult().getCode(), result.ciResult(), result.ciLabel(), result.ciScore(),
                     auditStatus.getCode(), nextQueryCount, properties.getVideoQueryMaxAttempts(), auditRejectReason);
-            if (result.auditResult() == AuditResultDict.PASS) { transcribePassedVideo(task); }
+            if (result.auditResult() == AuditResultDict.PASS) { enrichPassedVideo(task); }
             return;
         }
         if (nextQueryCount >= properties.getVideoQueryMaxAttempts()) {

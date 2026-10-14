@@ -68,7 +68,7 @@ class WorkAuditPersistentTransactionTest {
                   media_type VARCHAR(16) NOT NULL,
                   media_object_key VARCHAR(512), media_sha256 VARCHAR(64), manual_audit_no VARCHAR(34),
                   audit_reason_code VARCHAR(32), audit_reason_codes CLOB CHECK(audit_reason_codes IS NULL OR audit_reason_codes IS JSON),
-                  audit_reject_reason VARCHAR(512), video_frames_json CLOB, video_audio_text CLOB,
+                  audit_reject_reason VARCHAR(512), video_frames_json CLOB, video_audio_text CLOB, video_summary_json CLOB,
                   ai_media_summary_json CLOB, ai_media_summary_expires_at TIMESTAMP,
                   title VARCHAR(128), deleted BIGINT, version INT, updated_at TIMESTAMP,
                   CONSTRAINT chk_work_video_frames_json CHECK(video_frames_json IS NULL OR video_frames_json IS JSON)
@@ -124,12 +124,13 @@ class WorkAuditPersistentTransactionTest {
     /** 三份结果一次提交，标题等普通作品字段不被旧快照覆盖。 */
     @Test
     void completedFramesAndAuditShouldCommitTogether() {
-        jdbc.update("UPDATE wf_work SET video_audio_text='旧口播',ai_media_summary_json='旧摘要',ai_media_summary_expires_at=CURRENT_TIMESTAMP WHERE id=11");
+        jdbc.update("UPDATE wf_work SET video_audio_text='旧口播',video_summary_json='{\"summary\":\"原视频摘要\"}',ai_media_summary_json='旧摘要',ai_media_summary_expires_at=CURRENT_TIMESTAMP WHERE id=11");
         assertThat(service.completePersistentVideo(task, result, WorkAuditStatusDict.PASSED, null, MANIFEST_JSON))
                 .isTrue();
         assertThat(value("wf_work", "audit_status", 11)).isEqualTo("PASSED");
         assertThat(value("wf_work", "video_frames_json", 11)).isEqualTo(MANIFEST_JSON);
         assertThat(value("wf_work", "video_audio_text", 11)).isNull();
+        assertThat(value("wf_work", "video_summary_json", 11)).isEqualTo("{\"summary\":\"原视频摘要\"}");
         assertThat(value("wf_work", "ai_media_summary_json", 11)).isNull();
         assertThat(value("wf_work", "ai_media_summary_expires_at", 11)).isNull();
         assertThat(value("wf_work", "title", 11)).isEqualTo("用户中途编辑标题");

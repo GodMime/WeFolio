@@ -1,8 +1,12 @@
 package com.jxc.wefolio.job.service;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.job.config.CosProperties;
 import com.jxc.wefolio.job.config.VideoFrameProperties;
 import com.qcloud.cos.COSClient;
+import com.qcloud.cos.exception.CosServiceException;
 import com.qcloud.cos.model.ciModel.xml.CIMediaXmlFactory;
 import java.nio.charset.StandardCharsets;
 import com.qcloud.cos.model.COSObjectSummary;
@@ -16,6 +20,7 @@ import com.qcloud.cos.model.ciModel.job.MediaJobsRequest;
 import com.qcloud.cos.model.ciModel.job.MediaListJobResponse;
 import com.qcloud.cos.model.ciModel.job.MediaJobObject;
 import com.qcloud.cos.model.ObjectMetadata;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -28,6 +33,7 @@ import java.time.Instant;
 import java.time.Duration;
 import java.util.Date;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -37,6 +43,9 @@ class VideoFrameSnapshotClientTest {
     private COSClient cos;
     private VideoFrameSnapshotClient client;
     private VideoFrameProperties frames;
+    /** 捕获安全诊断字段，防止供应商任意响应进入日志。 */
+    private final Logger logger = (Logger) LoggerFactory.getLogger(VideoFrameSnapshotClient.class);
+    private ListAppender<ILoggingEvent> events;
     private final VideoFrameSource source = new VideoFrameSource("OWNER/work/video/a.mp4","a".repeat(64),"etag",1000);
     private final String prefix = "OWNER/others/video-frames/1/source/policy/history/raw/";
     @BeforeEach
@@ -45,7 +54,11 @@ class VideoFrameSnapshotClientTest {
         properties.setBucketName("bucket-1"); properties.setRegion("ap-guangzhou");
         frames = new VideoFrameProperties();
         client = new VideoFrameSnapshotClient(cos,properties,frames);
+        events = new ListAppender<>(); events.start(); logger.addAppender(events);
     }
+    /** 移除测试日志监听，避免其它用例受到影响。 */
+    @AfterEach
+    void detachLogger() { logger.detachAppender(events); events.stop(); }
     @Test
     void averageRequestNeverSetsTimeIntervalOrMediaInfoAndHasTimePlaceholder() {
         var request = client.buildRequest(source,8,prefix,"queue-1");
@@ -311,6 +324,63 @@ class VideoFrameSnapshotClientTest {
         assertEquals(requests.getAllValues().get(0).getEndCreationTime(), requests.getAllValues().get(1).getEndCreationTime());
         assertEquals(20, requests.getAllValues().get(0).getSize());
         assertEquals("Success,Failed,Cancel", requests.getAllValues().get(0).getStates());
+    }
+
+    /** 媒体任务列表只接受数字时区，UTC 的 Z 表达会被供应商拒绝。 */
+    @Test
+    void cleanupQueryUsesWholeSecondUtcNumericOffsetAndUnchangedThirtyDayRange() {
+        when(cos.describeMediaJobs(any())).thenReturn(new MediaListJobResponse());
+        client.cleanupCompletedOutputs(mock(VideoFrameBackfillLock.ExecutionLock.class));
+        var requests = ArgumentCaptor.forClass(MediaJobsRequest.class);
+        verify(cos).describeMediaJobs(requests.capture());
+        var request = requests.getValue();
+        assertTrue(request.getStartCreationTime().matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\+0000"), request.getStartCreationTime());
+        assertTrue(request.getEndCreationTime().matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\+0000"), request.getEndCreationTime());
+        Instant start = Instant.parse(request.getStartCreationTime().replace("+0000", "Z"));
+        Instant end = Instant.parse(request.getEndCreationTime().replace("+0000", "Z"));
+        assertEquals(Duration.ofDays(30), Duration.between(start, end));
+        verify(cos, never()).deleteObject(anyString(), anyString());
+    }
+
+    /** 查询失败只记录可检索的安全字段，拒绝将任意响应或错误码链接写入日志。 */
+    @ParameterizedTest
+    @CsvSource({"InvalidArgument,InvalidArgument", "https://private.invalid?signature=secret,UNKNOWN"})
+    void cleanupQueryFailureLogsSafeStageStatusAndCodeWithoutRemoteMessage(String providerCode, String safeCode) {
+        var unavailable = new CosServiceException("startCreationTime is illegal https://private.invalid?signature=secret");
+        unavailable.setStatusCode(400); unavailable.setErrorCode(providerCode);
+        when(cos.describeMediaJobs(any())).thenThrow(unavailable);
+
+        var failure = assertThrows(VideoFrameProcessingException.class,
+                () -> client.cleanupCompletedOutputs(mock(VideoFrameBackfillLock.ExecutionLock.class)));
+
+        assertEquals("FRAME_CLEANUP", failure.getStage());
+        assertNull(failure.getCause());
+        assertTrue(events.list.stream().map(ILoggingEvent::getFormattedMessage).anyMatch(message ->
+                message.contains("stage=FRAME_CLEANUP_QUERY") && message.contains("httpStatus=400")
+                        && message.contains("errorCode=" + safeCode) && message.contains("exceptionType=CosServiceException")));
+        assertTrue(events.list.stream().allMatch(event -> event.getThrowableProxy() == null));
+        assertTrue(events.list.stream().map(ILoggingEvent::getFormattedMessage).noneMatch(message ->
+                message.contains("https://") || message.contains("secret") || message.contains("startCreationTime is illegal")));
+        verify(cos, never()).deleteObject(anyString(), anyString());
+    }
+
+    /** 区分已完成查询后的输出清理错误，仍保留原有失败与不删除行为。 */
+    @Test
+    void cleanupOutputFailureIsDistinguishedFromProviderQueryFailure() {
+        MediaListJobResponse page = new MediaListJobResponse(); page.setJobsDetailList(List.of(terminalJob()));
+        when(cos.describeMediaJobs(any())).thenReturn(page);
+        var unavailable = new CosServiceException("https://private.invalid?signature=secret");
+        unavailable.setStatusCode(503); unavailable.setErrorCode("ServiceUnavailable");
+        when(cos.listObjects(any(ListObjectsRequest.class))).thenThrow(unavailable);
+
+        assertThrows(VideoFrameProcessingException.class,
+                () -> client.cleanupCompletedOutputs(mock(VideoFrameBackfillLock.ExecutionLock.class)));
+
+        assertTrue(events.list.stream().map(ILoggingEvent::getFormattedMessage).anyMatch(message ->
+                message.contains("stage=FRAME_CLEANUP_OUTPUT") && message.contains("httpStatus=503")
+                        && message.contains("errorCode=ServiceUnavailable")));
+        assertTrue(events.list.stream().allMatch(event -> event.getThrowableProxy() == null));
+        verify(cos, never()).deleteObject(anyString(), anyString());
     }
 
     /** 截断原始对象列表时保留整页，不能删除部分后把剩余对象失去追踪。 */

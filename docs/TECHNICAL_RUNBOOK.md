@@ -535,6 +535,88 @@ portfolio:
 
 证据：`/private/tmp/wefolio-latest-publish-release-manifest.json`、`/private/tmp/wefolio-latest-publish-postdeploy-verification.json`、`/private/tmp/wefolio-latest-runtime-entry-comparison.json`、`/private/tmp/wefolio-latest-job-entry-comparison.json`、`/private/tmp/wefolio-latest-release-source-audit.json`；发布日志：`/private/tmp/wefolio-latest-publish-runtime-deploy.log`、`/private/tmp/wefolio-latest-publish-job-deploy.log`。
 
+### 4.24 视频音频转写与原视频摘要 Runtime / Job 发布（2026-10-14）
+
+按用户“发布runtime和job，同时检查服务器”的授权，从本轮已验证的工作区依次发布 Runtime 双节点与 Job；用户随后明确选择“发布并开启摘要功能”，因此先开启 Job 原视频摘要，再滚动开启两台 Runtime 的摘要读取。版本字段为 HEAD `96a0ef9`，摘要功能尚未提交 Git，实际制品以构建时间及 SHA-256 识别。独立音频转写仍关闭，未手动执行历史 backfill/rebuild 或新增真实模型测试。
+
+| 服务 | 构建时间（上海） | JAR SHA-256 | 最终 PID / 启动时间（上海） |
+| --- | --- | --- | --- |
+| Runtime 双节点 | `2026-10-14 12:06:41` | `4b8fe8ae455da83ff0306bd6d22db1881e1ebe679ce2f0b3e278bb7652e52a9d` | 老节点 `9736` / `12:14:56`；新节点 `4391` / `12:15:10` |
+| Job 老节点 | `2026-10-14 12:09:14` | `e1538d1da2c7f734b55ea2a3fddd3b9fee6f5c7f44217c9906db1f484eade237` | `9346` / `12:14:08` |
+
+- Runtime 标准滚动发布退出码 0，耗时 98.741 秒；老节点执行 V64、V65，新节点确认 schema V65 已是最新；两节点均校验 65 份 migration。数据库只读验收确认 `video_audio_text` 为可空 MEDIUMTEXT、`video_summary_json` 为可空 JSON、默认 NULL，两个 VIDEO 类型 CHECK 均 enforced。
+- Job 使用原部署脚本与本地临时安装包装，在正式包替换前完成上传 SHA 校验、旧实例排空（`DISABLED / activeTaskCount=0`）和独立备份，再原子替换、重启。退出码 0，耗时 21.853 秒。Job 不包含 Flyway migration。
+- 两台 Runtime 旧包均保留在 `/root/java/wefolio-java-runtime.jar.backup`，SHA 为 `20614d7d41732502632f4056c8044c6399539378c9f4ee6367decd1f1965f098`；Job 旧包保留在 `/root/java/job/wefolio-java-job.jar.backup-video-summary-20261014-before-release`，SHA 为 `795f1ca280859142f317eca6ec3a270049c83f88a0f5619e1f930979534c3586`。三份备份均独立核验一致。
+- 发布后两服务器只读验收均退出码 0、`verified=true`。三服务 active/running、健康 UP，正式 HTTPS 健康和版本入口均通过；线上 JAR、关键 class、提示词和构建元数据匹配本地制品。Nginx active、语法通过并恢复双节点轮询；Runtime 字体 enabled/ready。
+- 三服务启用后本次启动的 application/journal ERROR/FATAL 计数均为 0。老/新节点根盘使用率分别约 18.8% / 9.7%，可用内存约 1.82 / 2.19 GiB，发布前无失败 systemd unit，当前负载正常。老节点 Runtime 和 Job 的 `is-enabled` 均为 `disabled`，新 Runtime 为 `enabled`；本次只记录现状，未修改开机自启设置。
+- 摘要通过独立 systemd drop-in 启用：Job `/etc/systemd/system/wefolio-job.service.d/video-summary.conf` 设置 `WEFOLIO_VIDEO_SUMMARY_ENABLED=true`；两台 Runtime `/etc/systemd/system/wefolio.service.d/video-summary.conf` 设置 `WEFOLIO_AI_MEDIA_STORED_VIDEO_SUMMARY_ENABLED=true`。不含密钥，不修改既有 `.env`。Job 启用前再次排空至 0；Runtime 沿用摘流、重启、健康检查、恢复轮询流程，未重新替换 JAR 或覆盖发布前备份。
+- 启用后有效配置检查覆盖进程环境、命令行/JVM 参数、Spring JSON 和外部 application 配置来源，确认两个摘要开关为 `true` 且无更高优先级冲突；`WEFOLIO_VIDEO_AUDIO_ENABLED`、Runtime `WEFOLIO_AI_MEDIA_AUDIO_TEXT_ENABLED` 仍为 `false`。v3 会使用已存在的转写文字，但本轮不生成独立 ASR 文字。TokenHub 凭据存在，仅检查存在性；Job 节点 PATH 中无 FFmpeg/FFprobe，后续启用独立 ASR 前仍须准备工具，原视频摘要不依赖它们。大小默认仍 100,000,000 字节，每轮费用预留 500 分、最多五次完整上下文预留。
+
+发布沿用本轮最终 Runtime 2,765 项、Job 1,011 项、小程序 2,666 项无失败验证；本次未再改变应用源码，部署重新执行 `clean package -DskipTests`。未发布小程序、未提交 Git。回退时先把 Runtime 摘要开关设为 false 并滚动重启，排空 v3 任务后再回退 Job；保留 V64/V65 可空列，不回滚数据库。
+
+脱敏证据：`/private/tmp/wefolio-video-summary-release-manifest.json`、`/private/tmp/wefolio-summary-old-verification.json`、`/private/tmp/wefolio-summary-new-verification.json`、`/private/tmp/wefolio-summary-schema-result.txt`；启用后验收：`/private/tmp/wefolio-summary-old-enabled-verification.json`、`/private/tmp/wefolio-summary-new-enabled-verification.json`，均 `verified=true`；部署日志：`/private/tmp/wefolio-summary-runtime-deploy.log`、`/private/tmp/wefolio-summary-job-deploy.log`；启用日志：`/private/tmp/wefolio-summary-runtime-enable.log`、`/private/tmp/wefolio-summary-job-enable.log`。
+
+### 4.25 视频摘要时长读取类型修复与 Job 发布（2026-10-14）
+
+用户执行的重建 `88367297-1cf9-4e30-b718-589d45fae43a` 于 `12:37:47` 在首件作品 17 的摘要预检中遇到 `ClassCastException`，状态为 `PREFLIGHT_REFUSED`，扫描 1 件、失败 1 件，截图数及模型请求数均为 0，游标保留 0，旧派生数据未清空。
+
+根因：生产 MySQL 的 `duration_ms INT UNSIGNED` 经 Connector/J 无指定类型的 `getObject` 返回 `java.lang.Long`，新增摘要仓储直接强转 `Integer`；原 H2 普通 INT 测试返回 Integer，未覆盖这个差异。新增 BIGINT 返回 Long 的最小回归先复现相同异常，再把读取改为 `getObject("duration_ms", Integer.class)`，沿用现有其他视频读取链路的可空整数契约；另覆盖 NULL 保留及超出 Integer 范围时拒绝，避免静默截断。没有修改字段或业务准入上限。
+
+- 相关 63 项测试通过，Job 全量 1,014 项、0 失败/错误、2 项条件跳过。此次只有 Job 仓储一行生产代码变更；所选制品条目对比仅 `VideoSummaryRepository.class` 改变，Runtime 无变化。
+- 按用户修复要求，延续本次生产发布完成 Job 更新；构建时间 `2026-10-14 12:43:41`，版本 `96a0ef9`，JAR SHA-256 `4137333cd5fc5455e3868ddc2405e1272a9290aeffa66eb4c02cc5235dd9d6e4`，PID `16852`，启动时间 `12:44:00`。发布退出码 0、24.438 秒，替换前已排空任务、校验上传并备份。旧包 `/root/java/job/wefolio-java-job.jar.backup-duration-cast-20261014-before-release`，SHA `e1538d1da2c7f734b55ea2a3fddd3b9fee6f5c7f44217c9906db1f484eade237`。
+- 生产只读探针对相同作品 17、相同 MySQL 驱动和真实部署仓储类分别执行修复前后读取：修复前 `snapshotRead=false, exceptionType=ClassCastException`，修复后 `snapshotRead=true, durationPreserved=true`。探针不调用模型、不写业务数据，临时服务器文件自动清理。
+- 发布后健康及版本接口、制品与备份、当前进程开关、启动日志均核验通过；Job 及老 Runtime active/UP，Nginx 轮询正常，新增 ERROR/FATAL 为 0。Job 摘要仍开启，独立音频转写仍关闭。未新增迁移、未改环境配置、未重新发布 Runtime、未提交 Git。
+
+原失败任务不会自动续跑，本轮未重新提交有清空行为的 rebuild；可沿原参数 `afterWorkId=0` 重新提交。修复确认的是原时长类型异常消除，不表示完整截图及模型生成链已经重新执行成功。
+
+脱敏证据：`/private/tmp/wefolio-summary-duration-production-red.txt`、`/private/tmp/wefolio-summary-duration-production-green.txt`、`/private/tmp/wefolio-summary-duration-release-manifest.json`、`/private/tmp/wefolio-summary-old-duration-fixed-verification.json`；测试日志：`/private/tmp/wefolio-summary-duration-red.log`、`/private/tmp/wefolio-summary-duration-green.log`、`/private/tmp/wefolio-summary-duration-job-full.log`；部署日志：`/private/tmp/wefolio-summary-duration-job-deploy.log`。
+
+### 4.26 Snapshot 清理、摘要截断与预算修复，并开启音频文本（2026-10-14）
+
+按用户要求修复并发布 Job，发布前修改服务器实际加载的 `/root/java/.env` 开启独立 ASR；本轮没有改动 Runtime 代码、数据库结构或小程序，也未提交 Git。以下时间均为上海时间。
+
+- Snapshot 终态查询原先使用 `Instant.toString()` 的 UTC `Z`，供应商返回 HTTP 400、`InvalidArgument/startCreationTime is illegal`；只改为官方数字时区格式 `+0000` 的只读对照成功返回 20 条记录。修复日期格式并补充脱敏阶段、HTTP 状态和错误码日志，保留分页、锁和删除边界。
+- 原视频摘要改为 `reasoning_effort=low`、`max_tokens=16384`，保留必须开启的思考及严格 JSON 合同。作品 28 原请求输出 4096 token 中有 4079 用于思考、正文为空；候选制品单次实测 25.546 秒生成合法摘要，输入 89404、输出 525 token，缓存 0，未写业务数据库。
+- 摘要费用以每请求凭证预留，有合法 usage 后结算实际估算费用并释放差额；未知用量、未发送凭证仍保留预留，次数不回退。截断响应也传递无正文计量用于结算；重复结算、跨批次凭证及费用越界均有保护。每批 500 分硬上限保持。
+- Job 全量 1028 项测试、0 失败/错误、2 项远端集成条件跳过；首次沙箱执行受回环端口和媒体工具系统探测权限限制，取得权限后完整重跑通过。Snapshot 红测 4 项失败后相关 79 项通过；摘要截断及预算均先复现后修复。
+- 服务器 CentOS 7 / glibc 2.17 / kernel 3.10 不满足当前预编译 FFmpeg 的最低要求，使用官方仍维护的 5.1.10 源码以低优先级编译安装到 `/opt/wefolio/ffmpeg/5.1.10`。源码签名通过官方指纹 `FCF986EA15E6E293A5644F10B4322F04D67658D8` 验证，源码 SHA-256 为 `392306d6fc45dab0e9e0ea55381e071842e83a2fb31d320aeda40477a7766293`；没有替换系统库。MP4/AAC 提取为 16kHz、单声道、PCM16 WAV 以及候选应用原生启动自检均通过。
+- 替换 JAR 前已备份 `.env` 为 `/root/java/.env.backup-audio-summary-20261014`，原子更新 `WEFOLIO_VIDEO_AUDIO_ENABLED=true`，两个工具路径为 `/opt/wefolio/ffmpeg/5.1.10/bin/ffmpeg` 和同目录 `ffprobe`；环境文件与备份权限为 `0600`。复用已有 TokenHub 密钥，没有打印或复制到本地。
+- 已排空旧实例后备份、验证候选 SHA 并发布。构建时间 `2026-10-14 13:11:41`，版本 `96a0ef9`，JAR SHA-256 `88221d510c6db02558c3e389dfe3862b45619a01e0b3e38e5c57f34ae87ae897`；新 PID `6038`，启动 `13:30:48`，本机及正式 Job 健康均 UP、版本匹配，进程有效音频与摘要开关均为 true。旧 JAR 为 `/root/java/job/wefolio-java-job.jar.backup-audio-summary-20261014`，SHA `4137333cd5fc5455e3868ddc2405e1272a9290aeffa66eb4c02cc5235dd9d6e4`。
+- 发布后用部署 JAR 中的真实 ASR 客户端向 `hy-asr-3.0-preview` 发送一次 1 秒合成测试音，状态完成、正文为空（无语音）、22 token，公开价估算 `0.00022` 元；不写作品数据。高级作品集现有 v3 已携带音频文字，本轮无需另启 v2 开关或重启 Runtime。未自动重跑历史 rebuild。
+- `13:35:27` 复查，新进程运行约 280 秒，本机与正式 Job、正式 Runtime 健康均 UP，Job 构建版本匹配；新启动 ERROR/FATAL、Snapshot 补偿失败和 ClassCastException 均为 0。未出现实际补偿删除记录，因此此观察只确认周期告警没有复现，不宣称已清空历史输出。服务器内存使用率 51.7%、磁盘 19.4%。
+
+本轮发布包装在任意换包后验证失败时恢复旧 JAR 与 `.env` 并再次验证旧版本健康。实际发布成功，未执行回退。今后调用仓库 Job `deploy.sh` 时注意其音频预检固定读取 `/root/java/job/.env`，本机 systemd 实际使用 `/root/java/.env`，须沿用实际配置的额外预检。
+
+证据：`/private/tmp/wefolio-audio-summary-fix-job-full.log`、`/private/tmp/wefolio-summary-release-smoke.txt`、`/private/tmp/wefolio-install-audio-tools.log`、`/private/tmp/wefolio-enable-audio-env-result.json`、`/private/tmp/wefolio-publish-audio-summary-result.json`、`/private/tmp/wefolio-audio-provider-smoke-result.txt`、`/private/tmp/wefolio-audio-summary-postverify.json`。
+
+### 4.27 原视频摘要校验诊断与失败视频补跑（2026-10-14，Job 已发布）
+
+用户手动触发的重建 `224dc3fe-8792-4983-8775-08343bf009cb` 于 21:18:01 开始、21:28:21 结束。整件成功 9、失败 3；帧成功 11、121 帧；音频保存 9、有效空文本 2；摘要保存 9、校验失败 2（作品 29、33），作品 153 摘要规格不支持，最终 `PREFLIGHT_REFUSED`、`nextAfterWorkId=119`。这轮不是预算中断；摘要 11 次请求、已知 918769 token，按每次向上取整到分估算 81 分，最终费用以供应商账单为准。
+
+29、33 均正常收到模型正文且 `finishReason=stop`，随后本地摘要正文或持久包装校验抛 `AiProtocolException`。旧日志未记录安全错误消息或具体字段，失败正文也未落库，不能还原这两次的精确违规规则；正文总长度不等于 `summary` 字段长度。
+
+新增失败阶段、错误码、安全原因、固定字段路径、规则、实际类型/码点长度/条目数及上限；同时记录耗时、正文总长度、token 计量和异常代码位置。规格拒绝额外记录视频大小、时长及配置上限。未知字段只计数，不输出原键；摘要原文、音频文本、签名链接及普通异常原始消息不进诊断日志。两端共享校验源码同步，原接受/拒绝规则及错误提示保持不变；新增诊断已随本节记录的 Job 发布生效，Runtime 本轮未发布。
+
+验证：5 项用例先证明旧日志缺少诊断信息；修正后相关 47 项通过。完整 Job 1039 项（2 项条件跳过）、Runtime 2771 项（30 项条件跳过），均 0 失败/错误；首次受沙箱本地监听/FFmpeg 系统探测限制，取得权限后全量重跑通过。测试证据为 `/private/tmp/wefolio-summary-logging-red.log`、`/private/tmp/wefolio-summary-logging-focused.log`、`/private/tmp/wefolio-summary-logging-job-full-approved.log`、`/private/tmp/wefolio-summary-logging-runtime-full-approved.log`。
+
+现有 `POST /job-api/video-frames/rebuild` 支持 `(afterWorkId, throughWorkId]`：仅处理作品 29 使用 `{"afterWorkId":28,"throughWorkId":29}`，作品 33 使用 `{"afterWorkId":32,"throughWorkId":33}`。该入口会清空并重建目标作品的帧、音频和摘要，产生相应费用；须等前一任务结束再发下一件，同种执行进行中时只返回已有执行，不排队。`POST /job-api/video-frames/backfill` 仅补缺失/失效阶段，但当前不接受作品 ID 或范围，只能全量扫描；不要向该接口添加未支持的范围参数。本轮未新增接口、未自动补跑。
+
+按用户要求使用 Job 工程现有 `deploy.sh` 完成构建、上传和重启；临时发布包装在脚本替换 JAR 前补做实际运行环境音频工具验证、排空、SHA 核验和独立备份，失败仅回退 JAR，不恢复旧 `.env`。发布构建时间 `2026-10-14 21:47:34`、Git 版本 `96a0ef9`，JAR SHA-256 为 `3a013ca390e36ec76b8c98399c33c67cfb13f290a701d13d607f2229246391d7`；新 PID `22760`，启动时间 `21:47:53`。旧 JAR 备份为 `/root/java/job/wefolio-java-job.jar.backup-summary-logging-20261014-2146`，SHA-256 为 `88221d510c6db02558c3e389dfe3862b45619a01e0b3e38e5c57f34ae87ae897`。
+
+`21:48:39` 验证 Job 本机/公网健康 UP、版本和构建时间一致、制品 SHA 一致，新增诊断异常类存在；当前进程音频和摘要均开启，两个 FFmpeg 路径保持不变，实际 `.env` 内容未变且权限 `0600`。启动后 ERROR/FATAL、Snapshot 清理失败、ClassCastException 均为 0；公网 Runtime 健康 UP，服务器内存 55.0%、磁盘 19.1%。未执行数据库迁移、未重启 Runtime、未提交 Git，发布未触发视频补跑。发布证据：`/private/tmp/wefolio-logging-deploy.log`、`/private/tmp/wefolio-logging-release-result.json`、`/private/tmp/wefolio-logging-postdeploy.json`。
+
+### 4.28 原视频摘要条目超限规整与 Job 发布（2026-10-14）
+
+用户单件重试作品 29 的执行 `fcbc5d11-a038-4d52-8ce3-e8d5d1144a25` 于 21:57:40 结束。新增诊断明确记录 `CONTENT_VALIDATE / INVALID_MEDIA_SUMMARY / path=$.observations / ARRAY_COUNT / actualCount=12 / maxCount=8`；模型正常返回且计量已结算，失败原因是条目数量不符合持久摘要合同。帧 21 张及音频文本 275 字成功保存，摘要未保存。
+
+修复在原视频生产端新增条目数量规整：严格解析原始 JSON、检查字段及全部条目（包括最终舍弃的尾项）的字符串类型、码点长度和内容清理，再按模型顺序保留前 8 条观察、前 4 条识别局限。超长文本、错误类型、未知字段及非法 JSON 仍拒绝；不静默截断文字，不增加模型调用。旧 `validateContent`、`parse`、数据库 schema 及消费者合同继续严格执行，输出可被线上旧 Runtime 直接读取。提示词补充按重要性排序、关键局限优先以及输出前检查数量；裁剪前后条数进入安全日志，正文不输出。共享源码两端同步，本轮只发布 Job。
+
+Service 两项回归先复现旧逻辑 `FAILED/ARRAY_COUNT`，修复后相关 53 项通过；全量 Job 1045 项（2 项条件跳过）、Runtime 2775 项（30 项条件跳过），均 0 失败/错误。覆盖超量保序、尾项非法仍拒绝、原严格合同读取、单次计费、日志脱敏。测试日志：`/private/tmp/wefolio-summary-count-red.log`、`/private/tmp/wefolio-summary-count-focused.log`、`/private/tmp/wefolio-summary-count-job-full.log`、`/private/tmp/wefolio-summary-normalize-runtime-full-approved.log`。
+
+按用户要求调用现有 Job `deploy.sh` 构建、上传、排空及重启；包装在替换前补做实际音频工具检查、SHA 校验、独立备份和安全排空，保留现有 `.env`。构建时间 `2026-10-14 22:07:49`、Git 版本 `96a0ef9`，JAR SHA-256 `fb429712b718330cefa81bc7c6586cebfc58381d67d0c5d055dfa0868639c2d7`；新 PID `27641`，启动时间 `22:08:10`。旧 JAR 备份为 `/root/java/job/wefolio-java-job.jar.backup-summary-count-20261014-2204`，SHA-256 `3a013ca390e36ec76b8c98399c33c67cfb13f290a701d13d607f2229246391d7`。发布失败保护只回滚 JAR；本次成功，未执行回退。
+
+`22:08:37` 复查 Job 本机/公网健康 UP、版本和构建时间一致、安装 SHA 与本地一致，规整类已进入制品；音频与摘要均开启，实际 `.env` 内容未变且权限为 `0600`。启动后 ERROR/FATAL、Snapshot 清理失败与 ClassCastException 均为 0，公网 Runtime 健康 UP。未新增数据库迁移、未重启 Runtime、未提交 Git或触发额外视频补跑。发布证据：`/private/tmp/wefolio-count-deploy.log`、`/private/tmp/wefolio-count-release-result.json`、`/private/tmp/wefolio-count-postdeploy.json`。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |
@@ -610,7 +692,7 @@ HTTPS GET 核验因 CDN 证书过期未通过。**用户已明确本轮不处理
 
 TokenHub 调用为 `POST /chat/completions`。Runtime 只冻结供应商、模型及端点配置，API Key 仅由 Job 使用；不得将旧 `DEEPSEEK_API_KEY` 作为新服务凭据。启用前 Runtime 与 Job 的 `WEFOLIO_AI_BASE_URL`、`WEFOLIO_AI_MODEL` 必须一致，未配置时使用上表默认值。当前迁移保持本地未提交状态，验证方案见本地 `docs/design/advanced-portfolios/2026-10-10-tokenhub-api.md`。
 
-### 视频作品音频转写（2026-10-14，代码接入，未部署）
+### 视频作品音频转写（2026-10-14，已部署，未启用）
 
 V64 仅新增 `wf_work.video_audio_text` 一个可空 MEDIUMTEXT 字段：NULL 为待生成或失败，空字符串为已处理无文字，非空为完整转写。CHECK 禁止非 VIDEO 保存非 NULL 值。转写全文不出现在普通作品查询或公开 DTO，也不随作品标题、封面编辑写回。Job 自动审核的 AVERAGE/INTERVAL 视频 PASS 事务提交后执行转写；ASR 失败不改变审核结论。人工审核通过而未走此回调的作品通过显式 backfill 补齐。
 
@@ -638,9 +720,41 @@ ASR 固定使用 `POST https://tokenhub.tencentmaas.com/v1/wand/asrproxy/sync_tr
 
 高级作品集 v2 在接单时一次读取源、帧和文字，冻结清理后的单作品最多 6,000/全任务最多 24,000 码点；数据库保留全文。已有 FRAMES 和短视频 VIDEO 路线均可使用文字，NULL/空串省略。单作品摘要和最终页面生成均发送冻结文字并计入预算，将口播作为不可信作品内容，区分画面事实与音频说法。冻结后新增文字不会插入旧任务；文字变化使缓存身份变化，旧任务不得覆盖新文字缓存。Job 同时接受 v1/v2，v1 维持无转写上下文。
 
-发布顺序：先执行 V64（可随关闭 v2 的 Runtime 发布），升级全部 Job 消费者并准备媒体工具，再开启 ASR 与 Runtime v2。回退时先关闭 Runtime v2，排空已接收 v2 任务后才可退回旧 Job；关闭 ASR 不清已有文字，保留新增可空列。当前原视频对象不可替换；若将来换源或人工同键覆盖 COS，必须同步清除文字、帧和摘要。此次仅完成代码与离线验证，不代表已部署、已开启生产配置或已执行历史处理。
+发布顺序：先执行 V64（可随关闭 v2 的 Runtime 发布），升级全部 Job 消费者并准备媒体工具，再开启 ASR 与 Runtime v2。回退时先关闭 Runtime v2，排空已接收 v2 任务后才可退回旧 Job；关闭 ASR 不清已有文字，保留新增可空列。当前原视频对象不可替换；若将来换源或人工同键覆盖 COS，必须同步清除文字、帧和摘要。代码和 V64 已按 §4.24 发布；随后按 §4.26 安装 FFmpeg/FFprobe 5.1.10，在实际 `/root/java/.env` 开启生产 ASR。当前 Runtime v3 已直接携带音频文字，不依赖 v2 开关；本轮未重新执行历史批处理。
 
 本地真实结果见 `docs/design/advanced-portfolios/2026-10-10-tokenhub-validation.md`。提示词为 `portfolio-ai-2026-10-10.2`，启用思考、`temperature=1.0`、`top_p=0.95`、非流式及JSON输出；单HTTP60秒、总180秒、最多3次。本轮最慢作品集HTTP为58.808秒；23.13秒公开视频直接媒体探针输入62143 token。生产当前仍仅在文本JSON提供授权作品的COS链接，独立媒体探针不代表生产已发送视频媒体项。视频大小分流与数据万象取帧为后续独立方案，尚未实现或部署。
+
+### 视频作品原视频摘要（2026-10-14，已部署并启用）
+
+V65 只新增 `wf_work.video_summary_json JSON NULL`，仅 VIDEO 允许非空。保存原视频身份、输入模式、模型/提示词版本和 `summary / observations / limitations` 正文，无 TTL，不包含临时链接或原视频副本。普通作品查询、编辑和 DTO 不读取或覆盖新字段。现有 `video_audio_text` 继续保存独立 ASR 全文，原有七天 `ai_media_summary_json` 缓存仍服务图片及帧摘要。
+
+Job 自动审核 AVERAGE/INTERVAL 的 VIDEO PASS 提交后、历史 backfill 和 rebuild 均调用原视频摘要服务。原 COS 对象经 HEAD 核验后，以单个 `video_url` 发往既有 TokenHub `glm-5.3-flash`，不先压缩、裁剪或换成关键帧，不附加转写。关键帧/ASR 普通失败不禁止独立摘要；源过期、竞争、预算不足和总期限不足不得继续。摘要失败不回退审核结果，也不清已成功的帧和文字。后补同源关键帧/转写不清原视频摘要；源改变则不得复用。
+
+| 配置 | 所属 | 默认值与用途 |
+| --- | --- | --- |
+| `WEFOLIO_VIDEO_SUMMARY_ENABLED` | Job | `false`；原视频前置摘要开关，与高级作品集和 ASR 开关独立 |
+| `TOKENHUB_API_KEY` | Job | 复用现有凭据，不另建或记录密钥 |
+| `WEFOLIO_VIDEO_SUMMARY_MAX_VIDEO_BYTES` | Job | `100000000`；十进制 100 MB，配置硬上限 `104857600`（100 MiB），不表示供应商保证接受此整个区间 |
+| `WEFOLIO_VIDEO_SUMMARY_MAX_DURATION_SECONDS` | Job | `600`；按当前作品时长做应用准入，缺失/非法时长拒绝；不是实际音轨探测或模型能力保证 |
+| `WEFOLIO_VIDEO_SUMMARY_TOTAL_TIMEOUT_SECONDS` | Job | `180`；单件摘要预检及调用期限，受历史整件剩余期限收紧 |
+| `WEFOLIO_VIDEO_SUMMARY_CONCURRENCY` | Job | `1`；实例内并发，另复用按作品 ID 的 MySQL 会话锁 |
+| `WEFOLIO_VIDEO_SUMMARY_MAX_REQUESTS_PER_RUN` | Job | `100`；审核轮/一次历史执行的独立预留请求上限 |
+| `WEFOLIO_VIDEO_SUMMARY_MAX_COST_FEN_PER_RUN` | Job | `500`；后台摘要预留费用上限，单位分，不扣用户积分 |
+| `WEFOLIO_AI_MEDIA_STORED_VIDEO_SUMMARY_ENABLED` | Runtime | `false`；开启后冻结内部 `portfolio-media-v3`，命中直读，缺失走帧＋音频 |
+
+原视频输入无法从 MB 或单个样本可靠换算 token，故按一百万级上下文的保守上界 1,048,576 输入 tokens 加最多 16,384 输出 tokens 预留，默认轻度思考 `low`。按既有广州公开价格每件向上取整预留 89 分，批次默认上限保持 500 分；可信 usage 返回后把该件预留结算为实际估算费用、释放差额，因此不再固定五次即停止。已知失败响应（包括截断）也结算计量；未知响应或未发送凭证保留完整预留，次数不返还，单件费用超过自身预留立即停止后续发送。记录真实 usage、缓存量和费用估算，思考 tokens 已包含在输出中；前置摘要不用作品集任务账本，无隐藏模型重试；401/402 等账户错误停止本轮后续摘要。详见 §4.26。
+
+模型请求从剩余 180 秒摘要期限扣除一次 COS HEAD 的配置硬超时和 5 秒保存余量，预检耗时也计入摘要阶段；每次 HEAD 前须有足够时间完成固定超时请求，返回后再检查绝对期限。防止模型占满阶段时间导致最终源校验无法启动。
+
+backfill 逐项检查帧、音频和原视频摘要，只缺摘要时只执行原视频调用。超过配置大小/时长上限时，保留既有资料，原视频摘要不生成。rebuild 在清空之前完成帧、ASR、摘要全部必要准入，规格或额度不满足则保留旧内容并停止在本件；准入后同一 CAS 清四类派生字段，再重建，失败不恢复旧摘要。摘要开关关闭时不阻断旧帧/音频重建，但显式 rebuild 仍清旧摘要。音频预检所持的作品锁必须先释放，摘要再领取，避免跨 JDBC 会话嵌套同名锁。历史单件缺省总期限为 540 秒（帧180＋音频180＋摘要180），包含预检；既有部署排空许可覆盖全部阶段。
+
+v3 入队时一次读取并冻结源、摘要、帧和音频：合法持久摘要走 `STORED_VIDEO_SUMMARY`，不要求当前帧存在，也不签帧 URL/查缓存/再次请求摘要；缺失、损坏或源身份不匹配则固定走 `FRAMES`，用关键帧和音频文本生成摘要，复用现有七天缓存。兜底结果只写旧缓存，不写代表原视频理解的新字段。音频单件 6,000、整任务 24,000 码点并继续参与最终生成。无音频允许视觉摘要并说明局限；无摘要且无合法帧仍为 `MEDIA_NOT_PREPARED`，不在作品集中临时截图或 ASR。已冻结任务不因后来补摘要/文字而切换路线，源、权限或审核失效仍阻止发布。公开接口和小程序协议不变。
+
+本地原视频实测：84.613秒、102,381,193字节的用户样本，一次请求 60.826秒，输入229,508、输出622（含157思考）、合计230,130 tokens，公开价估算0.185348元。该样本超过默认十进制100MB保护线，生产要直传此样本须显式配置大小上限104857600；成功样本不证明所有十分钟视频或100MiB边界均可处理。模型根据画面与字幕归纳，未验证原声识别能力。证据仅本地保存在 `docs/video-summary-results/2026-10-14-original-video/`；本轮业务代码测试不发送新的付费请求。
+
+发布顺序：先由 Runtime 执行 V65（Job 不维护 Flyway），升级所有支持 v1/v2/v3 的 Job，再开启原视频摘要，最后开启 Runtime v3；历史 backfill 单独按授权执行。所有开关的代码默认值仍关闭。回退先停止创建 v3、排空在途任务，再回退消费者，保留新增可空列和数据。代码和 V65 已按 §4.24 发布，并按用户确认通过 systemd drop-in 开启摘要及 Runtime v3，服务器 `.env` 未修改。
+
+2026-10-14 本地最终验证：Runtime 全量 2,765 项（30 项条件跳过），Job 全量 1,011 项（2 项条件跳过），均 0 失败、0 错误；小程序全量 2,666 项通过。覆盖原视频请求形态、预算及超时准入、源/审核轮次/CAS、三个入口、rebuild 清空前拒绝与锁释放、同源帧/音频保留摘要，以及 v3 直读和帧兜底。随后完成 §4.24 的生产发布与迁移，未新增真实模型调用。
 
 ### 7.1 高级作品集超时调整（2026-10-13，已部署）
 
@@ -824,3 +938,6 @@ Runtime 双节点已完成发布，服务、制品、有效配置和正式入口
 | 2026-10-12 | Codex | 按授权发布八款字体选用上下文的 Job 服务，制品与提示词摘要一致，本机和正式 HTTPS 健康及版本验证通过；发现发布前已存在的历史截图清理网络警告，新实例无 ERROR/FATAL | Job 单节点；未发布 Runtime 或小程序，未修改数据库与环境配置 | Job 旧包保留带时间戳的 `backup-font-guidance-20261012180956` 备份；恢复前核查当前任务与既有表结构兼容性 |
 
 | 2026-10-13 | Codex | 按授权发布高级作品集超时调整：总期限 600 秒、Job 单次 HTTP 180 秒、恢复窗口 240 秒；三服务制品与有效配置独立核验通过，active/UP，本次启动后无 ERROR/FATAL，Nginx 恢复双节点轮询 | Runtime 双节点、Job 单节点及 Nginx 切流；未改服务器环境、未新增迁移，小程序未发布 | Runtime 两台固定 `.backup` 保留旧包，Job 另存 `backup-timeout-20261013-before-release`；已失败任务需重新生成，恢复前核查当前任务与既有表结构兼容性 |
+
+| 2026-10-14 | Codex | 按授权发布 Runtime 双节点、Job 单节点并执行 V64/V65；按用户确认通过 systemd drop-in 开启原视频摘要及 Runtime v3，三服务 active/UP、Nginx 轮询正常、新启动无 ERROR/FATAL | 两个可空数据库字段及两服务摘要配置；独立 ASR 仍关闭，未手动补历史 | 先关 Runtime v3 并排空新合同任务，再回退 Job；保留新列与发布前 JAR 备份，详见 §4.24 |
+| 2026-10-14 | Codex | 修复 Snapshot 日期格式、摘要截断与费用预留结算并发布 Job；安装官方签名校验的 FFmpeg 5.1.10，发布前修改实际 `.env` 开启 ASR，真实摘要和 ASR 探针通过 | Job 单节点、独立媒体工具及三项非敏感音频配置；Runtime 沿用现有 v3，未重跑历史批次 | 旧 JAR 与 `.env` 均有独立备份，回退须恢复并验证旧版本健康；详见 §4.26 |

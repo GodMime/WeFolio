@@ -40,7 +40,9 @@ public class PortfolioAiMediaPlanService {
 
     /** Facts 已检查本人或团队授权，本步骤重新检查作品状态并冻结真实 HEAD。 */
     public void freeze(ObjectNode input, ObjectNode facts) {
-        ObjectNode plan = facts.putObject(KEY_MEDIA_PLAN).put(KEY_VERSION, properties.isMediaAudioTextEnabled() ? PLAN_VERSION : LEGACY_PLAN_VERSION);
+        boolean storedVersion = properties.isMediaStoredVideoSummaryEnabled();
+        ObjectNode plan = facts.putObject(KEY_MEDIA_PLAN).put(KEY_VERSION, storedVersion ? STORED_SUMMARY_PLAN_VERSION
+                : properties.isMediaAudioTextEnabled() ? PLAN_VERSION : LEGACY_PLAN_VERSION);
         var entries = plan.putArray(KEY_ENTRIES);
         List<PortfolioAiVideoAudioContext.Source> audioSources = new ArrayList<>();
         for (JsonNode source : facts.path(KEY_SOURCES)) {
@@ -64,10 +66,17 @@ public class PortfolioAiMediaPlanService {
                     .put(KEY_SOURCE_OBJECT_KEY, work.getMediaObjectKey()).put(KEY_SOURCE_VERSION, identity)
                     .put(KEY_SOURCE_ETAG, normalize(head.eTag())).put(KEY_SOURCE_BYTES, head.contentLength())
                     .put(KEY_MEDIA_SHA256, work.getMediaSha256() == null ? "" : work.getMediaSha256());
+            if (storedVersion) {
+                if (work.getAuditRound() == null || work.getAuditRound() < 0) { throw unavailable(); }
+                entry.put(KEY_AUDIT_ROUND, work.getAuditRound());
+            }
             if (work.getDurationMs() != null) { entry.put(KEY_DURATION_MS, work.getDurationMs()); }
             if (ROUTE_VIDEO.equals(work.getMediaType())) {
-                // 已有审核持久帧优先复用；历史无帧短视频保留原有直传边界。
-                if (work.getVideoFramesJson() == null && withinDirectVideoLimits(head.contentLength(), work.getDurationMs())) {
+                ObjectNode stored = storedVersion ? PortfolioAiStoredVideoSummary.documentOrNull(work.getVideoSummaryJson(), identity) : null;
+                if (stored != null) {
+                    entry.put(KEY_ROUTE, ROUTE_STORED_VIDEO_SUMMARY).put(KEY_ESTIMATED_INPUT_TOKENS, 0);
+                    entry.set(PortfolioAiStoredVideoSummary.FIELD, stored);
+                } else if (!storedVersion && work.getVideoFramesJson() == null && withinDirectVideoLimits(head.contentLength(), work.getDurationMs())) {
                     entry.put(KEY_ROUTE, ROUTE_VIDEO)
                             .put(KEY_ESTIMATED_INPUT_TOKENS, estimateVideoInputTokens(work.getDurationMs()));
                 } else { frames(work, identity, entry); }
@@ -75,7 +84,7 @@ public class PortfolioAiMediaPlanService {
                 if (head.contentLength() > DIRECT_MEDIA_MAX_BYTES) { throw unavailable(); }
                 entry.put(KEY_ROUTE, ROUTE_IMAGE).put(KEY_ESTIMATED_INPUT_TOKENS, IMAGE_ESTIMATED_INPUT_TOKENS);
             } else { throw unavailable(); }
-            if (properties.isMediaAudioTextEnabled() && ROUTE_VIDEO.equals(work.getMediaType())) {
+            if ((storedVersion || properties.isMediaAudioTextEnabled()) && ROUTE_VIDEO.equals(work.getMediaType())) {
                 audioSources.add(new PortfolioAiVideoAudioContext.Source(entry, work.getVideoAudioText()));
             }
             // 新链路最终生成只消费媒体摘要，不把旧公开地址附在文字内容中。
@@ -125,7 +134,7 @@ public class PortfolioAiMediaPlanService {
 
     /** 两工程使用相同源身份算法，不信任客户端媒体长度。 */
     public static String fingerprint(String key, String etag, long bytes, String sha256) {
-        return hash(key + "\n" + normalize(etag) + "\n" + bytes + "\n" + (sha256 == null ? "" : sha256));
+        return PortfolioAiStoredVideoSummary.sourceVersion(key, etag, bytes, sha256);
     }
     /** 去除 SDK ETag 可选引号，保持内容大小写。 */
     private static String normalize(String value) { return value == null ? "" : value.replace("\"", "").strip().toLowerCase(Locale.ROOT); }

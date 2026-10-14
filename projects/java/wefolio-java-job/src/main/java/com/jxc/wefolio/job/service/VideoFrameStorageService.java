@@ -152,6 +152,17 @@ public class VideoFrameStorageService {
     }
     /** 为消费者提供仅元数据读取，不下载媒体。 */
     public ObjectMetadata head(String objectKey) { return cosClient.getObjectMetadata(cos.getBucketName(), objectKey); }
+    /** 原视频摘要在每次 HEAD 前为固定 COS 请求上限预留时间，不额外重试。 */
+    public ObjectMetadata head(String objectKey, Instant deadline) {
+        checkDeadline(deadline);
+        ObjectMetadata metadata = head(objectKey);
+        if (Thread.currentThread().isInterrupted() || !Instant.now().isBefore(deadline)) {
+            throw failure(PROCESS_INTERRUPTED, "视频源 HEAD 已中断或超过期限");
+        }
+        return metadata;
+    }
+    /** 供摘要发送前预留最终源复验时间，与真实 COS 请求硬超时保持一致。 */
+    public int headTimeoutSeconds() { return Math.max(1, properties.getRemoteTimeoutSeconds()); }
     /** 显式、有界地重读瞬时服务或连接故障；不存在、鉴权失败和业务失效立即返回。 */
     private ObjectMetadata headWithRetry(String objectKey, Instant deadline) {
         for (int attempt = 1; ; attempt++) {

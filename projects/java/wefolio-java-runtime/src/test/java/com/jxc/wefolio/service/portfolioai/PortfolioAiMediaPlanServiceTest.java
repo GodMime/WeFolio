@@ -10,6 +10,7 @@ import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.message.PortfolioAiMessage;
 import com.jxc.wefolio.service.CosService;
 import org.junit.jupiter.api.Test;
+import java.time.Instant;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -32,7 +33,7 @@ class PortfolioAiMediaPlanServiceTest {
     private WorkEntity video(Integer duration) {
         WorkEntity work = new WorkEntity(); work.setId(9L); work.setUserId(7L); work.setMediaType("VIDEO");
         work.setMediaObjectKey("OWNER/work/video/test.mp4"); work.setMediaSha256("sha"); work.setDurationMs(duration);
-        work.setStatus(WorkStatusDict.ACTIVE.getCode()); work.setAuditStatus(WorkAuditStatusDict.PASSED.getCode()); work.setDeleted(0L);
+        work.setAuditRound(1); work.setStatus(WorkStatusDict.ACTIVE.getCode()); work.setAuditStatus(WorkAuditStatusDict.PASSED.getCode()); work.setDeleted(0L);
         when(works.selectPortfolioAiMediaSnapshot(9L)).thenReturn(work); return work;
     }
     /** 只有已授权可绑定WORK进入计划。 */
@@ -245,4 +246,73 @@ class PortfolioAiMediaPlanServiceTest {
         ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
         assertThat(facts.toString()).doesNotContain("非法残留", PortfolioAiVideoAudioContext.FULL_HASH);
     }
+    /** v3 原视频摘要命中不依赖帧或视频直传规格，旧音频开关关闭也冻结已有音频。 */
+    @Test void storedSummaryV3FreezesFactsWithoutFramesAndIncludesAudioAutomatically() {
+        properties.setMediaStoredVideoSummaryEnabled(true);
+        WorkEntity work = video(600000);
+        work.setVideoAudioText("婚礼主持词");
+        work.setVideoFramesJson("broken-unneeded-frames");
+        String identity = PortfolioAiMediaPlanService.fingerprint(work.getMediaObjectKey(), "ETAG", 30000000, "sha");
+        work.setVideoSummaryJson(storedSummary(identity));
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 30000000, "ETAG", 0));
+        ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+        var entry = facts.path("mediaPlan").path("entries").get(0);
+        assertThat(facts.path("mediaPlan").path("version").asText()).isEqualTo(PortfolioAiMediaContract.STORED_SUMMARY_PLAN_VERSION);
+        assertThat(entry.path("route").asText()).isEqualTo(PortfolioAiMediaContract.ROUTE_STORED_VIDEO_SUMMARY);
+        assertThat(entry.path("auditRound").asInt()).isEqualTo(1);
+        assertThat(entry.path("estimatedInputTokens").asInt()).isZero();
+        assertThat(entry.has("frames")).isFalse();
+        assertThat(entry.path(PortfolioAiVideoAudioContext.TEXT).asText()).isEqualTo("婚礼主持词");
+        assertThat(PortfolioAiStoredVideoSummary.frozenContent(entry).path("summary").asText()).isEqualTo("婚礼仪式");
+        verify(cos, times(1)).headObjectVersion(anyString());
+    }
+
+    /** 缺失、损坏、过期源摘要统一走帧兜底，即使是旧合同可直传的短视频也不例外。 */
+    @Test void v3MissingOrStaleSummaryAlwaysUsesFrozenFramesAndAudio() {
+        properties.setMediaStoredVideoSummaryEnabled(true);
+        WorkEntity work = video(10000);
+        work.setVideoAudioText("已有转写");
+        work.setVideoFramesJson(manifest(work, 8, 1000, 960, 540));
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 1000, "ETAG", 0));
+        for (String summary : new String[]{null, "", "null", "{broken", storedSummary("f".repeat(64))}) {
+            work.setVideoSummaryJson(summary);
+            ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+            var entry = facts.path("mediaPlan").path("entries").get(0);
+            assertThat(entry.path("route").asText()).isEqualTo("FRAMES");
+            assertThat(entry.has(PortfolioAiStoredVideoSummary.FIELD)).isFalse();
+            assertThat(entry.path(PortfolioAiVideoAudioContext.TEXT).asText()).isEqualTo("已有转写");
+            assertThat(entry.path(PortfolioAiFrameSelection.FIELD).path("frames")).hasSize(8);
+        }
+    }
+
+    /** v3 没有摘要又没有帧时沿用准备失败，不能绕过新合同直传原短视频。 */
+    @Test void v3MissingSummaryAndFramesRejectsEvenSmallShortVideo() {
+        properties.setMediaStoredVideoSummaryEnabled(true); video(10000);
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 1000, "ETAG", 0));
+        assertThatThrownBy(() -> service.freeze(StrictAiJson.mapper().createObjectNode(), facts()))
+                .isInstanceOf(BusinessException.class).hasMessage(PortfolioAiMessage.MEDIA_NOT_PREPARED);
+    }
+
+    /** 关闭新开关不改变 v1/v2 直传短视频与旧帧行为。 */
+    @Test void legacyVersionDoesNotAccidentallyConsumeNewStoredSummary() {
+        WorkEntity work = video(10000);
+        work.setVideoSummaryJson(storedSummary(PortfolioAiMediaPlanService.fingerprint(work.getMediaObjectKey(), "ETAG", 1000, "sha")));
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 1000, "ETAG", 0));
+        for (boolean audio : new boolean[]{false, true}) {
+            properties.setMediaAudioTextEnabled(audio);
+            ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+            var entry = facts.path("mediaPlan").path("entries").get(0);
+            assertThat(entry.path("route").asText()).isEqualTo("VIDEO");
+            assertThat(entry.has(PortfolioAiStoredVideoSummary.FIELD)).isFalse();
+        }
+    }
+
+    /** 构造有效原视频理解包装，不依赖临时签名、帧或音频状态。 */
+    private String storedSummary(String identity) {
+        ObjectNode content = StrictAiJson.mapper().createObjectNode().put("summary", "婚礼仪式");
+        content.putArray("observations"); content.putArray("limitations").add("可见画面");
+        return PortfolioAiStoredVideoSummary.create(identity, "a".repeat(64), "glm-5.3-flash", "direct-v1",
+                Instant.parse("2020-01-01T00:00:00Z"), content).toString();
+    }
+
 }

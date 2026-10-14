@@ -6,6 +6,12 @@ public final class PortfolioAiMediaContract {
     public static final String LEGACY_PLAN_VERSION = "portfolio-media-v1";
     /** 冻结音频文字的新媒体合同。 */
     public static final String PLAN_VERSION = "portfolio-media-v2";
+    /** 持久视频摘要优先、缺失时强制帧兜底的内部合同。 */
+    public static final String STORED_SUMMARY_PLAN_VERSION = "portfolio-media-v3";
+    /** 直接消费入队时冻结的原视频摘要。 */
+    public static final String ROUTE_STORED_VIDEO_SUMMARY = "STORED_VIDEO_SUMMARY";
+    /** 新合同冻结的审核轮次，重审使旧任务失效。 */
+    public static final String KEY_AUDIT_ROUND = "auditRound";
     /** 固定媒体合同：video-frames-v1。 */
     public static final String FRAME_SCHEMA = "video-frames-v1";
     /** 固定媒体合同：media-summary-v1。 */

@@ -26,6 +26,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -149,6 +150,7 @@ class WorkAuditServiceTest {
         WorkAuditClaimTransactionService claims = mock(WorkAuditClaimTransactionService.class);
         TencentCiAuditClient client = mock(TencentCiAuditClient.class);
         VideoAudioTranscriptionService audio = mock(VideoAudioTranscriptionService.class);
+        VideoSummaryService summary = VideoSummaryTestSupport.disabled();
         when(tasks.findQueryableVideoTasks(eq(1000), eq(120), any())).thenReturn(List.of(task));
         when(tasks.claimVideoQuery(eq(108L), anyString(), any(), any(), eq(120))).thenReturn(true);
         TencentCiAuditResult result = new TencentCiAuditResult("video-job-id", "Success",
@@ -161,16 +163,19 @@ class WorkAuditServiceTest {
                 .thenThrow(new IllegalStateException("模拟转写失败"));
         WorkAuditService service = new WorkAuditService(works, tasks, claims, client, properties(),
                 new AnimationFrameSampler(), new AnimationAuditResultAggregator(), mock(AnimationFrameCosService.class),
-                mock(VideoFrameStorageService.class), audio);
+                mock(VideoFrameStorageService.class), audio, summary);
         service.queryPendingVideoResults(1000);
         if (expectedAudio) {
-            InOrder order = inOrder(claims, audio);
+            InOrder order = inOrder(claims, audio, summary);
             order.verify(claims).markVideoTaskSuccessAndUpdateWork(any(), any(), any(), any(), any(), any(), any(),
                     any(), any(), any(), any(), any(), any());
             order.verify(audio).transcribe(eq(18L), eq(task.getAuditRound()), eq(task.getMediaObjectKey()),
                     eq(task.getMediaSha256()), any(), any());
+            order.verify(summary).summarize(eq(18L), eq(task.getAuditRound()), eq(task.getMediaObjectKey()),
+                    eq(task.getMediaSha256()), any(), any());
         } else {
             verify(audio, never()).transcribe(anyLong(), any(), any(), any(), any(), any());
+            verify(summary, never()).summarize(anyLong(), nullable(Integer.class), any(), any(), any(), any());
         }
         verify(claims, never()).markVideoQueryFailureForNextRunAndKeepWorkAuditing(any(), any(), any(), any(), any(), any());
         verify(claims, never()).markVideoTaskFailedAndUpdateWorkFailed(any(), any(), any(), any(), any(), any(), any());
@@ -1187,7 +1192,7 @@ class WorkAuditServiceTest {
             AnimationFrameCosService animationFrameCosService) {
         return new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties,
                 animationFrameSampler, animationResultAggregator, animationFrameCosService,
-                mock(VideoFrameStorageService.class), mock(VideoAudioTranscriptionService.class));
+                mock(VideoFrameStorageService.class), mock(VideoAudioTranscriptionService.class), VideoSummaryTestSupport.disabled());
     }
 
     private WorkAuditProperties properties() {
