@@ -1,6 +1,7 @@
 package com.jxc.wefolio.job.service;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 
 import java.time.Duration;
@@ -49,6 +50,11 @@ public interface PortfolioAiModelClient {
     /** 独立媒体理解请求，不混合 image_url 与 video_url。 */
     default Completion summarize(AiGenerationTaskEntity task, ObjectNode request, List<MediaInput> media, Duration remaining) {
         throw new PortfolioAiCallException("CONTRACT_UNAVAILABLE", "多模态客户端不可用", false);
+    }
+    /** 当前作品的独立冻结文字与媒体一起传递，禁止混入其它作品的音频。 */
+    default Completion summarize(AiGenerationTaskEntity task, ObjectNode request, List<MediaInput> media,
+                                 JsonNode entry, Duration remaining) {
+        throw new PortfolioAiCallException("CONTRACT_UNAVAILABLE", "带音频文字的多模态客户端不可用", false);
     }
     /** 完整最终文字请求字节上界，供费用保守预留。 */
     default int textRequestBytes(AiGenerationTaskEntity task, ObjectNode request) {

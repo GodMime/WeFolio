@@ -596,7 +596,9 @@ HTTPS GET 核验因 CDN 证书过期未通过。**用户已明确本轮不处理
 
 `POST /job-api/video-frames/rebuild` 沿用 `X-Admin-Point-Secret` 运维头，只能显式触发。可选 JSON 字段为 `maxFrames`（默认 `VIDEO_FRAME_BACKFILL_MAX_FRAMES`，缺省配置 2400，请求范围 8～配置上限）、`afterWorkId`（排他下界，默认 0）和 `throughWorkId`（包含上界，省略时扫描冻结当前水位）。仅处理未删除、ACTIVE/PASSED 且作者 ACTIVE 的 VIDEO。202 表示接受，200 表示本机已有同种重建且未重复提交；与补帧、清扫或跨实例锁冲突返回 503。
 
-每件先检查预算和旧清单归属，再 CAS 清空帧及 AI 摘要、严格删除旧 COS 帧、重截完整 8～24 帧并按最长边 960px/每张 200KiB 上限存储，附可选视觉特征后 CAS 发布。旧 `/job-api/video-frames/backfill` 共用新截图及存储流程，仍跳过合法同源旧清单。预算不足不清下一件；旧清单异常或删除失败不继续收费截图。重建本身不调用模型，重复执行已结束的范围会重新产生截图费用。
+每件先检查帧预算和旧清单归属；开启音频转写后，还须下载、探测真实音轨及时长并预留音频额度。预检通过才 CAS 同时清空帧、音频文本及 AI 摘要，严格删除旧 COS 帧、重截完整 8～24 帧并按最长边 960px/每张 200KiB 上限存储，附可选视觉特征后 CAS 发布，最后复用预检文件重新转写。预算不足不清下一件；旧清单异常或删除失败不继续收费截图。重复执行已结束的范围会重新产生截图及已开启的 ASR 费用；`maxFrames` 始终只限制帧，音频有独立预算。
+
+`POST /job-api/video-frames/backfill` 共用上述处理模块：合法同源帧且文字非 NULL（包括空字符串）才整件跳过；已有帧但文字为 NULL 时只补转写。新帧发布使旧文字和摘要同时失效，帧成功而转写失败则保留帧、文字仍为 NULL，后续 backfill 只补文字。音频开关关闭时维持原帧处理能力。
 
 清空后失败没有自动精确恢复；可能短暂或持续缺帧，已冻结旧清单的在途作品集可能失败。结束日志 `nextAfterWorkId` 跨过已失败行，接续不等于补跑失败；失败件按单件范围重建或在清单为 NULL 时使用 backfill。残留旧帧按超过 24 小时的对象年龄及引用保护由既有清扫补偿，不承诺立即删净。详细参数、日志、补跑及影响见本地[历史视频帧手动重建操作说明](design/advanced-portfolios/2026-10-14-video-frame-rebuild.md)。本节为代码操作说明，不代表已部署或已执行生产重建。
 
@@ -607,6 +609,36 @@ HTTPS GET 核验因 CDN 证书过期未通过。**用户已明确本轮不处理
 | 本地技术验证（2026-10-10） | 腾讯云 TokenHub | 高级作品集生成、整体修改 | `glm-5.3-flash` | `https://tokenhub.tencentmaas.com/v1` | `TOKENHUB_API_KEY`（只记变量名） | `projects/java/wefolio-java-job/.env` | 实测11次调用共133435 token；费用按账户实际计量核对 | 连通性、8/8公开mock场景首轮通过，独立图片/视频主要画面人工核查一致；未发布，生产历史状态见 §4.10/4.11 |
 
 TokenHub 调用为 `POST /chat/completions`。Runtime 只冻结供应商、模型及端点配置，API Key 仅由 Job 使用；不得将旧 `DEEPSEEK_API_KEY` 作为新服务凭据。启用前 Runtime 与 Job 的 `WEFOLIO_AI_BASE_URL`、`WEFOLIO_AI_MODEL` 必须一致，未配置时使用上表默认值。当前迁移保持本地未提交状态，验证方案见本地 `docs/design/advanced-portfolios/2026-10-10-tokenhub-api.md`。
+
+### 视频作品音频转写（2026-10-14，代码接入，未部署）
+
+V64 仅新增 `wf_work.video_audio_text` 一个可空 MEDIUMTEXT 字段：NULL 为待生成或失败，空字符串为已处理无文字，非空为完整转写。CHECK 禁止非 VIDEO 保存非 NULL 值。转写全文不出现在普通作品查询或公开 DTO，也不随作品标题、封面编辑写回。Job 自动审核的 AVERAGE/INTERVAL 视频 PASS 事务提交后执行转写；ASR 失败不改变审核结论。人工审核通过而未走此回调的作品通过显式 backfill 补齐。
+
+ASR 固定使用 `POST https://tokenhub.tencentmaas.com/v1/wand/asrproxy/sync_transcribe`、模型 `hy-asr-3.0-preview`，读取既有 `TOKENHUB_API_KEY`。受控 COS 下载后，ffprobe 检查真实时长，ffmpeg 取第一音轨转为 16kHz/单声道/PCM16 WAV，以纯 Base64 提交。请求仅含 `model`、`data`、`voice_encode_format`；校验 `completed` 后只保存 `output.text`，不下载字幕、不保存时间戳、不额外调用 GLM。无音轨直接保存空字符串，无 ASR 费用；超过十分钟拒绝处理，不截断。
+
+| 配置 | 所属 | 默认值与用途 |
+| --- | --- | --- |
+| `WEFOLIO_VIDEO_AUDIO_ENABLED` | Job | `false`；迁移、媒体工具及账户权限就绪后开启 |
+| `TOKENHUB_API_KEY` | Job | 沿用作品集 TokenHub 密钥，勿记录值 |
+| `WEFOLIO_VIDEO_AUDIO_FFMPEG_PATH` | Job | `/usr/bin/ffmpeg`；管理员安装的绝对可执行路径 |
+| `WEFOLIO_VIDEO_AUDIO_FFPROBE_PATH` | Job | `/usr/bin/ffprobe`；管理员安装的绝对可执行路径 |
+| `WEFOLIO_VIDEO_AUDIO_TOTAL_TIMEOUT_SECONDS` | Job | `180`；音频处理总期限 |
+| `WEFOLIO_VIDEO_AUDIO_CONCURRENCY` | Job | `1`；每实例同时处理量，非跨实例全局额度 |
+| `WEFOLIO_VIDEO_AUDIO_MAX_REQUESTS_PER_RUN` | Job | `100`；单次历史执行或审核扫描的请求预算 |
+| `WEFOLIO_VIDEO_AUDIO_MAX_SECONDS_PER_RUN` | Job | `3600`；同一执行的音频秒数预算 |
+| `WEFOLIO_AI_MEDIA_AUDIO_TEXT_ENABLED` | Runtime | `false`；全部 Job 升级后开启 v2 音频上下文冻结 |
+
+启用时校验工具路径、可执行性、WAV 编码及探测能力和资源配置。Job 部署脚本在替换制品前检查已开启实例的媒体工具。生产主机须安装带 PCM16/WAV 能力的 ffmpeg/ffprobe；临时目录使用 JVM `java.io.tmpdir`，每件预留 160MiB 可用空间，按实例并发评估磁盘容量。单视频上限 100MiB、WAV 25MiB、Base64 40MiB、响应 2MiB；全文最多 65,536 个 Unicode 码点/256KiB，超限失败而不保存节选。下载/探测/提取/HTTP 上限分别 60/10/30/120 秒，均受音频总期限及历史单件剩余总期限限制；历史单件默认 180 秒帧期限 + 180 秒音频期限，重建预检包含在内。
+
+跨实例同作品使用 MySQL 会话命名锁。付费前及写回前检查作者、作品、审核轮次、源键/SHA、COS ETag/大小及帧清单源身份；全文与摘要失效同事务 CAS 写入。预检预算按向上取整时长再保守加一秒（最多 600 秒）预留，覆盖 AAC 解码尾部填充；提取后重新探测 WAV，超出十分钟或已预留时长则拒绝付费调用。所有临时文件和子进程在执行结束时回收，日志只保留作品 ID、结果、请求编号、长度、usage 与公开价估算，不打印全文、密钥、Base64 或签名 URL。401/402 停止本轮后续 ASR 发送；超时/429/5xx 不隐藏重试，保持 NULL 待显式补齐。预算不足停止扫描且不跨过当前游标，普通失败行仍沿用 §6.4 的游标规则。进程在供应商收费后、写回前退出可能导致后续重复费用；当前没有持久收费账本。
+
+`usage.total_tokens` 优先，兼容 `usage.total_token`；缺失或非法计量明确为未知，不按免费处理。公开价格为 22 tokens/秒、10 元/百万 tokens，以 BigDecimal 保留估算精度。十分钟约 13,200 tokens/0.132 元；单轮 3,600 秒约 0.792 元，均不含下载、截图及后续 GLM 费用。此前获授权样本实测 84.608 秒、1,861 tokens、公开价约 0.01861 元；本次代码测试使用合成媒体及本地模拟响应，没有新增收费调用。官方依据：[ASR 接口](https://cloud.tencent.com/document/product/1823/135791)、[公开价格](https://cloud.tencent.com/document/product/1823/130055#voice-generation-price-section)。
+
+账户 401/402 后，审核结论与 backfill 后续补帧照常完成；rebuild 后续作品因音频预检失败保留原帧、文字和摘要，本轮不再清空。已有完整文字仍按跳过处理。请求预算耗尽但尚未探测音轨的作品可能仍需下载/探测，以区分无音轨的免费空结果；批量吞吐需同时考虑下载、媒体工具及 ASR 耗时。
+
+高级作品集 v2 在接单时一次读取源、帧和文字，冻结清理后的单作品最多 6,000/全任务最多 24,000 码点；数据库保留全文。已有 FRAMES 和短视频 VIDEO 路线均可使用文字，NULL/空串省略。单作品摘要和最终页面生成均发送冻结文字并计入预算，将口播作为不可信作品内容，区分画面事实与音频说法。冻结后新增文字不会插入旧任务；文字变化使缓存身份变化，旧任务不得覆盖新文字缓存。Job 同时接受 v1/v2，v1 维持无转写上下文。
+
+发布顺序：先执行 V64（可随关闭 v2 的 Runtime 发布），升级全部 Job 消费者并准备媒体工具，再开启 ASR 与 Runtime v2。回退时先关闭 Runtime v2，排空已接收 v2 任务后才可退回旧 Job；关闭 ASR 不清已有文字，保留新增可空列。当前原视频对象不可替换；若将来换源或人工同键覆盖 COS，必须同步清除文字、帧和摘要。此次仅完成代码与离线验证，不代表已部署、已开启生产配置或已执行历史处理。
 
 本地真实结果见 `docs/design/advanced-portfolios/2026-10-10-tokenhub-validation.md`。提示词为 `portfolio-ai-2026-10-10.2`，启用思考、`temperature=1.0`、`top_p=0.95`、非流式及JSON输出；单HTTP60秒、总180秒、最多3次。本轮最慢作品集HTTP为58.808秒；23.13秒公开视频直接媒体探针输入62143 token。生产当前仍仅在文本JSON提供授权作品的COS链接，独立媒体探针不代表生产已发送视频媒体项。视频大小分流与数据万象取帧为后续独立方案，尚未实现或部署。
 

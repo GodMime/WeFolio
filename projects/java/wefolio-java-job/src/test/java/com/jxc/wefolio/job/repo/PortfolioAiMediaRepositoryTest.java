@@ -6,6 +6,7 @@ import com.jxc.wefolio.job.model.PortfolioAiMediaSummaryIdentity;
 import com.jxc.wefolio.job.service.PortfolioAiMediaAccessService;
 import com.jxc.wefolio.job.service.PortfolioAiModelClient.CacheStatus;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
@@ -67,14 +68,14 @@ class PortfolioAiMediaRepositoryTest {
                 """);
         jdbc.execute("""
                 CREATE TABLE wf_work(id BIGINT PRIMARY KEY,media_object_key VARCHAR(512),media_sha256 VARCHAR(64),
-                video_frames_json CLOB,status VARCHAR(32),audit_status VARCHAR(32),deleted BIGINT,version INT,
+                video_frames_json CLOB,video_audio_text CLOB,status VARCHAR(32),audit_status VARCHAR(32),deleted BIGINT,version INT,
                 updated_at TIMESTAMP,ai_media_summary_json CLOB,ai_media_summary_expires_at TIMESTAMP)
                 """);
         jdbc.update("INSERT INTO wf_user VALUES(2,'ACTIVE',0)");
         for (long id = 1; id <= 3; id++) {
             jdbc.update("INSERT INTO wf_ai_generation_task(id,requested_by,status,version,deleted,created_at) VALUES(?,2,'RUNNING',1,0,?)", id, now);
         }
-        jdbc.update("INSERT INTO wf_work VALUES(9,?,'sha',?,'ACTIVE','PASSED',0,7,?,NULL,NULL)", SOURCE_KEY, MANIFEST, now.minusDays(1));
+        jdbc.update("INSERT INTO wf_work VALUES(9,?,'sha',?,NULL,'ACTIVE','PASSED',0,7,?,NULL,NULL)", SOURCE_KEY, MANIFEST, now.minusDays(1));
     }
 
     /** 当前执行代次，费用字段专用更新不能改变该版本。 */
@@ -523,5 +524,21 @@ class PortfolioAiMediaRepositoryTest {
         assertThat(PortfolioAiMediaRepository.costCents(Long.MAX_VALUE, Long.MAX_VALUE)).isEqualTo(3_320_413_933_267_720L);
         assertThat(PortfolioAiMediaRepository.costCents(Long.MAX_VALUE, Long.MAX_VALUE, Long.MAX_VALUE)).isEqualTo(2_794_681_727_166_998L);
         assertThat(PortfolioAiMediaRepository.costCents(Long.MAX_VALUE, 0, Long.MAX_VALUE)).isEqualTo(212_137_556_847_660L);
+    }
+
+    /** 旧任务晚到只跳过缓存，不能覆盖已补齐文字对应的新缓存或让任务失败。 */
+    @Test void changedFullTranscriptPreventsLateCacheWriteWithoutFailingTask() {
+        var legacy = identity("model");
+        jdbc.update("UPDATE wf_work SET video_audio_text=?,ai_media_summary_json=? WHERE id=9", "较新文字", "new-cache-marker");
+        repository.cache(9, legacy, SUMMARY, now);
+        assertThat(jdbc.queryForObject("SELECT ai_media_summary_json FROM wf_work WHERE id=9", String.class)).isEqualTo("new-cache-marker");
+        var current = new PortfolioAiMediaSummaryIdentity(legacy.cacheKey(), legacy.sourceVersion(), legacy.model(), legacy.promptVersion(),
+                legacy.route(), legacy.manifestHash(), legacy.sourceObjectKey(), legacy.sourceEtag(), legacy.sourceBytes(),
+                PortfolioAiVideoAudioContext.fullHash("较新文字"));
+        repository.cache(9, current, SUMMARY, now);
+        assertThat(repository.cached(9, current, now)).isEqualTo(SUMMARY);
+        jdbc.update("UPDATE wf_work SET video_audio_text='' WHERE id=9");
+        repository.cache(9, legacy, SUMMARY.replace("婚礼舞台", "过期任务"), now);
+        assertThat(jdbc.queryForObject("SELECT ai_media_summary_json FROM wf_work WHERE id=9", String.class)).doesNotContain("过期任务");
     }
 }

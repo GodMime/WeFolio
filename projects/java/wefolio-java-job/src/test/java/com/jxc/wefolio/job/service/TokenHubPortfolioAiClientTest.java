@@ -246,6 +246,10 @@ class TokenHubPortfolioAiClientTest {
                 new PortfolioAiModelClient.MediaInput("video_url", "https://template.invalid/media", null))) {
             ObjectNode actual = client.mediaPayload(task(), request(), List.of(input));
             templates.add(actual.retain("max_tokens", "messages"));
+            for (boolean excerpt : List.of(false, true)) {
+                var entry = StrictAiJson.mapper().createObjectNode().put("videoAudioText", "模板音频文字").put("videoAudioExcerpt", excerpt);
+                templates.add(client.mediaPayload(task(), request(), List.of(input), entry).retain("max_tokens", "messages"));
+            }
         }
         assertThat(PortfolioAiMediaSummaryPrompt.version())
                 .isEqualTo(PortfolioAiMediaContract.SUMMARY_VERSION + ":" + StrictAiJson.canonicalHash(templates));
@@ -668,5 +672,28 @@ class TokenHubPortfolioAiClientTest {
                 .isInstanceOf(PortfolioAiCallException.class).hasMessage("模型调用超过绝对期限");
         assertThat(pending.isCancelled()).isTrue(); verify(transport).shutdownNow();
         assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(2));
+    }
+
+    /** 音频只进入当前作品的 user 文本块，最终真实 payload 也保留且实际字节预算随之增长。 */
+    @Test void transcriptIsSeparateUserContentAndFinalSourceText() {
+        var client = new TokenHubPortfolioAiClient(properties());
+        ObjectNode request = request();
+        var sources = request.withObject("facts").withArray("sources");
+        var first = sources.addObject().put("sourceNo", 8).put("kind", "WORK").put("canBind", true);
+        first.putObject("mediaSummary").put("summary", "画面舞台");
+        var second = sources.addObject().put("sourceNo", 9).put("kind", "WORK").put("canBind", true).put("videoAudioText", "另一作品口播");
+        second.putObject("mediaSummary").put("summary", "另一作品");
+        int before = client.textRequestBytes(task(), request);
+        String text = "本作品口播😀\n\"引号\"";
+        first.put("videoAudioText", text).put("videoAudioExcerpt", true);
+        int after = client.textRequestBytes(task(), request);
+        assertThat(after).isGreaterThan(before);
+        var body = client.mediaPayload(task(), request, List.of(new PortfolioAiModelClient.MediaInput("video_url", "https://private.example/video", null)), first);
+        assertThat(body.path("messages").get(0).path("content").asText()).doesNotContain(text, "另一作品口播").contains("画面可见", "音频中表达");
+        assertThat(body.path("messages").get(1).toString()).contains("本作品口播", "节选").doesNotContain("另一作品口播");
+        var finalBody = client.payload(task(), request);
+        assertThat(client.textRequestBytes(task(), request)).isEqualTo(finalBody.toString().getBytes(StandardCharsets.UTF_8).length);
+        var user = StrictAiJson.parseObject(finalBody.path("messages").get(1).path("content").asText(), 100000, 16);
+        assertThat(user.path("sources").findValuesAsText("videoAudioText")).contains(text, "另一作品口播");
     }
 }

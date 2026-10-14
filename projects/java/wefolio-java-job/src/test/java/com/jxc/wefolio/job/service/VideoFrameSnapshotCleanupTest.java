@@ -66,7 +66,7 @@ class VideoFrameSnapshotCleanupTest {
             listing.getObjectSummaries().add(output); return listing;
         });
         VideoFrameBackfillLock.ExecutionLock executionLock = mock(VideoFrameBackfillLock.ExecutionLock.class);
-        VideoFrameBackfillService backfill = new VideoFrameBackfillService(repository, storage, snapshots, frames);
+        VideoFrameBackfillService backfill = new VideoFrameBackfillService(repository, storage, snapshots, frames, VideoAudioTestSupport.disabled());
         var failed = backfill.run("execution-lost", 8, executionLock, "queue-1");
         assertEquals(1, failed.failed()); assertEquals(8, failed.chargedFrames());
         verify(cos, never()).deleteObject(anyString(), anyString());

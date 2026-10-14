@@ -61,8 +61,8 @@ class VideoFrameRebuildIntegrationTest {
                 + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         new ResourceDatabasePopulator(new ClassPathResource("video-frame-backfill-test-schema.sql")).execute(data);
         jdbc = new JdbcTemplate(data);
-        jdbc.execute("ALTER TABLE wf_work ADD ai_media_summary_json CLOB");
-        jdbc.execute("ALTER TABLE wf_work ADD ai_media_summary_expires_at TIMESTAMP");
+        jdbc.execute("ALTER TABLE wf_work ADD COLUMN IF NOT EXISTS ai_media_summary_json CLOB");
+        jdbc.execute("ALTER TABLE wf_work ADD COLUMN IF NOT EXISTS ai_media_summary_expires_at TIMESTAMP");
         jdbc.update("INSERT INTO wf_user(id,unique_code,status) VALUES(1,'OWNER','ACTIVE')");
         jdbc.update("""
                 INSERT INTO wf_work(id,user_id,media_type,status,media_object_key,media_sha256,duration_ms,audit_status)
@@ -105,7 +105,7 @@ class VideoFrameRebuildIntegrationTest {
         when(snapshots.ready(PROVIDER_JOB)).thenReturn(true);
         when(snapshots.outputFrames(anyString(), eq(24))).thenReturn(inputs());
         lock = mock(VideoFrameBackfillLock.ExecutionLock.class);
-        service = new VideoFrameBackfillService(repository, storage, snapshots, properties);
+        service = new VideoFrameBackfillService(repository, storage, snapshots, properties, VideoAudioTestSupport.disabled());
         events.clear(); clearInvocations(cos, storage);
     }
 

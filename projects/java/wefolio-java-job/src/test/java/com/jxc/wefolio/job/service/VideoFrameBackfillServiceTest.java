@@ -30,6 +30,8 @@ class VideoFrameBackfillServiceTest {
     private VideoFrameSnapshotClient snapshots;
     private VideoFrameBackfillLock.ExecutionLock executionLock;
     private VideoFrameBackfillService service;
+    /** 默认关闭模拟生产灰度开关，转写用例显式改为所需结果。 */
+    private VideoAudioTranscriptionService audio;
     /** 可配置单件期限，用于验证清空及付费前的时间边界。 */
     private VideoFrameProperties properties;
     private ListAppender<ILoggingEvent> events;
@@ -43,7 +45,8 @@ class VideoFrameBackfillServiceTest {
         snapshots = mock(VideoFrameSnapshotClient.class);
         executionLock = mock(VideoFrameBackfillLock.ExecutionLock.class);
         properties = new VideoFrameProperties();
-        service = new VideoFrameBackfillService(repository, storage, snapshots, properties);
+        audio = VideoAudioTestSupport.disabled();
+        service = new VideoFrameBackfillService(repository, storage, snapshots, properties, audio);
         when(repository.highWatermark()).thenReturn(1L);
         when(repository.scan(0, 1, 20)).thenReturn(List.of(work));
         when(repository.scan(1, 1, 20)).thenReturn(List.of());
@@ -89,6 +92,146 @@ class VideoFrameBackfillServiceTest {
         verifyNoInteractions(snapshots);
         verify(repository, never()).saveManifest(any(), anyString());
         assertTrue(logged(Level.INFO, "历史视频补帧跳过", "executionId=execution-1", "workId=1"));
+    }
+
+    /** 合法帧缺文字只请求转写，不产生任何重新截图和删帧费用。 */
+    @Test
+    void existingFramesWithMissingTextOnlyTranscribe() {
+        when(storage.hasValidManifest(any(), eq(source), eq(1L), any())).thenReturn(true);
+        when(audio.transcribe(eq(1L), any(), any(), any())).thenReturn(VideoAudioTranscriptionService.Outcome.SAVED);
+        var result = service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID);
+        assertEquals(1, result.succeeded());
+        assertEquals(0, result.chargedFrames());
+        verifyNoInteractions(snapshots);
+        verify(repository, never()).saveManifest(any(), anyString());
+        assertTrue(logged(Level.INFO, "历史视频音频处理汇总", "audioSaved=1", "frameSucceeded=0"));
+    }
+
+    /** 同源已有帧的音频步骤继续使用历史锁守卫，失锁后不处理下一件作品。 */
+    @Test
+    void audioCallbackRetainsHistoricalExecutionLockGuard() {
+        addSecondWork();
+        when(storage.hasValidManifest(any(), eq(source), eq(1L), any())).thenReturn(true);
+        java.util.concurrent.atomic.AtomicBoolean lost = new java.util.concurrent.atomic.AtomicBoolean();
+        doAnswer(invocation -> {
+            if (lost.get()) { throw new IllegalStateException("模拟历史锁丢失"); }
+            return null;
+        }).when(executionLock).checkHeld();
+        when(audio.transcribe(eq(1L), any(), any(), any())).thenAnswer(invocation -> {
+            lost.set(true);
+            invocation.<Runnable>getArgument(3).run();
+            return VideoAudioTranscriptionService.Outcome.SAVED;
+        });
+        service.run(EXECUTION_ID, 16, executionLock, QUEUE_ID);
+        verify(audio, never()).transcribe(eq(2L), any(), any(), any());
+        verifyNoInteractions(snapshots);
+        assertTrue(logged(Level.ERROR, "历史视频补帧扫描中断", "cursor=0"));
+    }
+
+    /** 模块识别空串为已处理时，保持帧和空结果，不重复识别。 */
+    @Test
+    void completedEmptyTranscriptWithValidFramesSkipsWork() {
+        when(storage.hasValidManifest(any(), eq(source), eq(1L), any())).thenReturn(true);
+        when(audio.transcribe(eq(1L), any(), any(), any())).thenReturn(VideoAudioTranscriptionService.Outcome.ALREADY_COMPLETE);
+        assertEquals(1, service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID).skipped());
+        verifyNoInteractions(snapshots);
+    }
+
+    /** 帧已提交之后的音频失败明确暴露为未完成，不能删除刚发布的可用帧。 */
+    @Test
+    void transcriptionFailureRetainsPublishedFramesAndReportsIncomplete() {
+        when(audio.transcribe(eq(1L), any(), any(), any())).thenReturn(VideoAudioTranscriptionService.Outcome.FAILED);
+        var result = service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID);
+        assertEquals(1, result.failed());
+        assertEquals(8, result.chargedFrames());
+        var order = inOrder(repository, audio);
+        order.verify(repository).saveManifest(work, MANIFEST);
+        order.verify(audio).transcribe(eq(1L), any(), any(), any());
+        verify(storage, never()).cleanupOwnedManifest(eq(MANIFEST), any(), any());
+        assertTrue(logged(Level.WARN, "历史视频有转写未完成", "audioFailed=1"));
+        assertTrue(logged(Level.INFO, "历史视频音频处理汇总", "frameSucceeded=1", "audioFailed=1"));
+    }
+
+    /** 账户级 ASR 失败由音频模块停止发送，但本轮其余作品的原截图流程仍继续。 */
+    @Test
+    void stoppedAudioAccountDoesNotStopRemainingFrameBackfill() {
+        addSecondWork();
+        when(audio.transcribe(anyLong(), any(), any(), any())).thenReturn(VideoAudioTranscriptionService.Outcome.FAILED);
+        var result = service.run(EXECUTION_ID, 16, executionLock, QUEUE_ID);
+        assertEquals(2, result.failed());
+        assertEquals(16, result.chargedFrames());
+        assertFalse(result.budgetExhausted());
+        verify(repository, times(2)).saveManifest(any(), eq(MANIFEST));
+        verify(snapshots, times(2)).submit(eq(source), eq(8), anyString(), eq(QUEUE_ID));
+        assertTrue(logged(Level.INFO, "历史视频音频处理汇总", "frameSucceeded=2", "audioFailed=2"));
+    }
+
+    /** 音频额度不足与截图额度相同，不让接续游标越过当前尚未处理作品。 */
+    @Test
+    void audioBudgetExhaustionStopsBeforeAdvancingCursor() {
+        when(storage.hasValidManifest(any(), eq(source), eq(1L), any())).thenReturn(true);
+        when(audio.transcribe(eq(1L), any(), any(), any())).thenReturn(VideoAudioTranscriptionService.Outcome.BUDGET_EXHAUSTED);
+        var result = service.run(EXECUTION_ID, 8, executionLock, QUEUE_ID);
+        assertTrue(result.budgetExhausted());
+        verify(repository, never()).scan(1, 1, 20);
+        assertTrue(logged(Level.INFO, "历史视频补帧执行结束", "cursor=0", "status=BUDGET_EXHAUSTED"));
+    }
+
+    /** 强制重建在任何清空之前下载探测并预留音频预算；额度不足保留全部旧内容。 */
+    @Test
+    void rebuildAudioBudgetRefusalPreservesCurrentWork() {
+        Work previous = existingWork();
+        var preparation = mock(VideoAudioTranscriptionService.Preparation.class);
+        when(preparation.outcome()).thenReturn(VideoAudioTranscriptionService.Outcome.BUDGET_EXHAUSTED);
+        when(audio.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(preparation);
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertTrue(result.budgetExhausted());
+        verify(repository, never()).clearManifestForRebuild(previous);
+        verifyNoInteractions(snapshots);
+        verify(audio, never()).complete(any(), any());
+        verify(preparation).close();
+        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "nextAfterWorkId=0"));
+    }
+
+    /** 成功预检资源跨过帧重建复用，新的作品版本由共用转写模块重新读取。 */
+    @Test
+    void rebuildReusesPreparationAndTranscribesOnlyAfterNewManifest() {
+        Work previous = existingWork();
+        var preparation = mock(VideoAudioTranscriptionService.Preparation.class);
+        when(preparation.ready()).thenReturn(true);
+        when(audio.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(preparation);
+        when(audio.complete(eq(preparation), any())).thenReturn(VideoAudioTranscriptionService.Outcome.EMPTY);
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertEquals(1, result.succeeded());
+        var order = inOrder(audio, repository, preparation);
+        order.verify(audio).prepare(eq(1L), eq(true), any(), any(), any());
+        order.verify(repository).clearManifestForRebuild(previous);
+        order.verify(repository).saveManifest(cleared(previous), MANIFEST);
+        order.verify(audio).complete(eq(preparation), any());
+        order.verify(preparation).close();
+        var preflightDeadline = org.mockito.ArgumentCaptor.forClass(java.time.Instant.class);
+        var completionDeadline = org.mockito.ArgumentCaptor.forClass(java.time.Instant.class);
+        verify(audio).prepare(eq(1L), eq(true), any(), preflightDeadline.capture(), any());
+        verify(audio).complete(eq(preparation), completionDeadline.capture());
+        assertEquals(preflightDeadline.getValue(), completionDeadline.getValue());
+        verify(audio, never()).transcribe(anyLong(), any(), any(), any());
+        assertTrue(logged(Level.INFO, "历史视频音频处理汇总", "audioEmpty=1"));
+    }
+
+    /** 预检失败或另一个入口持有同作品锁时，不能先清空再等待补偿。 */
+    @Test
+    void failedOrBusyAudioPreflightDoesNotClearOldFrames() {
+        existingWork();
+        for (var outcome : List.of(VideoAudioTranscriptionService.Outcome.FAILED,
+                VideoAudioTranscriptionService.Outcome.BUSY, VideoAudioTranscriptionService.Outcome.STALE)) {
+            var preparation = mock(VideoAudioTranscriptionService.Preparation.class);
+            when(preparation.outcome()).thenReturn(outcome);
+            when(audio.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(preparation);
+            service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+            verify(preparation).close();
+        }
+        verify(repository, never()).clearManifestForRebuild(any());
+        verifyNoInteractions(snapshots);
     }
 
     @Test

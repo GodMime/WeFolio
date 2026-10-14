@@ -31,6 +31,11 @@ public class WorkAuditWorkEntity extends BaseEntity {
     /** 视频时长毫秒，图片为空 */
     private Integer durationMs;
 
+    /** 视频音频转写全文；NULL 表示尚未生成，空字符串表示已处理但没有文字，仅由专用仓储写入。 */
+    @ToString.Exclude
+    @TableField(select = false, updateStrategy = FieldStrategy.NEVER)
+    private String videoAudioText;
+
     /** 完整持久视频帧清单，未准备完成时为空 */
     private String videoFramesJson;
 

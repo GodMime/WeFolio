@@ -51,7 +51,7 @@ public class VideoFrameBackfillRepository {
 
     /**
      * 同一短事务核对源、版本及当前清单后写完整结果，不能覆盖新审核已发布的帧。
-     * 事务内没有远端调用，且只改帧字段及标准更新时间、版本。
+     * 事务内没有远端调用，发布新清单同步失效旧音频文本和媒体摘要。
      */
     @Transactional
     public boolean saveManifest(Work work, String manifest) {
@@ -63,7 +63,8 @@ public class VideoFrameBackfillRepository {
                 WorkAuditStatusDict.PASSED.getCode(), work.objectKey(), work.version(), work.sha256(), work.sha256());
         if (current.isEmpty() || !sameManifest(current.getFirst(), work.manifest())) { return false; }
         return jdbc.update("""
-                UPDATE wf_work SET video_frames_json=?,updated_at=?,version=version+1
+                UPDATE wf_work SET video_frames_json=?,video_audio_text=NULL,ai_media_summary_json=NULL,
+                  ai_media_summary_expires_at=NULL,updated_at=?,version=version+1
                 WHERE id=? AND media_type=? AND status=? AND audit_status=? AND media_object_key=? AND version=? AND deleted=0
                   AND (media_sha256=? OR (media_sha256 IS NULL AND ? IS NULL))
                 """, manifest, Timestamp.from(Instant.now()), work.id(), MediaTypeDict.VIDEO.getCode(),
@@ -85,7 +86,7 @@ public class VideoFrameBackfillRepository {
                 WorkAuditStatusDict.PASSED.getCode(), work.objectKey(), work.version(), work.sha256(), work.sha256());
         if (current.isEmpty() || !sameRebuildManifest(current.getFirst(), work.manifest())) { return null; }
         int changed = jdbc.update("""
-                UPDATE wf_work SET video_frames_json=NULL,ai_media_summary_json=NULL,ai_media_summary_expires_at=NULL,
+                UPDATE wf_work SET video_frames_json=NULL,video_audio_text=NULL,ai_media_summary_json=NULL,ai_media_summary_expires_at=NULL,
                   updated_at=?,version=version+1
                 WHERE id=? AND media_type=? AND status=? AND audit_status=? AND media_object_key=? AND version=? AND deleted=0
                   AND (media_sha256=? OR (media_sha256 IS NULL AND ? IS NULL))

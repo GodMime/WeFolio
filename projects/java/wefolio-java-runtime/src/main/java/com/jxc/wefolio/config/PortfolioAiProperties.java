@@ -28,6 +28,8 @@ public class PortfolioAiProperties {
     private boolean enabled;
     /** 新任务是否冻结真实多模态输入，默认关闭以兼容旧部署。 */
     private boolean mediaEnabled;
+    /** 全部 Job 消费者升级后才开启 v2 音频文字冻结。 */
+    private boolean mediaAudioTextEnabled;
     /** 单次描述的 Unicode 码点上限。 */
     private int maxPromptCodePoints = 2000;
     /** 完整普通配置的字节上限。 */

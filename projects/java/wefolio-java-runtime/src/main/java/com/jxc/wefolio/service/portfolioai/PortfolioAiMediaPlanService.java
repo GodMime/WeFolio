@@ -3,6 +3,7 @@ package com.jxc.wefolio.service.portfolioai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
+import com.jxc.wefolio.config.PortfolioAiProperties;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -34,13 +35,17 @@ public class PortfolioAiMediaPlanService {
     /** COS 只读元数据，无原作品下载。 */
     private final CosService cos;
 
+    /** 新内部合同须在全部消费者升级后开启。 */
+    private final PortfolioAiProperties properties;
+
     /** Facts 已检查本人或团队授权，本步骤重新检查作品状态并冻结真实 HEAD。 */
     public void freeze(ObjectNode input, ObjectNode facts) {
-        ObjectNode plan = facts.putObject(KEY_MEDIA_PLAN).put(KEY_VERSION, PLAN_VERSION);
+        ObjectNode plan = facts.putObject(KEY_MEDIA_PLAN).put(KEY_VERSION, properties.isMediaAudioTextEnabled() ? PLAN_VERSION : LEGACY_PLAN_VERSION);
         var entries = plan.putArray(KEY_ENTRIES);
+        List<PortfolioAiVideoAudioContext.Source> audioSources = new ArrayList<>();
         for (JsonNode source : facts.path(KEY_SOURCES)) {
             if (!source.path(KEY_CAN_BIND).asBoolean() || !SOURCE_WORK.equals(source.path(KEY_KIND).asText())) { continue; }
-            WorkEntity work = works.selectById(Long.parseLong(source.path(KEY_SOURCE_ID).asText()));
+            WorkEntity work = works.selectPortfolioAiMediaSnapshot(Long.parseLong(source.path(KEY_SOURCE_ID).asText()));
             if (work == null || !WorkStatusDict.ACTIVE.getCode().equals(work.getStatus())
                     || !WorkAuditStatusDict.PASSED.getCode().equals(work.getAuditStatus())
                     || work.getDeleted() != null && work.getDeleted() != 0L) { throw unavailable(); }
@@ -70,9 +75,13 @@ public class PortfolioAiMediaPlanService {
                 if (head.contentLength() > DIRECT_MEDIA_MAX_BYTES) { throw unavailable(); }
                 entry.put(KEY_ROUTE, ROUTE_IMAGE).put(KEY_ESTIMATED_INPUT_TOKENS, IMAGE_ESTIMATED_INPUT_TOKENS);
             } else { throw unavailable(); }
+            if (properties.isMediaAudioTextEnabled() && ROUTE_VIDEO.equals(work.getMediaType())) {
+                audioSources.add(new PortfolioAiVideoAudioContext.Source(entry, work.getVideoAudioText()));
+            }
             // 新链路最终生成只消费媒体摘要，不把旧公开地址附在文字内容中。
             ((ObjectNode) source).remove(List.of(KEY_MEDIA_URL, KEY_COVER_URL));
         }
+        PortfolioAiVideoAudioContext.freeze(audioSources);
     }
 
     /** 帧列表必须完整、同源且有稳定对象键；实际对象再次由 Job 在调用前核验。 */

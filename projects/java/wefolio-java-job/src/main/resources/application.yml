@@ -161,6 +161,31 @@ virtual-payment-dispatch:
   # 单次 runtime 请求连接和读取超时，不在同一轮自动重试。
   request-timeout: ${VIRTUAL_PAYMENT_DISPATCH_REQUEST_TIMEOUT:30s}
 
+video-audio:
+  # 先完成数据库迁移并安装 FFmpeg，再开启；仅复用现有 TokenHub 密钥。
+  enabled: ${WEFOLIO_VIDEO_AUDIO_ENABLED:false}
+  api-key: ${TOKENHUB_API_KEY:}
+  ffmpeg-path: ${WEFOLIO_VIDEO_AUDIO_FFMPEG_PATH:/usr/bin/ffmpeg}
+  ffprobe-path: ${WEFOLIO_VIDEO_AUDIO_FFPROBE_PATH:/usr/bin/ffprobe}
+  total-timeout-seconds: ${WEFOLIO_VIDEO_AUDIO_TOTAL_TIMEOUT_SECONDS:180}
+  download-timeout-seconds: 60
+  probe-timeout-seconds: 10
+  extract-timeout-seconds: 30
+  http-timeout-seconds: 120
+  # 此限制属于单实例；同一作品另由 MySQL 会话锁跨实例互斥。
+  concurrency: ${WEFOLIO_VIDEO_AUDIO_CONCURRENCY:1}
+  max-duration-seconds: 600
+  max-video-bytes: 104857600
+  max-wav-bytes: 26214400
+  max-base64-bytes: 41943040
+  max-temp-bytes: 167772160
+  max-response-bytes: 2097152
+  max-text-code-points: 65536
+  max-text-bytes: 262144
+  # 每轮审核扫描或一次历史显式执行的独立 ASR 预算，不占 maxFrames。
+  max-requests-per-run: ${WEFOLIO_VIDEO_AUDIO_MAX_REQUESTS_PER_RUN:100}
+  max-audio-seconds-per-run: ${WEFOLIO_VIDEO_AUDIO_MAX_SECONDS_PER_RUN:3600}
+
 portfolio-ai:
   # 与 Runtime 共用全局开关，默认关闭；启动读取，重启生效。
   enabled: ${WEFOLIO_AI_ENABLED:false}

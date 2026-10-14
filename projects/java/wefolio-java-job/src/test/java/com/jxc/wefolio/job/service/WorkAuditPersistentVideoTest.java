@@ -30,16 +30,17 @@ class WorkAuditPersistentVideoTest {
     private final WorkAuditClaimTransactionService claims = mock(WorkAuditClaimTransactionService.class);
     private final TencentCiAuditClient client = mock(TencentCiAuditClient.class);
     private final VideoFrameStorageService storage = mock(VideoFrameStorageService.class);
+    private final VideoAudioTranscriptionService audio = mock(VideoAudioTranscriptionService.class);
     private final WorkAuditProperties properties = new WorkAuditProperties();
     private final WorkAuditService service = new WorkAuditService(works, tasks, claims, client, properties,
-            new AnimationFrameSampler(), new AnimationAuditResultAggregator(), mock(AnimationFrameCosService.class), storage);
+            new AnimationFrameSampler(), new AnimationAuditResultAggregator(), mock(AnimationFrameCosService.class), storage, audio);
 
     /** 缺少帧存储依赖时构造即失败，不留下可能在新调用点产生空指针的服务。 */
     @Test
     void constructorShouldRejectMissingVideoFrameStorage() {
         assertThatThrownBy(() -> new WorkAuditService(works, tasks, claims, client, properties,
                 new AnimationFrameSampler(), new AnimationAuditResultAggregator(),
-                mock(AnimationFrameCosService.class), null))
+                mock(AnimationFrameCosService.class), null, audio))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("持久视频审核需要注入 VideoFrameStorageService");
         verifyNoInteractions(works, tasks, claims, client, storage);
@@ -92,6 +93,74 @@ class WorkAuditPersistentVideoTest {
                 ? WorkAuditStatusDict.PASSED : WorkAuditStatusDict.REVIEW_REQUIRED), any(), eq("complete-manifest"));
         verify(storage, never()).cleanupOwnedManifest(anyString(), any(), any());
         verify(claims, never()).markVideoTaskSuccessAndUpdateWork(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    /** 两种通过结果都先提交；仅 PASS 在终态事务返回后生成文本。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"PASS", "REVIEW", "BLOCK"})
+    void onlyPassedVideoTranscribesAfterCommit(String resultCode) {
+        WorkAuditTaskEntity task = prepareQuery();
+        AuditResultDict resultCodeValue = AuditResultDict.valueOf(resultCode);
+        when(client.queryVideo("ci-job", true)).thenReturn(result(resultCodeValue, true));
+        when(storage.persist(any(), any(), any(), any(), anyInt(), any(), any())).thenReturn("manifest");
+        when(claims.completePersistentVideoWithFrames(eq(task), any(), any(), any(), any()))
+                .thenReturn(new PersistentVideoCompletion(true, null));
+        service.queryPendingVideoResults(1);
+        if (resultCodeValue == AuditResultDict.PASS) {
+            var order = inOrder(claims, audio);
+            order.verify(claims).completePersistentVideoWithFrames(eq(task), any(), eq(WorkAuditStatusDict.PASSED), any(), eq("manifest"));
+            order.verify(audio).transcribe(eq(11L), eq(task.getAuditRound()), eq(OBJECT_KEY), eq(task.getMediaSha256()), any(), any());
+        } else {
+            verify(audio, never()).transcribe(anyLong(), any(), any(), any(), any(), any());
+        }
+    }
+
+    /** ASR 失败不能落入审核 catch 分支改写已提交的 PASS。 */
+    @Test
+    void audioFailureDoesNotFailCommittedAudit() {
+        WorkAuditTaskEntity task = prepareQuery();
+        when(client.queryVideo("ci-job", true)).thenReturn(result(AuditResultDict.PASS, true));
+        when(storage.persist(any(), any(), any(), any(), anyInt(), any(), any())).thenReturn("manifest");
+        when(claims.completePersistentVideoWithFrames(eq(task), any(), any(), any(), any()))
+                .thenReturn(new PersistentVideoCompletion(true, null));
+        when(audio.transcribe(anyLong(), any(), any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("模拟音频服务异常"));
+        service.queryPendingVideoResults(1);
+        verify(claims, never()).failPersistentVideo(any(), any(), any());
+        verify(claims, never()).markVideoQueryFailureForNextRunAndKeepWorkAuditing(any(), any(), any(), any(), any(), any());
+        verify(storage, never()).cleanupOwnedManifest(eq("manifest"), any(), any());
+    }
+
+    /** 排空必须等同一调度回调内的转写结束，不能在审核提交后提前报告空闲。 */
+    @Test
+    void audioRemainsInsideScheduledLifecycleAfterAuditCommit() {
+        WorkAuditTaskEntity task = prepareQuery();
+        when(client.queryVideo("ci-job", true)).thenReturn(result(AuditResultDict.PASS, true));
+        when(storage.persist(any(), any(), any(), any(), anyInt(), any(), any())).thenReturn("manifest");
+        when(claims.completePersistentVideoWithFrames(eq(task), any(), any(), any(), any()))
+                .thenReturn(new PersistentVideoCompletion(true, null));
+        JobExecutionLifecycle lifecycle = new JobExecutionLifecycle();
+        when(audio.transcribe(anyLong(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            var paused = lifecycle.pause(java.time.Duration.ofMinutes(5));
+            assertThat(paused.status()).isEqualTo(JobExecutionLifecycle.Status.DRAINING);
+            assertThat(paused.activeTaskCount()).isEqualTo(1);
+            return VideoAudioTranscriptionService.Outcome.EMPTY;
+        });
+        assertThat(lifecycle.runScheduled(() -> service.queryPendingVideoResults(1))).isTrue();
+        assertThat(lifecycle.snapshot().status()).isEqualTo(JobExecutionLifecycle.Status.DISABLED);
+        assertThat(lifecycle.snapshot().activeTaskCount()).isZero();
+    }
+
+    /** 失效审核终态提交未成功时不能触发任何音频收费链路。 */
+    @Test
+    void staleCompletionDoesNotTranscribe() {
+        WorkAuditTaskEntity task = prepareQuery();
+        when(client.queryVideo("ci-job", true)).thenReturn(result(AuditResultDict.PASS, true));
+        when(storage.persist(any(), any(), any(), any(), anyInt(), any(), any())).thenReturn("manifest");
+        when(claims.completePersistentVideoWithFrames(eq(task), any(), any(), any(), any()))
+                .thenReturn(new PersistentVideoCompletion(false, null));
+        service.queryPendingVideoResults(1);
+        verify(audio, never()).transcribe(anyLong(), any(), any(), any(), any(), any());
     }
 
     /** 明确违规沿现有 REJECTED，不为 AI 上传帧。 */

@@ -11,6 +11,7 @@ import com.jxc.wefolio.job.service.PortfolioAiCallException;
 import com.jxc.wefolio.job.service.PortfolioAiMediaAccessService;
 import com.jxc.wefolio.job.service.PortfolioAiModelClient.CacheStatus;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -70,11 +71,13 @@ public class PortfolioAiMediaRepository {
     @Transactional(rollbackFor = Exception.class)
     public void cache(long workId, PortfolioAiMediaSummaryIdentity identity, String summary, LocalDateTime now) {
         List<CacheSource> rows = jdbc.query("""
-                SELECT media_object_key,media_sha256,video_frames_json FROM wf_work
+                SELECT media_object_key,media_sha256,video_frames_json,video_audio_text FROM wf_work
                 WHERE id=? AND deleted=0 AND status=? AND audit_status=? FOR UPDATE
-                """, (rs, n) -> new CacheSource(rs.getString(1), rs.getString(2), rs.getString(3)),
+                """, (rs, n) -> new CacheSource(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)),
                 workId, WORK_ACTIVE, WorkAuditStatusDict.PASSED.getCode());
         if (rows.isEmpty() || !sourceMatches(rows.getFirst(), identity)) { throw unavailable(); }
+        // 只有文字变化不使已接单任务失败，但其旧摘要不得覆盖较新文字的缓存。
+        if (!Objects.equals(identity.videoAudioFullHash(), PortfolioAiVideoAudioContext.fullHash(rows.getFirst().audioText()))) { return; }
         ObjectNode cache = StrictAiJson.mapper().createObjectNode().put(CACHE_KEY, identity.cacheKey())
                 .put(KEY_SOURCE_VERSION, identity.sourceVersion()).put(KEY_MODEL, identity.model())
                 .put(PROMPT_VERSION, identity.promptVersion()).put(KEY_ROUTE, identity.route())
@@ -319,5 +322,5 @@ public class PortfolioAiMediaRepository {
     /** 当前任务账本及请求人当日保守费用，不包含任何新预留。 */
     private record BudgetCapacity(PortfolioAiMediaBudget budget, long dailyTotal) { }
     /** 已锁定作品的当前源与帧清单。 */
-    private record CacheSource(String key, String sha, String manifest) { }
+    private record CacheSource(String key, String sha, String manifest, String audioText) { }
 }

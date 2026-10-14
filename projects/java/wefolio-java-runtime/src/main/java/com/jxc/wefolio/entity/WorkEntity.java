@@ -50,6 +50,11 @@ public class WorkEntity extends BaseEntity {
     /** 视频时长毫秒，图片为空 */
     private Integer durationMs;
 
+    /** 视频音频转写全文；NULL 表示尚未生成，空字符串表示已处理但没有文字，仅由专用仓储写入。 */
+    @ToString.Exclude
+    @TableField(select = false, updateStrategy = FieldStrategy.NEVER)
+    private String videoAudioText;
+
     /** 视频完整持久帧清单，由 Job 显式写入；普通作品修改不得覆盖清单，不保存临时签名。 */
     @TableField(updateStrategy = FieldStrategy.NEVER)
     private String videoFramesJson;

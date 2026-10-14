@@ -275,13 +275,13 @@ class PortfolioAiMediaAccessServiceTest {
         var repository = mock(PortfolioAiMediaRepository.class);
         var client = mock(PortfolioAiModelClient.class);
         var execution = new PortfolioAiMediaExecutionService(repository, service, client, properties);
-        when(client.summarize(any(), any(), anyList(), any())).thenReturn(new PortfolioAiModelClient.Completion(
+        when(client.summarize(any(), any(), anyList(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion(
                 "{\"summary\":\"舞台\",\"observations\":[],\"limitations\":[\"采样帧有盲区\"]}", 100L, 10L));
         when(client.textRequestBytes(any(), any())).thenReturn(1000);
         when(client.generateWithUsage(any(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 100L, 10L));
         assertThat(execution.generate(task(), frozen, () -> {})).isEqualTo("final");
         verify(client).summarize(any(), any(), argThat(inputs -> inputs.size() == 8
-                && inputs.getFirst().timeMs() == 1000L && inputs.getLast().timeMs() == 22000L), any());
+                && inputs.getFirst().timeMs() == 1000L && inputs.getLast().timeMs() == 22000L), any(), any());
         verify(storage, times(8)).signedGet(anyString(), any());
         verify(repository).cache(eq(9L), any(), anyString(), any());
     }

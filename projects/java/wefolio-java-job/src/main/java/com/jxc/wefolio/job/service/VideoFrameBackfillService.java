@@ -31,6 +31,8 @@ public class VideoFrameBackfillService {
     private static final String MANIFEST_SAVE = "MANIFEST_SAVE";
     /** 重建先验证旧对象边界，再以数据库 CAS 清空引用和派生摘要。 */
     private static final String MANIFEST_CLEAR = "MANIFEST_CLEAR";
+    private static final String AUDIO_PREFLIGHT = "AUDIO_PREFLIGHT";
+    private static final String AUDIO_TRANSCRIBE = "AUDIO_TRANSCRIBE";
     private static final String BACKFILL = "BACKFILL";
     private static final String REBUILD = "REBUILD";
     private static final String PROCESS_INTERRUPTED = "PROCESS_INTERRUPTED";
@@ -48,6 +50,8 @@ public class VideoFrameBackfillService {
     private final VideoFrameSnapshotClient snapshots;
     /** 单件期限、分页及远端边界。 */
     private final VideoFrameProperties properties;
+    /** 三入口共用转写，预算和临时资源由模块统一管理。 */
+    private final VideoAudioTranscriptionService audio;
 
     /**
      * 本次固定水位、游标和预算只留内存；重启后显式重新扫描，已发布清单自动跳过。
@@ -72,6 +76,7 @@ public class VideoFrameBackfillService {
     private Summary runScan(String executionId, int maxFrames, long afterWorkId, Long throughWorkId,
             VideoFrameBackfillLock.ExecutionLock executionLock, String queueId, boolean rebuild) {
         MutableSummary summary = new MutableSummary(maxFrames);
+        VideoAudioTranscriptionService.RunBudget audioRun = audio.newRun();
         long cursor = afterWorkId;
         long highWatermark = 0;
         String result = SUCCESS;
@@ -92,7 +97,7 @@ public class VideoFrameBackfillService {
                         throw new IllegalStateException("历史补帧线程已中断，本次扫描停止");
                     }
                     summary.scanned++;
-                    Outcome outcome = processOne(executionId, work, summary, executionLock, queueId, rebuild);
+                    Outcome outcome = processOne(executionId, work, summary, executionLock, queueId, rebuild, audioRun);
                     if (outcome == Outcome.BUDGET) {
                         summary.budgetExhausted = true;
                         result = BUDGET_EXHAUSTED;
@@ -111,7 +116,7 @@ public class VideoFrameBackfillService {
                 log.info("历史视频补帧分页完成: executionId={}, cursor={}, highWatermark={}, chargedFrames={}",
                         executionId, cursor, highWatermark, summary.chargedFrames);
             }
-            if (SUCCESS.equals(result) && summary.failed > 0) { result = COMPLETED_WITH_FAILURES; }
+            if (SUCCESS.equals(result) && (summary.failed > 0 || summary.audioBusy > 0)) { result = COMPLETED_WITH_FAILURES; }
         } catch (RuntimeException exception) {
             result = PROCESS_INTERRUPTED;
             log.error("历史视频补帧扫描中断: executionId={}, cursor={}, stage={}, exceptionType={}",
@@ -122,6 +127,19 @@ public class VideoFrameBackfillService {
                         + "succeeded={}, skipped={}, failed={}, chargedFrames={}, maxFrames={}",
                 executionId, result, highWatermark, cursor, completed.scanned(), completed.succeeded(),
                 completed.skipped(), completed.failed(), completed.chargedFrames(), maxFrames);
+        log.info("历史视频音频处理汇总: executionId={}, frameSucceeded={}, audioSaved={}, audioEmpty={}, "
+                        + "audioFailed={}, audioSkipped={}, audioBusy={}, audioBudgetDeferred={}, audioDisabled={}",
+                executionId, summary.frameSucceeded, summary.audioSaved, summary.audioEmpty, summary.audioFailed,
+                summary.audioSkipped, summary.audioBusy, summary.audioBudgetDeferred, summary.audioDisabled);
+        if (audioRun != null) {
+            log.info("历史视频音频计量汇总: executionId={}, reservedRequests={}, reservedSeconds={}, sentRequests={}, "
+                            + "knownTokens={}, usageUnknownCount={}, accountStopped={}", executionId, audioRun.requests(),
+                    audioRun.seconds(), audioRun.sentRequests(), audioRun.knownTokens(), audioRun.unknownUsageCount(), audioRun.stopped());
+        }
+        if (summary.audioFailed > 0 || summary.audioBusy > 0 || summary.audioBudgetDeferred > 0) {
+            log.warn("历史视频有转写未完成: executionId={}, audioFailed={}, audioBusy={}, audioBudgetDeferred={}",
+                    executionId, summary.audioFailed, summary.audioBusy, summary.audioBudgetDeferred);
+        }
         if (rebuild) {
             log.info("视频帧重建扫描结束: executionId={}, status={}, afterWorkId={}, highWatermark={}, nextAfterWorkId={}, "
                             + "succeeded={}, failed={}, chargedFrames={}",
@@ -131,34 +149,116 @@ public class VideoFrameBackfillService {
         return completed;
     }
 
-    /** 单件只提交一次；完整同源清单跳过，全部上传成功才写作品表。 */
+    /**
+     * 单件总期限包括重建预检；帧和转写分别计量，已发布帧不会因转写失败被清理。
+     * 重建预检持有同作品音频锁并复用本地下载，预算不足前不清旧内容。
+     */
     private Outcome processOne(String executionId, Work work, MutableSummary summary,
-            VideoFrameBackfillLock.ExecutionLock executionLock, String queueId, boolean rebuild) {
+            VideoFrameBackfillLock.ExecutionLock executionLock, String queueId, boolean rebuild,
+            VideoAudioTranscriptionService.RunBudget audioRun) {
+        Instant started = Instant.now();
+        Instant overallDeadline = started.plusSeconds(Math.max(15, properties.getBackfillItemSeconds())
+                + audio.audioTimeoutSeconds());
+        VideoAudioTranscriptionService.Preparation prepared = null;
+        String stage = SOURCE_VERIFY;
+        try {
+            if (!repository.ownedSource(work)) {
+                throw new VideoFrameProcessingException(SOURCE_VERIFY, "历史视频目录不属于作品作者");
+            }
+            VideoFrameSource source = storage.inspectSource(work.objectKey(), work.sha256());
+            Instant frameDeadline = earlier(started.plusSeconds(Math.max(15, properties.getBackfillItemSeconds())),
+                    overallDeadline);
+            if (!rebuild && storage.hasValidManifest(work.manifest(), source, work.id(), frameDeadline)) {
+                stage = AUDIO_TRANSCRIBE;
+                VideoAudioTranscriptionService.Outcome outcome = audio.transcribe(work.id(), audioRun,
+                        earlier(audio.audioDeadline(), overallDeadline), executionLock::checkHeld);
+                executionLock.checkHeld();
+                Outcome result = recordAudio(executionId, work.id(), outcome, summary, false);
+                if (result == Outcome.SKIPPED) {
+                    log.info("历史视频补帧跳过: executionId={}, workId={}, stage={}, reason=完整同源清单已存在",
+                            executionId, work.id(), SOURCE_VERIFY);
+                }
+                return result;
+            }
+            int count = VideoFramePolicy.calculateFrameCount(work.durationMs());
+            if (!summary.canReserve(count)) { return Outcome.BUDGET; }
+            if (rebuild) {
+                stage = FRAME_CLEANUP;
+                storage.validateOwnedManifestForCleanup(work.manifest(), source, work.id());
+                checkRemainingTime(frameDeadline);
+                stage = AUDIO_PREFLIGHT;
+                prepared = audio.prepare(work.id(), true, audioRun, overallDeadline, executionLock::checkHeld);
+                executionLock.checkHeld();
+                if (!prepared.ready() && prepared.outcome() != VideoAudioTranscriptionService.Outcome.DISABLED) {
+                    return recordAudio(executionId, work.id(), prepared.outcome(), summary, false);
+                }
+                // 音频预检使用独立音频时间，但不能延长从单件开始计算的总期限。
+                frameDeadline = earlier(Instant.now().plusSeconds(Math.max(15, properties.getBackfillItemSeconds())),
+                        overallDeadline);
+                storage.verifySource(source, frameDeadline);
+            }
+            Outcome frames = processFrames(executionId, work, summary, executionLock, queueId, rebuild,
+                    source, frameDeadline);
+            if (frames != Outcome.SUCCESS) { return frames; }
+            stage = AUDIO_TRANSCRIBE;
+            VideoAudioTranscriptionService.Outcome outcome = prepared == null
+                    ? audio.transcribe(work.id(), audioRun, earlier(audio.audioDeadline(), overallDeadline),
+                            executionLock::checkHeld)
+                    : audio.complete(prepared, overallDeadline);
+            executionLock.checkHeld();
+            return recordAudio(executionId, work.id(), outcome, summary, true);
+        } catch (RuntimeException exception) {
+            // 丢失历史锁时停止扫描；普通音频/预检异常只失败当前作品，不改审核状态。
+            if (exception instanceof VideoFrameProcessingException processing
+                    && EXECUTION_LOCK.equals(processing.getStage())) { throw exception; }
+            executionLock.checkHeld();
+            if (Thread.currentThread().isInterrupted()) { throw stopped(); }
+            String failureStage = exception instanceof VideoFrameProcessingException processing
+                    ? processing.getStage() : stage;
+            log.error("历史视频补帧失败: executionId={}, workId={}, stage={}, exceptionType={}",
+                    executionId, work.id(), failureStage, exception.getClass().getSimpleName());
+            if (AUDIO_PREFLIGHT.equals(stage) || AUDIO_TRANSCRIBE.equals(stage)) { summary.audioFailed++; }
+            return Outcome.FAILED;
+        } finally {
+            if (prepared != null) { prepared.close(); }
+        }
+    }
+
+    /** 转写与帧分别统计，文字失败不伪装为整件成功。 */
+    private Outcome recordAudio(String executionId, long workId, VideoAudioTranscriptionService.Outcome outcome,
+            MutableSummary summary, boolean framesSaved) {
+        log.info("历史视频转写结果: executionId={}, workId={}, outcome={}", executionId, workId, outcome);
+        return switch (outcome) {
+            case SAVED -> { summary.audioSaved++; yield Outcome.SUCCESS; }
+            case EMPTY -> { summary.audioEmpty++; yield Outcome.SUCCESS; }
+            case ALREADY_COMPLETE -> { summary.audioSkipped++; yield framesSaved ? Outcome.SUCCESS : Outcome.SKIPPED; }
+            case DISABLED -> { summary.audioDisabled++; yield framesSaved ? Outcome.SUCCESS : Outcome.SKIPPED; }
+            case BUSY, STALE -> { summary.audioBusy++; yield Outcome.SKIPPED; }
+            case BUDGET_EXHAUSTED -> { summary.audioBudgetDeferred++; yield Outcome.BUDGET; }
+            case FAILED -> { summary.audioFailed++; yield Outcome.FAILED; }
+            case READY -> throw new IllegalStateException("视频音频仍在预检阶段，不能作为最终结果");
+        };
+    }
+
+    /** 两阶段均受整体截止时间限制，不把分阶段上限累加成无限重试。 */
+    private Instant earlier(Instant left, Instant right) { return left.isBefore(right) ? left : right; }
+
+    /** 已完成准入后只执行帧链路，独立处理提交未知和对象清理。 */
+    private Outcome processFrames(String executionId, Work work, MutableSummary summary,
+            VideoFrameBackfillLock.ExecutionLock executionLock, String queueId, boolean rebuild,
+            VideoFrameSource source, Instant deadline) {
         Work target = work;
-        VideoFrameSource source = null;
         String manifest = null;
         String rawPrefix = null;
         String stage = SOURCE_VERIFY;
         String jobId = null;
         int count = 0;
         boolean providerFinished = false;
-        Instant deadline = Instant.now().plusSeconds(Math.max(15, properties.getBackfillItemSeconds()));
         try {
-            if (!repository.ownedSource(work)) {
-                throw new VideoFrameProcessingException(SOURCE_VERIFY, "历史视频目录不属于作品作者");
-            }
-            source = storage.inspectSource(work.objectKey(), work.sha256());
-            if (!rebuild && storage.hasValidManifest(work.manifest(), source, work.id(), deadline)) {
-                log.info("历史视频补帧跳过: executionId={}, workId={}, stage={}, reason=完整同源清单已存在",
-                        executionId, work.id(), SOURCE_VERIFY);
-                return Outcome.SKIPPED;
-            }
             count = VideoFramePolicy.calculateFrameCount(work.durationMs());
             // 预算不足时绝不能清掉下一件作品；真正可能计费的额度仍在提交前才消耗。
             if (rebuild) {
                 if (!summary.canReserve(count)) { return Outcome.BUDGET; }
-                stage = FRAME_CLEANUP;
-                storage.validateOwnedManifestForCleanup(work.manifest(), source, work.id());
                 stage = EXECUTION_LOCK;
                 executionLock.checkHeld();
                 checkRemainingTime(deadline);
@@ -206,6 +306,7 @@ public class VideoFrameBackfillService {
             cleanupPreviousInvalidManifest(executionId, target, source, manifest);
             cleanupRawQuietly(executionId, work.id(), rawPrefix, count);
             logSuccess(executionId, work.id(), count);
+            summary.frameSucceeded++;
             return Outcome.SUCCESS;
         } catch (Exception exception) {
             String failureStage = exception instanceof VideoFrameProcessingException processing
@@ -216,6 +317,7 @@ public class VideoFrameBackfillService {
                         cleanupPreviousInvalidManifest(executionId, target, source, manifest);
                         cleanupRawQuietly(executionId, work.id(), rawPrefix, count);
                         logSuccess(executionId, work.id(), count);
+                        summary.frameSucceeded++;
                         return Outcome.SUCCESS;
                     }
                     storage.cleanupOwnedManifest(manifest, source, work.id());
@@ -243,7 +345,9 @@ public class VideoFrameBackfillService {
     }
 
     /** 丢锁必须上抛到扫描循环停止整次执行。 */
-    private IllegalStateException stopped() { return new IllegalStateException("历史补帧执行锁失效或线程中断，本次扫描停止"); }
+    private VideoFrameProcessingException stopped() {
+        return new VideoFrameProcessingException(EXECUTION_LOCK, "历史补帧执行锁失效或线程中断，本次扫描停止");
+    }
 
     /** 成功回写后，只有本次清单仍被当前作品引用才清理旧失效清单。 */
     private void cleanupPreviousInvalidManifest(String executionId, Work work, VideoFrameSource source, String manifest) {
@@ -310,6 +414,15 @@ public class VideoFrameBackfillService {
         private long failed;
         private int chargedFrames;
         private boolean budgetExhausted;
+        /** 帧与音频结果独立，避免部分成功掩盖补偿需求。 */
+        private long frameSucceeded;
+        private long audioSaved;
+        private long audioEmpty;
+        private long audioFailed;
+        private long audioSkipped;
+        private long audioBusy;
+        private long audioBudgetDeferred;
+        private long audioDisabled;
         private MutableSummary(int maxFrames) { this.maxFrames = maxFrames; }
         /** 提交前保守预留；差值比较避免加法溢出。 */
         private boolean reserve(int count) {

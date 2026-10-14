@@ -2,8 +2,10 @@ package com.jxc.wefolio.service.portfolioai;
 
 /** 两独立工程共用的媒体冻结、摘要结构、持久帧及分流合同，版本和单作品上限固定。 */
 public final class PortfolioAiMediaContract {
-    /** 固定媒体合同：portfolio-media-v1。 */
-    public static final String PLAN_VERSION = "portfolio-media-v1";
+    /** 兼容已经入队的无转写媒体任务。 */
+    public static final String LEGACY_PLAN_VERSION = "portfolio-media-v1";
+    /** 冻结音频文字的新媒体合同。 */
+    public static final String PLAN_VERSION = "portfolio-media-v2";
     /** 固定媒体合同：video-frames-v1。 */
     public static final String FRAME_SCHEMA = "video-frames-v1";
     /** 固定媒体合同：media-summary-v1。 */

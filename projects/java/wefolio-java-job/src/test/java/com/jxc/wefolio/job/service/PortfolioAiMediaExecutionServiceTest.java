@@ -1,6 +1,9 @@
 package com.jxc.wefolio.job.service;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
 import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
@@ -51,7 +54,7 @@ class PortfolioAiMediaExecutionServiceTest {
         }
         entry.set(PortfolioAiFrameSelection.FIELD, PortfolioAiFrameSelection.select(frames));
         when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1, 2);
-        when(client.summarize(eq(task), any(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion(SUMMARY, 6000L, 200L));
+        when(client.summarize(eq(task), any(), any(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion(SUMMARY, 6000L, 200L));
         when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
         when(client.generateWithUsage(eq(task), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 1000L, 100L));
 
@@ -119,13 +122,13 @@ class PortfolioAiMediaExecutionServiceTest {
         properties.setMediaEnabled(true); AiGenerationTaskEntity task = task(); ObjectNode request = request();
         when(access.signedAfterVerification(eq(task), any())).thenReturn(List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame?signature=fake", 1000L)));
         when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1, 2);
-        when(client.summarize(eq(task), any(), anyList(), any())).thenReturn(new PortfolioAiModelClient.Completion(SUMMARY, null, null));
+        when(client.summarize(eq(task), any(), anyList(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion(SUMMARY, null, null));
         when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
         when(client.generateWithUsage(eq(task), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 1000L, 100L));
         assertThat(service.generate(task, request, checkOwned)).isEqualTo("final");
         var order = inOrder(repository, client);
         order.verify(repository).cached(eq(9L), any(), any()); order.verify(repository).reserve(eq(task), intThat(value -> value <= 5), any());
-        order.verify(client).summarize(eq(task), any(), anyList(), any());
+        order.verify(client).summarize(eq(task), any(), anyList(), any(), any());
         order.verify(repository).settle(eq(task), eq(1), isNull(), isNull(), isNull(), eq(CacheStatus.UNKNOWN), any());
         order.verify(repository).cache(eq(9L), any(), contains("婚礼舞台"), any());
         order.verify(repository).reserve(eq(task), anyInt(), any()); order.verify(client).generateWithUsage(eq(task), any(), any());
@@ -140,7 +143,7 @@ class PortfolioAiMediaExecutionServiceTest {
         when(access.signedAfterVerification(eq(task), any())).thenReturn(List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame", 1000L)));
         when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1, 2);
         when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
-        when(client.summarize(eq(task), any(), anyList(), any())).thenReturn(
+        when(client.summarize(eq(task), any(), anyList(), any(), any())).thenReturn(
                 new PortfolioAiModelClient.Completion(SUMMARY, 16000L, 100L, 12000L, CacheStatus.KNOWN_HIT));
         when(client.generateWithUsage(eq(task), any(), any())).thenReturn(
                 new PortfolioAiModelClient.Completion("final", 1000L, 100L, 800L, CacheStatus.KNOWN_HIT));
@@ -151,7 +154,7 @@ class PortfolioAiMediaExecutionServiceTest {
         var order = inOrder(repository, client);
         order.verify(repository).checkCapacity(eq(task), eq(6), eq(2), any());
         order.verify(repository).reserve(eq(task), eq(3), any());
-        order.verify(client).summarize(eq(task), any(), anyList(), any());
+        order.verify(client).summarize(eq(task), any(), anyList(), any(), any());
         order.verify(repository).settle(eq(task), eq(1), eq(16000L), eq(100L), eq(12000L), eq(CacheStatus.KNOWN_HIT), any());
         order.verify(repository).reserve(eq(task), eq(3), any());
         order.verify(client).generateWithUsage(eq(task), any(), any());
@@ -180,7 +183,7 @@ class PortfolioAiMediaExecutionServiceTest {
         when(repository.reserve(eq(task), anyInt(), any())).thenReturn(7);
         when(client.generateWithUsage(eq(task), any(), any())).thenReturn(
                 new PortfolioAiModelClient.Completion("final", 1000L, 100L, 800L, CacheStatus.KNOWN_HIT));
-        service.generate(task, request(), checkOwned); verify(client, never()).summarize(any(), any(), any(), any());
+        service.generate(task, request(), checkOwned); verify(client, never()).summarize(any(), any(), any(), any(), any());
         verify(repository).checkCapacity(eq(task), eq(3), eq(1), any());
         verify(repository, times(1)).reserve(eq(task), eq(3), any()); verify(access, times(2)).verify(eq(task), any());
         verify(repository).settle(eq(task), eq(7), eq(1000L), eq(100L), eq(800L), eq(CacheStatus.KNOWN_HIT), any());
@@ -201,7 +204,7 @@ class PortfolioAiMediaExecutionServiceTest {
         // 输入 1000 token、输出 32768 token 按广州全价共 9.25504 分，向上预留 10 分。
         verify(repository).checkCapacity(eq(task), eq(10), eq(1), any());
         verify(repository).reserve(eq(task), eq(10), any());
-        verify(client, never()).summarize(any(), any(), anyList(), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any(), any());
     }
 
     /** 新冻结 32768 输出上限扩大最终布局预留，媒体摘要仍保持原 4096 token 上限对应金额。 */
@@ -211,7 +214,7 @@ class PortfolioAiMediaExecutionServiceTest {
         when(access.signedAfterVerification(eq(task), any())).thenReturn(List.of(
                 new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame", 1000L)));
         when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1, 2);
-        when(client.summarize(eq(task), any(), anyList(), any())).thenReturn(
+        when(client.summarize(eq(task), any(), anyList(), any(), any())).thenReturn(
                 new PortfolioAiModelClient.Completion(SUMMARY, 16000L, 100L));
         when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
         when(client.generateWithUsage(eq(task), any(), any())).thenReturn(
@@ -223,7 +226,7 @@ class PortfolioAiMediaExecutionServiceTest {
         var order = inOrder(repository, client);
         order.verify(repository).checkCapacity(eq(task), eq(13), eq(2), any());
         order.verify(repository).reserve(eq(task), eq(3), any());
-        order.verify(client).summarize(eq(task), any(), anyList(), any());
+        order.verify(client).summarize(eq(task), any(), anyList(), any(), any());
         order.verify(repository).reserve(eq(task), eq(10), any());
         order.verify(client).generateWithUsage(eq(task), any(), any());
     }
@@ -242,7 +245,7 @@ class PortfolioAiMediaExecutionServiceTest {
         // 输入 1000 token、旧冻结输出 16384 token 按全价共 4.66752 分，仍预留 5 分。
         verify(repository).checkCapacity(eq(task), eq(5), eq(1), any());
         verify(repository).reserve(eq(task), eq(5), any());
-        verify(client, never()).summarize(any(), any(), anyList(), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any(), any());
     }
 
     /** 已接单的旧冻结 8192 输出上限继续按原价预留，不能因新默认值扩大该任务预算。 */
@@ -258,7 +261,7 @@ class PortfolioAiMediaExecutionServiceTest {
         // 输入 1000 token、旧冻结输出 8192 token 按全价共 2.37376 分，仍预留 3 分。
         verify(repository).checkCapacity(eq(task), eq(3), eq(1), any());
         verify(repository).reserve(eq(task), eq(3), any());
-        verify(client, never()).summarize(any(), any(), anyList(), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any(), any());
     }
 
     /** 返回前瞬时 HEAD 失败不丢失已付费摘要，下一代执行复用缓存而不重复理解。 */
@@ -274,7 +277,7 @@ class PortfolioAiMediaExecutionServiceTest {
             return null;
         }).when(access).verify(eq(task), any());
         when(access.signedAfterVerification(eq(task), any())).thenReturn(List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame", 0L)));
-        when(client.summarize(eq(task), any(), anyList(), any())).thenReturn(new PortfolioAiModelClient.Completion(SUMMARY, 100L, 100L));
+        when(client.summarize(eq(task), any(), anyList(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion(SUMMARY, 100L, 100L));
         when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
         when(client.generateWithUsage(eq(task), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 100L, 100L));
         assertThatThrownBy(() -> service.generate(task, request(), checkOwned)).isInstanceOfSatisfying(PortfolioAiCallException.class,
@@ -282,7 +285,7 @@ class PortfolioAiMediaExecutionServiceTest {
         assertThat(cached.get()).contains("婚礼舞台");
         task.setAttemptCount(2);
         assertThat(service.generate(task, request(), checkOwned)).isEqualTo("final");
-        verify(client, times(1)).summarize(eq(task), any(), anyList(), any());
+        verify(client, times(1)).summarize(eq(task), any(), anyList(), any(), any());
         verify(client, times(2)).generateWithUsage(eq(task), any(), any());
         verify(repository, times(3)).reserve(eq(task), anyInt(), any());
     }
@@ -292,7 +295,7 @@ class PortfolioAiMediaExecutionServiceTest {
         when(access.signedAfterVerification(eq(task), any())).thenReturn(List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://private.example/frame", null)));
         when(repository.reserve(eq(task), anyInt(), any())).thenThrow(new PortfolioAiCallException("SOURCE_UNAVAILABLE", "执行代次失效", false));
         assertThatThrownBy(() -> service.generate(task, request(), checkOwned)).hasMessage("执行代次失效");
-        verify(client, never()).summarize(any(), any(), anyList(), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any(), any());
         verify(client, never()).generateWithUsage(any(), any(), any());
     }
 
@@ -307,7 +310,7 @@ class PortfolioAiMediaExecutionServiceTest {
         assertThatThrownBy(() -> service.generate(task, request(), owner)).hasMessage("执行代次已失效");
         verify(repository).reserve(eq(task), anyInt(), any());
         verify(repository).releaseUnsent(task, 1);
-        verify(client, never()).summarize(any(), any(), anyList(), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any(), any());
         verify(client, never()).generateWithUsage(any(), any(), any());
     }
 
@@ -322,7 +325,7 @@ class PortfolioAiMediaExecutionServiceTest {
         });
         assertThatThrownBy(() -> service.generate(task, request(), owner)).hasMessage("执行代次已失效");
         verify(repository).releaseUnsent(task, 2);
-        verify(client, never()).summarize(any(), any(), anyList(), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any(), any());
         verify(client, never()).generateWithUsage(any(), any(), any());
     }
 
@@ -335,7 +338,7 @@ class PortfolioAiMediaExecutionServiceTest {
         });
         assertThatThrownBy(() -> service.generate(task, request(), checkOwned)).hasMessage("媒体处理超过任务期限");
         verify(repository).releaseUnsent(task, 1);
-        verify(client, never()).summarize(any(), any(), anyList(), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any(), any());
         verify(client, never()).generateWithUsage(any(), any(), any());
     }
 
@@ -343,7 +346,7 @@ class PortfolioAiMediaExecutionServiceTest {
     @Test void modelTransportFailureKeepsUnknownReservation() {
         AiGenerationTaskEntity task = task();
         when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1);
-        when(client.summarize(eq(task), any(), any(), any())).thenThrow(new IllegalStateException("模拟传输中断"));
+        when(client.summarize(eq(task), any(), any(), any(), any())).thenThrow(new IllegalStateException("模拟传输中断"));
         assertThatThrownBy(() -> service.generate(task, request(), checkOwned)).hasMessage("模拟传输中断");
         verify(repository, never()).settle(any(), anyInt(), any(), any(), any(), any(), any());
         verify(repository, never()).releaseUnsent(any(), anyInt());
@@ -363,7 +366,7 @@ class PortfolioAiMediaExecutionServiceTest {
         verify(repository).reserve(eq(task), eq(3), any());
         verify(repository, never()).settle(any(), anyInt(), any(), any(), any(), any(), any());
         verify(repository, never()).releaseUnsent(any(), anyInt());
-        verify(client, never()).summarize(any(), any(), anyList(), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any(), any());
     }
 
     /** 总步骤上界预算不足时，摘要、最终生成和逐次预留都还没有发生。 */
@@ -375,7 +378,7 @@ class PortfolioAiMediaExecutionServiceTest {
         verify(repository, never()).reserve(any(), anyInt(), any());
         verify(repository, never()).cache(anyLong(), any(), anyString(), any());
         verify(access, never()).signedAfterVerification(any(), any());
-        verify(client, never()).summarize(any(), any(), anyList(), any());
+        verify(client, never()).summarize(any(), any(), anyList(), any(), any());
         verify(client, never()).generateWithUsage(any(), any(), any());
     }
 
@@ -383,7 +386,7 @@ class PortfolioAiMediaExecutionServiceTest {
     @Test void lostLeaseAfterSummaryStillSettlesUsageButStopsNextPaidStage() {
         properties.setMediaEnabled(true); AiGenerationTaskEntity task = task(); Runnable owner = mock(Runnable.class);
         when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1);
-        when(client.summarize(eq(task), any(), anyList(), any())).thenAnswer(invocation -> {
+        when(client.summarize(eq(task), any(), anyList(), any(), any())).thenAnswer(invocation -> {
             doThrow(new PortfolioAiCallException("EXECUTION_INTERRUPTED", "执行代次已失效", false)).when(owner).run();
             return new PortfolioAiModelClient.Completion(SUMMARY, 100L, 10L, 80L, CacheStatus.KNOWN_HIT);
         });
@@ -428,5 +431,74 @@ class PortfolioAiMediaExecutionServiceTest {
     @Test void summaryIsClosedBoundedAndRemovesMediaLinks() {
         assertThatThrownBy(() -> PortfolioAiMediaExecutionService.validateSummary(SUMMARY.replace("\"limitations\"", "\"url\""))).hasMessageContaining("字段");
         assertThat(PortfolioAiMediaExecutionService.validateSummary(SUMMARY.replace("婚礼舞台", "https://secret.example/path 13800138000")).toString()).doesNotContain("secret.example", "13800138000");
+    }
+
+    /** v2 的两件口播分别进入各自摘要；最终任务携带全部冻结文字，后续更新不混入。 */
+    @Test void v2AudioIsScopedPerSummaryAndFrozenForFinalGeneration() {
+        var task = task(); ObjectNode request = request();
+        request.withObject("facts").withObject("mediaPlan").put("version", PortfolioAiMediaContract.PLAN_VERSION);
+        var sources = request.withObject("facts").withArray("sources");
+        sources.add(sources.get(0).deepCopy());
+        ((ObjectNode) sources.get(1)).put("sourceNo", 2).put("sourceId", "10");
+        var entries = request.withObject("facts").withObject("mediaPlan").withArray("entries");
+        ObjectNode first = (ObjectNode) entries.get(0); ObjectNode second = first.deepCopy().put("sourceNo", 2).put("workId", 10);
+        entries.add(second);
+        PortfolioAiVideoAudioContext.freeze(List.of(new PortfolioAiVideoAudioContext.Source(first, "第一件口播"),
+                new PortfolioAiVideoAudioContext.Source(second, "第二件口播")));
+        when(access.signedAfterVerification(eq(task), any())).thenReturn(List.of(new PortfolioAiModelClient.MediaInput("image_url", "https://example.test/frame", 1L)));
+        when(client.summarize(eq(task), any(), anyList(), any(), any())).thenAnswer(invocation -> {
+            JsonNode current = invocation.getArgument(3);
+            String expected = current.path("workId").asLong() == 9 ? "第一件口播" : "第二件口播";
+            assertThat(current.path(PortfolioAiVideoAudioContext.TEXT).asText()).isEqualTo(expected);
+            // 模拟原冻结对象在执行后发生更新，执行私有副本不能跟随变化。
+            first.put(PortfolioAiVideoAudioContext.TEXT, "后来补齐的内容");
+            return new PortfolioAiModelClient.Completion(SUMMARY, 1L, 1L);
+        });
+        when(client.generateWithUsage(eq(task), any(), any())).thenAnswer(invocation -> {
+            ObjectNode finalRequest = invocation.getArgument(1);
+            assertThat(finalRequest.path("facts").path("sources").findValuesAsText(PortfolioAiVideoAudioContext.TEXT))
+                    .containsExactly("第一件口播", "第二件口播");
+            return new PortfolioAiModelClient.Completion("final", 1L, 1L);
+        });
+        assertThat(service.generate(task, request, checkOwned)).isEqualTo("final");
+        verify(client, times(2)).summarize(eq(task), any(), anyList(), any(), any());
+    }
+
+    /** v1 明确保留无转写语义，附带未知音频字段也不会意外升级成 v2。 */
+    @Test void legacyTaskNeverUsesAudioEvenIfOptionalFieldsWerePresent() {
+        var task = task(); ObjectNode request = request();
+        ObjectNode entry = (ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0);
+        PortfolioAiVideoAudioContext.freeze(List.of(new PortfolioAiVideoAudioContext.Source(entry, "不应送入")));
+        when(repository.cached(eq(9L), any(), any())).thenReturn(SUMMARY);
+        when(client.generateWithUsage(eq(task), any(), any())).thenAnswer(invocation -> {
+            ObjectNode sent = invocation.getArgument(1);
+            assertThat(sent.toString()).doesNotContain("不应送入", PortfolioAiVideoAudioContext.TEXT);
+            return new PortfolioAiModelClient.Completion("final", 1L, 1L);
+        });
+        assertThat(service.generate(task, request, checkOwned)).isEqualTo("final");
+    }
+
+    /** 只按实际输入、节选提示与策略隔离摘要，数据库未选取的尾部只影响写缓存守卫。 */
+    @Test void audioChangesCacheIdentityButUnsentTailDoesNot() {
+        ObjectNode request = request(); ObjectNode entry = (ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0);
+        PortfolioAiVideoAudioContext.freeze(List.of(new PortfolioAiVideoAudioContext.Source(entry, "字".repeat(7000))));
+        String original = PortfolioAiMediaExecutionService.cacheKey(entry, request);
+        PortfolioAiVideoAudioContext.freeze(List.of(new PortfolioAiVideoAudioContext.Source(entry, "字".repeat(6000) + "尾".repeat(1000))));
+        assertThat(PortfolioAiMediaExecutionService.cacheKey(entry, request)).isEqualTo(original);
+        entry.put(PortfolioAiVideoAudioContext.TEXT, "不同文字");
+        assertThat(PortfolioAiMediaExecutionService.cacheKey(entry, request)).isNotEqualTo(original);
+        PortfolioAiVideoAudioContext.freeze(List.of(new PortfolioAiVideoAudioContext.Source(entry, "字".repeat(7000))));
+        entry.put(PortfolioAiVideoAudioContext.EXCERPT, false);
+        assertThat(PortfolioAiMediaExecutionService.cacheKey(entry, request)).isNotEqualTo(original);
+    }
+
+    /** 篡改音频合同在准入、权限、签名与任何模型动作之前失败。 */
+    @Test void corruptAudioContextIsRejectedBeforeAnyExternalBoundary() {
+        ObjectNode request = request(); request.withObject("facts").withObject("mediaPlan").put("version", PortfolioAiMediaContract.PLAN_VERSION);
+        ObjectNode entry = (ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0);
+        PortfolioAiVideoAudioContext.freeze(List.of(new PortfolioAiVideoAudioContext.Source(entry, "冻结文字")));
+        entry.put(PortfolioAiVideoAudioContext.TEXT, "篡改文字");
+        assertThatThrownBy(() -> service.generate(task(), request, checkOwned)).hasMessageContaining("音频文字上下文不合法");
+        verifyNoInteractions(repository, access, client);
     }
 }

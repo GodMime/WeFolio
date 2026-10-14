@@ -2,6 +2,7 @@ package com.jxc.wefolio.service.portfolioai;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
+import com.jxc.wefolio.config.PortfolioAiProperties;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.entity.WorkEntity;
 import com.jxc.wefolio.exception.BusinessException;
@@ -24,13 +25,15 @@ class PortfolioAiMediaPlanServiceTest {
     /** HEAD替身，不下载视频。 */
     private final CosService cos = mock(CosService.class);
     /** 被测媒体计划。 */
-    private final PortfolioAiMediaPlanService service = new PortfolioAiMediaPlanService(works, cos);
+    private final PortfolioAiProperties properties = new PortfolioAiProperties();
+    /** 被测冻结服务及其发布开关。 */
+    private final PortfolioAiMediaPlanService service = new PortfolioAiMediaPlanService(works, cos, properties);
     /** 当前有效视频基础资料。 */
     private WorkEntity video(Integer duration) {
         WorkEntity work = new WorkEntity(); work.setId(9L); work.setUserId(7L); work.setMediaType("VIDEO");
         work.setMediaObjectKey("OWNER/work/video/test.mp4"); work.setMediaSha256("sha"); work.setDurationMs(duration);
         work.setStatus(WorkStatusDict.ACTIVE.getCode()); work.setAuditStatus(WorkAuditStatusDict.PASSED.getCode()); work.setDeleted(0L);
-        when(works.selectById(9L)).thenReturn(work); return work;
+        when(works.selectPortfolioAiMediaSnapshot(9L)).thenReturn(work); return work;
     }
     /** 只有已授权可绑定WORK进入计划。 */
     private ObjectNode facts() {
@@ -199,5 +202,47 @@ class PortfolioAiMediaPlanServiceTest {
         }
         work.setVideoFramesJson(manifest(work, 8).replace("OWNER/others/", "OTHER/others/"));
         assertThatThrownBy(() -> service.freeze(StrictAiJson.mapper().createObjectNode(), facts())).hasMessageContaining("持久帧");
+    }
+
+    /** v2 在同一查询快照中读取文字，短视频和持久帧均保留原路线。 */
+    @ParameterizedTest
+    @CsvSource({"false,VIDEO", "true,FRAMES"})
+    void audioTextIsFrozenWithBothVideoRoutes(boolean withFrames, String route) {
+        properties.setMediaAudioTextEnabled(true);
+        WorkEntity work = video(15000); work.setVideoAudioText("主持口播😀，联系13812345678");
+        if (withFrames) { work.setVideoFramesJson(manifest(work, 8, 1000, 960, 540)); }
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 1000, "ETAG", 0));
+        ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+        var entry = facts.path("mediaPlan").path("entries").get(0);
+        assertThat(facts.path("mediaPlan").path("version").asText()).isEqualTo(PortfolioAiMediaContract.PLAN_VERSION);
+        assertThat(entry.path("route").asText()).isEqualTo(route);
+        assertThat(entry.path(PortfolioAiVideoAudioContext.TEXT).asText()).contains("主持口播😀", "已隐藏联系方式").doesNotContain("13812345678");
+        assertThat(entry.path(PortfolioAiVideoAudioContext.FULL_HASH).asText()).isEqualTo(PortfolioAiVideoAudioContext.fullHash(work.getVideoAudioText()));
+        work.setVideoAudioText("较新文字");
+        assertThat(entry.path(PortfolioAiVideoAudioContext.TEXT).asText()).doesNotContain("较新文字");
+        verify(works).selectPortfolioAiMediaSnapshot(9L); verify(works, never()).selectById(any());
+    }
+
+    /** 开关关闭仍产出 v1，已有数据库文字也不会静默送到旧消费者。 */
+    @Test void rolloutSwitchDefaultsToLegacyWithoutTranscript() {
+        video(15000).setVideoAudioText("尚未开启消费者合同");
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 1000, "ETAG", 0));
+        ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+        assertThat(facts.path("mediaPlan").path("version").asText()).isEqualTo(PortfolioAiMediaContract.LEGACY_PLAN_VERSION);
+        assertThat(facts.toString()).doesNotContain(PortfolioAiVideoAudioContext.TEXT, "尚未开启消费者合同");
+    }
+
+    /** v2 无字不阻断媒体，图片不会附带数据库中不合法的音频残留。 */
+    @Test void missingAndEmptyAudioTextDoNotChangeAvailabilityAndImageNeverProjectsText() {
+        properties.setMediaAudioTextEnabled(true);
+        for (String audio : new String[]{null, ""}) {
+            WorkEntity work = video(15000); work.setVideoAudioText(audio);
+            when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 1000, "ETAG", 0));
+            ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+            assertThat(facts.path("mediaPlan").path("entries").get(0).has(PortfolioAiVideoAudioContext.TEXT)).isFalse();
+        }
+        WorkEntity image = video(null); image.setMediaType("IMAGE"); image.setVideoAudioText("非法残留");
+        ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+        assertThat(facts.toString()).doesNotContain("非法残留", PortfolioAiVideoAudioContext.FULL_HASH);
     }
 }

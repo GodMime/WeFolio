@@ -126,6 +126,12 @@ public class WorkAuditService {
     /** 审核和历史共用的逐帧内存规范化与持久 COS 保存。 */
     private final VideoFrameStorageService videoFrameStorageService;
 
+    /** 审核成功提交之后补充文字，不能让音频异常进入审核失败分支。 */
+    private final VideoAudioTranscriptionService videoAudioTranscriptionService;
+
+    /** 同一调度轮次的所有视频共用收费预算，线程结束必须释放上下文。 */
+    private final ThreadLocal<VideoAudioTranscriptionService.RunBudget> audioRunBudget = new ThreadLocal<>();
+
     /** 本服务专用时钟，默认使用系统时区，可在包内测试注入。 */
     private Clock clock = Clock.systemDefaultZone();
 
@@ -147,7 +153,8 @@ public class WorkAuditService {
             AnimationFrameSampler animationFrameSampler,
             AnimationAuditResultAggregator animationResultAggregator,
             AnimationFrameCosService animationFrameCosService,
-            VideoFrameStorageService videoFrameStorageService
+            VideoFrameStorageService videoFrameStorageService,
+            VideoAudioTranscriptionService videoAudioTranscriptionService
     ) {
         if (videoFrameStorageService == null) {
             throw new IllegalArgumentException(VIDEO_FRAME_STORAGE_REQUIRED);
@@ -161,6 +168,7 @@ public class WorkAuditService {
         this.animationResultAggregator = animationResultAggregator;
         this.animationFrameCosService = animationFrameCosService;
         this.videoFrameStorageService = videoFrameStorageService;
+        this.videoAudioTranscriptionService = Objects.requireNonNull(videoAudioTranscriptionService);
     }
 
     /**
@@ -168,6 +176,7 @@ public class WorkAuditService {
      */
     public void runOneRound() {
         long startNanos = System.nanoTime();
+        audioRunBudget.set(videoAudioTranscriptionService.newRun());
         log.info("作品审核任务开始: 单轮视频查询任务上限={}, 单轮视频提交作品上限={}, 视频提交最大尝试次数={}, "
                         + "单轮图片审核作品上限={}, 图片最大尝试次数={}, 单轮动图审核任务上限={}, 动图最大尝试次数={}, "
                         + "视频主动查询最大次数={}",
@@ -187,6 +196,8 @@ public class WorkAuditService {
             auditPendingAnimations(properties.getMaxAuditAnimationPerRun());
             queryAllPendingVideoResults(properties.getMaxQueryVideoPerRun());
         } finally {
+            logAudioRunBudget();
+            audioRunBudget.remove();
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
             log.info("作品审核任务结束: 任务总耗时毫秒={}", durationMs);
         }
@@ -208,8 +219,24 @@ public class WorkAuditService {
      * @param now 本轮扫描截止时间，不作为领取时间
      */
     void queryPendingVideoResults(int limit, LocalDateTime now) {
-        taskRepository.findQueryableVideoTasks(limit, properties.getVideoQueryMaxAttempts(), now)
-                .forEach(this::queryOneVideoResult);
+        boolean ownsBudget = audioRunBudget.get() == null;
+        if (ownsBudget) { audioRunBudget.set(videoAudioTranscriptionService.newRun()); }
+        try {
+            taskRepository.findQueryableVideoTasks(limit, properties.getVideoQueryMaxAttempts(), now)
+                    .forEach(this::queryOneVideoResult);
+        } finally {
+            if (ownsBudget) { logAudioRunBudget(); audioRunBudget.remove(); }
+        }
+    }
+
+    /** 本轮安全计量不包含转写原文；未知费用不得记为零。 */
+    private void logAudioRunBudget() {
+        VideoAudioTranscriptionService.RunBudget run = audioRunBudget.get();
+        if (run != null) {
+            log.info("作品审核音频计量汇总: reservedRequests={}, reservedSeconds={}, sentRequests={}, "
+                            + "knownTokens={}, usageUnknownCount={}, accountStopped={}", run.requests(), run.seconds(),
+                    run.sentRequests(), run.knownTokens(), run.unknownUsageCount(), run.stopped());
+        }
     }
 
     /**
@@ -1010,6 +1037,26 @@ public class WorkAuditService {
                 cleanupUnpublishedManifest(task, source, manifest);
             }
         }
+        // Spring 短事务代理已经返回，审核终态已提交；此处不再使用终态审核租约。
+        if (committed && result != null && result.auditResult() == AuditResultDict.PASS) {
+            transcribePassedVideo(task);
+        }
+    }
+
+    /** 独立截止时间仍在原调度生命周期内，任何 ASR 异常都不能回退已通过的审核。 */
+    private void transcribePassedVideo(WorkAuditTaskEntity task) {
+        if (!MediaTypeDict.VIDEO.getCode().equals(task.getMediaType())) { return; }
+        try {
+            VideoAudioTranscriptionService.RunBudget run = audioRunBudget.get();
+            if (run == null) { run = videoAudioTranscriptionService.newRun(); }
+            VideoAudioTranscriptionService.Outcome outcome = videoAudioTranscriptionService.transcribe(
+                    task.getWorkId(), task.getAuditRound(), task.getMediaObjectKey(), task.getMediaSha256(),
+                    run, videoAudioTranscriptionService.audioDeadline());
+            log.info("审核通过后视频转写结束: workId={}, taskId={}, outcome={}", task.getWorkId(), task.getId(), outcome);
+        } catch (RuntimeException exception) {
+            log.warn("审核通过后视频转写失败，保持原审核结论: workId={}, taskId={}, exceptionType={}",
+                    task.getWorkId(), task.getId(), exception.getClass().getSimpleName());
+        }
     }
 
     /** 保存结果不确定时先确认作品未引用清单；数据库不可读时保留对象，避免删到有效帧。 */
@@ -1153,6 +1200,7 @@ public class WorkAuditService {
                     task.getWorkId(), task.getId(), task.getMediaObjectKey(), task.getCiJobId(), result.ciState(),
                     result.auditResult().getCode(), result.ciResult(), result.ciLabel(), result.ciScore(),
                     auditStatus.getCode(), nextQueryCount, properties.getVideoQueryMaxAttempts(), auditRejectReason);
+            if (result.auditResult() == AuditResultDict.PASS) { transcribePassedVideo(task); }
             return;
         }
         if (nextQueryCount >= properties.getVideoQueryMaxAttempts()) {

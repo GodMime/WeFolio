@@ -7,7 +7,11 @@ import com.jxc.wefolio.job.repo.PortfolioAiMediaBudget;
 import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
 import com.jxc.wefolio.job.model.PortfolioAiMediaSummaryIdentity;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
+import java.util.ArrayList;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.aop.framework.ProxyFactory;
@@ -42,9 +46,9 @@ class PortfolioAiMediaCapacityIntegrationTest {
                 fixture.repository().cache(entry.path("workId").asLong(), identity, summary, fixture.task().getCreatedAt());
             }
         }
-        doReturn(new PortfolioAiModelClient.Completion(summary, null, null)).when(fixture.client()).summarize(any(), any(), anyList(), any());
+        doReturn(new PortfolioAiModelClient.Completion(summary, null, null)).when(fixture.client()).summarize(any(), any(), anyList(), any(), any());
         assertThat(fixture.service().generate(fixture.task(), fixture.request(), () -> {})).isEqualTo("final");
-        verify(fixture.client(), times(cached ? 0 : 50)).summarize(any(), any(), anyList(), any());
+        verify(fixture.client(), times(cached ? 0 : 50)).summarize(any(), any(), anyList(), any(), any());
         verify(fixture.client()).generateWithUsage(any(), any(), any());
         PortfolioAiMediaBudget budget = budget(fixture);
         assertThat(budget.callCount()).isEqualTo(cached ? 1 : 51);
@@ -70,7 +74,7 @@ class PortfolioAiMediaCapacityIntegrationTest {
         assertThat(maximumRequired).isGreaterThan(300);
         assertThatThrownBy(() -> fixture.service().generate(fixture.task(), fixture.request(), () -> {}))
                 .isInstanceOfSatisfying(PortfolioAiCallException.class, failure -> assertThat(failure.getCode()).isEqualTo("MEDIA_BUDGET_EXHAUSTED"));
-        verify(fixture.client(), never()).summarize(any(), any(), anyList(), any());
+        verify(fixture.client(), never()).summarize(any(), any(), anyList(), any(), any());
         verify(fixture.client(), never()).generateWithUsage(any(), any(), any());
         assertThat(budget(fixture).callCount()).isZero();
         assertThat(fixture.jdbc().queryForObject("SELECT COUNT(*) FROM wf_work WHERE ai_media_summary_json IS NOT NULL", Integer.class)).isZero();
@@ -100,7 +104,7 @@ class PortfolioAiMediaCapacityIntegrationTest {
         jdbc.execute("CREATE ALIAS UTC_TIMESTAMP FOR 'com.jxc.wefolio.job.repo.PortfolioAiSqlClockTestSupport.utcTimestamp'");
         jdbc.execute("CREATE TABLE wf_user(id BIGINT PRIMARY KEY,status VARCHAR(32),deleted BIGINT)");
         jdbc.execute("CREATE TABLE wf_ai_generation_task(id BIGINT PRIMARY KEY,requested_by BIGINT,status VARCHAR(32),version INT,deleted BIGINT,created_at TIMESTAMP,attempt_count INT,media_budget_json CLOB,media_budget_unknown_count INT DEFAULT 0,updated_at TIMESTAMP)");
-        jdbc.execute("CREATE TABLE wf_work(id BIGINT PRIMARY KEY,media_object_key VARCHAR(512),media_sha256 VARCHAR(64),video_frames_json CLOB,status VARCHAR(32),audit_status VARCHAR(32),deleted BIGINT,updated_at TIMESTAMP,ai_media_summary_json CLOB,ai_media_summary_expires_at TIMESTAMP)");
+        jdbc.execute("CREATE TABLE wf_work(id BIGINT PRIMARY KEY,media_object_key VARCHAR(512),media_sha256 VARCHAR(64),video_frames_json CLOB,video_audio_text CLOB,status VARCHAR(32),audit_status VARCHAR(32),deleted BIGINT,updated_at TIMESTAMP,ai_media_summary_json CLOB,ai_media_summary_expires_at TIMESTAMP)");
         LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
         jdbc.update("INSERT INTO wf_user VALUES(2,'ACTIVE',0)");
         jdbc.update("INSERT INTO wf_ai_generation_task(id,requested_by,status,version,deleted,created_at,attempt_count) VALUES(1,2,'RUNNING',1,0,?,1)", now);
@@ -145,7 +149,7 @@ class PortfolioAiMediaCapacityIntegrationTest {
                 }
                 manifestJson = manifest.toString(); entry.put("manifestHash", PortfolioAiMediaAccessService.hash(manifestJson));
             }
-            jdbc.update("INSERT INTO wf_work VALUES(?,?,'sha',?,'ACTIVE','PASSED',0,?,NULL,NULL)", number, key, manifestJson, now);
+            jdbc.update("INSERT INTO wf_work VALUES(?,?,'sha',?,NULL,'ACTIVE','PASSED',0,?,NULL,NULL)", number, key, manifestJson, now);
         }
         var properties = new PortfolioAiProperties(); properties.setApiKey("test-fake-key");
         var proxy = new ProxyFactory(new PortfolioAiMediaRepository(jdbc, properties));
@@ -156,13 +160,73 @@ class PortfolioAiMediaCapacityIntegrationTest {
         var client = spy(new TokenHubPortfolioAiClient(properties));
         // 回归失效时也只使用本地模型返回替身，绝不因为准入缺失而意外访问真实供应商。
         doReturn(new PortfolioAiModelClient.Completion(maximumSummary("汉").toString(), null, null))
-                .when(client).summarize(any(), any(), anyList(), any());
+                .when(client).summarize(any(), any(), anyList(), any(), any());
         doReturn(new PortfolioAiModelClient.Completion("final", null, null)).when(client).generateWithUsage(any(), any(), any());
         var service = new PortfolioAiMediaExecutionService(repository, access, client, properties);
-        return new Fixture(jdbc, task, request, repository, client, service);
+        return new Fixture(jdbc, task, request, repository, client, service, properties);
     }
 
     /** 单场隔离数据库、真实估价客户端与模型传输替身。 */
     private record Fixture(JdbcTemplate jdbc, AiGenerationTaskEntity task, ObjectNode request,
-            PortfolioAiMediaRepository repository, TokenHubPortfolioAiClient client, PortfolioAiMediaExecutionService service) { }
+            PortfolioAiMediaRepository repository, TokenHubPortfolioAiClient client, PortfolioAiMediaExecutionService service, PortfolioAiProperties properties) { }
+
+    /** 五十来源的极端转义与 emoji 在真实请求构造、真实账本准入和缓存写入中完整走通。 */
+    @Test void fiftyAudioSourcesUseRealSerializedBytesInBothStages() {
+        Fixture fixture = fixture("FRAMES", false);
+        fixture.properties().setMediaTaskBudgetCents(1000);
+        fixture.properties().setMediaDailyBudgetCents(2000);
+        ObjectNode request = fixture.request();
+        request.withObject("facts").withObject("mediaPlan").put("version", PortfolioAiMediaContract.PLAN_VERSION);
+        List<PortfolioAiVideoAudioContext.Source> audio = new ArrayList<>();
+        String original = "😀\u0001\"\\".repeat(6000);
+        for (var entry : request.path("facts").path("mediaPlan").path("entries")) {
+            audio.add(new PortfolioAiVideoAudioContext.Source((ObjectNode) entry, original));
+            fixture.jdbc().update("UPDATE wf_work SET video_audio_text=? WHERE id=?", original, entry.path("workId").asLong());
+        }
+        PortfolioAiVideoAudioContext.freeze(audio);
+        var sent = org.mockito.ArgumentCaptor.forClass(ObjectNode.class);
+        assertThat(fixture.service().generate(fixture.task(), request, () -> {})).isEqualTo("final");
+        verify(fixture.client()).generateWithUsage(any(), sent.capture(), any());
+        int actualBytes = fixture.client().payload(fixture.task(), sent.getValue()).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        assertThat(fixture.client().textRequestBytes(fixture.task(), sent.getValue())).isEqualTo(actualBytes);
+        var recorded = budget(fixture);
+        long textCost = PortfolioAiMediaRepository.costCents(actualBytes, 8192);
+        assertThat(recorded.find(1, 51).reserved()).isEqualTo(textCost);
+        // 五十件均分后，每次摘要仍按帧与文字总输入向上取整。
+        assertThat(recorded.find(1, 1).reserved()).isEqualTo(5);
+        assertThat(recorded.callCount()).isEqualTo(51);
+        assertThat(sent.getValue().path("facts").path("sources").findValuesAsText(PortfolioAiVideoAudioContext.TEXT)).hasSize(50);
+    }
+
+    /** 音频新增预算能让原本足够的额度拒绝整任务，且拒绝发生于第一次付费前。 */
+    @Test void transcriptCostIsAdmittedBeforeFirstPaidCall() {
+        Fixture fixture = fixture("FRAMES", false);
+        fixture.properties().setMediaTaskBudgetCents(300);
+        fixture.request().withObject("facts").withObject("mediaPlan").put("version", PortfolioAiMediaContract.PLAN_VERSION);
+        List<PortfolioAiVideoAudioContext.Source> audio = new ArrayList<>();
+        for (var entry : fixture.request().path("facts").path("mediaPlan").path("entries")) {
+            audio.add(new PortfolioAiVideoAudioContext.Source((ObjectNode) entry, "\u0001".repeat(7000)));
+        }
+        PortfolioAiVideoAudioContext.freeze(audio);
+        assertThatThrownBy(() -> fixture.service().generate(fixture.task(), fixture.request(), () -> {}))
+                .isInstanceOfSatisfying(PortfolioAiCallException.class, failure -> assertThat(failure.getCode()).isEqualTo("MEDIA_BUDGET_EXHAUSTED"));
+        verify(fixture.client(), never()).summarize(any(), any(), anyList(), any(), any());
+        verify(fixture.client(), never()).generateWithUsage(any(), any(), any());
+        assertThat(budget(fixture).callCount()).isZero();
+    }
+
+    /** 单件六千控制字符必须计入摘要请求，不能仅在最终生成预算中补记。 */
+    @Test void fullPerWorkTranscriptIncreasesSummaryReservation() {
+        Fixture fixture = fixture("FRAMES", false);
+        var plan = fixture.request().withObject("facts").withObject("mediaPlan");
+        plan.put("version", PortfolioAiMediaContract.PLAN_VERSION);
+        ObjectNode entry = (ObjectNode) plan.withArray("entries").get(0);
+        plan.putArray("entries").add(entry);
+        var facts = fixture.request().withObject("facts");
+        var source = facts.path("sources").get(0);
+        facts.putArray("sources").add(source);
+        PortfolioAiVideoAudioContext.freeze(List.of(new PortfolioAiVideoAudioContext.Source(entry, "\u0001".repeat(7000))));
+        assertThat(fixture.service().generate(fixture.task(), fixture.request(), () -> {})).isEqualTo("final");
+        assertThat(budget(fixture).find(1, 1).reserved()).isEqualTo(8);
+    }
 }

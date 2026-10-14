@@ -7,6 +7,7 @@ import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
 import com.jxc.wefolio.job.model.PortfolioAiMediaSummaryIdentity;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import com.jxc.wefolio.service.portfolioai.AiPortfolioProtocol;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
@@ -57,13 +58,17 @@ public class PortfolioAiMediaExecutionService {
     /** 以 Runtime 已接单的冻结媒体版本为执行合同，不被 Job 局部开关撤销。 */
     public String generate(AiGenerationTaskEntity task, ObjectNode frozen, Runnable checkOwned) {
         checkOwned.run();
-        if (!PLAN_VERSION.equals(frozen.path(KEY_FACTS).path(KEY_MEDIA_PLAN).path(KEY_VERSION).asText())) {
+        String planVersion = frozen.path(KEY_FACTS).path(KEY_MEDIA_PLAN).path(KEY_VERSION).asText();
+        if (!PLAN_VERSION.equals(planVersion) && !LEGACY_PLAN_VERSION.equals(planVersion)) {
             throw failed(ERROR_CONTRACT_UNAVAILABLE, "真实媒体读取暂未启用");
         }
         ObjectNode request = frozen.deepCopy();
         JsonNode entries = request.path(KEY_FACTS).path(KEY_MEDIA_PLAN).path(KEY_ENTRIES);
         if (!entries.isArray() || entries.size() > AiPortfolioProtocol.limits().path(KEY_MAX_SOURCE_COUNT).asInt()) { throw failed(ERROR_MEDIA_INVALID, "媒体输入计划不合法"); }
         validateSelectedSources(request, entries);
+        try { PortfolioAiVideoAudioContext.validateAndNormalize(entries, PLAN_VERSION.equals(planVersion)); }
+        catch (AiProtocolException exception) { throw failed(ERROR_MEDIA_INVALID, exception.getMessage()); }
+        for (JsonNode entry : entries) { attachAudio(request, entry); }
         List<PreparedMedia> prepared = new ArrayList<>();
         ObjectNode upperBound = request.deepCopy();
         long requiredCents = 0;
@@ -98,7 +103,7 @@ public class PortfolioAiMediaExecutionService {
                 int call = repository.reserve(task, media.cents(), now());
                 Duration timeout = remainingBeforeSend(task, call, checkOwned);
                 // 发送失败/进程中断/未知usage均保留完整预留；绝不按未读到usage假设免费。
-                var completion = client.summarize(task, request, signed, timeout);
+                var completion = client.summarize(task, request, signed, entry, timeout);
                 repository.settle(task, call, completion.promptTokens(), completion.completionTokens(),
                         completion.cachedTokens(), completion.cacheStatus(), now());
                 checkOwned.run();
@@ -161,6 +166,11 @@ public class PortfolioAiMediaExecutionService {
 
     /** 从受限路线重新估算输入，不信任冻结 JSON 自报的估算数值。 */
     private static long estimatedSummaryInputTokens(JsonNode entry) {
+        return estimatedMediaInputTokens(entry) + PortfolioAiVideoAudioContext.inputTokenUpperBound(entry);
+    }
+
+    /** 媒体本身的保守上界独立于可选文字，均由实际路线重新计算。 */
+    private static long estimatedMediaInputTokens(JsonNode entry) {
         String route = entry.path(KEY_ROUTE).asText();
         if (ROUTE_IMAGE.equals(route)) { return IMAGE_ESTIMATED_INPUT_TOKENS; }
         if (ROUTE_FRAMES.equals(route)) {
@@ -227,7 +237,10 @@ public class PortfolioAiMediaExecutionService {
                 .put(KEY_MODEL, request.path(KEY_MODEL_CONFIG).path(KEY_MODEL).asText())
                 .put(KEY_SCHEMA_VERSION, SUMMARY_VERSION)
                 .put(SUMMARY_PROMPT_VERSION_FIELD, PortfolioAiMediaSummaryPrompt.version())
-                .put(KEY_ROUTE, entry.path(KEY_ROUTE).asText());
+                .put(KEY_ROUTE, entry.path(KEY_ROUTE).asText())
+                .put(PortfolioAiVideoAudioContext.INPUT_HASH, PortfolioAiVideoAudioContext.inputHash(entry.path(PortfolioAiVideoAudioContext.TEXT).asText("")))
+                .put(PortfolioAiVideoAudioContext.POLICY, entry.path(PortfolioAiVideoAudioContext.POLICY).asText(""))
+                .put(PortfolioAiVideoAudioContext.EXCERPT, entry.path(PortfolioAiVideoAudioContext.EXCERPT).asBoolean());
         if (ROUTE_FRAMES.equals(entry.path(KEY_ROUTE).asText())) {
             JsonNode input = entry.has(PortfolioAiFrameSelection.FIELD)
                     ? entry.path(PortfolioAiFrameSelection.FIELD).path(KEY_FRAMES) : entry.path(KEY_FRAMES);
@@ -248,7 +261,18 @@ public class PortfolioAiMediaExecutionService {
                 request.path(KEY_MODEL_CONFIG).path(KEY_MODEL).asText(), PortfolioAiMediaSummaryPrompt.version(),
                 entry.path(KEY_ROUTE).asText(), entry.path(KEY_MANIFEST_HASH).asText(),
                 entry.path(KEY_SOURCE_OBJECT_KEY).asText(), entry.path(KEY_SOURCE_ETAG).asText(),
-                entry.path(KEY_SOURCE_BYTES).asLong());
+                entry.path(KEY_SOURCE_BYTES).asLong(), entry.path(PortfolioAiVideoAudioContext.FULL_HASH)
+                        .asText(PortfolioAiVideoAudioContext.fullHash(null)));
+    }
+
+    /** 最终生成使用同一冻结文字；执行中不得查询并补入较新的转写。 */
+    private void attachAudio(ObjectNode request, JsonNode entry) {
+        for (JsonNode source : request.path(KEY_FACTS).path(KEY_SOURCES)) {
+            if (source.path(KEY_SOURCE_NO).asInt() == entry.path(KEY_SOURCE_NO).asInt()) {
+                PortfolioAiVideoAudioContext.project(entry, (ObjectNode) source);
+                return;
+            }
+        }
     }
 
     /** 摘要只能作为当前素材的参考事实，不改变原sourceNo或绑定句柄。 */
@@ -285,8 +309,7 @@ public class PortfolioAiMediaExecutionService {
         if (!node.isTextual() || node.asText().codePointCount(0, node.asText().length()) > maximum) {
             throw failed(ERROR_INVALID_SUMMARY, "媒体摘要文本超过限制");
         }
-        return node.asText().replaceAll("(?i)https?://[^\\s]+", "[已隐藏链接]")
-                .replaceAll("(?<![0-9])1[3-9][0-9]{9}(?![0-9])", "[已隐藏联系方式]");
+        return PortfolioAiVideoAudioContext.sanitize(node.asText());
     }
 
     /** 每个远端阶段重新计算不可延期的剩余期限。 */

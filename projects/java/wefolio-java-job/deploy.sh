@@ -61,6 +61,40 @@ echo ">>> [${DEPLOY_LABEL}] 准备远端目录 ${SERVER}:${REMOTE_DIR}/ ..."
 ssh "${SERVER}" "mkdir -p ${REMOTE_DIR}" || die "远端目录创建失败"
 elapsed
 
+# 音频转写依赖在覆盖 JAR 前检查。远端不读取或输出密钥，也不自动安装系统软件。
+echo ">>> [${DEPLOY_LABEL}] 检查音频转写运行依赖..."
+ssh "${SERVER}" 'bash -s' <<'AUDIO_PREFLIGHT' || die "FFmpeg 依赖检查失败，请先安装 FFmpeg 或配置有效绝对路径"
+set -e
+audio_env=/root/java/job/.env
+audio_enabled=false
+audio_ffmpeg=/usr/bin/ffmpeg
+audio_ffprobe=/usr/bin/ffprobe
+# 只解析三个非敏感配置项；禁止 source 整份环境文件或回显其内容。
+if [ -f "$audio_env" ]; then
+    while IFS='=' read -r audio_key audio_value; do
+        audio_value="${audio_value%$'\r'}"
+        audio_value="${audio_value#\"}"; audio_value="${audio_value%\"}"
+        audio_value="${audio_value#\'}"; audio_value="${audio_value%\'}"
+        case "$audio_key" in
+            WEFOLIO_VIDEO_AUDIO_ENABLED) audio_enabled="$audio_value" ;;
+            WEFOLIO_VIDEO_AUDIO_FFMPEG_PATH) audio_ffmpeg="$audio_value" ;;
+            WEFOLIO_VIDEO_AUDIO_FFPROBE_PATH) audio_ffprobe="$audio_value" ;;
+        esac
+    done < "$audio_env"
+fi
+if [ "$audio_enabled" = true ]; then
+    for audio_binary in "$audio_ffmpeg" "$audio_ffprobe"; do
+        case "$audio_binary" in /*) ;; *) exit 1 ;; esac
+        [ -x "$audio_binary" ] && [ -f "$audio_binary" ]
+        "$audio_binary" -version >/dev/null 2>&1
+    done
+    echo '视频音频依赖检查通过；应用启动时还会复查有效配置。'
+else
+    echo '视频音频开关未开启；启用时应用会验证 FFmpeg 绝对路径。'
+fi
+AUDIO_PREFLIGHT
+elapsed
+
 # === 4. 上传（服务仍在运行，先上传到临时文件）===
 echo ">>> [${DEPLOY_LABEL}] 上传 JAR 到 ${SERVER}:${REMOTE_DIR}/${UPLOAD_JAR_NAME} ..."
 scp "target/${JAR_NAME}" "${SERVER}:${REMOTE_DIR}/${UPLOAD_JAR_NAME}" || die "SCP 上传失败，请检查网络或 SSH 配置"

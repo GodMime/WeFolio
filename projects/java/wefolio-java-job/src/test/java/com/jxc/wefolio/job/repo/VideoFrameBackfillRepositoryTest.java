@@ -62,8 +62,12 @@ class VideoFrameBackfillRepositoryTest {
     @Test
     void savesWholeManifestWithoutChangingAuditOrFrontendDuration() {
         String manifest = "{\"complete\":true}";
+        jdbc.update("UPDATE wf_work SET video_audio_text='旧口播',ai_media_summary_json='旧摘要',ai_media_summary_expires_at=CURRENT_TIMESTAMP WHERE id=1");
         assertEquals(Boolean.TRUE, transaction.execute(status -> repository.saveManifest(work, manifest)));
         assertEquals(manifest, currentManifest());
+        assertNull(jdbc.queryForObject("SELECT video_audio_text FROM wf_work WHERE id=1", String.class));
+        assertNull(jdbc.queryForObject("SELECT ai_media_summary_json FROM wf_work WHERE id=1", String.class));
+        assertNull(jdbc.queryForObject("SELECT ai_media_summary_expires_at FROM wf_work WHERE id=1", LocalDateTime.class));
         assertEquals("PASSED", jdbc.queryForObject("SELECT audit_status FROM wf_work WHERE id=1", String.class));
         assertEquals(23000, jdbc.queryForObject("SELECT duration_ms FROM wf_work WHERE id=1", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT version FROM wf_work WHERE id=1", Integer.class));
@@ -155,12 +159,14 @@ class VideoFrameBackfillRepositoryTest {
     @Test
     void rebuildClearsManifestAndSummaryCacheWithoutChangingSourceOrAudit() {
         Work snapshot = savedWork(OLD_MANIFEST);
+        jdbc.update("UPDATE wf_work SET video_audio_text='旧口播' WHERE id=1");
 
         Work cleared = transaction.execute(status -> repository.clearManifestForRebuild(snapshot));
 
         assertEquals(new Work(snapshot.id(), snapshot.objectKey(), snapshot.sha256(), snapshot.durationMs(),
                 null, snapshot.version() + 1, snapshot.ownerCode()), cleared);
         assertNull(currentManifest());
+        assertNull(jdbc.queryForObject("SELECT video_audio_text FROM wf_work WHERE id=1", String.class));
         assertNull(jdbc.queryForObject("SELECT ai_media_summary_json FROM wf_work WHERE id=1", String.class));
         assertNull(jdbc.queryForObject("SELECT ai_media_summary_expires_at FROM wf_work WHERE id=1", LocalDateTime.class));
         assertEquals(1, jdbc.queryForObject("SELECT version FROM wf_work WHERE id=1", Integer.class));

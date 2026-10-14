@@ -27,6 +27,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -133,6 +134,46 @@ class WorkAuditServiceTest {
                 eq(108L), eq(18L), eq(1), anyString(),
                 eq(AuditResultDict.PASS), eq("Success"), eq(0), eq("Normal"), eq(0),
                 eq(List.<TencentCiAuditRisk>of()), eq("{}"), eq(WorkAuditStatusDict.PASSED), eq(null));
+    }
+
+    /** 旧 INTERVAL 通过同样补转写，AUDIO、待复核、拒绝和失效终态均排除。 */
+    @ParameterizedTest
+    @CsvSource({"VIDEO,PASS,true,true", "AUDIO,PASS,true,false", "VIDEO,REVIEW,true,false",
+            "VIDEO,BLOCK,true,false", "VIDEO,PASS,false,false"})
+    void legacyAuditAudioRunsOnlyAfterSuccessfulVideoPass(String mediaType, String resultCode,
+            boolean committed, boolean expectedAudio) {
+        WorkAuditTaskEntity task = videoTask(108L, 18L, 3);
+        task.setMediaType(mediaType);
+        WorkAuditWorkRepository works = mock(WorkAuditWorkRepository.class);
+        WorkAuditTaskRepository tasks = mock(WorkAuditTaskRepository.class);
+        WorkAuditClaimTransactionService claims = mock(WorkAuditClaimTransactionService.class);
+        TencentCiAuditClient client = mock(TencentCiAuditClient.class);
+        VideoAudioTranscriptionService audio = mock(VideoAudioTranscriptionService.class);
+        when(tasks.findQueryableVideoTasks(eq(1000), eq(120), any())).thenReturn(List.of(task));
+        when(tasks.claimVideoQuery(eq(108L), anyString(), any(), any(), eq(120))).thenReturn(true);
+        TencentCiAuditResult result = new TencentCiAuditResult("video-job-id", "Success",
+                AuditResultDict.valueOf(resultCode), 0, "Normal", 0, true, false, "{}");
+        when(client.queryVideo("video-job-id")).thenReturn(result);
+        when(client.queryAudio("video-job-id")).thenReturn(result);
+        when(claims.markVideoTaskSuccessAndUpdateWork(any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any())).thenReturn(committed);
+        when(audio.transcribe(anyLong(), any(), any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("模拟转写失败"));
+        WorkAuditService service = new WorkAuditService(works, tasks, claims, client, properties(),
+                new AnimationFrameSampler(), new AnimationAuditResultAggregator(), mock(AnimationFrameCosService.class),
+                mock(VideoFrameStorageService.class), audio);
+        service.queryPendingVideoResults(1000);
+        if (expectedAudio) {
+            InOrder order = inOrder(claims, audio);
+            order.verify(claims).markVideoTaskSuccessAndUpdateWork(any(), any(), any(), any(), any(), any(), any(),
+                    any(), any(), any(), any(), any(), any());
+            order.verify(audio).transcribe(eq(18L), eq(task.getAuditRound()), eq(task.getMediaObjectKey()),
+                    eq(task.getMediaSha256()), any(), any());
+        } else {
+            verify(audio, never()).transcribe(anyLong(), any(), any(), any(), any(), any());
+        }
+        verify(claims, never()).markVideoQueryFailureForNextRunAndKeepWorkAuditing(any(), any(), any(), any(), any(), any());
+        verify(claims, never()).markVideoTaskFailedAndUpdateWorkFailed(any(), any(), any(), any(), any(), any(), any());
     }
 
     /** 一轮任务必须按既定顺序执行各类审核链路。 */
@@ -1146,7 +1187,7 @@ class WorkAuditServiceTest {
             AnimationFrameCosService animationFrameCosService) {
         return new WorkAuditService(workRepository, taskRepository, claimTransactionService, auditClient, properties,
                 animationFrameSampler, animationResultAggregator, animationFrameCosService,
-                mock(VideoFrameStorageService.class));
+                mock(VideoFrameStorageService.class), mock(VideoAudioTranscriptionService.class));
     }
 
     private WorkAuditProperties properties() {
