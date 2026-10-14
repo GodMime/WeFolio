@@ -236,6 +236,21 @@ class TokenHubPortfolioAiClientTest {
         assertThat(client.mediaPayload(task(), request(), List.of(video)).path("messages").get(1).path("content").get(1).path("type").asText()).isEqualTo("video_url");
     }
 
+    /** 缓存提示词身份必须等于真实客户端三种摘要消息模板的哈希，不能维护独立的近似模板。 */
+    @Test void summaryPromptIdentityHashesActualClientPayloadTemplates() {
+        var client = new TokenHubPortfolioAiClient(properties());
+        var templates = StrictAiJson.mapper().createArrayNode();
+        for (var input : List.of(
+                new PortfolioAiModelClient.MediaInput("image_url", "https://template.invalid/media", 1L),
+                new PortfolioAiModelClient.MediaInput("image_url", "https://template.invalid/media", null),
+                new PortfolioAiModelClient.MediaInput("video_url", "https://template.invalid/media", null))) {
+            ObjectNode actual = client.mediaPayload(task(), request(), List.of(input));
+            templates.add(actual.retain("max_tokens", "messages"));
+        }
+        assertThat(PortfolioAiMediaSummaryPrompt.version())
+                .isEqualTo(PortfolioAiMediaContract.SUMMARY_VERSION + ":" + StrictAiJson.canonicalHash(templates));
+    }
+
     /** 模型图片输入接受持久帧固定上限，超限及空媒体统一报安全分类。 */
     @Test void multimediaCountLimitUsesTheSameContractAsPersistentFrames() {
         var client = new TokenHubPortfolioAiClient(properties());

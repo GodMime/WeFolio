@@ -253,7 +253,7 @@ public class PortfolioAiMediaRepository {
         return count;
     }
 
-    /** 元数据全部匹配才命中，修改模型、提示词、路线或帧策略不会复用旧摘要。 */
+    /** 源守卫与输入身份全部匹配才命中，模型、真实提示词、路线或实际帧变化均隔离旧摘要。 */
     private boolean identityMatches(ObjectNode value, PortfolioAiMediaSummaryIdentity identity) {
         return identity.cacheKey().equals(value.path(CACHE_KEY).asText())
                 && identity.sourceVersion().equals(value.path(KEY_SOURCE_VERSION).asText())

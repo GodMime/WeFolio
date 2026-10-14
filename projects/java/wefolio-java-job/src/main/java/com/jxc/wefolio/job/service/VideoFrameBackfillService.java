@@ -29,6 +29,10 @@ public class VideoFrameBackfillService {
     private static final String FRAME_UPLOAD = "FRAME_UPLOAD";
     private static final String FRAME_CLEANUP = "FRAME_CLEANUP";
     private static final String MANIFEST_SAVE = "MANIFEST_SAVE";
+    /** 重建先验证旧对象边界，再以数据库 CAS 清空引用和派生摘要。 */
+    private static final String MANIFEST_CLEAR = "MANIFEST_CLEAR";
+    private static final String BACKFILL = "BACKFILL";
+    private static final String REBUILD = "REBUILD";
     private static final String PROCESS_INTERRUPTED = "PROCESS_INTERRUPTED";
     private static final String EXECUTION_LOCK = "EXECUTION_LOCK";
     private static final String SUCCESS = "SUCCESS";
@@ -52,13 +56,31 @@ public class VideoFrameBackfillService {
      */
     public Summary run(String executionId, int maxFrames, VideoFrameBackfillLock.ExecutionLock executionLock,
             String queueId) {
+        return runScan(executionId, maxFrames, 0, null, executionLock, queueId, false);
+    }
+
+    /** 显式范围内逐件清空后重建，游标只用于手动接续扫描，不代表持久化任务恢复。 */
+    public Summary runRebuild(String executionId, int maxFrames, long afterWorkId, Long throughWorkId,
+            VideoFrameBackfillLock.ExecutionLock executionLock, String queueId) {
+        if (afterWorkId < 0 || throughWorkId != null && throughWorkId <= afterWorkId) {
+            throw new IllegalArgumentException("视频帧重建作品范围非法");
+        }
+        return runScan(executionId, maxFrames, afterWorkId, throughWorkId, executionLock, queueId, true);
+    }
+
+    /** 补帧与重建共用截图、特征提取、上传和发布流程；重建仅增加前置清理步骤。 */
+    private Summary runScan(String executionId, int maxFrames, long afterWorkId, Long throughWorkId,
+            VideoFrameBackfillLock.ExecutionLock executionLock, String queueId, boolean rebuild) {
         MutableSummary summary = new MutableSummary(maxFrames);
-        long cursor = 0;
+        long cursor = afterWorkId;
         long highWatermark = 0;
         String result = SUCCESS;
         try {
             executionLock.checkHeld();
             highWatermark = repository.highWatermark();
+            if (throughWorkId != null) { highWatermark = Math.min(highWatermark, throughWorkId); }
+            log.info("视频帧扫描开始: executionId={}, operation={}, afterWorkId={}, highWatermark={}, maxFrames={}",
+                    executionId, rebuild ? REBUILD : BACKFILL, afterWorkId, highWatermark, maxFrames);
             while (true) {
                 executionLock.checkHeld();
                 List<Work> page = repository.scan(cursor, highWatermark, properties.getBackfillBatchSize());
@@ -70,7 +92,7 @@ public class VideoFrameBackfillService {
                         throw new IllegalStateException("历史补帧线程已中断，本次扫描停止");
                     }
                     summary.scanned++;
-                    Outcome outcome = processOne(executionId, work, summary, executionLock, queueId);
+                    Outcome outcome = processOne(executionId, work, summary, executionLock, queueId, rebuild);
                     if (outcome == Outcome.BUDGET) {
                         summary.budgetExhausted = true;
                         result = BUDGET_EXHAUSTED;
@@ -100,12 +122,19 @@ public class VideoFrameBackfillService {
                         + "succeeded={}, skipped={}, failed={}, chargedFrames={}, maxFrames={}",
                 executionId, result, highWatermark, cursor, completed.scanned(), completed.succeeded(),
                 completed.skipped(), completed.failed(), completed.chargedFrames(), maxFrames);
+        if (rebuild) {
+            log.info("视频帧重建扫描结束: executionId={}, status={}, afterWorkId={}, highWatermark={}, nextAfterWorkId={}, "
+                            + "succeeded={}, failed={}, chargedFrames={}",
+                    executionId, result, afterWorkId, highWatermark, cursor, completed.succeeded(),
+                    completed.failed(), completed.chargedFrames());
+        }
         return completed;
     }
 
     /** 单件只提交一次；完整同源清单跳过，全部上传成功才写作品表。 */
     private Outcome processOne(String executionId, Work work, MutableSummary summary,
-            VideoFrameBackfillLock.ExecutionLock executionLock, String queueId) {
+            VideoFrameBackfillLock.ExecutionLock executionLock, String queueId, boolean rebuild) {
+        Work target = work;
         VideoFrameSource source = null;
         String manifest = null;
         String rawPrefix = null;
@@ -119,16 +148,38 @@ public class VideoFrameBackfillService {
                 throw new VideoFrameProcessingException(SOURCE_VERIFY, "历史视频目录不属于作品作者");
             }
             source = storage.inspectSource(work.objectKey(), work.sha256());
-            if (storage.hasValidManifest(work.manifest(), source, work.id(), deadline)) {
+            if (!rebuild && storage.hasValidManifest(work.manifest(), source, work.id(), deadline)) {
                 log.info("历史视频补帧跳过: executionId={}, workId={}, stage={}, reason=完整同源清单已存在",
                         executionId, work.id(), SOURCE_VERIFY);
                 return Outcome.SKIPPED;
             }
             count = VideoFramePolicy.calculateFrameCount(work.durationMs());
+            // 预算不足时绝不能清掉下一件作品；真正可能计费的额度仍在提交前才消耗。
+            if (rebuild) {
+                if (!summary.canReserve(count)) { return Outcome.BUDGET; }
+                stage = FRAME_CLEANUP;
+                storage.validateOwnedManifestForCleanup(work.manifest(), source, work.id());
+                stage = EXECUTION_LOCK;
+                executionLock.checkHeld();
+                checkRemainingTime(deadline);
+                stage = MANIFEST_CLEAR;
+                target = repository.clearManifestForRebuild(work);
+                if (target == null) {
+                    throw new VideoFrameProcessingException(MANIFEST_CLEAR, "作品源、版本或清单已变化，本次未清空作品");
+                }
+                log.info("视频帧重建清单已清空: executionId={}, workId={}, sourceVersion={}, previousVersion={}, clearedVersion={}",
+                        executionId, work.id(), source.sourceVersion(), work.version(), target.version());
+                stage = EXECUTION_LOCK;
+                executionLock.checkHeld();
+                stage = FRAME_CLEANUP;
+                storage.cleanupOwnedManifestStrict(work.manifest(), source, work.id(), deadline);
+                log.info("视频帧重建旧对象已删除: executionId={}, workId={}", executionId, work.id());
+            }
             String token = HISTORY_TOKEN + UUID.randomUUID();
             rawPrefix = storage.targetPrefix(source, work.id(), token) + RAW_DIRECTORY;
             stage = EXECUTION_LOCK;
             executionLock.checkHeld();
+            checkRemainingTime(deadline);
             stage = FRAME_SUBMIT;
             if (!summary.reserve(count)) {
                 log.error("历史视频补帧预算不足: executionId={}, workId={}, stage={}, chargedFrames={}, count={}, maxFrames={}",
@@ -149,10 +200,10 @@ public class VideoFrameBackfillService {
             stage = EXECUTION_LOCK;
             executionLock.checkHeld();
             stage = MANIFEST_SAVE;
-            if (!repository.saveManifest(work, manifest)) {
+            if (!repository.saveManifest(target, manifest)) {
                 throw new VideoFrameProcessingException(MANIFEST_SAVE, "作品源、版本或清单已变化，本次结果不覆盖当前作品");
             }
-            cleanupPreviousInvalidManifest(executionId, work, source, manifest);
+            cleanupPreviousInvalidManifest(executionId, target, source, manifest);
             cleanupRawQuietly(executionId, work.id(), rawPrefix, count);
             logSuccess(executionId, work.id(), count);
             return Outcome.SUCCESS;
@@ -162,7 +213,7 @@ public class VideoFrameBackfillService {
             if (manifest != null && source != null) {
                 try {
                     if (repository.manifestPublished(work.id(), manifest)) {
-                        cleanupPreviousInvalidManifest(executionId, work, source, manifest);
+                        cleanupPreviousInvalidManifest(executionId, target, source, manifest);
                         cleanupRawQuietly(executionId, work.id(), rawPrefix, count);
                         logSuccess(executionId, work.id(), count);
                         return Outcome.SUCCESS;
@@ -223,10 +274,7 @@ public class VideoFrameBackfillService {
             catch (IllegalStateException exception) {
                 throw new VideoFrameProcessingException(EXECUTION_LOCK, "执行锁已失效，本次扫描停止");
             }
-            if (Thread.currentThread().isInterrupted()
-                    || !Instant.now().plusSeconds(Math.max(1, properties.getRemoteTimeoutSeconds())).isBefore(deadline)) {
-                throw new VideoFrameProcessingException(PROCESS_INTERRUPTED, "历史截图超过期限或线程中断，本次不重提");
-            }
+            checkRemainingTime(deadline);
             if (snapshots.ready(jobId)) { return; }
             long sleepMillis = Math.min(Math.max(1, properties.getBackfillPollSeconds()) * 1000L,
                     Duration.between(Instant.now(), deadline).toMillis());
@@ -236,6 +284,14 @@ public class VideoFrameBackfillService {
                 Thread.currentThread().interrupt();
                 throw new VideoFrameProcessingException(PROCESS_INTERRUPTED, "历史截图等待被中断，本次不重提");
             }
+        }
+    }
+
+    /** 清空引用、提交付费截图及远端查询前保留一次完整调用时间，超期或关闭中断立即停止当前作品。 */
+    private void checkRemainingTime(Instant deadline) {
+        if (Thread.currentThread().isInterrupted()
+                || !Instant.now().plusSeconds(Math.max(1, properties.getRemoteTimeoutSeconds())).isBefore(deadline)) {
+            throw new VideoFrameProcessingException(PROCESS_INTERRUPTED, "历史截图超过期限或线程中断，本次不重提");
         }
     }
 
@@ -257,10 +313,12 @@ public class VideoFrameBackfillService {
         private MutableSummary(int maxFrames) { this.maxFrames = maxFrames; }
         /** 提交前保守预留；差值比较避免加法溢出。 */
         private boolean reserve(int count) {
-            if (count > maxFrames - chargedFrames) { return false; }
+            if (!canReserve(count)) { return false; }
             chargedFrames += count;
             return true;
         }
+        /** 破坏性重建前只检查剩余额度，不把尚未提交的截图记作可能已计费。 */
+        private boolean canReserve(int count) { return count <= maxFrames - chargedFrames; }
         private Summary snapshot() {
             return new Summary(scanned, succeeded, skipped, failed, chargedFrames, budgetExhausted);
         }

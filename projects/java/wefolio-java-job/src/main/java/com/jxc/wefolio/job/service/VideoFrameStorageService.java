@@ -4,10 +4,12 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.alibaba.fastjson2.JSONArray;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.jxc.wefolio.job.config.CosProperties;
 import com.jxc.wefolio.job.config.VideoFrameConfig;
 import com.jxc.wefolio.job.config.VideoFrameProperties;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
+import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.exception.CosServiceException;
 import com.qcloud.cos.exception.CosClientException;
@@ -35,6 +37,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** 审核与历史批处理共用的逐帧持久化，不读取原视频字节。 */
 @Service
@@ -57,12 +61,19 @@ public class VideoFrameStorageService {
     private static final String TASK_TOKEN_PATTERN = "[A-Za-z0-9_-]{1,96}";
     private static final String FRAME_NAME_FORMAT = "%04d.jpg";
     private static final String OWNED_PREFIX_PATTERN = "[a-f0-9]{64}/[A-Za-z0-9_-]{1,96}/[A-Za-z0-9_-]{1,96}/";
+    /** 强制重建只接受生产审核任务或随机历史任务的完整目录，不扩大到作品目录。 */
+    private static final Pattern STRICT_OWNED_PREFIX = Pattern.compile("([a-f0-9]{64})/([A-Za-z0-9_-]{1,96})/"
+            + "(?:audit-([1-9][0-9]*)|history-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})/");
+    /** 严格清理沿用媒体清单解析上限，异常消息不能携带原文。 */
+    private static final int CLEANUP_MANIFEST_MAX_BYTES = 128 * 1024;
+    private static final int CLEANUP_MANIFEST_MAX_DEPTH = 12;
     private static final String FRAME_LIST = "FRAME_LIST";
     private static final String FRAME_NORMALIZE = "FRAME_NORMALIZE";
     private static final long MAX_TOTAL_DOWNLOAD_BYTES = 64L * 1024 * 1024;
     private static final String FRAME_DOWNLOAD = "FRAME_DOWNLOAD";
     private static final String FRAME_UPLOAD = "FRAME_UPLOAD";
     private static final String FRAME_VERIFY = "FRAME_VERIFY";
+    private static final String FRAME_CLEANUP = "FRAME_CLEANUP";
     private static final String SOURCE_VERIFY = "SOURCE_VERIFY";
     private static final String PROCESS_INTERRUPTED = "PROCESS_INTERRUPTED";
     /** 只重读无计费的 HEAD，最多三次；付费截图提交保持一次。 */
@@ -87,6 +98,12 @@ public class VideoFrameStorageService {
     private static final String FIELD_WIDTH = "width";
     private static final String FIELD_HEIGHT = "height";
     private static final String FIELD_BYTES = "bytes";
+    /** 可选视觉特征，不改变原始完整帧清单与采样策略。 */
+    private static final String FIELD_VISUAL_FEATURES = "visualFeatures";
+    private static final String FIELD_FEATURE_VERSION = "version";
+    private static final String FIELD_DIFFERENCE_HASH = "dHash";
+    private static final String FIELD_LUMINANCE = "luminance";
+    private static final String FIELD_SHARPNESS = "sharpness";
     private static final String FIELD_FIRST_FRAME_MS = "firstFrameMs";
     private static final String FIELD_LAST_FRAME_MS = "lastFrameMs";
     private static final String FIELD_MAX_GAP_MS = "maxGapMs";
@@ -199,6 +216,10 @@ public class VideoFrameStorageService {
                 VideoFrameImageNormalizer.NormalizedImage image = normalizer.normalize(content);
                 checkDeadline(deadline);
                 String target = prefix + String.format(Locale.ROOT, FRAME_NAME_FORMAT, i + 1);
+                if (image.featureFailureType() != null) {
+                    log.warn("视频帧视觉特征计算失败，保留基础帧: workId={}, task={}, objectKey={}, timeMs={}, exceptionType={}",
+                            workId, taskToken, target, input.timeMs(), image.featureFailureType());
+                }
                 ObjectMetadata metadata = new ObjectMetadata();
                 metadata.setContentType(JPEG_TYPE);
                 metadata.setContentLength(image.bytes().length);
@@ -219,9 +240,19 @@ public class VideoFrameStorageService {
                 frame.put(FIELD_WIDTH, image.width());
                 frame.put(FIELD_HEIGHT, image.height());
                 frame.put(FIELD_BYTES, image.bytes().length);
+                if (image.visualFeatures() != null) {
+                    VideoFrameVisualFeatures features = image.visualFeatures();
+                    JSONObject featureJson = new JSONObject();
+                    featureJson.put(FIELD_FEATURE_VERSION, features.version());
+                    featureJson.put(FIELD_DIFFERENCE_HASH, features.dHash());
+                    featureJson.put(FIELD_LUMINANCE, features.luminance());
+                    featureJson.put(FIELD_SHARPNESS, features.sharpness());
+                    frame.put(FIELD_VISUAL_FEATURES, featureJson);
+                }
                 frames.add(frame);
-                log.info("视频持久帧写入: workId={}, task={}, objectKey={}, timeMs={}, bytes={}",
-                        workId, taskToken, target, input.timeMs(), image.bytes().length);
+                log.info("视频持久帧写入: workId={}, task={}, objectKey={}, timeMs={}, bytes={}, visualFeaturesPresent={}, featureFailureType={}",
+                        workId, taskToken, target, input.timeMs(), image.bytes().length,
+                        image.visualFeatures() != null, image.featureFailureType());
             }
             stage = SOURCE_VERIFY;
             verifySource(source, deadline);
@@ -303,6 +334,78 @@ public class VideoFrameStorageService {
             }
             cleanupObjects(keys);
         } catch (Exception exception) { log.warn("旧视频帧清理未通过作品所有权校验: workId={}", workId); }
+    }
+
+    /** 清空数据库引用前预检完整旧清单；空引用允许继续，非空坏清单必须先人工确认。 */
+    public void validateOwnedManifestForCleanup(String json, VideoFrameSource source, Long workId) {
+        strictCleanupKeys(json, source, workId);
+    }
+
+    /**
+     * 重建流程使用的严格删除：完整校验后只逐个删除清单内帧，任何非不存在异常均中断。
+     * 调用方须先解除对应数据库引用；本方法不猜测发布状态，也不列举或删除整个作品目录。
+     * 每次删除前检查线程中断及单件期限，并为完整的单次远端调用预留时间。
+     */
+    public void cleanupOwnedManifestStrict(String json, VideoFrameSource source, Long workId, Instant deadline) {
+        List<String> keys = strictCleanupKeys(json, source, workId);
+        for (String key : keys) {
+            checkDeadline(deadline);
+            try { cosClient.deleteObject(cos.getBucketName(), key); }
+            catch (CosServiceException exception) {
+                if (exception.getStatusCode() != 404) { throw strictCleanupFailure(workId, key, exception); }
+            } catch (RuntimeException exception) { throw strictCleanupFailure(workId, key, exception); }
+            log.info("视频帧重建旧帧删除完成: workId={}, objectKey={}", workId, key);
+        }
+    }
+
+    /** 旧源可以已被替换，但所有帧必须属于真实作者、当前作品和清单声明的独立任务目录。 */
+    private List<String> strictCleanupKeys(String json, VideoFrameSource source, Long workId) {
+        if (json == null) { return List.of(); }
+        try {
+            if (json.isBlank() || source == null || workId == null || workId <= 0) { throw new IllegalArgumentException(); }
+            JsonNode manifest = StrictAiJson.parseObject(json, CLEANUP_MANIFEST_MAX_BYTES, CLEANUP_MANIFEST_MAX_DEPTH);
+            String owner = sourceOwner(source.objectKey());
+            String ownerPrefix = owner + FRAME_DIRECTORY + workId + "/";
+            JsonNode prefixNode = manifest.path(FIELD_OBJECT_PREFIX);
+            JsonNode countNode = manifest.path(FIELD_FRAME_COUNT);
+            JsonNode frames = manifest.path(FIELD_FRAMES);
+            if (!VideoFramePolicy.SCHEMA_VERSION.equals(manifest.path(FIELD_SCHEMA_VERSION).asText())
+                    || !prefixNode.isTextual() || !prefixNode.textValue().startsWith(ownerPrefix)
+                    || !countNode.isIntegralNumber() || !countNode.canConvertToInt()
+                    || !PortfolioAiMediaContract.isSupportedFrameCount(countNode.intValue())
+                    || !frames.isArray() || frames.size() != countNode.intValue()) { throw new IllegalArgumentException(); }
+            String prefix = prefixNode.textValue();
+            Matcher owned = STRICT_OWNED_PREFIX.matcher(prefix.substring(ownerPrefix.length()));
+            if (!owned.matches() || !manifest.path(FIELD_SOURCE_VERSION).isTextual()
+                    || !owned.group(1).equals(manifest.path(FIELD_SOURCE_VERSION).textValue())
+                    || !manifest.path(FIELD_POLICY_VERSION).isTextual()
+                    || !owned.group(2).equals(manifest.path(FIELD_POLICY_VERSION).textValue())
+                    || !manifest.path(FIELD_SOURCE_OBJECT_KEY).isTextual()
+                    || !owner.equals(sourceOwner(manifest.path(FIELD_SOURCE_OBJECT_KEY).textValue()))) {
+                throw new IllegalArgumentException();
+            }
+            if (owned.group(3) != null) { Long.parseLong(owned.group(3)); }
+            HashSet<String> expected = new HashSet<>();
+            for (int number = 1; number <= countNode.intValue(); number++) {
+                expected.add(prefix + String.format(Locale.ROOT, FRAME_NAME_FORMAT, number));
+            }
+            List<String> keys = new ArrayList<>();
+            for (JsonNode frame : frames) {
+                JsonNode key = frame.path(FIELD_OBJECT_KEY);
+                if (!frame.isObject() || !key.isTextual() || !expected.remove(key.textValue())) {
+                    throw new IllegalArgumentException();
+                }
+                keys.add(key.textValue());
+            }
+            return keys;
+        } catch (Exception exception) { throw failure(FRAME_CLEANUP, "旧视频帧清单未通过严格所有权校验"); }
+    }
+
+    /** 删除异常只记录已验证的对象键和异常类型，不透出远端原文或签名信息。 */
+    private VideoFrameProcessingException strictCleanupFailure(Long workId, String key, RuntimeException exception) {
+        log.warn("视频帧重建旧帧删除失败: workId={}, objectKey={}, exceptionType={}",
+                workId, key, exception.getClass().getSimpleName());
+        return failure(FRAME_CLEANUP, "旧视频帧对象删除失败，重建已中止");
     }
 
     /** 按真实作品所有者和当前任务生成私有目录，禁止客户端控制路径。 */

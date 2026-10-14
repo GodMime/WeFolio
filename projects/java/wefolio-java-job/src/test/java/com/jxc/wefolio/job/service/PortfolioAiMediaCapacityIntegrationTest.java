@@ -37,7 +37,7 @@ class PortfolioAiMediaCapacityIntegrationTest {
         if (cached) {
             for (var entry : fixture.request().path("facts").path("mediaPlan").path("entries")) {
                 var identity = new PortfolioAiMediaSummaryIdentity(PortfolioAiMediaExecutionService.cacheKey(entry, fixture.request()),
-                        entry.path("sourceVersion").asText(), "glm-5.3-flash", "media-summary-v1", route,
+                        entry.path("sourceVersion").asText(), "glm-5.3-flash", PortfolioAiMediaSummaryPrompt.version(), route,
                         entry.path("manifestHash").asText(), entry.path("sourceObjectKey").asText(), "etag", 1000);
                 fixture.repository().cache(entry.path("workId").asLong(), identity, summary, fixture.task().getCreatedAt());
             }

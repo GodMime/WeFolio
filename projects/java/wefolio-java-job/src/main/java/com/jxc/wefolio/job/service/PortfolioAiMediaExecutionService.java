@@ -7,6 +7,7 @@ import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
 import com.jxc.wefolio.job.model.PortfolioAiMediaSummaryIdentity;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import com.jxc.wefolio.service.portfolioai.AiPortfolioProtocol;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Comparator;
 
 /** 按作品理解真实媒体、复用安全摘要，再以原v1协议生成；费用在每次发送前持久预留。 */
 @Service
@@ -34,6 +36,8 @@ public class PortfolioAiMediaExecutionService {
     private static final int OUTPUT_TOKENS = PortfolioAiProperties.MAX_OUTPUT_TOKENS;
     /** 原作品事实的媒体类型字段，不扩大v1输出合同。 */
     private static final String MEDIA_TYPE_FIELD = "mediaType";
+    /** 摘要缓存身份同时保留结构版本与实际请求提示词身份。 */
+    private static final String SUMMARY_PROMPT_VERSION_FIELD = "promptVersion";
     /** 摘要协议中的文本与条目上限，准入上界与实际校验保持一致。 */
     private static final int SUMMARY_MAX_CODE_POINTS = 600;
     private static final int ITEM_MAX_CODE_POINTS = 120;
@@ -164,6 +168,9 @@ public class PortfolioAiMediaExecutionService {
             if (!frames.isArray() || !isSupportedFrameCount(frames.size())) {
                 throw failed(ERROR_MEDIA_INVALID, "媒体帧输入数量不合法");
             }
+            if (entry.has(PortfolioAiFrameSelection.FIELD)) {
+                return PortfolioAiFrameSelection.estimatedInputTokens(entry.path(PortfolioAiFrameSelection.FIELD));
+            }
             return FRAMES_INPUT_OVERHEAD_TOKENS + FRAME_ESTIMATED_INPUT_TOKENS * frames.size();
         }
         JsonNode duration = entry.path(KEY_DURATION_MS);
@@ -213,17 +220,32 @@ public class PortfolioAiMediaExecutionService {
         }
     }
 
-    /** 摘要按源、模型、提示词、帧/路线策略复用；标题、说明、样式不进入缓存身份。 */
+    /** 摘要按源、模型、真实提示词及实际有序输入复用；选帧策略和预算元数据不影响等价输入。 */
     static String cacheKey(JsonNode entry, JsonNode request) {
-        return PortfolioAiMediaAccessService.hash(entry.path(KEY_SOURCE_VERSION).asText() + "\n"
-                + request.path(KEY_MODEL_CONFIG).path(KEY_MODEL).asText() + "\n" + SUMMARY_VERSION + "\n"
-                + entry.path(KEY_ROUTE).asText() + "\n" + entry.path(KEY_MANIFEST_HASH).asText());
+        ObjectNode identity = StrictAiJson.mapper().createObjectNode()
+                .put(KEY_SOURCE_VERSION, entry.path(KEY_SOURCE_VERSION).asText())
+                .put(KEY_MODEL, request.path(KEY_MODEL_CONFIG).path(KEY_MODEL).asText())
+                .put(KEY_SCHEMA_VERSION, SUMMARY_VERSION)
+                .put(SUMMARY_PROMPT_VERSION_FIELD, PortfolioAiMediaSummaryPrompt.version())
+                .put(KEY_ROUTE, entry.path(KEY_ROUTE).asText());
+        if (ROUTE_FRAMES.equals(entry.path(KEY_ROUTE).asText())) {
+            JsonNode input = entry.has(PortfolioAiFrameSelection.FIELD)
+                    ? entry.path(PortfolioAiFrameSelection.FIELD).path(KEY_FRAMES) : entry.path(KEY_FRAMES);
+            List<JsonNode> ordered = new ArrayList<>(); input.forEach(ordered::add);
+            ordered.sort(Comparator.comparingLong(frame -> frame.path(KEY_TIME_MS).asLong()));
+            var frames = identity.putArray(KEY_FRAMES);
+            for (JsonNode frame : ordered) {
+                frames.addObject().put(KEY_OBJECT_KEY, frame.path(KEY_OBJECT_KEY).asText())
+                        .put(KEY_BYTES, frame.path(KEY_BYTES).asLong()).put(KEY_TIME_MS, frame.path(KEY_TIME_MS).asLong());
+            }
+        }
+        return StrictAiJson.canonicalHash(identity);
     }
 
     /** 缓存身份独立于作品帧清单，额外源字段仅用于写入时的守卫。 */
     private static PortfolioAiMediaSummaryIdentity cacheIdentity(JsonNode entry, JsonNode request) {
         return new PortfolioAiMediaSummaryIdentity(cacheKey(entry, request), entry.path(KEY_SOURCE_VERSION).asText(),
-                request.path(KEY_MODEL_CONFIG).path(KEY_MODEL).asText(), SUMMARY_VERSION,
+                request.path(KEY_MODEL_CONFIG).path(KEY_MODEL).asText(), PortfolioAiMediaSummaryPrompt.version(),
                 entry.path(KEY_ROUTE).asText(), entry.path(KEY_MANIFEST_HASH).asText(),
                 entry.path(KEY_SOURCE_OBJECT_KEY).asText(), entry.path(KEY_SOURCE_ETAG).asText(),
                 entry.path(KEY_SOURCE_BYTES).asLong());

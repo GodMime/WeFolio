@@ -6,6 +6,7 @@ import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
 import com.jxc.wefolio.job.service.PortfolioAiModelClient.CacheStatus;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -38,6 +39,81 @@ class PortfolioAiMediaExecutionServiceTest {
                           "mediaPlan":{"version":"portfolio-media-v1","entries":[{"sourceNo":1,"workId":9,"sourceVersion":"source","route":"FRAMES","manifestHash":"frames","frames":[{},{},{},{},{},{},{},{}]}]}}}
                 """, 10000, 16);
     }
+
+    /** 准入按真实精选分辨率预算，完整二十四帧不会被重复按旧全部输入预留。 */
+    @Test void selectedHighResolutionFramesReserveThreeCentsInsteadOfFive() {
+        AiGenerationTaskEntity task = task(); ObjectNode request = request();
+        ObjectNode entry = (ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0);
+        var frames = entry.putArray("frames");
+        for (int i = 0; i < 24; i++) {
+            frames.addObject().put("objectKey", "OWNER/others/video-frames/9/" + i + ".jpg")
+                    .put("timeMs", i * 1000).put("bytes", 1000).put("width", 960).put("height", 540);
+        }
+        entry.set(PortfolioAiFrameSelection.FIELD, PortfolioAiFrameSelection.select(frames));
+        when(repository.reserve(eq(task), anyInt(), any())).thenReturn(1, 2);
+        when(client.summarize(eq(task), any(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion(SUMMARY, 6000L, 200L));
+        when(client.textRequestBytes(eq(task), any())).thenReturn(1000);
+        when(client.generateWithUsage(eq(task), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 1000L, 100L));
+
+        assertThat(service.generate(task, request, checkOwned)).isEqualTo("final");
+
+        verify(repository).checkCapacity(eq(task), eq(6), eq(2), any());
+        verify(repository, times(2)).reserve(eq(task), eq(3), any());
+        verify(repository).settle(eq(task), eq(1), eq(6000L), eq(200L), isNull(), eq(CacheStatus.UNKNOWN), any());
+        assertThat(entry.path("frames")).hasSize(24);
+    }
+
+    /** 同提示词下实际发送相同八帧时新旧计划复用缓存，策略和预算元数据不改变身份。 */
+    @Test void equivalentLegacyAndSelectedInputsShareCacheIdentity() {
+        ObjectNode request = request(); ObjectNode entry = (ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0);
+        var candidates = entry.putArray("frames");
+        for (int i = 7; i >= 0; i--) {
+            candidates.addObject().put("objectKey", "OWNER/others/video-frames/9/" + i + ".jpg")
+                    .put("timeMs", i * 1000).put("bytes", 1000).put("width", 960).put("height", 540);
+        }
+        String legacy = PortfolioAiMediaExecutionService.cacheKey(entry, request);
+        ObjectNode selection = PortfolioAiFrameSelection.select(candidates);
+        entry.set(PortfolioAiFrameSelection.FIELD, selection);
+        assertThat(PortfolioAiMediaExecutionService.cacheKey(entry, request)).isEqualTo(legacy);
+        assertThat(PortfolioAiMediaExecutionService.cacheKey(
+                StrictAiJson.parseObject(entry.toString(), 128 * 1024, 12), request)).isEqualTo(legacy);
+        // 本断言只验证缓存投影；不合法计划的准入与错误语义由真实 Access 测试覆盖。
+        selection.put("policyVersion", "future-policy").put("estimatedInputTokens", 1);
+        assertThat(PortfolioAiMediaExecutionService.cacheKey(entry, request)).isEqualTo(legacy);
+    }
+
+    /** 仅实际模型输入子集变化时隔离缓存，完整清单保护仍由缓存身份中的 manifestHash 负责。 */
+    @Test void selectedInputSubsetChangesCacheIdentity() {
+        ObjectNode request = request(); ObjectNode entry = (ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0);
+        var candidates = entry.putArray("frames");
+        for (int i = 0; i < 24; i++) {
+            candidates.addObject().put("objectKey", "OWNER/others/video-frames/9/" + i + ".jpg")
+                    .put("timeMs", i * 1000).put("bytes", 1000).put("width", 960).put("height", 540);
+        }
+        String complete = PortfolioAiMediaExecutionService.cacheKey(entry, request);
+        entry.set(PortfolioAiFrameSelection.FIELD, PortfolioAiFrameSelection.select(candidates));
+        String highResolution = PortfolioAiMediaExecutionService.cacheKey(entry, request);
+        assertThat(highResolution).isNotEqualTo(complete);
+        for (var candidate : candidates) { ((ObjectNode) candidate).put("width", 512).put("height", 288); }
+        entry.set(PortfolioAiFrameSelection.FIELD, PortfolioAiFrameSelection.select(candidates));
+        assertThat(PortfolioAiMediaExecutionService.cacheKey(entry, request)).isEqualTo(complete);
+    }
+
+    /** 帧身份由对象键、字节和真实时刻确定，不因 JSON 属性顺序或尺寸元数据重复付费。 */
+    @Test void actualFrameObjectBytesAndTimeDetermineCacheIdentity() {
+        ObjectNode request = request(); ObjectNode entry = (ObjectNode) request.path("facts").path("mediaPlan").path("entries").get(0);
+        var frame = entry.putArray("frames").addObject().put("objectKey", "OWNER/frame.jpg").put("bytes", 1000).put("timeMs", 1000);
+        String original = PortfolioAiMediaExecutionService.cacheKey(entry, request);
+        frame.put("width", 960).put("height", 540);
+        assertThat(PortfolioAiMediaExecutionService.cacheKey(entry, request)).isEqualTo(original);
+        for (String field : List.of("bytes", "timeMs")) {
+            frame.put(field, 2000);
+            assertThat(PortfolioAiMediaExecutionService.cacheKey(entry, request)).isNotEqualTo(original);
+            frame.put(field, 1000);
+        }
+        frame.put("objectKey", "OWNER/replaced.jpg");
+        assertThat(PortfolioAiMediaExecutionService.cacheKey(entry, request)).isNotEqualTo(original);
+    }
     /** 合法摘要可缓存，未知用量继续保留预留；最终生成仍使用原协议文本。 */
     @Test void understandingPrecedesGenerationAndUnknownUsageKeepsReservedAmount() {
         properties.setMediaEnabled(true); AiGenerationTaskEntity task = task(); ObjectNode request = request();
@@ -54,6 +130,8 @@ class PortfolioAiMediaExecutionServiceTest {
         order.verify(repository).cache(eq(9L), any(), contains("婚礼舞台"), any());
         order.verify(repository).reserve(eq(task), anyInt(), any()); order.verify(client).generateWithUsage(eq(task), any(), any());
         order.verify(repository).settle(eq(task), eq(2), eq(1000L), eq(100L), isNull(), eq(CacheStatus.UNKNOWN), any());
+        verify(repository).cache(eq(9L), argThat(identity -> identity.promptVersion().equals(PortfolioAiMediaSummaryPrompt.version())
+                && identity.manifestHash().equals("frames")), contains("婚礼舞台"), any());
         assertThat(request.toString()).doesNotContain("mediaSummary", "signature=fake");
     }
     /** 两个付费阶段均传递缓存命中量，但准入及发送前仍保留全价金额。 */

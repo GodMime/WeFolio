@@ -5,6 +5,7 @@ import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.exception.CosServiceException;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,10 @@ public class PortfolioAiMediaAccessService {
     private static final long MIN_SIGN_SECONDS = 180;
     /** 签名到发送及模型读取的前置余量，单位为秒。 */
     private static final long SIGN_MARGIN_SECONDS = 60;
+    /** 非法冻结选择与真实资产缺失分别提示，避免误导为重新准备视频帧。 */
+    private static final String INVALID_SELECTION_MESSAGE = "媒体选帧计划不合法";
+    /** 未安装的策略属于消费者合同不支持，不能归类为帧未准备完成。 */
+    private static final String UNSUPPORTED_SELECTION_MESSAGE = "媒体选帧策略版本暂不支持";
 
     /** 每个来源始终验证当前授权和当前源；即使缓存命中也不跳过HEAD。 */
     public void verify(AiGenerationTaskEntity task, JsonNode entry) {
@@ -88,7 +93,8 @@ public class PortfolioAiMediaAccessService {
         if (bytes <= 0 || etag == null
                 || !fingerprint(work.key(), etag, bytes, work.sha()).equals(entry.path(KEY_SOURCE_VERSION).asText())) { throw unavailable(); }
         String route = entry.path(KEY_ROUTE).asText();
-        if (ROUTE_FRAMES.equals(route)) { verifyFrames(work, entry, inspectObjects); }
+        if (entry.has(PortfolioAiFrameSelection.FIELD) && !ROUTE_FRAMES.equals(route)) { throw invalidSelection(); }
+        if (ROUTE_FRAMES.equals(route)) { verifyFrames(task, work, entry, inspectObjects); }
         else if (ROUTE_VIDEO.equals(route)) {
             if (!ROUTE_VIDEO.equals(work.type()) || !withinDirectVideoLimits(bytes, work.duration())) { throw unavailable(); }
         } else if (!ROUTE_IMAGE.equals(route) || !ROUTE_IMAGE.equals(work.type()) || bytes > DIRECT_MEDIA_MAX_BYTES) { throw unavailable(); }
@@ -111,7 +117,7 @@ public class PortfolioAiMediaAccessService {
     }
 
     /** 同源完整资产必须仍是当前作品清单；全部对象HEAD验证后才能生成临时链接。 */
-    private void verifyFrames(CurrentWork work, JsonNode entry, boolean inspectObjects) {
+    private void verifyFrames(AiGenerationTaskEntity task, CurrentWork work, JsonNode entry, boolean inspectObjects) {
         if (work.frames() == null || !ROUTE_VIDEO.equals(work.type())) { throw unprepared(); }
         JsonNode manifest = StrictAiJson.parseObject(work.frames(), 128 * 1024, 12);
         int count = manifest.path(KEY_FRAME_COUNT).asInt();
@@ -147,6 +153,25 @@ public class PortfolioAiMediaAccessService {
                 if (head.getContentLength() != frame.path(KEY_BYTES).asLong() || !JPEG_CONTENT_TYPE.equalsIgnoreCase(head.getContentType())) { throw unprepared(); }
             }
         }
+        // 按任务冻结版本重算，未来默认策略升级不能改变在途任务的解释。
+        if (entry.has(PortfolioAiFrameSelection.FIELD)) {
+            try {
+                JsonNode selected = entry.path(PortfolioAiFrameSelection.FIELD);
+                PortfolioAiFrameSelection.validateFrozen(manifest.path(KEY_FRAMES), selected);
+                if (inspectObjects) { logFeatureFallback(task, work.id(), manifest.path(KEY_FRAMES), selected); }
+            } catch (PortfolioAiFrameSelection.UnsupportedPolicyVersionException exception) {
+                throw new PortfolioAiCallException(ERROR_CONTRACT_UNAVAILABLE, UNSUPPORTED_SELECTION_MESSAGE, false);
+            } catch (IllegalArgumentException exception) { throw invalidSelection(); }
+        }
+    }
+
+    /** 仅完整检查时记录降级范围，阶段间反复复核不刷日志；不输出清单、特征值或临时链接。 */
+    private void logFeatureFallback(AiGenerationTaskEntity task, long workId, JsonNode frames, JsonNode selected) {
+        var coverage = PortfolioAiFrameSelection.featureCoverage(frames, selected);
+        if (coverage.usable() == coverage.total()) { return; }
+        log.info("作品集视频选帧降级: taskId={}, attempt={}, workId={}, policyVersion={}, totalFrames={}, usableFeatures={}, missingFeatures={}, invalidFeatures={}",
+                task.getId(), task.getAttemptCount(), workId, selected.path(KEY_POLICY_VERSION).textValue(),
+                coverage.total(), coverage.usable(), coverage.missing(), coverage.invalid());
     }
 
     /** 只签服务端被冻结且刚复核的本桶键，模型只接受此临时列表。 */
@@ -165,7 +190,9 @@ public class PortfolioAiMediaAccessService {
     private List<PortfolioAiModelClient.MediaInput> signedInputs(JsonNode entry) {
         List<PortfolioAiModelClient.MediaInput> result = new ArrayList<>();
         if (ROUTE_FRAMES.equals(entry.path(KEY_ROUTE).asText())) {
-            List<JsonNode> frames = new ArrayList<>(); entry.path(KEY_FRAMES).forEach(frames::add);
+            JsonNode selected = entry.has(PortfolioAiFrameSelection.FIELD)
+                    ? entry.path(PortfolioAiFrameSelection.FIELD).path(KEY_FRAMES) : entry.path(KEY_FRAMES);
+            List<JsonNode> frames = new ArrayList<>(); selected.forEach(frames::add);
             frames.sort(Comparator.comparingLong(frame -> frame.path(KEY_TIME_MS).asLong()));
             for (JsonNode frame : frames) { result.add(new PortfolioAiModelClient.MediaInput(TYPE_IMAGE_URL, sign(frame.path(KEY_OBJECT_KEY).asText()), frame.path(KEY_TIME_MS).asLong())); }
         } else {
@@ -207,6 +234,8 @@ public class PortfolioAiMediaAccessService {
     private static PortfolioAiCallException unavailable() { return new PortfolioAiCallException(ERROR_SOURCE_UNAVAILABLE, "所选作品或团队授权已失效", false); }
     /** 已有帧缺失或不合格。 */
     private static PortfolioAiCallException unprepared() { return new PortfolioAiCallException(ERROR_MEDIA_NOT_PREPARED, "所选视频持久帧尚未准备完成", false); }
+    /** 冻结计划非法与资产损坏分别归类，调用方不再二次翻译该错误。 */
+    private static PortfolioAiCallException invalidSelection() { return new PortfolioAiCallException(ERROR_MEDIA_INVALID, INVALID_SELECTION_MESSAGE, false); }
     /** 暂时无法确认真实对象，保留已付费摘要并交给统一重试预算。 */
     private static PortfolioAiCallException temporary() { return new PortfolioAiCallException(ERROR_MEDIA_ACCESS_RETRY, "媒体对象服务暂时不可用，请稍后重试", true); }
 }

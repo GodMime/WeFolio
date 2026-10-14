@@ -3,17 +3,28 @@ package com.jxc.wefolio.job.service;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
+import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.exception.CosServiceException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,7 +53,11 @@ class PortfolioAiMediaAccessServiceTest {
         when(storage.signedGet(anyString(), any())).thenReturn("https://private.example/video?signature=fake");
     }
     /** 当前有效个人任务。 */
-    private AiGenerationTaskEntity task() { var task = new AiGenerationTaskEntity(); task.setOwnerType("USER"); task.setOwnerId(2L); task.setRequestedBy(2L); return task; }
+    private AiGenerationTaskEntity task() {
+        var task = new AiGenerationTaskEntity(); task.setId(11L); task.setAttemptCount(1); task.setVersion(1);
+        task.setOwnerType("USER"); task.setOwnerId(2L); task.setRequestedBy(2L);
+        task.setCreatedAt(LocalDateTime.now(ZoneId.of("Asia/Shanghai"))); return task;
+    }
     /** HEAD匹配的冻结源身份。 */
     private ObjectNode entry() {
         return StrictAiJson.mapper().createObjectNode().put("workId", 9).put("userId", 2).put("sourceObjectKey", "OWNER/work/video/test.mp4")
@@ -157,6 +172,164 @@ class PortfolioAiMediaAccessServiceTest {
             assertThatThrownBy(() -> service.signed(task(), entry)).hasMessageContaining("持久帧");
         }
         verify(storage, never()).signedGet(anyString(), any());
+    }
+
+    /** 新任务完整复核所有审核资产，只签名预算内的代表帧，数据库完整清单不减少。 */
+    @Test void resolutionSelectionSignsEightOfTwentyFourWithoutDiscardingAuditFrames() {
+        ObjectNode entry = selectedFrameEntry(24, 960, 540);
+        // 模拟 Runtime 写入任务 JSON 后 Job 重新解析，不能依赖内存数字节点类型一致。
+        entry = StrictAiJson.parseObject(entry.toString(), 128 * 1024, 12);
+        String before = jdbc.queryForObject("SELECT video_frames_json FROM wf_work WHERE id=9", String.class);
+
+        var signed = service.signed(task(), entry);
+
+        assertThat(signed).hasSize(8);
+        assertThat(signed.stream().map(PortfolioAiModelClient.MediaInput::timeMs).toList())
+                .containsExactlyElementsOf(StreamSupport.stream(
+                        entry.path(PortfolioAiFrameSelection.FIELD).path("frames").spliterator(), false)
+                        .map(frame -> frame.path("timeMs").asLong()).toList());
+        assertThat(entry.path("frames")).hasSize(24);
+        verify(storage, times(25)).head(anyString());
+        verify(storage, times(8)).signedGet(anyString(), any());
+        assertThat(jdbc.queryForObject("SELECT video_frames_json FROM wf_work WHERE id=9", String.class)).isEqualTo(before);
+    }
+
+    /** 实际低清候选允许更密时间覆盖，横竖画面按同一长边限量。 */
+    @Test void actualFrameDimensionsControlSigningCountForLandscapeAndPortrait() {
+        for (int[] example : new int[][]{{512, 288, 24}, {768, 432, 12}, {540, 960, 8}}) {
+            ObjectNode entry = selectedFrameEntry(24, example[0], example[1]);
+            assertThat(service.signed(task(), entry)).hasSize(example[2]);
+        }
+    }
+
+    /** 精选身份和尺寸必须从同一当前清单重算，不能使用看似合法的其它子集替代。 */
+    @Test void changedSelectionIdentityDimensionsOrBudgetCannotBeSigned() {
+        List<Consumer<ObjectNode>> changes = List.of(
+                selection -> ((ObjectNode) selection.path("frames").get(0)).put("objectKey", "OTHER/frames/1.jpg"),
+                selection -> ((ObjectNode) selection.path("frames").get(0)).put("timeMs", 99999),
+                selection -> ((ObjectNode) selection.path("frames").get(0)).put("width", 512),
+                selection -> ((ObjectNode) selection.path("frames").get(0)).put("height", 288),
+                selection -> ((ObjectNode) selection.path("frames").get(0)).put("width", 960.0),
+                selection -> selection.put("estimatedInputTokens", 1),
+                selection -> selection.withArray("frames").remove(0));
+        for (Consumer<ObjectNode> change : changes) {
+            ObjectNode entry = selectedFrameEntry(24, 960, 540);
+            change.accept((ObjectNode) entry.path(PortfolioAiFrameSelection.FIELD));
+            clearInvocations(storage);
+            assertThatThrownBy(() -> service.signed(task(), entry)).hasMessage("媒体选帧计划不合法")
+                    .isInstanceOfSatisfying(PortfolioAiCallException.class,
+                            exception -> assertThat(exception.getCode()).isEqualTo("MEDIA_INVALID"));
+            verify(storage, never()).signedGet(anyString(), any());
+        }
+    }
+
+    /** 旧任务可以没有精选字段，但显式空字段和把精选放在直传路线均拒绝。 */
+    @Test void explicitNullSelectionOrSelectionOnDirectVideoIsRejected() {
+        ObjectNode entry = selectedFrameEntry(24, 960, 540);
+        entry.putNull(PortfolioAiFrameSelection.FIELD);
+        assertThatThrownBy(() -> service.signed(task(), entry)).hasMessage("媒体选帧计划不合法");
+        ObjectNode video = entry();
+        video.set(PortfolioAiFrameSelection.FIELD, StrictAiJson.mapper().createObjectNode());
+        assertThatThrownBy(() -> service.signed(task(), video)).hasMessage("媒体选帧计划不合法");
+        verify(storage, never()).signedGet(anyString(), any());
+    }
+
+    /** 真实执行链在缓存、签名和付费前统一区分非法选择、未知策略与缺失资产。 */
+    @Test void realExecutionRejectsInvalidSelectionsWithProductionErrorBeforeAnyPaidBoundary() {
+        ObjectNode forged = selectedFrameEntry(24, 960, 540);
+        ((ObjectNode) forged.path(PortfolioAiFrameSelection.FIELD)).put("estimatedInputTokens", 1);
+        assertExecutionRejected(forged, "MEDIA_INVALID", "媒体选帧计划不合法");
+
+        ObjectNode unsupported = selectedFrameEntry(24, 960, 540);
+        ((ObjectNode) unsupported.path(PortfolioAiFrameSelection.FIELD)).put("policyVersion", "resolution-budget-v999");
+        assertExecutionRejected(unsupported, "CONTRACT_UNAVAILABLE", "媒体选帧策略版本暂不支持");
+
+        ObjectNode malformed = selectedFrameEntry(24, 960, 540);
+        malformed.putNull(PortfolioAiFrameSelection.FIELD);
+        assertExecutionRejected(malformed, "MEDIA_INVALID", "媒体选帧计划不合法");
+
+        ObjectNode missing = selectedFrameEntry(24, 960, 540);
+        var absent = new CosServiceException("missing"); absent.setStatusCode(404);
+        doThrow(absent).when(storage).head(missing.path("frames").get(0).path("objectKey").asText());
+        assertExecutionRejected(missing, "MEDIA_NOT_PREPARED", "所选视频持久帧尚未准备完成");
+    }
+
+    /** 采用真实授权及 H2 当前清单，替身仅包围缓存账本和付费模型边界。 */
+    private void assertExecutionRejected(ObjectNode entry, String code, String message) {
+        var repository = mock(PortfolioAiMediaRepository.class);
+        var client = mock(PortfolioAiModelClient.class);
+        var execution = new PortfolioAiMediaExecutionService(repository, service, client, properties);
+        assertThatThrownBy(() -> execution.generate(task(), request(entry), () -> {}))
+                .hasMessage(message).isInstanceOfSatisfying(PortfolioAiCallException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(code);
+                    assertThat(exception.isRetryable()).isFalse();
+                });
+        verifyNoInteractions(repository, client);
+        verify(storage, never()).signedGet(anyString(), any());
+    }
+
+    /** 冻结 v1 落库往返后沿真实链路签八帧并完成两个阶段，旧策略不是只通过孤立工具测试。 */
+    @Test void persistedV1SelectionCanCompleteRealExecution() {
+        ObjectNode entry = selectedFrameEntry(24, 960, 540);
+        ObjectNode frozen = StrictAiJson.parseObject(request(entry).toString(), 128 * 1024, 16);
+        var repository = mock(PortfolioAiMediaRepository.class);
+        var client = mock(PortfolioAiModelClient.class);
+        var execution = new PortfolioAiMediaExecutionService(repository, service, client, properties);
+        when(client.summarize(any(), any(), anyList(), any())).thenReturn(new PortfolioAiModelClient.Completion(
+                "{\"summary\":\"舞台\",\"observations\":[],\"limitations\":[\"采样帧有盲区\"]}", 100L, 10L));
+        when(client.textRequestBytes(any(), any())).thenReturn(1000);
+        when(client.generateWithUsage(any(), any(), any())).thenReturn(new PortfolioAiModelClient.Completion("final", 100L, 10L));
+        assertThat(execution.generate(task(), frozen, () -> {})).isEqualTo("final");
+        verify(client).summarize(any(), any(), argThat(inputs -> inputs.size() == 8
+                && inputs.getFirst().timeMs() == 1000L && inputs.getLast().timeMs() == 22000L), any());
+        verify(storage, times(8)).signedGet(anyString(), any());
+        verify(repository).cache(eq(9L), any(), anyString(), any());
+    }
+
+    /** 选帧降级日志可关联任务与作品，并区分历史缺失和已存在但损坏的特征。 */
+    @Test void fallbackLogsCoverageContextWithoutRepeatedStageLogs() {
+        ObjectNode entry = selectedFrameEntry(24, 960, 540);
+        ObjectNode manifest = StrictAiJson.parseObject(jdbc.queryForObject(
+                "SELECT video_frames_json FROM wf_work WHERE id=9", String.class), 128 * 1024, 12);
+        ((ObjectNode) manifest.path("frames").get(0)).putObject("visualFeatures").put("version", "unknown");
+        ((ObjectNode) manifest.path("frames").get(1)).putObject("visualFeatures").put("version", "visual-features-v1")
+                .put("dHash", "0000000000000000").put("luminance", 100).put("sharpness", 10);
+        entry.put("manifestHash", PortfolioAiMediaAccessService.hash(manifest.toString()));
+        jdbc.update("UPDATE wf_work SET video_frames_json=? WHERE id=9", manifest.toString());
+        Logger logger = (Logger) LoggerFactory.getLogger(PortfolioAiMediaAccessService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>(); appender.start(); logger.addAppender(appender);
+        try {
+            service.verify(task(), entry);
+            service.verifyCurrent(task(), entry);
+            service.signedAfterVerification(task(), entry);
+            assertThat(appender.list).hasSize(1);
+            assertThat(appender.list.getFirst().getFormattedMessage()).contains("taskId=11", "attempt=1", "workId=9",
+                    "policyVersion=resolution-budget-v1", "totalFrames=24", "usableFeatures=1", "missingFeatures=22", "invalidFeatures=1")
+                    .doesNotContain("signature", "https://", "OWNER/");
+        } finally { logger.detachAppender(appender); appender.stop(); }
+    }
+
+    /** 将真实冻结 entry 放入最小合法作品来源上下文。 */
+    private ObjectNode request(ObjectNode entry) {
+        ObjectNode request = StrictAiJson.parseObject("""
+                {"modelConfig":{"model":"glm-5.3-flash","maxTokens":8192},
+                 "facts":{"sources":[{"sourceNo":1,"sourceId":"9","kind":"WORK","mediaType":"VIDEO","canBind":true}],
+                          "mediaPlan":{"version":"portfolio-media-v1","entries":[]}}}
+                """, 10000, 16);
+        request.withObject("facts").withObject("mediaPlan").withArray("entries").add(entry.deepCopy().put("sourceNo", 1));
+        return request;
+    }
+
+    /** 由真实清单尺寸冻结新选择，未选帧仍在完整清单中参与源验证。 */
+    private ObjectNode selectedFrameEntry(int count, int width, int height) {
+        ObjectNode entry = frameEntry(count);
+        ObjectNode manifest = StrictAiJson.parseObject(jdbc.queryForObject(
+                "SELECT video_frames_json FROM wf_work WHERE id=9", String.class), 128 * 1024, 12);
+        for (var frame : manifest.path("frames")) { ((ObjectNode) frame).put("width", width).put("height", height); }
+        entry.put("manifestHash", PortfolioAiMediaAccessService.hash(manifest.toString()));
+        entry.set(PortfolioAiFrameSelection.FIELD, PortfolioAiFrameSelection.select(manifest.path("frames")));
+        jdbc.update("UPDATE wf_work SET video_frames_json=? WHERE id=9", manifest.toString());
+        return entry;
     }
 
     /** 构造当前清单及对应冻结列表，并使真实 HEAD 符合固定尺寸字节合同。 */

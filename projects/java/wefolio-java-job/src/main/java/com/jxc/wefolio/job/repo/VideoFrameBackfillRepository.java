@@ -1,6 +1,7 @@
 package com.jxc.wefolio.job.repo;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.job.dict.MediaTypeDict;
 import com.jxc.wefolio.job.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.job.model.VideoFrameBackfillModels.Work;
@@ -14,7 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
-/** 历史一次性补帧只读作品扫描与完整清单回写，不维护任务表。 */
+/** 历史视频扫描、重建清空与完整清单回写，不维护任务表。 */
 @Repository
 @RequiredArgsConstructor
 public class VideoFrameBackfillRepository {
@@ -70,6 +71,30 @@ public class VideoFrameBackfillRepository {
                 work.sha256(), work.sha256()) == 1;
     }
 
+    /**
+     * 重建前在短事务内清空本次快照及派生摘要，成功返回后才允许删除旧 COS 帧。
+     * 源、审核状态、版本或清单已变化时返回空；提交结果未知时异常向上传递，不能推断清空成功。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Work clearManifestForRebuild(Work work) {
+        List<String> current = jdbc.query("""
+                SELECT video_frames_json FROM wf_work
+                WHERE id=? AND media_type=? AND status=? AND audit_status=? AND media_object_key=? AND version=? AND deleted=0
+                  AND (media_sha256=? OR (media_sha256 IS NULL AND ? IS NULL)) FOR UPDATE
+                """, (rs, n) -> rs.getString(1), work.id(), MediaTypeDict.VIDEO.getCode(), WORK_STATUS_ACTIVE,
+                WorkAuditStatusDict.PASSED.getCode(), work.objectKey(), work.version(), work.sha256(), work.sha256());
+        if (current.isEmpty() || !sameRebuildManifest(current.getFirst(), work.manifest())) { return null; }
+        int changed = jdbc.update("""
+                UPDATE wf_work SET video_frames_json=NULL,ai_media_summary_json=NULL,ai_media_summary_expires_at=NULL,
+                  updated_at=?,version=version+1
+                WHERE id=? AND media_type=? AND status=? AND audit_status=? AND media_object_key=? AND version=? AND deleted=0
+                  AND (media_sha256=? OR (media_sha256 IS NULL AND ? IS NULL))
+                """, Timestamp.from(Instant.now()), work.id(), MediaTypeDict.VIDEO.getCode(), WORK_STATUS_ACTIVE,
+                WorkAuditStatusDict.PASSED.getCode(), work.objectKey(), work.version(), work.sha256(), work.sha256());
+        return changed == 1 ? new Work(work.id(), work.objectKey(), work.sha256(), work.durationMs(),
+                null, work.version() + 1, work.ownerCode()) : null;
+    }
+
     /** 提交响应未知时确认当前作品是否发布了本次完整清单；数据库异常交由调用方保留对象。 */
     public boolean manifestPublished(long workId, String manifest) {
         List<String> current = jdbc.query("SELECT video_frames_json FROM wf_work WHERE id=? AND deleted=0",
@@ -89,5 +114,15 @@ public class VideoFrameBackfillRepository {
         if (left == null || right == null) { return false; }
         try { return Objects.equals(JSON.parseObject(left), JSON.parseObject(right)); }
         catch (RuntimeException exception) { return false; }
+    }
+
+    /** 重建允许有效对象清单的格式差异；损坏或 JSON 空值清单只有原始文本完全相同才可清空。 */
+    private boolean sameRebuildManifest(String left, String right) {
+        if (Objects.equals(left, right)) { return true; }
+        if (left == null || right == null) { return false; }
+        try {
+            JSONObject current = JSON.parseObject(left);
+            return current != null && current.equals(JSON.parseObject(right));
+        } catch (RuntimeException exception) { return false; }
     }
 }

@@ -4,9 +4,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.entity.WorkEntity;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.message.PortfolioAiMessage;
 import com.jxc.wefolio.service.CosService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -37,12 +41,16 @@ class PortfolioAiMediaPlanServiceTest {
     }
     /** 当前完整旧帧允许原count，排序采用真实时间。 */
     private String manifest(WorkEntity work, int count) {
+        return manifest(work, count, 30000000, 960, 540);
+    }
+    /** 构造同源且具备真实帧尺寸的清单，源文件大小独立于图片分辨率。 */
+    private String manifest(WorkEntity work, int count, long sourceBytes, int width, int height) {
         ObjectNode manifest = StrictAiJson.mapper().createObjectNode().put("schemaVersion", "video-frames-v1")
-                .put("sourceVersion", PortfolioAiMediaPlanService.fingerprint(work.getMediaObjectKey(), "ETAG", 30000000, "sha"))
+                .put("sourceVersion", PortfolioAiMediaPlanService.fingerprint(work.getMediaObjectKey(), "ETAG", sourceBytes, "sha"))
                 .put("frameCount", count);
         var frames = manifest.putArray("frames");
         for (int i = count; i > 0; i--) { frames.addObject().put("timeMs", i * 1000).put("objectKey", "OWNER/others/video-frames/9/source/policy/task/" + i + ".jpg")
-                .put("bytes", 1000).put("width", 960).put("height", 540); }
+                .put("bytes", 1000).put("width", width).put("height", height); }
         return manifest.toString();
     }
     /** 直视频必须真实大小、前端有效时长和预计token均合格。 */
@@ -53,6 +61,80 @@ class PortfolioAiMediaPlanServiceTest {
         assertThat(facts.toString()).doesNotContain("public.example", "q-signature");
         assertThat(facts.path("mediaPlan").path("entries").get(0).path("estimatedInputTokens").asLong()).isEqualTo(45000);
         verify(cos).headObjectVersion("OWNER/work/video/test.mp4");
+    }
+
+    /** 短视频已有同源审核清单时复用帧，避免再次把整个视频送入模型。 */
+    @Test void shortVideoWithPersistentFramesUsesFrameSelection() {
+        WorkEntity work = video(15000);
+        work.setVideoFramesJson(manifest(work, 8, 1000, 960, 540));
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 1000, "ETAG", 0));
+        ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+        var entry = facts.path("mediaPlan").path("entries").get(0);
+        assertThat(entry.path("route").asText()).isEqualTo("FRAMES");
+        assertThat(entry.path("frames").size()).isEqualTo(8);
+        assertThat(entry.path(PortfolioAiFrameSelection.FIELD).path("frames").size()).isEqualTo(8);
+        assertThat(entry.path("estimatedInputTokens").asLong()).isLessThan(45000);
+    }
+
+    /** 已有短视频清单的源身份失效时继续拒绝，不可改走整段视频绕过检查。 */
+    @Test void shortVideoWithInvalidManifestDoesNotFallBackToDirectVideo() {
+        WorkEntity work = video(15000);
+        work.setVideoFramesJson(manifest(work, 8));
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 1000, "ETAG", 0));
+        assertThatThrownBy(() -> service.freeze(StrictAiJson.mapper().createObjectNode(), facts()))
+                .isInstanceOf(BusinessException.class).hasMessage(PortfolioAiMessage.MEDIA_NOT_PREPARED);
+    }
+
+    /** 非空损坏清单沿用严格 JSON 异常语义，空字符串也不能当作无帧短视频。 */
+    @Test void malformedShortVideoManifestRetainsParsingFailureWithoutDirectFallback() {
+        WorkEntity work = video(15000);
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 1000, "ETAG", 0));
+        for (String invalid : new String[]{"", " ", "{broken", "[]"}) {
+            work.setVideoFramesJson(invalid);
+            assertThatThrownBy(() -> service.freeze(StrictAiJson.mapper().createObjectNode(), facts()))
+                    .isInstanceOf(AiProtocolException.class);
+        }
+    }
+
+    /** 模型帧数按真实图片长边限制，完整审核清单和旧三字段冻结引用仍保留。 */
+    @ParameterizedTest
+    @CsvSource({"512,288,24", "288,512,24", "768,432,12", "432,768,12", "960,540,8", "540,960,8"})
+    void resolutionBudgetPreservesFullAuditManifest(int width, int height, int selectedCount) {
+        WorkEntity work = video(600000);
+        String originalManifest = manifest(work, 24, 30000000, width, height);
+        work.setVideoFramesJson(originalManifest);
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 30000000, "ETAG", 0));
+        ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+        var entry = facts.path("mediaPlan").path("entries").get(0);
+        var selection = entry.path(PortfolioAiFrameSelection.FIELD);
+        assertThat(entry.path("frames").size()).isEqualTo(24);
+        assertThat(selection.path("frames").size()).isEqualTo(selectedCount);
+        assertThat(selection.path("policyVersion").asText()).isEqualTo("resolution-budget-v1");
+        assertThat(entry.path("estimatedInputTokens").asLong())
+                .isEqualTo(selection.path("estimatedInputTokens").asLong()).isPositive()
+                .isLessThan(24 * PortfolioAiMediaContract.FRAME_ESTIMATED_INPUT_TOKENS
+                        + PortfolioAiMediaContract.FRAMES_INPUT_OVERHEAD_TOKENS);
+        for (var frame : entry.path("frames")) {
+            assertThat(frame.size()).isEqualTo(3);
+            assertThat(frame.has("width")).isFalse();
+            assertThat(frame.has("height")).isFalse();
+        }
+        for (var frame : selection.path("frames")) {
+            assertThat(frame.path("width").asInt()).isEqualTo(width);
+            assertThat(frame.path("height").asInt()).isEqualTo(height);
+        }
+        assertThat(work.getVideoFramesJson()).isEqualTo(originalManifest);
+    }
+
+    /** 模型仅选部分帧也不能放宽整个审核清单的尺寸校验。 */
+    @Test void invalidFrameOutsideTheModelBudgetStillRejectsTheCompleteManifest() {
+        WorkEntity work = video(600000);
+        ObjectNode invalid = StrictAiJson.parseObject(manifest(work, 24), 128 * 1024, 12);
+        ((ObjectNode) invalid.path("frames").get(12)).put("width", 961);
+        work.setVideoFramesJson(invalid.toString());
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 30000000, "ETAG", 0));
+        assertThatThrownBy(() -> service.freeze(StrictAiJson.mapper().createObjectNode(), facts()))
+                .isInstanceOf(BusinessException.class).hasMessage(PortfolioAiMessage.MEDIA_NOT_PREPARED);
     }
     /** 长视频缺清单必须明确拒绝，不临时截帧或文字降级。 */
     @Test void longOrUnknownDurationWithoutFramesFailsImmediately() {
@@ -82,6 +164,29 @@ class PortfolioAiMediaPlanServiceTest {
         for (int count : new int[]{PortfolioAiMediaContract.FRAME_MIN_COUNT - 1, PortfolioAiMediaContract.FRAME_MAX_COUNT + 1}) {
             work.setVideoFramesJson(manifest(work, count));
             assertThatThrownBy(() -> service.freeze(StrictAiJson.mapper().createObjectNode(), facts())).hasMessageContaining("持久帧");
+        }
+    }
+
+    /** 全局合同放宽前默认策略须已支持新边界，防止只改常量后接受资产却无法冻结任务。 */
+    @Test void defaultSelectionMustSupportGlobalFrameContractBoundaries() {
+        WorkEntity work = video(600000);
+        when(cos.headObjectVersion(anyString())).thenReturn(new CosService.VersionedObjectHead("video/mp4", 30000000, "ETAG", 0));
+        for (int count : new int[]{PortfolioAiMediaContract.FRAME_MIN_COUNT, PortfolioAiMediaContract.FRAME_MAX_COUNT}) {
+            for (int[] size : new int[][]{{PortfolioAiMediaContract.FRAME_MAX_EDGE, 1},
+                    {1, PortfolioAiMediaContract.FRAME_MAX_EDGE},
+                    {PortfolioAiMediaContract.FRAME_MAX_EDGE, PortfolioAiMediaContract.FRAME_MAX_EDGE}}) {
+                ObjectNode manifest = StrictAiJson.parseObject(manifest(work, count, 30000000, size[0], size[1]), 128 * 1024, 12);
+                for (var frame : manifest.path("frames")) {
+                    ((ObjectNode) frame).put("bytes", PortfolioAiMediaContract.FRAME_MAX_BYTES);
+                }
+                work.setVideoFramesJson(manifest.toString());
+                ObjectNode facts = facts(); service.freeze(StrictAiJson.mapper().createObjectNode(), facts);
+                var entry = facts.path("mediaPlan").path("entries").get(0);
+                assertThat(entry.path("frames")).hasSize(count);
+                assertThat(PortfolioAiFrameSelection.validateFrozen(manifest.path("frames"), entry.path(PortfolioAiFrameSelection.FIELD)))
+                        .isEqualTo(entry.path("estimatedInputTokens").asLong());
+                assertThat(work.getVideoFramesJson()).isEqualTo(manifest.toString());
+            }
         }
     }
 

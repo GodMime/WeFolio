@@ -592,6 +592,14 @@ HTTPS GET 核验因 CDN 证书过期未通过。**用户已明确本轮不处理
 
 正式样张引用须随包含上述 buildId 的 Runtime 包生效；Mock sampleUrl 与四处模板修复须随小程序包发布并被采用后生效。两条生效链均未发布，不能用 COS 上传成功代替客户端生效。§6.2 是此前地址的历史证据，新地址状态以本节及本地 `design/portfolio-multi-font/mock-static/publication.json` 为准。
 
+### 6.4 历史视频帧手动重建（2026-10-14，代码入口）
+
+`POST /job-api/video-frames/rebuild` 沿用 `X-Admin-Point-Secret` 运维头，只能显式触发。可选 JSON 字段为 `maxFrames`（默认 `VIDEO_FRAME_BACKFILL_MAX_FRAMES`，缺省配置 2400，请求范围 8～配置上限）、`afterWorkId`（排他下界，默认 0）和 `throughWorkId`（包含上界，省略时扫描冻结当前水位）。仅处理未删除、ACTIVE/PASSED 且作者 ACTIVE 的 VIDEO。202 表示接受，200 表示本机已有同种重建且未重复提交；与补帧、清扫或跨实例锁冲突返回 503。
+
+每件先检查预算和旧清单归属，再 CAS 清空帧及 AI 摘要、严格删除旧 COS 帧、重截完整 8～24 帧并按最长边 960px/每张 200KiB 上限存储，附可选视觉特征后 CAS 发布。旧 `/job-api/video-frames/backfill` 共用新截图及存储流程，仍跳过合法同源旧清单。预算不足不清下一件；旧清单异常或删除失败不继续收费截图。重建本身不调用模型，重复执行已结束的范围会重新产生截图费用。
+
+清空后失败没有自动精确恢复；可能短暂或持续缺帧，已冻结旧清单的在途作品集可能失败。结束日志 `nextAfterWorkId` 跨过已失败行，接续不等于补跑失败；失败件按单件范围重建或在清单为 NULL 时使用 backfill。残留旧帧按超过 24 小时的对象年龄及引用保护由既有清扫补偿，不承诺立即删净。详细参数、日志、补跑及影响见本地[历史视频帧手动重建操作说明](design/advanced-portfolios/2026-10-14-video-frame-rebuild.md)。本节为代码操作说明，不代表已部署或已执行生产重建。
+
 ## 7. 大模型服务
 
 | 环境 | 服务商 | 用途 | 模型/能力 | Base URL | API Key 标识 | Secret 存放位置 | 额度/计费 | 备注 |

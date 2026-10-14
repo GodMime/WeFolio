@@ -61,9 +61,10 @@ public class PortfolioAiMediaPlanService {
                     .put(KEY_MEDIA_SHA256, work.getMediaSha256() == null ? "" : work.getMediaSha256());
             if (work.getDurationMs() != null) { entry.put(KEY_DURATION_MS, work.getDurationMs()); }
             if (ROUTE_VIDEO.equals(work.getMediaType())) {
-                long estimate = estimateVideoInputTokens(work.getDurationMs());
-                if (withinDirectVideoLimits(head.contentLength(), work.getDurationMs())) {
-                    entry.put(KEY_ROUTE, ROUTE_VIDEO).put(KEY_ESTIMATED_INPUT_TOKENS, estimate);
+                // 已有审核持久帧优先复用；历史无帧短视频保留原有直传边界。
+                if (work.getVideoFramesJson() == null && withinDirectVideoLimits(head.contentLength(), work.getDurationMs())) {
+                    entry.put(KEY_ROUTE, ROUTE_VIDEO)
+                            .put(KEY_ESTIMATED_INPUT_TOKENS, estimateVideoInputTokens(work.getDurationMs()));
                 } else { frames(work, identity, entry); }
             } else if (ROUTE_IMAGE.equals(work.getMediaType())) {
                 if (head.contentLength() > DIRECT_MEDIA_MAX_BYTES) { throw unavailable(); }
@@ -104,8 +105,13 @@ public class PortfolioAiMediaPlanService {
             }
             frozen.addObject().put(KEY_OBJECT_KEY, key).put(KEY_BYTES, frame.path(KEY_BYTES).asLong()).put(KEY_TIME_MS, time);
         }
+        // 全局帧合同扩容时，默认选帧策略可能暂不支持；保持未准备完成的业务失败语义。
+        ObjectNode selection;
+        try { selection = PortfolioAiFrameSelection.select(manifest.path(KEY_FRAMES)); }
+        catch (IllegalArgumentException exception) { throw unprepared(); }
+        entry.set(PortfolioAiFrameSelection.FIELD, selection);
         entry.put(KEY_ROUTE, ROUTE_FRAMES).put(KEY_MANIFEST_HASH, hash(manifest.toString()))
-                .put(KEY_ESTIMATED_INPUT_TOKENS, count * FRAME_ESTIMATED_INPUT_TOKENS + FRAMES_INPUT_OVERHEAD_TOKENS);
+                .put(KEY_ESTIMATED_INPUT_TOKENS, selection.path(KEY_ESTIMATED_INPUT_TOKENS).asLong());
     }
 
     /** 两工程使用相同源身份算法，不信任客户端媒体长度。 */

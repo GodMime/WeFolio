@@ -62,7 +62,9 @@ public class VideoFrameImageNormalizer {
                     try {
                         for (float quality : new float[] { 0.88f, 0.75f, 0.60f, 0.45f, 0.30f }) {
                             byte[] result = encode(target, quality);
-                            if (result.length <= MAX_BYTES) { return new NormalizedImage(result, width, height); }
+                            if (result.length <= MAX_BYTES) {
+                                return withOptionalFeatures(result, target);
+                            }
                         }
                     } finally { target.flush(); }
                     if (Math.max(width, height) <= 128) { throw failure("截图无法压缩至字节上限"); }
@@ -99,8 +101,26 @@ public class VideoFrameImageNormalizer {
             return bytes.toByteArray();
         } finally { writer.dispose(); }
     }
+    /** 视觉特征失败仍保留基础帧；仅返回安全异常类型，交由持有作品与帧上下文的调用方记录。 */
+    private NormalizedImage withOptionalFeatures(byte[] bytes, BufferedImage image) {
+        try { return new NormalizedImage(bytes, image.getWidth(), image.getHeight(), analyzeFeatures(image)); }
+        catch (RuntimeException exception) {
+            return new NormalizedImage(bytes, image.getWidth(), image.getHeight(), null,
+                    exception.getClass().getSimpleName());
+        }
+    }
+    /** 独立的纯像素分析入口，调用方隔离辅助分析与必需图像规范化的失败。 */
+    VideoFrameVisualFeatures analyzeFeatures(BufferedImage image) { return VideoFrameVisualFeatures.analyze(image); }
     /** 创建不包含原始响应的安全异常。 */
     private VideoFrameProcessingException failure(String reason) { return new VideoFrameProcessingException(STAGE, reason); }
-    /** 仅保存当前一帧的规范化结果。 */
-    public record NormalizedImage(byte[] bytes, int width, int height) { }
+    /** 仅保存当前一帧的规范化结果；失败类型不携带异常文案、原始图片或远端响应。 */
+    public record NormalizedImage(byte[] bytes, int width, int height, VideoFrameVisualFeatures visualFeatures,
+            String featureFailureType) {
+        /** 成功提取特征的结果无需失败类型，并兼容原四参数调用方。 */
+        public NormalizedImage(byte[] bytes, int width, int height, VideoFrameVisualFeatures visualFeatures) {
+            this(bytes, width, height, visualFeatures, null);
+        }
+        /** 兼容不包含视觉特征的旧调用方与已有帧。 */
+        public NormalizedImage(byte[] bytes, int width, int height) { this(bytes, width, height, null, null); }
+    }
 }

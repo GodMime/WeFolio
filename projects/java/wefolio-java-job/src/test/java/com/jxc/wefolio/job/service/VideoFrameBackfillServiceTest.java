@@ -30,6 +30,8 @@ class VideoFrameBackfillServiceTest {
     private VideoFrameSnapshotClient snapshots;
     private VideoFrameBackfillLock.ExecutionLock executionLock;
     private VideoFrameBackfillService service;
+    /** 可配置单件期限，用于验证清空及付费前的时间边界。 */
+    private VideoFrameProperties properties;
     private ListAppender<ILoggingEvent> events;
     private final VideoFrameSource source = new VideoFrameSource("OWNER/work/video/a.mp4", "a".repeat(64), "etag", 1000);
     private final Work work = new Work(1, source.objectKey(), "sha", 23000, null, 0, "OWNER");
@@ -40,7 +42,8 @@ class VideoFrameBackfillServiceTest {
         storage = mock(VideoFrameStorageService.class);
         snapshots = mock(VideoFrameSnapshotClient.class);
         executionLock = mock(VideoFrameBackfillLock.ExecutionLock.class);
-        service = new VideoFrameBackfillService(repository, storage, snapshots, new VideoFrameProperties());
+        properties = new VideoFrameProperties();
+        service = new VideoFrameBackfillService(repository, storage, snapshots, properties);
         when(repository.highWatermark()).thenReturn(1L);
         when(repository.scan(0, 1, 20)).thenReturn(List.of(work));
         when(repository.scan(1, 1, 20)).thenReturn(List.of());
@@ -207,6 +210,157 @@ class VideoFrameBackfillServiceTest {
         verify(snapshots, never()).ready(anyString());
         verify(storage, times(1)).inspectSource(anyString(), any());
         verify(snapshots, never()).cleanupOutput(anyString(), anyInt());
+    }
+
+    /** 重建不跳过旧有效帧，先CAS清引用、严格删旧，再通过原共享链路生成完整新清单。 */
+    @Test
+    void rebuildClearsAndDeletesBeforeSharedFrameGeneration() {
+        Work previous = existingWork();
+        Work cleared = cleared(previous);
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertEquals(1, result.succeeded());
+        assertEquals(8, result.chargedFrames());
+        var order = inOrder(repository, storage, snapshots);
+        order.verify(storage).validateOwnedManifestForCleanup(previous.manifest(), source, 1L);
+        order.verify(repository).clearManifestForRebuild(previous);
+        order.verify(storage).cleanupOwnedManifestStrict(eq(previous.manifest()), eq(source), eq(1L), any());
+        order.verify(snapshots).submit(eq(source), eq(8), anyString(), eq(QUEUE_ID));
+        order.verify(storage).persist(eq(source), eq(1L), startsWith("history-"), eq(23000), eq(8), anyList(), any());
+        order.verify(repository).saveManifest(cleared, MANIFEST);
+        verify(storage, never()).hasValidManifest(any(), any(), anyLong(), any());
+        verify(storage, never()).cleanupOwnedManifest(anyString(), any(), anyLong());
+        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "nextAfterWorkId=1", "highWatermark=1"));
+    }
+
+    /** 不足以支付下一件截图的预算不能先清空该件数据库或COS。 */
+    @Test
+    void rebuildBudgetExhaustionPreservesTheNextWork() {
+        Work first = existingWork();
+        Work second = new Work(2, source.objectKey(), "sha", 23000, "{\"attempt\":\"second\"}", 0, "OWNER");
+        when(repository.highWatermark()).thenReturn(2L);
+        when(repository.scan(0, 2, 20)).thenReturn(List.of(first, second));
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertTrue(result.budgetExhausted());
+        assertEquals(1, result.succeeded());
+        verify(repository, never()).clearManifestForRebuild(second);
+        verify(storage, never()).cleanupOwnedManifestStrict(eq(second.manifest()), any(), anyLong(), any());
+        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "nextAfterWorkId=1", "highWatermark=2"));
+    }
+
+    /** CAS冲突或清空提交结果未知时保留所有旧对象，不假定数据库已安全解绑。 */
+    @Test
+    void rebuildClearConflictOrUnknownResultDoesNotDeleteOrPay() {
+        Work previous = existingWork();
+        when(repository.clearManifestForRebuild(previous)).thenReturn(null)
+                .thenThrow(new IllegalStateException("response lost"));
+        for (int attempt = 0; attempt < 2; attempt++) {
+            var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+            assertEquals(1, result.failed());
+            assertEquals(0, result.chargedFrames());
+        }
+        verify(storage, never()).cleanupOwnedManifestStrict(anyString(), any(), anyLong(), any());
+        verifyNoInteractions(snapshots);
+        verify(repository, never()).saveManifest(any(), anyString());
+    }
+
+    /** 删除失败不能进入付费截图；清空引用由后续补帧恢复，剩余旧对象交给孤儿扫尾。 */
+    @Test
+    void rebuildDeleteFailureStopsBeforePaidSubmission() {
+        Work previous = existingWork();
+        doThrow(new VideoFrameProcessingException("FRAME_CLEANUP", "旧帧删除失败"))
+                .when(storage).cleanupOwnedManifestStrict(eq(previous.manifest()), eq(source), eq(1L), any());
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertEquals(1, result.failed());
+        assertEquals(0, result.chargedFrames());
+        verify(repository).clearManifestForRebuild(previous);
+        verifyNoInteractions(snapshots);
+        verify(repository, never()).saveManifest(any(), anyString());
+        assertTrue(logged(Level.ERROR, "历史视频补帧失败", "stage=FRAME_CLEANUP"));
+    }
+
+    /** 剩余时间不足以完成远端调用时不破坏原清单，也不提交收费截图。 */
+    @Test
+    void insufficientDeadlineBeforeRebuildPreservesOldManifest() {
+        existingWork();
+        properties.setBackfillItemSeconds(15);
+        properties.setRemoteTimeoutSeconds(15);
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertEquals(1, result.failed());
+        assertEquals(0, result.chargedFrames());
+        verify(repository, never()).clearManifestForRebuild(any());
+        verify(storage, never()).cleanupOwnedManifestStrict(anyString(), any(), anyLong(), any());
+        verifyNoInteractions(snapshots);
+        assertTrue(logged(Level.ERROR, "历史视频补帧失败", "stage=PROCESS_INTERRUPTED"));
+    }
+
+    /** 清理期间收到关闭中断后，不能继续预留预算或提交新的收费截图。 */
+    @Test
+    void interruptedAfterOldFrameCleanupDoesNotSubmitPaidJob() {
+        Work previous = existingWork();
+        doAnswer(invocation -> {
+            Thread.currentThread().interrupt();
+            return null;
+        }).when(storage).cleanupOwnedManifestStrict(eq(previous.manifest()), eq(source), eq(1L), any());
+        try {
+            var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+            assertEquals(0, result.chargedFrames());
+            verify(repository).clearManifestForRebuild(previous);
+            verifyNoInteractions(snapshots);
+            verify(repository, never()).saveManifest(any(), anyString());
+            assertTrue(logged(Level.ERROR, "历史视频补帧失败", "stage=PROCESS_INTERRUPTED"));
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    /** 旧清单无法安全确认所有权时在数据库清空前失败。 */
+    @Test
+    void unsafeOldManifestCannotBeCleared() {
+        Work previous = existingWork();
+        doThrow(new VideoFrameProcessingException("FRAME_CLEANUP", "旧清单无法安全识别"))
+                .when(storage).validateOwnedManifestForCleanup(previous.manifest(), source, 1L);
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertEquals(1, result.failed());
+        verify(repository, never()).clearManifestForRebuild(any());
+        verify(storage, never()).cleanupOwnedManifestStrict(anyString(), any(), anyLong(), any());
+        verifyNoInteractions(snapshots);
+    }
+
+    /** 清空后被审核或用户修改，新的清单不能覆盖并发版本，只回收本次生成对象。 */
+    @Test
+    void rebuildPublicationUsesClearedVersionAndCleansOnlyNewUnpublishedFrames() {
+        Work previous = existingWork();
+        when(repository.saveManifest(cleared(previous), MANIFEST)).thenReturn(false);
+        var result = service.runRebuild(EXECUTION_ID, 8, 0, null, executionLock, QUEUE_ID);
+        assertEquals(1, result.failed());
+        verify(repository).saveManifest(cleared(previous), MANIFEST);
+        verify(storage).cleanupOwnedManifest(MANIFEST, source, 1L);
+        verify(storage, never()).cleanupOwnedManifest(eq(previous.manifest()), any(), anyLong());
+    }
+
+    /** 显式接续范围避免预算有限时反复重建首批作品，扫描上界以本次实际水位为限。 */
+    @Test
+    void rebuildHonorsExclusiveCursorAndInclusiveUpperBound() {
+        when(repository.highWatermark()).thenReturn(100L);
+        service.runRebuild(EXECUTION_ID, 8, 20, 30L, executionLock, QUEUE_ID);
+        verify(repository).scan(20, 30, 20);
+        verify(repository, never()).scan(eq(0L), anyLong(), anyInt());
+        verifyNoInteractions(storage, snapshots);
+        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "afterWorkId=20", "highWatermark=30", "nextAfterWorkId=20"));
+    }
+
+    /** 为重建用例准备一份旧清单及成功CAS返回的已清空快照。 */
+    private Work existingWork() {
+        Work previous = new Work(work.id(), work.objectKey(), work.sha256(), work.durationMs(),
+                "{\"attempt\":\"old\"}", work.version(), work.ownerCode());
+        when(repository.scan(0, 1, 20)).thenReturn(List.of(previous));
+        when(repository.clearManifestForRebuild(previous)).thenReturn(cleared(previous));
+        return previous;
+    }
+
+    /** 模拟短事务清空只增加标准版本、清掉帧引用，其它源事实不变。 */
+    private Work cleared(Work value) {
+        return new Work(value.id(), value.objectKey(), value.sha256(), value.durationMs(), null, value.version() + 1, value.ownerCode());
     }
 
     /** 同一固定水位分页内加入第二件，用于验证失败继续与成本边界。 */

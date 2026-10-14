@@ -7,6 +7,7 @@ import javax.imageio.stream.MemoryCacheImageOutputStream;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** 内存图片规范化的字节和像素边界。 */
@@ -21,8 +22,33 @@ class VideoFrameImageNormalizerTest {
         assertTrue(large.bytes().length <= 200 * 1024);
         assertEquals(0xff, large.bytes()[0] & 0xff); assertEquals(0xd8, large.bytes()[1] & 0xff);
         assertEquals(960, ImageIO.read(new ByteArrayInputStream(large.bytes())).getWidth());
+        assertNotNull(large.visualFeatures());
+        assertNull(large.featureFailureType());
+        assertEquals(0, large.visualFeatures().luminance());
         var small = normalizer.normalize(image(64, 32));
         assertEquals(64, small.width()); assertEquals(32, small.height());
+    }
+    /** 特征只读取已缩小的最终图像，辅助计算失败不丢弃成功规范化的帧。 */
+    @Test
+    void analyzesNormalizedPixelsAndPreservesFrameWhenOptionalFeaturesFail() throws Exception {
+        byte[] input = image(1920, 1080);
+        AtomicInteger calls = new AtomicInteger();
+        var failingFeatures = new VideoFrameImageNormalizer(properties) {
+            /** 使用真实规范化，只模拟最终的辅助计算故障。 */
+            @Override
+            VideoFrameVisualFeatures analyzeFeatures(BufferedImage normalized) {
+                calls.incrementAndGet();
+                assertEquals(960, normalized.getWidth());
+                assertEquals(540, normalized.getHeight());
+                throw new IllegalStateException("https://private.invalid/frame?signature=secret 辅助分析失败");
+            }
+        };
+        var result = failingFeatures.normalize(input);
+        assertNull(result.visualFeatures());
+        assertEquals("IllegalStateException", result.featureFailureType());
+        assertEquals(960, ImageIO.read(new ByteArrayInputStream(result.bytes())).getWidth());
+        assertEquals(1, calls.get());
+        assertThrows(VideoFrameProcessingException.class, () -> failingFeatures.normalize("<Error/>".getBytes()));
     }
     @Test
     void rejectsErrorBodyAndExcessPixelsBeforeFullDecode() throws Exception {
