@@ -20,7 +20,7 @@ import java.util.UUID;
 @Slf4j
 public class VideoFrameBackfillService {
     /** 失败继续下一件；预算耗尽或执行锁丢失停止本次扫描。 */
-    private enum Outcome { SUCCESS, SKIPPED, FAILED, STALE, BUDGET, PREFLIGHT_REFUSED }
+    private enum Outcome { SUCCESS, SKIPPED, FAILED, STALE, BUDGET }
     /** 日志固定阶段与本次处理前缀。 */
     private static final String SOURCE_VERIFY = "SOURCE_VERIFY";
     private static final String FRAME_SUBMIT = "FRAME_SUBMIT";
@@ -35,7 +35,6 @@ public class VideoFrameBackfillService {
     private static final String AUDIO_TRANSCRIBE = "AUDIO_TRANSCRIBE";
     private static final String SUMMARY_PREFLIGHT = "SUMMARY_PREFLIGHT";
     private static final String SUMMARY_GENERATE = "SUMMARY_GENERATE";
-    private static final String PREFLIGHT_REFUSED = "PREFLIGHT_REFUSED";
     private static final String BACKFILL = "BACKFILL";
     private static final String REBUILD = "REBUILD";
     private static final String PROCESS_INTERRUPTED = "PROCESS_INTERRUPTED";
@@ -104,12 +103,6 @@ public class VideoFrameBackfillService {
                     }
                     summary.scanned++;
                     Outcome outcome = processOne(executionId, work, summary, executionLock, queueId, rebuild, audioRun, summaryRun);
-                    if (outcome == Outcome.PREFLIGHT_REFUSED) {
-                        summary.failed++;
-                        summary.preflightRefused = true;
-                        result = PREFLIGHT_REFUSED;
-                        break;
-                    }
                     if (outcome == Outcome.BUDGET) {
                         summary.budgetExhausted = true;
                         result = BUDGET_EXHAUSTED;
@@ -124,7 +117,7 @@ public class VideoFrameBackfillService {
                     if (work.id() <= cursor) { throw new IllegalStateException("历史补帧游标未推进"); }
                     cursor = work.id();
                 }
-                if (summary.budgetExhausted || summary.preflightRefused) { break; }
+                if (summary.budgetExhausted) { break; }
                 log.info("历史视频补帧分页完成: executionId={}, cursor={}, highWatermark={}, chargedFrames={}",
                         executionId, cursor, highWatermark, summary.chargedFrames);
             }
@@ -173,7 +166,8 @@ public class VideoFrameBackfillService {
 
     /**
      * 单件总期限覆盖三阶段；普通帧和音频失败不阻止原视频摘要独立复验。
-     * 重建的全部必要准入在清空之前完成，摘要预留凭证跨阶段复用，不重复预留。
+     * 重建在清空前验证源和预算；摘要规格不支持只跳过摘要，帧和音频仍独立执行。
+     * 单件预检失败保留旧数据并继续后续作品，摘要预留凭证跨阶段复用，不重复预留。
      */
     private Outcome processOne(String executionId, Work work, MutableSummary summary,
             VideoFrameBackfillLock.ExecutionLock executionLock, String queueId, boolean rebuild,
@@ -184,7 +178,6 @@ public class VideoFrameBackfillService {
         VideoAudioTranscriptionService.Preparation prepared = null;
         VideoSummaryService.Preparation summaryPrepared = null;
         String stage = SOURCE_VERIFY;
-        boolean frameExecutionStarted = false;
         try {
             if (!repository.ownedSource(work)) {
                 throw new VideoFrameProcessingException(SOURCE_VERIFY, "历史视频目录不属于作品作者");
@@ -205,23 +198,28 @@ public class VideoFrameBackfillService {
                 executionLock.checkHeld();
                 if (!prepared.ready() && prepared.outcome() != VideoAudioTranscriptionService.Outcome.DISABLED) {
                     Outcome refusal = recordAudio(executionId, work.id(), prepared.outcome(), summary, false);
-                    return refusal == Outcome.BUDGET ? Outcome.BUDGET : Outcome.PREFLIGHT_REFUSED;
+                    return refusal == Outcome.BUDGET ? Outcome.BUDGET : Outcome.FAILED;
                 }
                 stage = SUMMARY_PREFLIGHT;
                 // 摘要预检仅核验源和保守费用，不持有音频已经领取的作品命名锁。
                 summaryPrepared = videoSummary.prepare(work.id(), true, summaryRun, overallDeadline, executionLock::checkHeld);
                 executionLock.checkHeld();
-                if (!summaryPrepared.ready() && summaryPrepared.outcome() != VideoSummaryService.Outcome.DISABLED) {
+                if (!summaryPrepared.ready() && summaryPrepared.outcome() != VideoSummaryService.Outcome.DISABLED
+                        && summaryPrepared.outcome() != VideoSummaryService.Outcome.NOT_SUPPORTED) {
                     Outcome refusal = recordSummary(executionId, work.id(), summaryPrepared.outcome(), summary);
-                    return refusal == Outcome.BUDGET ? Outcome.BUDGET : Outcome.PREFLIGHT_REFUSED;
+                    return refusal == Outcome.BUDGET ? Outcome.BUDGET : Outcome.FAILED;
+                }
+                if (summaryPrepared.outcome() == VideoSummaryService.Outcome.NOT_SUPPORTED) {
+                    log.info("历史视频摘要规格不支持，继续处理帧和音频: executionId={}, workId={}", executionId, work.id());
                 }
                 frameDeadline = earlier(Instant.now().plusSeconds(Math.max(15, properties.getBackfillItemSeconds())),
                         overallDeadline);
                 storage.verifySource(source, frameDeadline);
             }
-            frameExecutionStarted = true;
+            boolean clearVideoSummary = summaryPrepared == null
+                    || summaryPrepared.outcome() != VideoSummaryService.Outcome.NOT_SUPPORTED;
             Outcome frames = framesMissing ? processFrames(executionId, work, summary, executionLock, queueId,
-                    rebuild, source, frameDeadline) : Outcome.SKIPPED;
+                    rebuild, clearVideoSummary, source, frameDeadline) : Outcome.SKIPPED;
             if (frames == Outcome.BUDGET || frames == Outcome.STALE) { return frames; }
             Outcome audioResult = Outcome.SKIPPED;
             if (frames != Outcome.FAILED) {
@@ -246,11 +244,17 @@ public class VideoFrameBackfillService {
             if (prepared != null) { prepared.close(); prepared = null; }
             stage = SUMMARY_GENERATE;
             if (Thread.currentThread().isInterrupted()) { throw stopped(); }
-            if (!Instant.now().isBefore(overallDeadline)) { return Outcome.FAILED; }
-            VideoSummaryService.Outcome generated = summaryPrepared == null
-                    ? videoSummary.summarize(work.id(), work.objectKey(), work.sha256(), summaryRun,
-                            earlier(videoSummary.summaryDeadline(), overallDeadline), executionLock::checkHeld)
-                    : videoSummary.complete(summaryPrepared, overallDeadline);
+            VideoSummaryService.Outcome generated;
+            if (summaryPrepared != null && !summaryPrepared.ready()) {
+                // 规格不支持的结果直接记账，不重新预检或调用模型，也不丢失已保存的音频。
+                generated = summaryPrepared.outcome();
+            } else {
+                if (!Instant.now().isBefore(overallDeadline)) { return Outcome.FAILED; }
+                generated = summaryPrepared == null
+                        ? videoSummary.summarize(work.id(), work.objectKey(), work.sha256(), summaryRun,
+                                earlier(videoSummary.summaryDeadline(), overallDeadline), executionLock::checkHeld)
+                        : videoSummary.complete(summaryPrepared, overallDeadline);
+            }
             executionLock.checkHeld();
             Outcome summaryResult = recordSummary(executionId, work.id(), generated, summary);
             if (summaryResult == Outcome.BUDGET) { return Outcome.BUDGET; }
@@ -271,7 +275,7 @@ public class VideoFrameBackfillService {
                     executionId, work.id(), failureStage, exception.getClass().getSimpleName());
             if (AUDIO_PREFLIGHT.equals(stage) || AUDIO_TRANSCRIBE.equals(stage)) { summary.audioFailed++; }
             if (SUMMARY_PREFLIGHT.equals(stage) || SUMMARY_GENERATE.equals(stage)) { summary.summaryFailed++; }
-            return rebuild && !frameExecutionStarted ? Outcome.PREFLIGHT_REFUSED : Outcome.FAILED;
+            return Outcome.FAILED;
         } finally {
             if (prepared != null) { prepared.close(); }
             if (summaryPrepared != null) { summaryPrepared.close(); }
@@ -287,7 +291,7 @@ public class VideoFrameBackfillService {
                 ? Outcome.SUCCESS : Outcome.SKIPPED;
     }
 
-    /** 原视频摘要独立统计，规格超限只在重建预检时阻止破坏旧数据。 */
+    /** 原视频摘要独立统计，规格超限记为单件部分失败，不撤销帧和音频结果。 */
     private Outcome recordSummary(String executionId, long workId, VideoSummaryService.Outcome outcome,
             MutableSummary summary) {
         log.info("历史视频摘要结果: executionId={}, workId={}, outcome={}", executionId, workId, outcome);
@@ -324,7 +328,7 @@ public class VideoFrameBackfillService {
 
     /** 已完成准入后只执行帧链路，独立处理提交未知和对象清理。 */
     private Outcome processFrames(String executionId, Work work, MutableSummary summary,
-            VideoFrameBackfillLock.ExecutionLock executionLock, String queueId, boolean rebuild,
+            VideoFrameBackfillLock.ExecutionLock executionLock, String queueId, boolean rebuild, boolean clearVideoSummary,
             VideoFrameSource source, Instant deadline) {
         Work target = work;
         String manifest = null;
@@ -342,7 +346,8 @@ public class VideoFrameBackfillService {
                 executionLock.checkHeld();
                 checkRemainingTime(deadline);
                 stage = MANIFEST_CLEAR;
-                target = repository.clearManifestForRebuild(work);
+                target = clearVideoSummary ? repository.clearManifestForRebuild(work)
+                        : repository.clearManifestForRebuild(work, false);
                 if (target == null) {
                     throw new VideoFrameProcessingException(MANIFEST_CLEAR, "作品源、版本或清单已变化，本次未清空作品");
                 }
@@ -494,8 +499,6 @@ public class VideoFrameBackfillService {
         private long failed;
         private int chargedFrames;
         private boolean budgetExhausted;
-        /** 清空前准入拒绝必须保留当前游标，与已执行失败分开。 */
-        private boolean preflightRefused;
         /** 帧与音频结果独立，避免部分成功掩盖补偿需求。 */
         private long frameSucceeded;
         private long audioSaved;

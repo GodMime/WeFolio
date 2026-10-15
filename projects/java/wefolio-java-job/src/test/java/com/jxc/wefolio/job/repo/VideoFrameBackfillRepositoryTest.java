@@ -22,6 +22,10 @@ class VideoFrameBackfillRepositoryTest {
     private static final String OLD_MANIFEST = "{\"oldFrames\":true}";
     private static final String NEW_MANIFEST = "{\"newFrames\":true}";
     private static final String OLD_SUMMARY = "{\"summary\":\"旧帧摘要\"}";
+    /** 原视频摘要独立于帧和音频，规格拒绝时应保留同源旧结果。 */
+    private static final String OLD_VIDEO_SUMMARY = "{\"summary\":\"原视频摘要\"}";
+    /** 重建清空和冲突验证使用的旧音频文本。 */
+    private static final String OLD_AUDIO_TEXT = "旧口播";
     private static final String BROKEN_MANIFEST = "invalid-old";
     /** 固定缓存期限只用于证明清单清空与缓存清空发生在同一更新中。 */
     private static final LocalDateTime CACHE_EXPIRY = LocalDateTime.of(2026, 10, 14, 12, 0);
@@ -177,6 +181,59 @@ class VideoFrameBackfillRepositoryTest {
         assertEquals(snapshot.objectKey(), jdbc.queryForObject("SELECT media_object_key FROM wf_work WHERE id=1", String.class));
         assertEquals("PASSED", jdbc.queryForObject("SELECT audit_status FROM wf_work WHERE id=1", String.class));
         assertEquals(snapshot.durationMs(), jdbc.queryForObject("SELECT duration_ms FROM wf_work WHERE id=1", Integer.class));
+    }
+
+    /** 摘要规格不支持时只重建帧和音频，原视频摘要在同一事务中保持原值。 */
+    @Test
+    void rebuildCanPreserveVideoSummaryWhileClearingFramesAudioAndFrameCache() {
+        Work snapshot = savedWork(OLD_MANIFEST);
+        jdbc.update("UPDATE wf_work SET video_audio_text=?,video_summary_json=? WHERE id=1",
+                OLD_AUDIO_TEXT, OLD_VIDEO_SUMMARY);
+
+        Work cleared = transaction.execute(status -> repository.clearManifestForRebuild(snapshot, false));
+
+        assertNotNull(cleared);
+        assertNull(currentManifest());
+        assertNull(jdbc.queryForObject("SELECT video_audio_text FROM wf_work WHERE id=1", String.class));
+        assertEquals(OLD_VIDEO_SUMMARY, jdbc.queryForObject("SELECT video_summary_json FROM wf_work WHERE id=1", String.class));
+        assertNull(jdbc.queryForObject("SELECT ai_media_summary_json FROM wf_work WHERE id=1", String.class));
+        assertNull(jdbc.queryForObject("SELECT ai_media_summary_expires_at FROM wf_work WHERE id=1", LocalDateTime.class));
+        assertEquals(snapshot.version() + 1, cleared.version());
+        assertEquals(cleared.version(), jdbc.queryForObject("SELECT version FROM wf_work WHERE id=1", Integer.class));
+        assertEquals(Boolean.TRUE, transaction.execute(status -> repository.saveManifest(cleared, NEW_MANIFEST)));
+        assertEquals(OLD_VIDEO_SUMMARY, jdbc.queryForObject("SELECT video_summary_json FROM wf_work WHERE id=1", String.class));
+    }
+
+    /** 保留摘要选项不能把尚未生成的 NULL 变成占位结果。 */
+    @Test
+    void rebuildPreservingAbsentVideoSummaryKeepsNull() {
+        Work snapshot = savedWork(OLD_MANIFEST);
+
+        assertNotNull(transaction.execute(status -> repository.clearManifestForRebuild(snapshot, false)));
+
+        assertNull(currentManifest());
+        assertNull(jdbc.queryForObject("SELECT video_summary_json FROM wf_work WHERE id=1", String.class));
+    }
+
+    /** 保留摘要分支仍使用原源及版本 CAS，冲突时所有旧派生数据都保持不变。 */
+    @Test
+    void preservingVideoSummaryStillRejectsSourceAndVersionConflicts() {
+        for (String mutation : new String[]{
+                "UPDATE wf_work SET media_object_key='OWNER/work/video/replaced.mp4' WHERE id=1",
+                "UPDATE wf_work SET media_sha256='changed' WHERE id=1",
+                "UPDATE wf_work SET version=version+1 WHERE id=1"}) {
+            jdbc.update("UPDATE wf_work SET media_object_key=?,media_sha256=?,version=0,video_audio_text=?,video_summary_json=? WHERE id=1",
+                    work.objectKey(), work.sha256(), OLD_AUDIO_TEXT, OLD_VIDEO_SUMMARY);
+            Work snapshot = savedWork(OLD_MANIFEST);
+            jdbc.update(mutation);
+
+            assertNull(transaction.execute(status -> repository.clearManifestForRebuild(snapshot, false)), mutation);
+
+            assertEquals(OLD_MANIFEST, currentManifest(), mutation);
+            assertEquals(OLD_AUDIO_TEXT, jdbc.queryForObject("SELECT video_audio_text FROM wf_work WHERE id=1", String.class), mutation);
+            assertEquals(OLD_VIDEO_SUMMARY, jdbc.queryForObject("SELECT video_summary_json FROM wf_work WHERE id=1", String.class), mutation);
+            assertSummaryUnchanged();
+        }
     }
 
     /** 原来没有帧清单也返回版本递增快照，不能复用清空前的旧版本发布。 */

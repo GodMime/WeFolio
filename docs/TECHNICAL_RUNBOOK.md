@@ -617,6 +617,28 @@ Service 两项回归先复现旧逻辑 `FAILED/ARRAY_COUNT`，修复后相关 53
 
 `22:08:37` 复查 Job 本机/公网健康 UP、版本和构建时间一致、安装 SHA 与本地一致，规整类已进入制品；音频与摘要均开启，实际 `.env` 内容未变且权限为 `0600`。启动后 ERROR/FATAL、Snapshot 清理失败与 ClassCastException 均为 0，公网 Runtime 健康 UP。未新增数据库迁移、未重启 Runtime、未提交 Git或触发额外视频补跑。发布证据：`/private/tmp/wefolio-count-deploy.log`、`/private/tmp/wefolio-count-release-result.json`、`/private/tmp/wefolio-count-postdeploy.json`。
 
+### 4.29 视频批处理单件隔离与十进制上传大小修正（2026-10-14，本地完成，待发布）
+
+生产日志确认全量重建于 `21:28:21` 在作品 153 返回 `NOT_SUPPORTED` 后以 `PREFLIGHT_REFUSED` 停止，游标为 119；154～156 未执行。四件源文件均为约 101～103 MB，超过摘要默认的 100,000,000 字节，但低于原小程序上传及音频独立资源上限 104,857,600 字节。已有关键帧来自 10 月 12 日，拒绝发生在清空和正式转写前。
+
+本地 Job 改为单件预检失败保留当前旧数据、记录失败并推进游标，继续后续作品；预算耗尽、全局执行锁失效和线程中断仍停止本轮。摘要规格不支持只跳过摘要模型，继续重建关键帧和音频；仓储在原事务及源、版本、清单 CAS 保护下保留本次无法重建的旧原视频摘要，原值为空则继续为空。整体仍报告部分失败，音频和摘要分别统计；不新增隐式模型重试。音频保留自己的源文件、音轨时长、WAV 和临时资源限制，未收紧到摘要的十进制百兆。
+
+小程序正式视频作品上传上限改为包含边界的 100,000,000 字节；超过此值进入现有最多三轮自动压缩，用 `statSync` 的实际成品大小验收，仍超限则清理临时成品并阻止上传。视频大小显示同步为十进制，图片、动图、音频维持既有显示。后端上传契约保持兼容旧小程序；此规则须发布新小程序后生效，历史 COS 视频不会自动压缩。
+
+验证：单件隔离回归先出现 4 项失败，修正后相关 113 项通过；仓储保留摘要先红后绿，H2 25 项通过；Job 全量 1052 项、0 失败/错误、2 项条件跳过；小程序全量 2671 项通过。补充了历史视频 102,090,765 字节仍可通过音频 HEAD 准入，以及 100,000,001 字节压缩结果被拒绝的验证。日志：`/private/tmp/wefolio-video-isolation-red.log`、`/private/tmp/wefolio-video-isolation-focused.log`、`/private/tmp/wefolio-video-isolation-job-full.log`、`/private/tmp/wefolio-upload-decimal-full.log`。未发布 Job 或小程序、未修改 Runtime、未提交 Git、未执行生产补跑或收费模型调用；手机原生编码效果尚未实机验证。
+
+### 4.30 高级作品集媒体摘要失败诊断日志（2026-10-15，Job 已发布）
+
+生产任务 `18` 于 `13:14:25.011` 创建，`13:14:40.943` 以 `FAILED/INVALID_MEDIA_SUMMARY` 结束，固定提示为“媒体摘要条目不合法”。只读核对确认唯一新模型调用对应图片作品 `157`；HTTP 200、`finishReason=stop`，输入 4401、输出 480 token。两个视频 `154`、`153` 的冻结摘要使用已部署校验器复核均通过。失败响应未写缓存或任务结果，原异常中的字段、类型和数量诊断在应用异常转换时丢失，因此无法从既有库表还原本次具体违规字段或条数。
+
+本轮只在 `PortfolioAiMediaExecutionService` 的模型响应、缓存、冻结摘要校验失败处新增 WARN，日志标签为“高级 AI 媒体摘要校验失败”。记录 `taskId/attempt/workId/sourceNo/stage/callNo/errorCode/diagnostic`；阶段为 `MODEL/CACHE/FROZEN`，仅模型阶段有真实调用号。诊断包含可信字段路径、规则、实际类型、条数或码点长度及上限；未知字段只计数，正文、资源 URL、联系方式和异常堆栈不输出。校验接受范围、错误码、提示文案、计费顺序与重试行为保持不变。
+
+6 项新增回归先在旧实现因日志缺失失败；修正后定向 41 项通过。从 HEAD `f7a9c1f` 隔离快照仅叠加本轮源码与测试，全量 Job 1051 项、0 失败/错误、2 项条件跳过；首次沙箱禁止本机监听和 FFmpeg 系统探测，取得本机测试权限后全量重跑通过。打包退出码 0，候选与生产基线 JAR 逐条比对仅变更本服务主类、内部类和 `version.properties`；§4.29 尚未发布的补帧业务改动未带入。
+
+按用户“补充日志 并发布”授权，先核验并排空旧实例、确认运行任务数为 0、独立备份后原子换包及重启。新构建版本 `f7a9c1f`、构建时间 `2026-10-15 13:39:48`、JAR SHA-256 `ed2ee0d481608980c7b3684305cd1e685a4a3bb7f79ec298502b1ba846836243`；PID `13121`，启动时间 `13:40:57`。旧包为 `/root/java/job/wefolio-java-job.jar.backup-media-summary-logging-20261015-1332`，SHA-256 `fb429712b718330cefa81bc7c6586cebfc58381d67d0c5d055dfa0868639c2d7`。本机与正式 HTTPS Job 健康 UP、版本及制品一致，正式 Runtime 健康 UP；新进程 ERROR/FATAL 为 0，音频/原视频摘要开关和工具路径、`.env` 内容及权限均未变。未执行数据库迁移、未发布 Runtime 或小程序、未重跑收费模型、未提交 Git；日志增强不构成任务 18 生成问题已修复或真实生成已验收。
+
+证据：`/private/tmp/wefolio-summary-logging-red.log`、`/private/tmp/wefolio-media-summary-logging-focused.log`、`/private/tmp/wefolio-media-summary-logging-job-full-approved.log`、`/private/tmp/wefolio-media-summary-logging-package.log`、`/private/tmp/wefolio-media-summary-logging-artifact-check.json`、`/private/tmp/wefolio-media-summary-logging-deploy.log`、`/private/tmp/wefolio-media-summary-logging-release-result.json`。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |

@@ -103,6 +103,17 @@ class VideoAudioExtractorTest {
         } finally { server.stop(0); }
     }
 
+    /** 历史视频可超过摘要的十进制百兆，音频 HEAD 准入仍遵守独立资源上限。 */
+    @Test void audioSourceAcceptsHistoricalVideoAboveSummaryLimit() throws Exception {
+        long historicalVideoBytes = 102_090_765L;
+        AtomicInteger gets = new AtomicInteger();
+        HttpServer server = server(new byte[1], gets, historicalVideoBytes);
+        try {
+            assertEquals(historicalVideoBytes, extractor.inspect("OWNER/work/video/a.mp4", future()).bytes());
+            assertEquals(0, gets.get());
+        } finally { server.stop(0); }
+    }
+
     /** 真实时长超限直接失败，不通过 -t 截取前一段继续收费。 */
     @Test void excessiveActualDurationIsRejected() throws Exception {
         Path file = temporary.resolve("long.mp4"); Files.write(file, video(true)); properties.setMaxDurationSeconds(1);
@@ -122,10 +133,15 @@ class VideoAudioExtractorTest {
 
     /** 测试 COS 只返回由当前回环服务持有的签名地址，生产不开放端点覆写。 */
     private HttpServer server(byte[] data, AtomicInteger gets) throws Exception {
+        return server(data, gets, data.length);
+    }
+
+    /** 可单独验证 HEAD 字节准入，避免为大小边界创建百兆测试文件。 */
+    private HttpServer server(byte[] data, AtomicInteger gets, long sourceBytes) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             exchange.getResponseHeaders().set("ETag", "\"test-etag\"");
-            exchange.getResponseHeaders().set("Content-Length", Integer.toString(data.length));
+            exchange.getResponseHeaders().set("Content-Length", Long.toString(sourceBytes));
             if (exchange.getRequestMethod().equals("HEAD")) { exchange.sendResponseHeaders(200, -1); }
             else { gets.incrementAndGet(); exchange.sendResponseHeaders(200, data.length); exchange.getResponseBody().write(data); }
             exchange.close();

@@ -4,7 +4,7 @@ const test = require('node:test')
 const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
 const { compressVideoToLimit } = require('../pages/works/utils/work-video-compress')
 
-const LIMIT = 100 * 1024 * 1024
+const LIMIT = 100000000
 const SOURCE_PATH = 'wxfile://source'
 const SOURCE_INFO = {
   width: 1920,
@@ -96,7 +96,7 @@ async function runCompression(harness, file = videoFile(), options = {}) {
 }
 
 test('视频以stat字节验收，并用成品更新票据信息', async () => {
-  const limit = 100 * 1024 * 1024
+  const limit = LIMIT
   const calls = []
   const wxApi = {
     getVideoInfo(args) {
@@ -174,7 +174,8 @@ test('视频大小边界以stat为准，只有L+1进入编码', async (t) => {
   for (const [label, sourceSize, expectedCalls] of [
     ['L-1', LIMIT - 1, 0],
     ['L', LIMIT, 0],
-    ['L+1', LIMIT + 1, 1]
+    ['L+1', LIMIT + 1, 1],
+    ['低于旧100MiB阈值但超过100MB', 102090765, 1]
   ]) {
     await t.test(label, async () => {
       const harness = createVideoHarness({ sourceSize })
@@ -386,7 +387,7 @@ test('首轮超限仍读取成品元数据', async () => {
 test('高帧率导致短边不足时降为30fps后重算resolution', async () => {
   const harness = createVideoHarness({
     sourceInfo: { width: 3840, height: 1600, duration: 600, fps: 60, bitrate: 120000 },
-    outputInfos: [{ width: 1438, height: 599, duration: 600, fps: 30, type: 'mp4' }]
+    outputInfos: [{ width: 1390, height: 579, duration: 600, fps: 30, type: 'mp4' }]
   })
   await runCompression(harness)
   assert.equal(harness.calls[0].fps, 30)
@@ -482,14 +483,14 @@ test('DJI样本的开发者工具元数据形态可以完成压缩结果验收',
     sourceSize: originalSize,
     sourceInfo,
     outputSizes: [outputSize],
-    outputInfos: [{ ...sourceInfo, bitrate: 29951, size: 100352 }]
+    outputInfos: [{ ...sourceInfo, bitrate: 28554, size: 95703 }]
   })
   const result = await runCompression(harness, videoFile({
     fileName: 'DJI_20260517171115_0202_D.MP4',
     size: originalSize
   }))
   assert.equal(harness.calls.length, 1)
-  assert.equal(harness.calls[0].bitrate, 29951)
+  assert.equal(harness.calls[0].bitrate, 28554)
   assert.equal(harness.calls[0].fps, 29)
   assert.equal(harness.calls[0].resolution, 1)
   assert.equal(result.tempFilePath, harness.outputPaths[0])
@@ -685,14 +686,14 @@ test('低报正码率与文件体积不一致时仍按可行预算编码并验�
   const harness = createVideoHarness({
     sourceSize: 101 * 1024 * 1024,
     sourceInfo: { duration: 600, bitrate: 500 },
-    outputSizes: [97 * 1024 * 1024],
+    outputSizes: [98000000],
     outputInfos: [{ width: 1200, height: 675, duration: 600, fps: 30, type: 'mp4' }]
   })
   const result = await runCompression(harness)
   assert.equal(harness.calls.length, 1)
   assert.ok(harness.calls[0].bitrate > 500)
   assert.ok(harness.calls[0].resolution > 480 / 1080)
-  assert.equal(result.size, 97 * 1024 * 1024)
+  assert.equal(result.size, 98000000)
   assert.equal(result.durationMs, 600000)
 })
 

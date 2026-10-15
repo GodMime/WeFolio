@@ -76,7 +76,7 @@ test('normalizes work list for page rendering', () => {
   assert.equal(result.filterTags[0].activeStyle, 'color: #ffffff; background: #212529; border-color: #212529;')
   assert.equal(result.works[0].typeText, '视频')
   assert.equal(result.works[0].durationText, '02:05')
-  assert.equal(result.works[0].fileSizeText, '10.0MB')
+  assert.equal(result.works[0].fileSizeText, '10.5MB')
   assert.equal(result.works[0].aspectRatio, '16:9')
   assert.equal(result.works[0].aspectRatioText, '16:9')
   assert.equal(result.works[0].auditStatus, 'PASSED')
@@ -591,4 +591,16 @@ test('作品大小格式器供压缩摘要复用并保持原有单位', () => {
   assert.equal(formatFileSize(512), '512B')
   assert.equal(formatFileSize(1536), '2KB')
   assert.equal(formatFileSize(10 * 1024 * 1024), '10.0MB')
+})
+
+test('视频大小显示与十进制100MB限制一致，其他媒体保留原单位', () => {
+  const { formatFileSize } = require('../pages/works/utils/works')
+  for (const [bytes, expected] of [[0, ''], [512, '512B'], [1000, '1KB'],
+    [1000000, '1.0MB'], [98000000, '98.0MB'], [100000000, '100.0MB'], [102090765, '102.1MB']]) {
+    assert.equal(formatFileSize(bytes, 'VIDEO'), expected)
+  }
+  const mediaTypes = ['VIDEO', 'IMAGE', 'ANIMATION', 'AUDIO']
+  const works = normalizeWorkList({ works: mediaTypes.map(mediaType => ({ mediaType, fileSize: 100000000 })) }).works
+  assert.deepEqual(works.map(work => work.fileSizeText), ['100.0MB', '95.4MB', '95.4MB', '95.4MB'])
+  assert.equal(normalizeWorkDetail({ work: { mediaType: 'VIDEO', fileSize: 102090765 } }).work.fileSizeText, '102.1MB')
 })

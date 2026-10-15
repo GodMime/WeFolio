@@ -13,6 +13,7 @@ import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import com.jxc.wefolio.service.portfolioai.AiPortfolioProtocol;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import static com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract.*;
@@ -31,6 +32,7 @@ import java.util.Comparator;
 /** 按作品理解真实媒体、复用安全摘要，再以原v1协议生成；费用在每次发送前持久预留。 */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PortfolioAiMediaExecutionService {
     /** 固定业务时区，与原任务总期限一致。 */
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
@@ -40,6 +42,14 @@ public class PortfolioAiMediaExecutionService {
     private static final String MEDIA_TYPE_FIELD = "mediaType";
     /** 摘要缓存身份同时保留结构版本与实际请求提示词身份。 */
     private static final String SUMMARY_PROMPT_VERSION_FIELD = "promptVersion";
+    /** 旧异常未携带结构诊断时使用固定占位，不回显异常原文。 */
+    private static final String SUMMARY_DIAGNOSTIC_UNAVAILABLE = "UNAVAILABLE";
+    /** 摘要失败发生的可信应用阶段，不取模型或用户提供的字符串。 */
+    private enum SummaryStage {
+        /** 本次模型响应。 */ MODEL,
+        /** 作品摘要缓存。 */ CACHE,
+        /** 任务冻结的视频摘要。 */ FROZEN
+    }
     /** 摘要协议中的文本与条目上限，准入上界与实际校验保持一致。 */
     private static final int SUMMARY_MAX_CODE_POINTS = PortfolioAiStoredVideoSummary.SUMMARY_MAX_CODE_POINTS;
     private static final int ITEM_MAX_CODE_POINTS = PortfolioAiStoredVideoSummary.ITEM_MAX_CODE_POINTS;
@@ -67,7 +77,7 @@ public class PortfolioAiMediaExecutionService {
         JsonNode entries = request.path(KEY_FACTS).path(KEY_MEDIA_PLAN).path(KEY_ENTRIES);
         if (!entries.isArray() || entries.size() > AiPortfolioProtocol.limits().path(KEY_MAX_SOURCE_COUNT).asInt()) { throw failed(ERROR_MEDIA_INVALID, "媒体输入计划不合法"); }
         validateSelectedSources(request, entries);
-        validateRoutes(entries, STORED_SUMMARY_PLAN_VERSION.equals(planVersion));
+        validateRoutes(task, entries, STORED_SUMMARY_PLAN_VERSION.equals(planVersion));
         try { PortfolioAiVideoAudioContext.validateAndNormalize(entries, !LEGACY_PLAN_VERSION.equals(planVersion)); }
         catch (AiProtocolException exception) { throw failed(ERROR_MEDIA_INVALID, exception.getMessage()); }
         for (JsonNode entry : entries) { attachAudio(request, entry); }
@@ -84,7 +94,8 @@ public class PortfolioAiMediaExecutionService {
             PortfolioAiMediaSummaryIdentity identity = stored ? null : cacheIdentity(entry, request);
             long workId = entry.path(KEY_WORK_ID).asLong();
             String cached = stored ? null : repository.cached(workId, identity, now());
-            ObjectNode summary = stored ? storedContent(entry) : cached == null ? null : validateSummary(cached);
+            ObjectNode summary = stored ? storedContent(task, entry) : cached == null ? null
+                    : validateSummary(cached, task, entry, SummaryStage.CACHE, null);
             int cents = summary == null ? (int) PortfolioAiMediaRepository.costCents(
                     estimatedSummaryInputTokens(entry), SUMMARY_OUTPUT_MAX_TOKENS) : 0;
             prepared.add(new PreparedMedia(entry, identity, summary, cents));
@@ -110,7 +121,7 @@ public class PortfolioAiMediaExecutionService {
                 repository.settle(task, call, completion.promptTokens(), completion.completionTokens(),
                         completion.cachedTokens(), completion.cacheStatus(), now());
                 checkOwned.run();
-                summary = validateSummary(completion.content());
+                summary = validateSummary(completion.content(), task, entry, SummaryStage.MODEL, call);
                 // 先复核当前数据库权限与源身份并缓存已付费摘要；后续瞬时 HEAD 故障可重试复用。
                 access.verifyCurrent(task, entry);
                 repository.cache(entry.path(KEY_WORK_ID).asLong(), media.identity(), summary.toString(), now());
@@ -291,18 +302,41 @@ public class PortfolioAiMediaExecutionService {
 
     /** 共用原视频与帧兜底的内容校验，应用层保留既有摘要失败分类。 */
     static ObjectNode validateSummary(String raw) {
+        return validateSummary(raw, null, null, null, null);
+    }
+
+    /** 在异常转换前记录可信诊断，校验规则、错误文案、费用和重试语义保持不变。 */
+    private static ObjectNode validateSummary(String raw, AiGenerationTaskEntity task, JsonNode entry,
+                                              SummaryStage stage, Integer callNo) {
         try { return PortfolioAiStoredVideoSummary.validateContent(raw); }
-        catch (AiProtocolException exception) { throw failed(ERROR_INVALID_SUMMARY, exception.getMessage()); }
+        catch (AiProtocolException exception) {
+            logSummaryFailure(task, entry, stage, callNo, exception);
+            throw failed(ERROR_INVALID_SUMMARY, exception.getMessage());
+        }
     }
 
     /** 冻结摘要只按任务内容读取，不能临时改用更新后的字段或调用模型补救。 */
-    private static ObjectNode storedContent(JsonNode entry) {
+    private static ObjectNode storedContent(AiGenerationTaskEntity task, JsonNode entry) {
         try { return PortfolioAiStoredVideoSummary.frozenContent(entry); }
-        catch (AiProtocolException exception) { throw failed(ERROR_INVALID_SUMMARY, "冻结视频摘要不合法"); }
+        catch (AiProtocolException exception) {
+            logSummaryFailure(task, entry, SummaryStage.FROZEN, null, exception);
+            throw failed(ERROR_INVALID_SUMMARY, "冻结视频摘要不合法");
+        }
+    }
+
+    /** 仅输出任务身份和合同内固定诊断，不输出摘要正文、资源地址或异常堆栈。 */
+    private static void logSummaryFailure(AiGenerationTaskEntity task, JsonNode entry,
+                                          SummaryStage stage, Integer callNo, AiProtocolException exception) {
+        if (task == null) { return; }
+        String diagnostic = exception instanceof PortfolioAiStoredVideoSummary.ValidationException validation
+                ? validation.diagnostic() : SUMMARY_DIAGNOSTIC_UNAVAILABLE;
+        log.warn("高级 AI 媒体摘要校验失败 taskId={}, attempt={}, workId={}, sourceNo={}, stage={}, callNo={}, errorCode={}, diagnostic={}",
+                task.getId(), task.getAttemptCount(), entry.path(KEY_WORK_ID).asLong(), entry.path(KEY_SOURCE_NO).asInt(),
+                stage, callNo, ERROR_INVALID_SUMMARY, diagnostic);
     }
 
     /** 新路线只属于 v3；v3 视频缺少摘要只能使用帧，审核轮次不得缺失。 */
-    private static void validateRoutes(JsonNode entries, boolean storedVersion) {
+    private static void validateRoutes(AiGenerationTaskEntity task, JsonNode entries, boolean storedVersion) {
         for (JsonNode entry : entries) {
             String route = entry.path(KEY_ROUTE).asText();
             if (storedVersion) {
@@ -317,7 +351,7 @@ public class PortfolioAiMediaExecutionService {
                 if (entry.has(KEY_FRAMES) || entry.has(KEY_MANIFEST_HASH) || entry.has(PortfolioAiFrameSelection.FIELD)) {
                     throw failed(ERROR_MEDIA_INVALID, "持久视频摘要不能混入帧输入");
                 }
-                storedContent(entry);
+                storedContent(task, entry);
             } else if (entry.has(PortfolioAiStoredVideoSummary.FIELD)) {
                 throw failed(ERROR_MEDIA_INVALID, "媒体路线与持久视频摘要不一致");
             }

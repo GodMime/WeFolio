@@ -33,7 +33,7 @@ MODIFY_PAGE 继续基于真实当前页面保留未要求修改的已有组件�
 其他菜单正文与底部导航结构始终保留。页面 AI 修改基于整体描述定位当前菜单中的必要变更；没有底部菜单时修改当前根页面。
 旧来源的移动不等于新增绑定；复制、新建组件、更换资源都要满足本次已选来源约束。
 远程字体选择使用可信字体 ref，其固定版本由 Runtime 决定。Runtime 维护最终字体版本引用表和资源清单，未修改节点的选择与版本保持不变。
-当前 CREATE 的远程字体只可绑定到开放 fontId 槽位的 TEXT_SECTION；新建 STRUCTURED_TEXT_SECTION 内文字块和 TEXT_GRID 内片段只有内置 fontFamily 参数，不能在嵌套 params 中插入 fontId 或 bindings。需要文艺远程字体的生成段落应使用 TEXT_SECTION。MODIFY_PAGE 可为现有结构化文字块或网格片段使用其实际允许的 fontId 槽位，按准确内部节点定位；不能把片段字体绑定到父组件。
+CREATE 或 INSERT_COMPONENT 新建 TEXT_SECTION 时，远程字体绑定到组件的 fontId 槽位；新建 STRUCTURED_TEXT_SECTION 时，远程字体绑定到 params.blocks 中各个文字块的 bindings，每块最多一项 {slot:"fontId",ref:"可信FONT ref"}。TITLE、PARAGRAPH、LIST、HINT 可绑定，SPACER 不带 bindings；只能使用本次允许新增绑定的 FONT ref，不写 sourceNo 或真实 fontId；绑定远程字体的文字块 fontFamily 省略或使用 SYSTEM，不同时选择 WECHAT_SANS_SS。TEXT_GRID 新建片段仍只支持内置 fontFamily，不能填写 fontId 或 bindings。MODIFY_PAGE 修改现有结构化文字块或网格片段时，使用定位到内部节点的 BIND_RESOURCES 和实际允许的 fontId 槽位；不通过 UPDATE_PARAMS 写入 bindings，也不把内部文字字体绑定到父组件。
 字体选用指南：根据文字语言、字号、篇幅和用户要求的风格选择字体。以下描述只提供选用知识，不表示本次八款字体均可用。系统默认和微信字体使用当前节点契约允许的 params.fontFamily；远程字体按 resources 中 kind=FONT 的 label 匹配名称，只通过允许的 fontId 槽位绑定对应 ref，遵守 reuseOnly 与原位保留约束，没有可新增绑定的 ref 时不能新增选择。
 - 系统默认（SYSTEM）：适合中文、英文、数字及中英混排，实际字体随设备变化。以无衬线字体为主，简洁、中性、清晰，接近设备原生界面。适合通用正文、说明、联系方式和简约标题。
 - 微信字体（WECHAT_SANS_SS，WeChatSansSS）：主要适合英文和数字，中文使用系统字体回退，不应描述为中文专用字体。现代无衬线风格，字形规整、简洁清爽、数字辨识清晰。适合英文短标题、日期、价格、统计数字和信息展示。
@@ -52,6 +52,7 @@ MODIFY_PAGE 继续基于真实当前页面保留未要求修改的已有组件�
 - “作品集名称”“分享标题”指 share.title；个人“分享头像”使用 share.avatarUrl 的 IMAGE ref，可用本人头像句柄或允许 avatarUrl 的已选作品图片句柄，仅当契约和资源同时允许时绑定；团队整体简介用 share.description。分享头像不修改账号资料中的头像；正文标题或主持描述使用文字组件，不能仅写成分享标题或整体简介。
 - “整体黑底”“页面背景”指 style.backgroundColor="#000000"；“组件间距”指 style.componentSpacingRpx，单位 rpx，仅个人当前契约开放。文字上的背景作品属于该文字组件的 backgroundWorkId，不替代整体底色。黑色背景配合可读文字颜色；不能把整体背景要求误写成文字网格单元格背景或分割线颜色。
 - “背景音乐”指全局 backgroundAudio；启用时绑定已选 AUDIO 作品到 workId 并设置 enabled=true；“关闭音乐”仅设置 enabled=false，保留未要求替换的曲目。displayStyle 的 DISC 为唱片、SLEEVE 为唱片封套、MINI_PLAYER 为迷你播放器；它是播放器外观，不是播放模式。
+- “多段文艺的描述”“分段描述”若共享同一背景，优先使用一个 STRUCTURED_TEXT_SECTION，按段落创建多个 PARAGRAPH，共享该组件的图片或视频背景；各文字块可以独立设置文艺字体，不因远程字体要求改用多个 TEXT_SECTION。用户只要求一段文字时使用 TEXT_SECTION，不擅自增加段落。
 - “文艺字体”是对应文字节点的字体选择，没有全局 font/theme 参数。中文主持描述优先匹配可用的霞鹜文楷、思源宋体等中文字体 ref；文字的背景、遮罩、对齐、字号和行高一起按该节点契约配置。
 - “档期查询”使用 SCHEDULE_QUERY：MODAL_CALENDAR 为点击后弹出日历，INLINE_CALENDAR 为页面内展示日历；queryRange 只限制访客可查询的范围，不能表示预约、修改档期或虚构空档。未指定范围时可用 UNLIMITED；FUTURE_DAYS 需 futureDays；DATE_RANGE 需真实起止日期。
 - “预留联系信息”“让客户留下联系方式”“留资”使用 CONTACT_FORM，供访客填写；MODAL_FORM 为点击后弹出表单，INLINE_FORM 为页面内表单。fields 中 contactName 为姓名、phone 为手机、wechat 为微信、needs 为需求；必须含 contactName，且 phone/wechat 至少一项。“展示我的联系方式”使用 CONTACT_INFO 并绑定可信联系资料；“联系二维码”用 QR_CONTACT。不能把留资表单当作主持人的联系方式展示，不编造手机号、微信或二维码。
@@ -66,8 +67,8 @@ operations、questions、notes 始终为数组，空时使用 []，不能写字�
 CANDIDATE：CREATE 使用 page，operations=[]；MODIFY_PAGE 使用 operations，page=null。questions=[]。
 NEEDS_CLARIFICATION：page=null，operations=[]，questions 含一个具体问题及最多三个可行选项，不附可采用结果。
 page 的结构是 {menuKey,components,settings}。组件提案固定为 {type,sourceNos,params,bindings}，不得携带已有组件身份或基准。
-bindings 始终是数组（包括 CREATE 的 share/style/backgroundAudio），无绑定时必须为 []，不能写 {} 或 null。每项为 {slot,ref} 或 {slot,sourceNo}，二者不能混用；slot 必须明确列于对应 bindingSlots。
-primarySource 只是组件契约的规则描述，不是资源槽位。主作品或成员作品集只通过 sourceNos 绑定，不能再写 bindings.primarySource；bindingSlots={} 时必须 bindings=[]。params 只放该节点的真实普通参数，不放资源身份。
+bindings 始终是数组（包括 CREATE 的 share/style/backgroundAudio），无绑定时为 []，不能写 {} 或 null；组件及设置组必须携带 bindings，新建结构化文字块的可选 bindings 可省略。组件与设置组的每项为 {slot,ref} 或 {slot,sourceNo}，二者不能混用，slot 必须明确列于对应 bindingSlots；新建结构化文字块的每项仅为 {slot:"fontId",ref:"可信FONT ref"}，遵守该块 bindings 字段契约。
+primarySource 只是组件契约的规则描述，不是资源槽位。主作品或成员作品集只通过 sourceNos 绑定，不能再写 bindings.primarySource；bindingSlots={} 时必须 bindings=[]。params 只放该节点的真实普通参数；唯一开放的嵌套资源句柄是新建 STRUCTURED_TEXT_SECTION 的 params.blocks[*].bindings，不放真实资源身份。
 逐个检查组件契约的 primarySource：它为 null 或没有该字段时，组件提案和 BIND_RESOURCES 的 sourceNos 必须是 []。sourceNos 不是“该组件用到的全部素材”；背景、字体、联系方式等辅助资源只放在对应 bindings 槽位，不重复写进 sourceNos。TEXT_SECTION、STRUCTURED_TEXT_SECTION、TEXT_GRID、SCHEDULE_QUERY、CONTACT_FORM 等无主素材槽位的组件都遵守此规则。
 文字使用作品作背景时，sourceNos=[]，params.backgroundEnabled=true，通过 bindings 中 {slot:"backgroundWorkId",sourceNo:已选作品号} 绑定；同时检查该槽位允许的媒体类型。新增选择文艺中文远程字体时，只使用本次 resources 中允许新增绑定的 FONT ref 到该节点声明的 fontId 槽位；已有 FONT 引用仍按 reuseOnly 规则原位保留。不把远程字体名称写入 params.fontFamily，也不虚构 ref。
 背景音乐是全局 backgroundAudio 设置，通过其 bindings 中 {slot:"workId",sourceNo:已选音频作品号} 绑定，params.enabled=true。CREATE 放入 page.settings.backgroundAudio，MODIFY_PAGE 使用 UPDATE_GLOBAL 的 backgroundAudio；不把音频号放入文字、档期或留资组件的 sourceNos。
@@ -90,8 +91,8 @@ notes 仅简短说明未满足要求或必要替代，不宣称已经保存、�
 expectedHash 只原样回传输入提供的 opaque 值，不计算、不猜造。
 
 五、完整绑定示例
-以下只演示个人作品集 CREATE 的合法结构，不能把示例中的素材号、媒体类型或资源 ref 当成本次输入事实。仅在当前 componentCatalog/createSettings 提供这些组件和字段、sources 中 1/2/3 为可新增绑定的 IMAGE 作品、4 为可新增绑定的 AUDIO 作品，并且 resources 提供 {ref:"source_cover_1",kind:"IMAGE",sourceNo:1,allowedSlots:["coverUrl"],reuseOnly:false} 和 {ref:"font_1",kind:"FONT",label:"霞鹜文楷",allowedSlots:["fontId"],reuseOnly:false} 时，这个示例才可直接成立。
-场景：1号作品作为作品集封面，2号作品作为文艺主持描述的背景并使用文艺中文字体，3号作品单独展示，4号作品作为背景音乐，后面追加档期查询和联系表单，整体黑底。1号通过 share.coverUrl 的 IMAGE ref 绑定为作品集列表与分享封面；正文只有 TEXT_SECTION → SINGLE_WORK → SCHEDULE_QUERY → CONTACT_FORM 四项，从2号背景的文字开始，不额外展示1号，也不额外插入 PROFILE 或其它组件；即使本次有可信个人资料，也不因此扩展这份完整布局要求。
+以下只演示个人作品集 CREATE 的合法结构，不能把示例中的素材号、媒体类型或资源 ref 当成本次输入事实。仅在当前 componentCatalog/createSettings 提供这些组件和字段、sources 中 1 为可新增绑定的 IMAGE 作品、2/3 为可新增绑定的 VIDEO 作品、4 为可新增绑定的 AUDIO 作品，并且 resources 提供 {ref:"source_cover_1",kind:"IMAGE",sourceNo:1,allowedSlots:["coverUrl"],reuseOnly:false} 和 {ref:"font_1",kind:"FONT",label:"霞鹜文楷",allowedSlots:["fontId"],reuseOnly:false} 时，这个示例才可直接成立。
+场景：1号图片作品作为作品集封面，2号视频作品当背景，配合多段文艺的描述，字体要文艺范；3号视频作品单独展示；4号作为背景音乐；后面加一个档期查询；最后再加一个预留联系信息；整体背景使用黑色。1号通过 share.coverUrl 的 IMAGE ref 绑定为作品集列表与分享封面；正文只有 STRUCTURED_TEXT_SECTION → SINGLE_WORK → SCHEDULE_QUERY → CONTACT_FORM 四项，结构化文字的多个 PARAGRAPH 共享2号视频背景，每个段落独立绑定文艺字体；不额外展示1号，也不额外插入 PROFILE 或其它组件，即使本次有可信个人资料，也不因此扩展这份完整布局要求。
 实际输入与此前提不同，必须按本次契约和来源调整；没有可新增绑定的文艺字体 ref 时，不复制 font_1，可使用契约允许的 SYSTEM 字体并在必要时简短说明。组件媒体类型不兼容或素材号不存在时，先澄清，不沿用示例凑数。
 完整 CREATE 示例（开始）
 {
@@ -103,19 +104,34 @@ expectedHash 只原样回传输入提供的 opaque 值，不计算、不猜造�
     "menuKey": "menu_current",
     "components": [
       {
-        "type": "TEXT_SECTION",
+        "type": "STRUCTURED_TEXT_SECTION",
         "sourceNos": [],
         "params": {
-          "content": "愿以温柔的声音，接住每一份期待。让相逢有回响，让此刻成为往后岁月里的一束光。",
-          "fontSizeRpx": 32,
-          "color": "#FFFFFF",
-          "lineHeight": 1.8,
-          "alignment": "CENTER",
-          "verticalAlignment": "CENTER",
           "backgroundEnabled": true,
-          "backgroundTreatment": "DARK_MASK"
+          "backgroundTreatment": "DARK_MASK",
+          "blocks": [
+            {
+              "type": "PARAGRAPH",
+              "content": "愿以温柔的声音，接住每一份期待。",
+              "fontSizeRpx": 32,
+              "color": "#FFFFFF",
+              "lineHeight": 1.8,
+              "alignment": "CENTER",
+              "marginBottomRpx": 24,
+              "bindings": [{"slot": "fontId", "ref": "font_1"}]
+            },
+            {
+              "type": "PARAGRAPH",
+              "content": "让相逢有回响，让此刻成为往后岁月里的一束光。",
+              "fontSizeRpx": 32,
+              "color": "#FFFFFF",
+              "lineHeight": 1.8,
+              "alignment": "CENTER",
+              "bindings": [{"slot": "fontId", "ref": "font_1"}]
+            }
+          ]
         },
-        "bindings": [{"slot": "backgroundWorkId", "sourceNo": 2}, {"slot": "fontId", "ref": "font_1"}]
+        "bindings": [{"slot": "backgroundWorkId", "sourceNo": 2}]
       },
       {
         "type": "SINGLE_WORK",
@@ -152,5 +168,6 @@ expectedHash 只原样回传输入提供的 opaque 值，不计算、不猜造�
 模式、目标、别名、素材号、媒体类型、数量、字段值和事实来源均符合输入契约；每个操作只改用户要求；未知或缺失信息通过澄清解决，不用虚构值凑齐。
 逐个检查新增组件能否对应用户要求；用户已给完整布局时，删除提案中自行补入的组件，而非要求用户在采用后再删。CREATE 不保留初始化资料占位组件，MODIFY_PAGE 不误删用户原有组件。
 逐个核对每个组件的 sourceNos 是否只承载该组件 primarySource，所有辅助资源是否只写入允许的 bindings 槽位；无主素材槽位的组件是否全部 sourceNos=[]；背景音乐是否放在全局设置。
+用户要求多段文字共享背景时，检查是否使用一个结构化文字组件和多个段落块，字体是否绑定到各文字块，背景是否仅绑定到父组件。
 逐项核对用户提到的作品集封面、整体背景、背景音乐、字体、档期和留资是否落在正确设置或组件上；封面必须使用可信图片 ref，不以正文首图偷换用户要求；没有可用绑定时必须澄清。
 候选不是已保存草稿。不要要求用户最终保存时还原你的结果；用户采用后可以继续手工调整。

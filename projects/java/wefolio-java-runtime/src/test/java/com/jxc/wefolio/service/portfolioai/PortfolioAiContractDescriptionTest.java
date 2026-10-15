@@ -123,7 +123,7 @@ class PortfolioAiContractDescriptionTest {
         }
     }
 
-    /** 新建块和片段不开放远程字体绑定，说明必须明确区分生成与现有节点修改。 */
+    /** 结构化文字新建块可绑定字体，网格片段仍需准确区分生成与现有节点修改。 */
     @Test
     void nestedFontDescriptionsFollowActualCreationAndModificationCapabilities() {
         ObjectNode contract = AiPortfolioProtocol.contract(request("USER", "CREATE"));
@@ -133,12 +133,24 @@ class PortfolioAiContractDescriptionTest {
         JsonNode runProperties = catalog.path("TEXT_GRID").path("params").path("cells").path("items")
                 .path("properties").path("blocks").path("items").path("properties")
                 .path("runs").path("items").path("properties");
-        for (JsonNode properties : List.of(blockProperties, runProperties)) {
-            assertThat(properties.has("fontId")).isFalse();
-            assertThat(properties.has("bindings")).isFalse();
-            assertThat(properties.path("fontFamily").path(DESCRIPTION).asText())
-                    .contains("CREATE", "只能选内置字体", "MODIFY_PAGE", "现有", "BIND_RESOURCES", "TEXT_SECTION");
-        }
+        assertThat(blockProperties.has("fontId")).isFalse();
+        assertThat(blockProperties.path("fontFamily").path(DESCRIPTION).asText())
+                .contains("SYSTEM", "WECHAT_SANS_SS", "bindings", "可信 FONT ref");
+        JsonNode blockBindings = blockProperties.path("bindings");
+        assertThat(blockBindings.path("type").asText()).isEqualTo("array");
+        assertThat(blockBindings.path("minItems").asInt()).isZero();
+        assertThat(blockBindings.path("maxItems").asInt()).isEqualTo(1);
+        assertThat(names(blockBindings.path("items").path("properties"))).containsExactlyInAnyOrder("slot", "ref");
+        assertThat(blockBindings.path("items").path("required").toString()).isEqualTo("[\"slot\",\"ref\"]");
+        assertThat(blockBindings.path("items").path("properties").path("slot").path("enum").toString())
+                .isEqualTo("[\"fontId\"]");
+        assertThat(blockBindings.path(DESCRIPTION).asText()).contains("CREATE", "INSERT_COMPONENT", "SPACER", "reuseOnly=false");
+        assertThat(catalog.path("STRUCTURED_TEXT_SECTION").path(DESCRIPTION).asText())
+                .contains("多段", "同一背景", "字体");
+        assertThat(runProperties.has("fontId")).isFalse();
+        assertThat(runProperties.has("bindings")).isFalse();
+        assertThat(runProperties.path("fontFamily").path(DESCRIPTION).asText())
+                .contains("CREATE", "只能选内置字体", "MODIFY_PAGE", "现有", "BIND_RESOURCES", "TEXT_SECTION");
         for (String type : List.of("STRUCTURED_TEXT_SECTION", "TEXT_GRID")) {
             assertThat(catalog.path(type).path("bindingSlots").has("fontId")).isFalse();
         }
@@ -153,9 +165,9 @@ class PortfolioAiContractDescriptionTest {
                 .path(DESCRIPTION).asText()).contains("个人资料头像 ref", "已选作品对应图片 ref");
     }
 
-    /** 使用实际协议证明新建节点不接受远程字体字段，而现有块和片段可通过独立操作绑定。 */
+    /** 使用实际协议证明新建结构化块接受字体句柄，网格仍拒绝嵌套绑定，现有节点保留绑定能力。 */
     @Test
-    void nestedRemoteFontsAreRejectedDuringCreationAndAcceptedForExistingNodes() {
+    void structuredBlockFontsAreAcceptedDuringCreationAndExistingNodeBindingsRemainAvailable() {
         for (String type : List.of("STRUCTURED_TEXT_SECTION", "TEXT_GRID")) {
             ObjectNode request = request("USER", "CREATE");
             ObjectNode proposal = StrictAiJson.parseObject("STRUCTURED_TEXT_SECTION".equals(type) ? """
@@ -166,6 +178,10 @@ class PortfolioAiContractDescriptionTest {
                      "cells":[{"row":0,"column":0,"rowSpan":1,"columnSpan":1,
                        "blocks":[{"runs":[{"text":"文艺主持描述","fontFamily":"SYSTEM"}]}]}]}}
                     """, StrictAiJson.RESPONSE_MAX_BYTES, StrictAiJson.MAX_DEPTH);
+            ObjectNode font = request.withObject("facts").withArray("bindings").addObject().put("ref", "available-font")
+                    .put("kind", "FONT").put("reuseOnly", false);
+            font.putArray("allowedSlots").add("fontId");
+            font.putObject("value").put("fontId", "test-font").putObject("reference").put("fontVersion", "test-version");
             ObjectNode output = candidate("CREATE");
             ObjectNode page = output.putObject("page").put("menuKey", AiPortfolioProtocol.MENU_ALIAS);
             page.putObject("settings"); page.putArray("components").add(proposal);
@@ -175,8 +191,13 @@ class PortfolioAiContractDescriptionTest {
                     : (ObjectNode) proposal.path("params").path("cells").get(0).path("blocks").get(0).path("runs").get(0);
             node.put("fontId", "unavailable-font");
             assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString())).isInstanceOf(AiProtocolException.class);
-            node.remove("fontId"); node.putArray("bindings");
-            assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString())).isInstanceOf(AiProtocolException.class);
+            node.remove("fontId");
+            node.putArray("bindings").addObject().put("slot", "fontId").put("ref", "available-font");
+            if ("STRUCTURED_TEXT_SECTION".equals(type)) {
+                assertThat(AiPortfolioProtocol.validate(request, output.toString())).isEqualTo(output);
+            } else {
+                assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString())).isInstanceOf(AiProtocolException.class);
+            }
             node.remove("bindings");
 
             request.withObject("input").put("mode", "MODIFY_PAGE");
@@ -191,10 +212,6 @@ class PortfolioAiContractDescriptionTest {
                 ((ObjectNode) component.path("config").path("cells").get(0).path("blocks").get(0)).put("blockKey", "existing-block");
                 node.put("runKey", "existing-run"); target.put("cellKey", "cell_1").put("runKey", "run_1");
             }
-            ObjectNode font = request.withObject("facts").withArray("bindings").addObject().put("ref", "available-font")
-                    .put("kind", "FONT").put("reuseOnly", false);
-            font.putArray("allowedSlots").add("fontId");
-            font.putObject("value").put("fontId", "test-font").putObject("reference").put("fontVersion", "test-version");
             ObjectNode modification = candidate("MODIFY_PAGE");
             ObjectNode operation = modification.withArray("operations").addObject().put("op", "BIND_RESOURCES")
                     .put("reason", "为已有文字选择文艺字体");
@@ -215,12 +232,14 @@ class PortfolioAiContractDescriptionTest {
         return output;
     }
 
-    /** 元数据补充不能偷偷改变字段、枚举、数值范围、必填性、媒体类型或数量限制。 */
+    /** 除明确新增的结构化块字体绑定外，保留其余字段、枚举、范围、必填性与素材限制。 */
     @Test
-    void descriptionsLeaveAllExistingValidationConstraintsUnchanged() throws IOException {
+    void blockFontBindingsLeaveAllOtherValidationConstraintsUnchanged() throws IOException {
         ObjectNode constraints = rules();
         removeDescriptions(constraints);
         constraints.remove("promptVersion");
+        ((ObjectNode) constraints.path("componentCatalog").path("STRUCTURED_TEXT_SECTION").path("params")
+                .path("blocks").path("items").path("properties")).remove("bindings");
         assertThat(StrictAiJson.canonicalHash(constraints)).isEqualTo(ORIGINAL_CONSTRAINTS_HASH);
     }
 

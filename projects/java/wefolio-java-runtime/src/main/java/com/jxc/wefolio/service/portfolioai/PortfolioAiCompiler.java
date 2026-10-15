@@ -102,11 +102,22 @@ public final class PortfolioAiCompiler {
         ObjectNode params = ((ObjectNode) proposal.path(KEY_PARAMS)).deepCopy();
         nodeKeys(params, AI_NODE_KEY_PREFIX + taskId + STABLE_KEY_SEPARATOR + index, new int[]{0});
         merge(config, params);
+        structuredFontBindings(type, config, request);
         if (COMPONENT_TEXT_GRID.equals(type)) { gridDefaults(config); }
         primary(type, config, proposal.path(KEY_SOURCE_NOS), request);
         // 生成组件的字体依赖在后续完整配置集合时统一合并。
         bindings(config, proposal.path(KEY_BINDINGS), request, null);
         return component;
+    }
+
+    /** 新建结构化文字逐块恢复可信字体，移除仅供 AI 使用的绑定包装后交给普通组件。 */
+    private static void structuredFontBindings(String type, ObjectNode config, ObjectNode request) {
+        if (!COMPONENT_STRUCTURED_TEXT_SECTION.equals(type)) { return; }
+        for (JsonNode raw : config.path(KEY_BLOCKS)) {
+            ObjectNode block = (ObjectNode) raw;
+            JsonNode fontBindings = block.remove(KEY_BINDINGS);
+            if (fontBindings != null) { bindings(block, fontBindings, request, null); }
+        }
     }
 
     /** 主来源只从冻结来源号映射真实 ID，不接受模型中的业务 ID。 */

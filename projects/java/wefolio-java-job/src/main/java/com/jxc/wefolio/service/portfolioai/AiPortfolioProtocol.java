@@ -68,6 +68,18 @@ public final class AiPortfolioProtocol {
     private static final String BINDINGS_FIELD = "bindings";
     /** 文字背景只能通过该独立槽位绑定。 */
     private static final String BACKGROUND_WORK_SLOT = "backgroundWorkId";
+    /** 新建结构化文字组件的块级字体与组件级背景独立绑定。 */
+    private static final String STRUCTURED_TEXT_COMPONENT = "STRUCTURED_TEXT_SECTION";
+    /** 结构化文字块数组字段。 */
+    private static final String BLOCKS_FIELD = "blocks";
+    /** 只有可信 FONT 句柄可用于文字节点字体。 */
+    private static final String FONT_KIND = "FONT";
+    /** 字体资源写入普通配置的固定槽位。 */
+    private static final String FONT_SLOT = "fontId";
+    /** 可信槽位目录使用资源类型字段校验句柄。 */
+    private static final String RESOURCE_KIND_FIELD = "kind";
+    /** 新建组件内部文字块的固定字段路径模板。 */
+    private static final String STRUCTURED_BLOCK_PATH = ".params.blocks[%d]";
     /** 目录在进程启动时读取，调用时返回独立副本。 */
     private static final ObjectNode RULES = loadRules();
 
@@ -434,6 +446,20 @@ public final class AiPortfolioProtocol {
         primaryWithFeedback(component.get("sourceNos"), definition.path("primarySource"), request, false, definition.path("bindingSlots"), context);
         bindings(component.get("bindings"), definition.path("bindingSlots"), request, null, null, context);
         structures(component.get("params"), type);
+        structuredFontBindings(component.get("params"), type, request, context);
+    }
+
+    /** 新建文字块只接受可新增的可信字体，不能复制已有组件或节点的原位引用。 */
+    private static void structuredFontBindings(JsonNode params, String type, ObjectNode request, BindingContext context) {
+        if (!STRUCTURED_TEXT_COMPONENT.equals(type)) { return; }
+        JsonNode blocks = params.path(BLOCKS_FIELD);
+        ObjectNode slots = object().set(FONT_SLOT, object().put(RESOURCE_KIND_FIELD, FONT_KIND));
+        for (int blockIndex = 0; blockIndex < blocks.size(); blockIndex++) {
+            JsonNode block = blocks.get(blockIndex);
+            if (!block.has(BINDINGS_FIELD)) { continue; }
+            BindingContext blockContext = new BindingContext(context.description(), context.path() + STRUCTURED_BLOCK_PATH.formatted(blockIndex));
+            bindings(block.get(BINDINGS_FIELD), slots, request, null, null, blockContext);
+        }
     }
 
     /** 校验设置组包装，绑定与普通参数严格分开。 */
@@ -563,7 +589,7 @@ public final class AiPortfolioProtocol {
         boolean structuredText = target.has("blockKey") && !target.has("cellKey")
                 && "STRUCTURED_TEXT_SECTION".equals(component.path("componentType").asText())
                 && !"SPACER".equals(indexed(component.path("config").path("blocks"), target.path("blockKey").asText(), "block_").path("type").asText());
-        return run || structuredText ? object().set("fontId", object().put("kind", "FONT")) : object();
+        return run || structuredText ? object().set(FONT_SLOT, object().put(RESOURCE_KIND_FIELD, FONT_KIND)) : object();
     }
 
     /**
@@ -754,7 +780,7 @@ public final class AiPortfolioProtocol {
                 if ("SPACER".equals(blockType)) {
                     require(!block.has("content") && !block.has("items") && !block.has("lineHeight")
                             && !block.has("fontFamily") && !block.has("fontSizeRpx") && !block.has("fontWeight")
-                            && !block.has("color") && !block.has("alignment"), "INVALID_OUTPUT", "留白区块不能含正文或文字样式");
+                            && !block.has("color") && !block.has("alignment") && !block.has(BINDINGS_FIELD), "INVALID_OUTPUT", "留白区块不能含正文或文字样式");
                 } else {
                     content = true;
                     require(!block.has("heightRpx"), "INVALID_OUTPUT", "文字区块不能含留白高度");

@@ -3,6 +3,8 @@ const { hasLocalToken, handleMaintainerAuthRequired } = require('../../../utils/
 const { AI_API_PREFIX, ADVANCED_API_PREFIX, ACTIVE_STATUSES, AI_TASK_MODES, PROMPT_MAX_LENGTH, normalizeContext, addSource, removeSource,
   captureBasis, candidateError, taskErrorMessage, buildTaskPayload, statusMessage, makeKey, clone, text, validatePrompt } = require('./advanced-portfolios')
 const PAGE_SIZE = 20
+/** 创建示例统一用于页面展示与一键填入。 */
+const CREATE_PROMPT_EXAMPLE = '1号图片作品作为封面；2号视频作品当背景，配合多段文艺的描述，字体要文艺范；3号视频作品单独展示；4号作为背景音乐；后面加一个档期查询；最后再加一个预留联系信息；整体背景使用黑色；并帮我想一个作品集名称；'
 /** 媒体枚举只用于显示，提交仍保留原始类型。 */
 const MEDIA_TYPE_LABELS = Object.freeze({ IMAGE: '图片', VIDEO: '视频', ANIMATION: '动图', AUDIO: '音频' })
 
@@ -31,7 +33,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
   return {
     data: { team, ownerType: team ? 'TEAM' : 'USER', ownerId: '', portfolioId: null, draftRevision: 0, localEditRevision: 0,
       config: null, aiContext: normalizeContext(), prompt: '', promptCount: 0, promptMaxLength: PROMPT_MAX_LENGTH,
-      mode: 'CREATE', targetMenuKey: null, managingSources: false, step: 'sources', loading: true,
+      mode: 'CREATE', createPromptExample: CREATE_PROMPT_EXAMPLE, targetMenuKey: null, managingSources: false, step: 'sources', loading: true,
       errorMessage: '', sourceLoading: false, sourceError: '', sourceOptions: [], selectedSources: [], keyword: '', tagId: '', tags: [],
       sourceKind: team ? 'WORK' : '', members: [], memberIndex: 0, page: 1, total: 0, hasMore: false, capabilities: null,
       submitting: false, submissionUncertain: false, waiting: false, adopting: false, task: null, statusText: '', result: null, summaryText: '', candidateTitle: '',
@@ -221,13 +223,13 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       this.emitContext()
     },
     handleSelectedSourceTap(event) { if (this.data.step === 'prompt') this.handleInsertNumber(event) },
-    /** 示例使用当前有效编号，断号后不会插入已经移除的素材。 */
+    /** 创建时填入完整示例，修改时沿用当前有效编号。 */
     handleUseExample() {
       if (this.data.waiting || this.data.adopting || this.data.submitting || this.data.submissionUncertain) return
       const sources = this.data.selectedSources.filter(source => source.available !== false).slice(0, 3)
       const references = sources.map(source => `${source.sourceNo}号`).join('、')
       const prompt = this.data.mode === 'CREATE'
-        ? `${references ? `先展示${references}，` : ''}再放一段简短介绍，最后放档期查询。整体简洁，留白舒适。`
+        ? CREATE_PROMPT_EXAMPLE
         : `${references ? `把${sources[0].sourceNo}号放在最上面，` : ''}介绍缩短成一句话，其他保持不变。`
       this.invalidateTaskQuery()
       this.setData({ prompt, promptCount: Array.from(prompt).length, tokenUsageText: '' })

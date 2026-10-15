@@ -571,11 +571,11 @@ class VideoFrameBackfillServiceTest {
         assertTrue(logged(Level.INFO, "历史视频补帧执行结束", "cursor=0", "status=BUDGET_EXHAUSTED"));
     }
 
-    /** 大小或时长超限及预检异常都保留旧内容并停在当前作品，不把拒绝当执行失败越过游标。 */
+    /** 摘要预检异常保留当前作品旧数据，但单件失败必须推进游标继续扫描。 */
     @Test
-    void rebuildSummaryPreflightRefusalPreservesDataAndCursor() {
+    void rebuildSummaryPreflightFailurePreservesDataAndAdvancesCursor() {
         Work previous = existingWork();
-        for (var outcome : List.of(VideoSummaryService.Outcome.NOT_SUPPORTED, VideoSummaryService.Outcome.FAILED,
+        for (var outcome : List.of(VideoSummaryService.Outcome.FAILED,
                 VideoSummaryService.Outcome.STALE, VideoSummaryService.Outcome.BUSY)) {
             var preparation = mock(VideoSummaryService.Preparation.class);
             when(preparation.outcome()).thenReturn(outcome);
@@ -586,10 +586,88 @@ class VideoFrameBackfillServiceTest {
             verify(preparation).close();
         }
         verify(repository, never()).clearManifestForRebuild(previous);
-        verify(repository, never()).scan(1, 1, 20);
+        verify(repository, times(3)).scan(1, 1, 20);
         verify(videoSummary, never()).complete(any(), any());
         verifyNoInteractions(snapshots);
-        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "status=PREFLIGHT_REFUSED", "nextAfterWorkId=0"));
+        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "status=COMPLETED_WITH_FAILURES", "nextAfterWorkId=1"));
+    }
+
+    /** 第一件原视频超出摘要规格时仍重建帧和音频，第二件照常完成全部阶段。 */
+    @Test
+    void unsupportedSummaryStillRebuildsAudioAndProcessesNextWork() {
+        addSecondWork();
+        when(repository.clearManifestForRebuild(any())).thenAnswer(call -> cleared(call.getArgument(0)));
+        when(repository.clearManifestForRebuild(any(), eq(false))).thenAnswer(call -> cleared(call.getArgument(0)));
+        var audioPrepared = mock(VideoAudioTranscriptionService.Preparation.class);
+        when(audioPrepared.ready()).thenReturn(true);
+        when(audio.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(audioPrepared);
+        when(audio.complete(eq(audioPrepared), any())).thenReturn(VideoAudioTranscriptionService.Outcome.SAVED);
+        var unsupported = mock(VideoSummaryService.Preparation.class);
+        when(unsupported.outcome()).thenReturn(VideoSummaryService.Outcome.NOT_SUPPORTED);
+        when(videoSummary.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(unsupported);
+        var ready = mock(VideoSummaryService.Preparation.class);
+        when(ready.ready()).thenReturn(true);
+        when(videoSummary.prepare(eq(2L), eq(true), any(), any(), any())).thenReturn(ready);
+        when(videoSummary.complete(eq(ready), any())).thenReturn(VideoSummaryService.Outcome.SAVED);
+
+        var result = service.runRebuild(EXECUTION_ID, 16, 0, null, executionLock, QUEUE_ID);
+
+        assertEquals(2, result.scanned());
+        assertEquals(1, result.failed());
+        assertEquals(1, result.succeeded());
+        assertEquals(16, result.chargedFrames());
+        assertFalse(result.budgetExhausted());
+        verify(repository).clearManifestForRebuild(work, false);
+        verify(repository, never()).clearManifestForRebuild(work);
+        verify(repository, times(2)).saveManifest(any(), eq(MANIFEST));
+        verify(audio).complete(eq(audioPrepared), any());
+        verify(videoSummary, never()).complete(eq(unsupported), any());
+        verify(videoSummary).complete(eq(ready), any());
+        verify(audioPrepared).close();
+        verify(unsupported).close();
+        verify(ready).close();
+        assertTrue(logged(Level.INFO, "历史视频音频处理汇总", "audioSaved=1", "frameSucceeded=2"));
+        assertTrue(logged(Level.INFO, "历史视频摘要处理汇总", "summaryUnsupported=1", "summarySaved=1"));
+        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "status=COMPLETED_WITH_FAILURES", "nextAfterWorkId=2"));
+    }
+
+    /** 音频预检失败只保留当前作品，不阻断下一件的重建。 */
+    @Test
+    void failedAudioPreflightPreservesWorkAndContinuesToNextWork() {
+        addSecondWork();
+        when(repository.clearManifestForRebuild(any())).thenAnswer(call -> cleared(call.getArgument(0)));
+        var failed = mock(VideoAudioTranscriptionService.Preparation.class);
+        when(failed.outcome()).thenReturn(VideoAudioTranscriptionService.Outcome.FAILED);
+        when(audio.prepare(eq(1L), eq(true), any(), any(), any())).thenReturn(failed);
+
+        var result = service.runRebuild(EXECUTION_ID, 16, 0, null, executionLock, QUEUE_ID);
+
+        assertEquals(2, result.scanned());
+        assertEquals(1, result.failed());
+        assertEquals(1, result.succeeded());
+        assertEquals(8, result.chargedFrames());
+        verify(repository, never()).clearManifestForRebuild(work);
+        verify(repository).clearManifestForRebuild(argThat(value -> value.id() == 2L));
+        verify(failed).close();
+        assertTrue(logged(Level.INFO, "视频帧重建扫描结束", "nextAfterWorkId=2"));
+    }
+
+    /** 旧清单无法安全删除属于单件失败，保留该件并继续后续作品。 */
+    @Test
+    void invalidOldManifestDoesNotBlockNextWork() {
+        addSecondWork();
+        when(repository.clearManifestForRebuild(any())).thenAnswer(call -> cleared(call.getArgument(0)));
+        doThrow(new VideoFrameProcessingException("FRAME_CLEANUP", "旧清单归属不合法"))
+                .when(storage).validateOwnedManifestForCleanup(any(), eq(source), eq(1L));
+
+        var result = service.runRebuild(EXECUTION_ID, 16, 0, null, executionLock, QUEUE_ID);
+
+        assertEquals(2, result.scanned());
+        assertEquals(1, result.failed());
+        assertEquals(1, result.succeeded());
+        verify(repository, never()).clearManifestForRebuild(work);
+        verify(repository).clearManifestForRebuild(argThat(value -> value.id() == 2L));
+        verify(audio, never()).prepare(eq(1L), anyBoolean(), any(), any(), any());
     }
 
     /** 原视频摘要费用不足也必须在清空前拒绝，保留原帧、文字和摘要。 */

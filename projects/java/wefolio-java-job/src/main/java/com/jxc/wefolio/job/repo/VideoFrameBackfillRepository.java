@@ -78,6 +78,12 @@ public class VideoFrameBackfillRepository {
      */
     @Transactional(rollbackFor = Exception.class)
     public Work clearManifestForRebuild(Work work) {
+        return clearManifestForRebuild(work, true);
+    }
+
+    /** 重建可按摘要准入结果决定是否清空原视频摘要，源及版本保护保持一致。 */
+    @Transactional(rollbackFor = Exception.class)
+    public Work clearManifestForRebuild(Work work, boolean clearVideoSummary) {
         List<String> current = jdbc.query("""
                 SELECT video_frames_json FROM wf_work
                 WHERE id=? AND media_type=? AND status=? AND audit_status=? AND media_object_key=? AND version=? AND deleted=0
@@ -86,12 +92,13 @@ public class VideoFrameBackfillRepository {
                 WorkAuditStatusDict.PASSED.getCode(), work.objectKey(), work.version(), work.sha256(), work.sha256());
         if (current.isEmpty() || !sameRebuildManifest(current.getFirst(), work.manifest())) { return null; }
         int changed = jdbc.update("""
-                UPDATE wf_work SET video_frames_json=NULL,video_audio_text=NULL,video_summary_json=NULL,
+                UPDATE wf_work SET video_frames_json=NULL,video_audio_text=NULL,
+                  video_summary_json=CASE WHEN ? THEN NULL ELSE video_summary_json END,
                   ai_media_summary_json=NULL,ai_media_summary_expires_at=NULL,
                   updated_at=?,version=version+1
                 WHERE id=? AND media_type=? AND status=? AND audit_status=? AND media_object_key=? AND version=? AND deleted=0
                   AND (media_sha256=? OR (media_sha256 IS NULL AND ? IS NULL))
-                """, Timestamp.from(Instant.now()), work.id(), MediaTypeDict.VIDEO.getCode(), WORK_STATUS_ACTIVE,
+                """, clearVideoSummary, Timestamp.from(Instant.now()), work.id(), MediaTypeDict.VIDEO.getCode(), WORK_STATUS_ACTIVE,
                 WorkAuditStatusDict.PASSED.getCode(), work.objectKey(), work.version(), work.sha256(), work.sha256());
         return changed == 1 ? new Work(work.id(), work.objectKey(), work.sha256(), work.durationMs(),
                 null, work.version() + 1, work.ownerCode()) : null;

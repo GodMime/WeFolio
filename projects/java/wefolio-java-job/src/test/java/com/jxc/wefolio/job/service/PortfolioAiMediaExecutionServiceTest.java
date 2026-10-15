@@ -1,5 +1,9 @@
 package com.jxc.wefolio.job.service;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
@@ -12,6 +16,9 @@ import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiStoredVideoSummary;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.time.Instant;
@@ -34,6 +41,34 @@ class PortfolioAiMediaExecutionServiceTest {
     /** 被测完整串行媒体理解流程。 */ private final PortfolioAiMediaExecutionService service = new PortfolioAiMediaExecutionService(repository, access, client, properties);
     /** 默认始终持权替身，失权边界由专项测试注入。 */ private final Runnable checkOwned = () -> {};
     /** 合法摘要仅为可见事实。 */ private static final String SUMMARY = "{\"summary\":\"婚礼舞台\",\"observations\":[\"暖色灯光\"],\"limitations\":[\"采样帧有盲区\"]}";
+    /** 日志只允许输出受信任的结构诊断，不回显模拟敏感正文或未知字段。 */
+    private static final String FAILURE_LOG_PREFIX = "高级 AI 媒体摘要校验失败";
+    /** 模拟摘要正文中的私有标记、临时资源地址和手机号。 */
+    private static final String PRIVATE_TEXT = "private-summary-marker https://private.example/raw?signature=temporary 13800138000";
+    /** 模拟模型添加的不可信字段名。 */
+    private static final String PRIVATE_FIELD = "private-unknown-field-marker";
+    /** 捕获真实执行入口产生的服务日志。 */
+    private final Logger logger = (Logger) LoggerFactory.getLogger(PortfolioAiMediaExecutionService.class);
+    /** 当前测试捕获的服务告警事件。 */
+    private ListAppender<ILoggingEvent> events;
+    /** 测试结束后恢复原日志级别。 */
+    private Level originalLevel;
+
+    /** 每例独立捕获告警，防止日志配置影响失败诊断断言。 */
+    @BeforeEach void captureSummaryDiagnostics() {
+        originalLevel = logger.getLevel();
+        logger.setLevel(Level.WARN);
+        events = new ListAppender<>();
+        events.start();
+        logger.addAppender(events);
+    }
+
+    /** 还原共享日志器配置，避免影响其他服务测试。 */
+    @AfterEach void releaseSummaryDiagnostics() {
+        logger.detachAppender(events);
+        events.stop();
+        logger.setLevel(originalLevel);
+    }
     /** 新任务与执行代次。 */
     private AiGenerationTaskEntity task() { var task = new AiGenerationTaskEntity(); task.setId(1L); task.setOwnerType("USER"); task.setOwnerId(2L); task.setRequestedBy(2L); task.setAttemptCount(1); task.setVersion(1); task.setCreatedAt(LocalDateTime.now(ZoneId.of("Asia/Shanghai"))); return task; }
     /** 新冻结计划，源标识不包含标题或文字样式。 */
@@ -433,6 +468,119 @@ class PortfolioAiMediaExecutionServiceTest {
     @Test void summaryIsClosedBoundedAndRemovesMediaLinks() {
         assertThatThrownBy(() -> PortfolioAiMediaExecutionService.validateSummary(SUMMARY.replace("\"limitations\"", "\"url\""))).hasMessageContaining("字段");
         assertThat(PortfolioAiMediaExecutionService.validateSummary(SUMMARY.replace("婚礼舞台", "https://secret.example/path 13800138000")).toString()).doesNotContain("secret.example", "13800138000");
+    }
+
+    /** 新模型观察条目超限须记录字段与实际数量，计费用量仍在校验之前结算。 */
+    @Test void modelObservationOverflowLogsSafeDiagnosticAfterSettlement() {
+        assertModelSummaryFailure(summaryWithItems("observations", 9), "媒体摘要条目不合法",
+                "path=$.observations", "rule=ARRAY_COUNT", "actualType=ARRAY", "actualCount=9", "maxCount=8");
+    }
+
+    /** 限制条目独立使用四条上限，不能把失败误归到观察字段。 */
+    @Test void modelLimitationOverflowLogsItsOwnLimit() {
+        assertModelSummaryFailure(summaryWithItems("limitations", 5), "媒体摘要条目不合法",
+                "path=$.limitations", "rule=ARRAY_COUNT", "actualType=ARRAY", "actualCount=5", "maxCount=4");
+    }
+
+    /** 非数组内容只记录固定类型，不把非法字段原值当作诊断信息。 */
+    @Test void modelNonArraySummaryLogsTypeWithoutRawValue() {
+        ObjectNode content = privateSummary();
+        content.put("observations", PRIVATE_TEXT);
+        assertModelSummaryFailure(content, "媒体摘要条目不合法",
+                "path=$.observations", "rule=ARRAY_TYPE", "actualType=STRING", "maxCount=8");
+    }
+
+    /** 未知字段只允许记录个数，模型生成的字段名不得进入日志。 */
+    @Test void modelUnknownSummaryFieldIsCountedWithoutLeakingItsName() {
+        ObjectNode content = privateSummary();
+        content.put(PRIVATE_FIELD, PRIVATE_TEXT);
+        assertModelSummaryFailure(content, "媒体摘要结构不合法",
+                "path=$", "rule=FIELDS", "actualFields=4", "expectedFields=3", "unknownFields=1");
+    }
+
+    /** 缓存结构失败须标记缓存阶段，不能预留费用、重发模型或回写损坏摘要。 */
+    @Test void invalidCachedSummaryLogsCacheStageWithoutPaidCalls() {
+        AiGenerationTaskEntity task = task();
+        when(repository.cached(eq(9L), any(), any())).thenReturn(summaryWithItems("observations", 9).toString());
+
+        assertSummaryFailure(task, request(), "媒体摘要条目不合法");
+
+        assertSafeDiagnostic("CACHE", null, "path=$.observations", "rule=ARRAY_COUNT", "actualCount=9", "maxCount=8");
+        verifyNoInteractions(client);
+        verify(repository, never()).reserve(any(), anyInt(), any());
+        verify(repository, never()).settle(any(), anyInt(), any(), any(), any(), any(), any());
+        verify(repository, never()).cache(anyLong(), any(), anyString(), any());
+    }
+
+    /** 冻结摘要损坏在任何外部访问前失败，保留原用户提示并记录内容字段位置。 */
+    @Test void invalidFrozenSummaryLogsFrozenStageWithoutExternalCalls() {
+        ObjectNode request = storedRequest();
+        ObjectNode document = (ObjectNode) request.path("facts").path("mediaPlan").path("entries")
+                .get(0).path(PortfolioAiStoredVideoSummary.FIELD);
+        document.set(PortfolioAiStoredVideoSummary.KEY_CONTENT, summaryWithItems("limitations", 5));
+
+        assertSummaryFailure(task(), request, "冻结视频摘要不合法");
+
+        assertSafeDiagnostic("FROZEN", null, "path=$.content.limitations", "rule=ARRAY_COUNT", "actualCount=5", "maxCount=4");
+        verifyNoInteractions(repository, client, access);
+    }
+
+    /** 模拟包含需保护正文的摘要，正常结构仍由真实合同负责校验。 */
+    private ObjectNode privateSummary() {
+        return StrictAiJson.parseObject(SUMMARY, 4096, 8).put("summary", PRIVATE_TEXT);
+    }
+
+    /** 生成指定字段的真实超量数组，使测试依赖实际服务校验而非异常替身。 */
+    private ObjectNode summaryWithItems(String field, int count) {
+        ObjectNode content = privateSummary();
+        var items = content.putArray(field);
+        for (int index = 0; index < count; index++) { items.add("private-summary-marker" + index); }
+        return content;
+    }
+
+    /** 实际模型失败仍先结算，并保持既有错误合同和终止边界。 */
+    private void assertModelSummaryFailure(ObjectNode content, String message, String... diagnostic) {
+        AiGenerationTaskEntity task = task();
+        when(repository.reserve(eq(task), anyInt(), any())).thenReturn(7);
+        when(client.summarize(eq(task), any(), any(), any(), any())).thenReturn(
+                new PortfolioAiModelClient.Completion(content.toString(), 100L, 20L, 80L, CacheStatus.KNOWN_HIT));
+        doAnswer(invocation -> {
+            assertThat(events.list).as("费用结算应发生在摘要失败诊断之前").isEmpty();
+            return null;
+        }).when(repository).settle(eq(task), eq(7), eq(100L), eq(20L), eq(80L), eq(CacheStatus.KNOWN_HIT), any());
+
+        assertSummaryFailure(task, request(), message);
+
+        assertSafeDiagnostic("MODEL", 7, diagnostic);
+        var order = inOrder(client, repository);
+        order.verify(client).summarize(eq(task), any(), any(), any(), any());
+        order.verify(repository).settle(eq(task), eq(7), eq(100L), eq(20L), eq(80L), eq(CacheStatus.KNOWN_HIT), any());
+        verify(repository, times(1)).reserve(eq(task), anyInt(), any());
+        verify(repository, never()).releaseUnsent(any(), anyInt());
+        verify(repository, never()).cache(anyLong(), any(), anyString(), any());
+        verify(client, never()).generateWithUsage(any(), any(), any());
+    }
+
+    /** 日志增强不得改变对任务执行器公开的失败码、文案和可重试性。 */
+    private void assertSummaryFailure(AiGenerationTaskEntity task, ObjectNode request, String message) {
+        assertThatThrownBy(() -> service.generate(task, request, checkOwned))
+                .isInstanceOfSatisfying(PortfolioAiCallException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(PortfolioAiMediaContract.ERROR_INVALID_SUMMARY);
+                    assertThat(exception.getMessage()).isEqualTo(message);
+                    assertThat(exception.isRetryable()).isFalse();
+                });
+    }
+
+    /** 全链路定位字段使用可信身份，日志不含模型正文、资源链接、手机号或异常堆栈。 */
+    private void assertSafeDiagnostic(String stage, Integer callNo, String... diagnostic) {
+        assertThat(events.list).hasSize(1);
+        ILoggingEvent event = events.list.getFirst();
+        assertThat(event.getLevel()).isEqualTo(Level.WARN);
+        assertThat(event.getThrowableProxy()).isNull();
+        assertThat(event.getFormattedMessage()).contains(FAILURE_LOG_PREFIX, "taskId=1", "attempt=1", "workId=9", "sourceNo=1",
+                        "stage=" + stage, "callNo=" + callNo, "errorCode=" + PortfolioAiMediaContract.ERROR_INVALID_SUMMARY, "diagnostic=")
+                .contains(diagnostic)
+                .doesNotContain("private-summary-marker", PRIVATE_FIELD, "private.example", "signature=temporary", "13800138000", "婚礼舞台");
     }
 
     /** v2 的两件口播分别进入各自摘要；最终任务携带全部冻结文字，后续更新不混入。 */

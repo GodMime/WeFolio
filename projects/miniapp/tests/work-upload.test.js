@@ -454,6 +454,16 @@ test('validates upload file count size and duration limits', () => {
   }
 })
 
+test('视频上传大小按十进制100MB验收且包含边界', () => {
+  assert.equal(VIDEO_MAX_BYTES, 100000000)
+  for (const size of [99999999, 100000000]) {
+    assert.equal(validateChosenMediaFiles([{ mediaType: 'VIDEO', size, durationMs: 1000 }]).valid, true)
+  }
+  for (const size of [100000001, 102090765, 104857600]) {
+    assert.equal(validateChosenMediaFiles([{ mediaType: 'VIDEO', size, durationMs: 1000 }]).message, '视频作品不能超过 100MB')
+  }
+})
+
 test('builds upload complete payload with per-file metadata', () => {
   const payload = buildUploadCompletePayload([
     {
@@ -1428,7 +1438,7 @@ test('超限预检缺失元数据使用明确提示且不开始编码', async ()
 test('真实视频预处理显示实测原大小到最终大小摘要且不泄露到票据', async () => {
   const { createCompressionSession } = require('../pages/works/utils/work-compression-runtime')
   const sourceSize = 120 * 1024 * 1024
-  const finalSize = 97 * 1024 * 1024
+  const finalSize = 98000000
   const wxApi = {
     getVideoInfo(args) { args.success({ width: 1920, height: 1080, duration: 60, fps: 30, bitrate: 18000, type: 'mp4' }) },
     compressVideo(args) { args.success({ tempFilePath: 'wxfile://video-result' }) },
@@ -1442,7 +1452,7 @@ test('真实视频预处理显示实测原大小到最终大小摘要且不泄�
     tempFilePath: 'wxfile://video-source', fileName: '演出.mov', size: VIDEO_MAX_BYTES + 1 }], { wxApi, session })
   assert.equal(result.files[0].compressed, true)
   assert.equal(result.files[0].originalSize, sourceSize)
-  assert.equal(result.files[0].compressionText, '已压缩：120.0MB → 97.0MB')
+  assert.equal(result.files[0].compressionText, '已压缩：125.8MB → 98.0MB')
   const item = buildUploadTicketPayload(result.files).files[0]
   assert.equal(item.fileSize, finalSize)
   assert.equal(Object.hasOwn(item, 'compressed'), false)
@@ -1482,7 +1492,7 @@ test('大视频预检接受数字字符串且复用已读取的源信息完成�
     },
     compressVideo(args) { args.success({ tempFilePath: 'wxfile://result' }) },
     getFileSystemManager() { return {
-      statSync(path) { return { size: path === 'wxfile://source' ? VIDEO_MAX_BYTES + 1 : 97 * 1024 * 1024 } },
+      statSync(path) { return { size: path === 'wxfile://source' ? VIDEO_MAX_BYTES + 1 : 98000000 } },
       unlinkSync() {}
     } }
   }
@@ -1494,7 +1504,7 @@ test('大视频预检接受数字字符串且复用已读取的源信息完成�
     assert.equal(result.files[0].compressed, true)
     assert.equal(result.files[0].durationMs, 60000)
     assert.deepEqual(infoPaths, ['wxfile://source', 'wxfile://result'])
-    assert.equal(buildUploadTicketPayload(result.files).files[0].fileSize, 97 * 1024 * 1024)
+    assert.equal(buildUploadTicketPayload(result.files).files[0].fileSize, 98000000)
   } finally {
     if (result) releasePreparedWorkFiles({ wxApi, ownedPathsByClientId: result.ownedPathsByClientId })
     session.dispose()

@@ -32,6 +32,8 @@ public final class PortfolioAiConstants {
     public static final String COMPONENT_WORK_LIST = PortfolioComponentTypeDict.WORK_LIST.getCode();
     /** 普通文字网格组件类型。 */
     public static final String COMPONENT_TEXT_GRID = PortfolioComponentTypeDict.TEXT_GRID.getCode();
+    /** 普通结构化文字说明组件类型。 */
+    public static final String COMPONENT_STRUCTURED_TEXT_SECTION = PortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode();
     /** 普通团队成员作品集网格组件类型。 */
     public static final String COMPONENT_MEMBER_PORTFOLIO_GRID = TeamPortfolioComponentTypeDict.MEMBER_PORTFOLIO_GRID.getCode();
     /** 普通团队成员作品集列表组件类型。 */

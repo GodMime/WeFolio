@@ -197,7 +197,7 @@
                   "SYSTEM",
                   "WECHAT_SANS_SS"
                 ],
-                "description": "内置字体：SYSTEM 系统默认字体；WECHAT_SANS_SS 微信无衬线字体，主要适合英文与数字，中文回退系统字体。CREATE 或 INSERT_COMPONENT 新建内部文字节点时只能选内置字体，不允许填写 fontId 或 bindings。远程字体仅可在 MODIFY_PAGE 对现有允许 fontId 的节点用 BIND_RESOURCES 绑定可信 FONT ref；生成内容需要远程字体时选 TEXT_SECTION。"
+                "description": "内置字体：SYSTEM 系统默认字体；WECHAT_SANS_SS 微信无衬线字体，主要适合英文与数字，中文回退系统字体。CREATE 或 INSERT_COMPONENT 新建文字块可通过本块 bindings 绑定可信 FONT ref 选择远程字体，不直接填写 fontId，也不把远程字体名称写入此字段。"
               },
               "fontSizeRpx": {
                 "type": "integer",
@@ -285,6 +285,35 @@
                   "RIGHT"
                 ],
                 "description": "文字水平对齐：LEFT 左对齐，CENTER 居中，RIGHT 右对齐。"
+              },
+              "bindings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "slot": {
+                      "type": "string",
+                      "enum": [
+                        "fontId"
+                      ],
+                      "maxCodePoints": 6,
+                      "description": "当前文字块的远程字体槽位，只允许 fontId；不能绑定背景或其它资源。"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "maxCodePoints": 128,
+                      "description": "本次 resources 中 kind=FONT、allowedSlots 含 fontId 且 reuseOnly=false 的可信字体 ref；不使用作品 sourceNo 或真实字体 ID。"
+                    }
+                  },
+                  "required": [
+                    "slot",
+                    "ref"
+                  ],
+                  "description": "当前文字块的封闭字体绑定结构，仅接受 slot 与 ref，实际字体 ID 和固定版本由 Runtime 写入。"
+                },
+                "maxItems": 1,
+                "minItems": 0,
+                "description": "仅用于 CREATE 或 INSERT_COMPONENT 的新建文字块，可省略或为 []；需要远程字体时填写 [{slot:\"fontId\",ref:\"可信字体ref\"}]，仅可使用 reuseOnly=false 的 FONT 引用。TITLE、PARAGRAPH、LIST、HINT 可独立选择字体，SPACER 不填写 bindings；绑定远程字体时 fontFamily 省略或使用 SYSTEM，不同时选择 WECHAT_SANS_SS。MODIFY_PAGE 修改现有文字块时使用定位到该块的 BIND_RESOURCES，不通过 UPDATE_PARAMS 写入本字段。"
               }
             },
             "required": [
@@ -312,7 +341,7 @@
           "description": "绑定已选图片、视频或动画作品的 sourceNo，作为当前文字区域的局部背景；同时设置 backgroundEnabled=true。不能写入 sourceNos 或用作全页背景。"
         }
       },
-      "description": "按顺序展示标题、段落、列表、提示和空白等文字块，各文字块独立排版；可为整段文字绑定局部背景。没有主素材，sourceNos=[]。"
+      "description": "按顺序展示标题、段落、列表、提示和空白等文字块，各文字块独立设置字体与排版；多段或分段描述使用多个 PARAGRAPH，并可共享同一背景图片或视频。需要文艺字体时在各文字块绑定可信 FONT ref，不因此拆成多个 TEXT_SECTION。没有主素材，sourceNos=[]。"
     },
     "TEXT_GRID": {
       "params": {
@@ -1104,7 +1133,7 @@
           "SYSTEM",
           "WECHAT_SANS_SS"
         ],
-        "description": "内置字体：SYSTEM 系统默认字体；WECHAT_SANS_SS 微信无衬线字体，主要适合英文与数字，中文回退系统字体。此规则用于 MODIFY_PAGE 的现有文字节点；仅对允许 fontId 的现有节点使用 BIND_RESOURCES 绑定可信 FONT ref 选择远程字体。CREATE 或 INSERT_COMPONENT 新节点不能在内部 schema 中填写 fontId 或 bindings，需要远程字体时选 TEXT_SECTION。"
+        "description": "内置字体：SYSTEM 系统默认字体；WECHAT_SANS_SS 微信无衬线字体，主要适合英文与数字，中文回退系统字体。此规则用于 MODIFY_PAGE 的现有文字节点；仅对允许 fontId 的现有节点使用 BIND_RESOURCES 绑定可信 FONT ref 选择远程字体，不在 UPDATE_PARAMS 中直接填写 fontId 或 bindings。CREATE 或 INSERT_COMPONENT 新建结构化文字块时使用组件契约中该块的 bindings。"
       },
       "fontSizeRpx": {
         "type": "integer",

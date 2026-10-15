@@ -23,12 +23,12 @@ class PortfolioAiPromptExampleTest {
     /** 示例场景中已经冻结的素材与字体，均不依赖真实数据库或远端资源。 */
     private static final String CREATE_FACTS = """
             {"input":{"ownerType":"USER","mode":"CREATE","targetMenuKey":"__root__","prompt":"黑底作品集","baseConfig":null},
-             "facts":{"safePrompt":"1号作为作品集封面，2号作为文艺文字背景，3号单独展示，4号作为背景音乐，追加档期查询和联系表单",
+             "facts":{"safePrompt":"1号作为作品集封面，2号视频作为多段文艺文字的同一背景，文字使用文艺字体，3号单独展示，4号作为背景音乐，追加档期查询和联系表单",
                "baseConfig":{"schemaVersion":"standard-personal-v1","share":{},"style":{"backgroundColor":"#FFFFFF"},"components":[]},
                "sources":[
                  {"sourceNo":1,"kind":"WORK","sourceId":"101","mediaType":"IMAGE","canBind":true},
-                 {"sourceNo":2,"kind":"WORK","sourceId":"102","mediaType":"IMAGE","canBind":true},
-                 {"sourceNo":3,"kind":"WORK","sourceId":"103","mediaType":"IMAGE","canBind":true},
+                 {"sourceNo":2,"kind":"WORK","sourceId":"102","mediaType":"VIDEO","canBind":true},
+                 {"sourceNo":3,"kind":"WORK","sourceId":"103","mediaType":"VIDEO","canBind":true},
                  {"sourceNo":4,"kind":"WORK","sourceId":"104","mediaType":"AUDIO","canBind":true}],
                "bindings":[{"ref":"source_cover_1","kind":"IMAGE","sourceNo":1,"label":"1号作品的封面图片","allowedSlots":["coverUrl"],"reuseOnly":false,
                  "value":"https://cdn.example.test/work/image/one.jpg"},
@@ -68,10 +68,18 @@ class PortfolioAiPromptExampleTest {
         assertThat(page.path("settings").path("share").path("bindings").toString())
                 .isEqualTo("[{\"slot\":\"coverUrl\",\"ref\":\"source_cover_1\"}]");
         assertThat(components).hasSize(4);
-        assertThat(components.get(0).path("type").asText()).isEqualTo("TEXT_SECTION");
+        assertThat(components.get(0).path("type").asText()).isEqualTo("STRUCTURED_TEXT_SECTION");
         assertThat(components.get(0).path("sourceNos")).isEmpty();
         assertThat(components.get(0).path("bindings").toString()).isEqualTo(
-                "[{\"slot\":\"backgroundWorkId\",\"sourceNo\":2},{\"slot\":\"fontId\",\"ref\":\"font_1\"}]");
+                "[{\"slot\":\"backgroundWorkId\",\"sourceNo\":2}]");
+        assertThat(components.get(0).path("params").path("backgroundEnabled").asBoolean()).isTrue();
+        JsonNode blocks = components.get(0).path("params").path("blocks");
+        assertThat(blocks).hasSizeGreaterThanOrEqualTo(2);
+        blocks.forEach(block -> {
+            assertThat(block.path("type").asText()).isEqualTo("PARAGRAPH");
+            assertThat(block.path("content").asText()).isNotBlank();
+            assertThat(block.path("bindings").toString()).isEqualTo("[{\"slot\":\"fontId\",\"ref\":\"font_1\"}]");
+        });
         assertThat(components.get(1).path("type").asText()).isEqualTo("SINGLE_WORK");
         assertThat(components.get(1).path("sourceNos").toString()).isEqualTo("[3]");
         assertThat(components.get(2).path("type").asText()).isEqualTo("SCHEDULE_QUERY");
@@ -86,11 +94,12 @@ class PortfolioAiPromptExampleTest {
                 .isEqualTo("#000000");
     }
 
+    /** 示例中块字体与全局音频必须分别使用可绑定的 FONT 与 AUDIO 来源。 */
     @Test
     void completeExampleRequiresTheDeclaredAvailableFontAndAudioMediaType() throws IOException {
         ObjectNode example = example();
         ObjectNode request = request();
-        ((ArrayNode) request.path("facts").path("bindings")).removeAll();
+        ((ArrayNode) request.path("facts").path("bindings")).remove(1);
         assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, example.toString()))
                 .isInstanceOf(AiProtocolException.class);
         request.withObject("facts").set("bindings", request().path("facts").path("bindings"));
