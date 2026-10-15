@@ -37,10 +37,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.nio.file.Path;
+import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Base64;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
@@ -82,6 +85,38 @@ class CosServiceTest {
     void cosServiceShouldNotExposeRemoteUrlUpload() {
         assertThat(CosService.class.getDeclaredMethods())
                 .noneMatch(method -> "uploadFromUrl".equals(method.getName()));
+    }
+
+    /** 私有对象只生成当前桶的 GET 临时地址，不更改 ACL 或输出签名凭证。 */
+    @Test
+    void signedGetShouldUseCurrentBucketAndBoundExpiration(CapturedOutput output) throws Exception {
+        COSClient client = mock(COSClient.class);
+        when(transferManager.getCOSClient()).thenReturn(client);
+        String key = "WFOWNER/others/video-frames/18/frame.jpg";
+        String url = "https://cos.test/frame.jpg?signature=private-test-signature";
+        when(client.generatePresignedUrl(eq("test-bucket"), eq(key), any(Date.class)))
+                .thenReturn(URI.create(url).toURL());
+        Instant before = Instant.now();
+
+        assertThat(cosService.signedGet(key, Duration.ofMinutes(15))).isEqualTo(url);
+
+        ArgumentCaptor<Date> expiresAt = ArgumentCaptor.forClass(Date.class);
+        verify(client).generatePresignedUrl(eq("test-bucket"), eq(key), expiresAt.capture());
+        assertThat(expiresAt.getValue().toInstant()).isBetween(before.plusSeconds(899), Instant.now().plusSeconds(901));
+        verifyNoMoreInteractions(client);
+        assertThat(output.getAll()).doesNotContain("private-test-signature");
+    }
+
+    /** 临时地址不能接受空对象键、零或超过一小时的有效期。 */
+    @Test
+    void signedGetShouldRejectInvalidArgumentsBeforeCallingCos() {
+        assertThatThrownBy(() -> cosService.signedGet(" ", Duration.ofMinutes(15)))
+                .isInstanceOf(IllegalArgumentException.class);
+        for (Duration ttl : new Duration[]{null, Duration.ZERO, Duration.ofSeconds(-1), Duration.ofMinutes(61)}) {
+            assertThatThrownBy(() -> cosService.signedGet("frame.jpg", ttl))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        verifyNoInteractions(transferManager);
     }
 
     // ── upload ──────────────────────────────────────────────

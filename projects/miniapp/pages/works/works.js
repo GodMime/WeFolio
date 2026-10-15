@@ -28,6 +28,7 @@ const {
   updateAnimationCoverEditFrame
 } = require('./utils/animation-cover')
 const { calculateFileSha256: calculateLocalFileSha256 } = require('./utils/sha256')
+const { VIDEO_AI_LOADING_MS, VIDEO_AI_TABS, normalizeVideoAiContent } = require('./utils/work-video-ai')
 const {
   DEFAULT_WORK_TAG_COLOR,
   DEFAULT_AUDIO_COVER_URL,
@@ -54,6 +55,7 @@ const WORK_TAGS_API_URL = '/api/mine/works/tags'
 const WORK_TAG_DELETE_API_PREFIX = '/api/mine/works/tags/delete'
 const WORKS_API_PREFIX = '/api/mine/works'
 const WORK_AUDIT_RESUBMIT_API_SUFFIX = '/audit-resubmit'
+const WORK_AI_CONTENT_API_SUFFIX = '/ai-content'
 const WORK_DELETE_API_PREFIX = '/api/mine/works/delete'
 const WORK_BATCH_DELETE_CHECK_API_URL = '/api/mine/works/delete-check'
 const WORK_BATCH_DELETE_API_URL = '/api/mine/works/delete'
@@ -479,6 +481,13 @@ Page({
     videoFrameExporting: false,
     videoCoverUploadProgress: 0,
     videoEditErrorText: '',
+    videoAiContent: normalizeVideoAiContent(),
+    videoAiExpanded: false,
+    videoAiLoading: false,
+    videoAiQueryLoading: false,
+    videoAiTab: 'summary',
+    videoAiErrorText: '',
+    videoAiFrameError: false,
     animationEditSheetVisible: false,
     animationEditForm: null,
     animationEditFieldCounters: buildWorkFieldCounters({}),
@@ -649,6 +658,7 @@ Page({
   },
 
   onUnload() {
+    this.resetVideoAi()
     this.pauseWorkAudio()
     this.audioDisposed = true
     if (this.workAudio) this.workAudio.destroy()
@@ -1159,6 +1169,7 @@ Page({
   },
 
   openImageEditSheet(work) {
+    this.resetVideoAi()
     this.pauseWorkAudio()
     const imageEditForm = Object.assign(buildImageEditForm(work), {
       tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
@@ -1198,6 +1209,7 @@ Page({
   },
 
   openVideoEditSheet(work) {
+    this.resetVideoAi()
     this.pauseWorkAudio()
     const videoEditForm = Object.assign(buildVideoEditForm(work), {
       tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
@@ -1226,9 +1238,11 @@ Page({
       animationEditErrorText: '',
       tagManageMode: false
     })
+    this.loadVideoAiContent()
   },
 
   openAnimationEditSheet(work) {
+    this.resetVideoAi()
     this.pauseWorkAudio()
     const animationEditForm = Object.assign(buildAnimationEditForm(work), {
       tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
@@ -1383,6 +1397,7 @@ Page({
     if (this.data.videoEditSaving || this.data.videoDownloading || this.data.videoFrameExporting) {
       return
     }
+    this.resetVideoAi()
     this.setData({
       videoEditSheetVisible: false,
       videoEditForm: null,
@@ -1390,6 +1405,98 @@ Page({
       videoEditErrorText: '',
       videoCoverUploadProgress: 0
     })
+  },
+
+  resetVideoAi() {
+    this.videoAiRequestSeq = (this.videoAiRequestSeq || 0) + 1
+    this.cancelVideoAiLoading()
+    this.setData({
+      videoAiContent: normalizeVideoAiContent(),
+      videoAiExpanded: false,
+      videoAiLoading: false,
+      videoAiQueryLoading: false,
+      videoAiTab: 'summary',
+      videoAiErrorText: '',
+      videoAiFrameError: false
+    })
+  },
+
+  cancelVideoAiLoading() {
+    if (this.videoAiLoadingTimer) clearTimeout(this.videoAiLoadingTimer)
+    this.videoAiLoadingTimer = null
+  },
+
+  async loadVideoAiContent() {
+    const form = this.data.videoEditForm
+    if (!this.data.videoEditSheetVisible || !form || !form.id || this.data.videoAiQueryLoading) return
+    const requestSeq = (this.videoAiRequestSeq || 0) + 1
+    this.videoAiRequestSeq = requestSeq
+    this.setData({ videoAiQueryLoading: true, videoAiErrorText: '' })
+    const isCurrent = () => requestSeq === this.videoAiRequestSeq
+      && this.data.videoEditSheetVisible && this.data.videoEditForm && this.data.videoEditForm.id === form.id
+    try {
+      const response = await request({ url: `${WORKS_API_PREFIX}/${form.id}${WORK_AI_CONTENT_API_SUFFIX}`, method: 'GET' })
+      if (!isCurrent()) return
+      const content = normalizeVideoAiContent(response || {})
+      if (!content.hasContent) this.cancelVideoAiLoading()
+      this.setData({
+        videoAiContent: content,
+        videoAiQueryLoading: false,
+        videoAiFrameError: false,
+        ...(!content.hasContent ? { videoAiExpanded: false, videoAiLoading: false } : {})
+      })
+    } catch (error) {
+      if (!isCurrent()) return
+      this.setData({ videoAiQueryLoading: false, videoAiErrorText: 'AI 内容加载失败，请重试' })
+      if (error && error.authRequired) handleMaintainerAuthRequired(error.message)
+    }
+  },
+
+  handleRetryVideoAi() {
+    return this.loadVideoAiContent()
+  },
+
+  handleToggleVideoAi() {
+    if (!this.data.videoEditSheetVisible || !this.data.videoAiContent.hasContent) return
+    this.cancelVideoAiLoading()
+    if (this.data.videoAiExpanded) {
+      this.setData({ videoAiExpanded: false, videoAiLoading: false })
+      return
+    }
+    // 打开编辑弹层时已读取数据，每次展开仅使用本地固定一秒的展示计时。
+    this.setData({ videoAiExpanded: true, videoAiLoading: true, videoAiTab: 'summary' })
+    this.videoAiLoadingTimer = setTimeout(() => {
+      this.videoAiLoadingTimer = null
+      if (this.data.videoEditSheetVisible && this.data.videoAiExpanded) this.setData({ videoAiLoading: false })
+    }, VIDEO_AI_LOADING_MS)
+  },
+
+  handleVideoAiTab(event) {
+    const tab = event.currentTarget.dataset.tab
+    if (!this.data.videoAiExpanded || !VIDEO_AI_TABS.includes(tab)) return
+    this.setData({ videoAiTab: tab })
+  },
+
+  handleCopyVideoAi(event) {
+    const type = event.currentTarget.dataset.type
+    const content = this.data.videoAiContent
+    const value = type === 'summary' ? content.summaryCopyText : type === 'audio' ? content.audioText : ''
+    if (!value || !value.trim()) return
+    wx.setClipboardData({ data: value })
+  },
+
+  handleVideoAiFrameError(event) {
+    const { index, url } = event.currentTarget.dataset
+    const frame = this.data.videoAiContent.frames[index]
+    // 已重试或切换作品时，旧图片的错误事件不能污染当前展示。
+    if (!this.data.videoEditSheetVisible || !frame || frame.url !== url) return
+    this.setData({ [`videoAiContent.frames[${index}].loadFailed`]: true, videoAiFrameError: true })
+  },
+
+  handlePreviewVideoAiFrame(event) {
+    const frame = this.data.videoAiContent.frames[event.currentTarget.dataset.index]
+    if (!frame || frame.loadFailed) return
+    wx.previewImage({ current: frame.url, urls: this.data.videoAiContent.frames.map((item) => item.url) })
   },
 
   handleCloseAnimationEditor() {
@@ -2104,6 +2211,7 @@ Page({
         title: '作品已更新',
         icon: 'success'
       })
+      this.resetVideoAi()
       this.setData({
         videoEditSheetVisible: false,
         videoEditForm: null,

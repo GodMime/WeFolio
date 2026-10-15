@@ -43,11 +43,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -551,6 +554,18 @@ public class CosService {
             if (exception.getStatusCode() == 404) return null;
             throw exception;
         }
+    }
+
+    /** 为已完成业务归属校验的本桶对象生成只读临时地址，不更改对象 ACL 或记录签名凭证。 */
+    public String signedGet(String objectKey, Duration ttl) {
+        if (objectKey == null || objectKey.isBlank()) {
+            throw new IllegalArgumentException(CosMessage.OBJECT_KEY_REQUIRED_MESSAGE);
+        }
+        if (ttl == null || ttl.isNegative() || ttl.isZero() || ttl.compareTo(Duration.ofHours(1)) > 0) {
+            throw new IllegalArgumentException(CosMessage.SIGNED_URL_TTL_INVALID_MESSAGE);
+        }
+        return transferManager.getCOSClient().generatePresignedUrl(cosProperties.getBucketName(), objectKey,
+                Date.from(Instant.now().plus(ttl))).toExternalForm();
     }
 
     /** 不改变既有 ObjectHead 构造器，独立承载版本与更新时间。 */

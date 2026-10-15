@@ -1576,6 +1576,250 @@
   min-height: 0;
 }
 
+.video-ai-trigger {
+  flex: none;
+  width: 140rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-ai-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  width: 128rpx;
+  height: 60rpx;
+  color: #526c4c;
+  font-size: 22rpx;
+  font-weight: 700;
+  background: #edf3e9;
+  border: 1rpx solid #dfe8d9;
+  border-radius: 18rpx;
+  box-sizing: border-box;
+}
+
+.video-ai-trigger.is-expanded .video-ai-mark {
+  color: #ffffff;
+  background: #4f6748;
+  border-color: #4f6748;
+}
+
+.video-ai-spark {
+  font-size: 28rpx;
+}
+
+.video-ai-panel {
+  flex: none;
+  overflow: hidden;
+  border: 1rpx solid #dce6d7;
+  border-radius: 24rpx;
+  background: #fbfcfa;
+}
+
+.video-ai-heading,
+.video-ai-content-heading,
+.video-ai-query-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.video-ai-heading {
+  padding: 8rpx 24rpx 0;
+}
+
+.video-ai-title {
+  color: #526c4c;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.video-ai-collapse,
+.video-ai-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72rpx;
+  padding: 0 8rpx;
+  color: #718367;
+  font-size: 20rpx;
+  font-weight: 400;
+}
+
+.video-ai-tabs {
+  display: flex;
+  padding: 0 20rpx;
+  gap: 12rpx;
+  border-bottom: 1rpx solid #e5ebe1;
+}
+
+.video-ai-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 22rpx 0;
+  color: #929b8d;
+  font-size: 22rpx;
+  text-align: center;
+  border-bottom: 3rpx solid transparent;
+}
+
+.video-ai-tab.is-active {
+  color: #3f5d39;
+  border-bottom-color: #58784e;
+  font-weight: 700;
+}
+
+.video-ai-body {
+  padding: 12rpx 24rpx 24rpx;
+}
+
+.video-ai-content-heading {
+  color: #516449;
+  min-height: 72rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.video-ai-text {
+  display: block;
+  color: #4e5b4a;
+  font-size: 24rpx;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.video-ai-observations,
+.video-ai-limitations {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-top: 18rpx;
+}
+
+.video-ai-observation,
+.video-ai-limitation {
+  display: block;
+  color: #829078;
+  font-size: 22rpx;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.video-ai-limitation-label,
+.video-ai-limitation {
+  color: #97937e;
+  font-size: 20rpx;
+}
+
+.video-ai-note {
+  margin-top: 22rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #e8eee3;
+  color: #929e88;
+  font-size: 20rpx;
+  line-height: 1.65;
+}
+
+.video-ai-loading,
+.video-ai-empty {
+  min-height: 280rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  color: #829176;
+  font-size: 22rpx;
+}
+
+.video-ai-spinner {
+  width: 44rpx;
+  height: 44rpx;
+  border: 4rpx solid #e1e8da;
+  border-top-color: #67825c;
+  border-radius: 50%;
+  animation: video-ai-spin 800ms linear infinite;
+}
+
+@keyframes video-ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+.video-ai-frames {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  row-gap: 18rpx;
+}
+
+.video-ai-frame {
+  position: relative;
+  width: 48%;
+  height: 152rpx;
+  overflow: hidden;
+  border-radius: 12rpx;
+  background: #e5ece4;
+}
+
+.video-ai-frame-image,
+.video-ai-frame-failed {
+  width: 100%;
+  height: 100%;
+}
+
+.video-ai-frame-failed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #829078;
+  font-size: 20rpx;
+}
+
+.video-ai-frame-time {
+  position: absolute;
+  left: 8rpx;
+  bottom: 8rpx;
+  padding: 4rpx 8rpx;
+  color: #ffffff;
+  font-size: 18rpx;
+  border-radius: 6rpx;
+  background: rgba(19, 37, 34, .6);
+}
+
+.video-ai-frame-count {
+  color: #829078;
+  font-size: 20rpx;
+  font-weight: 400;
+}
+
+.video-ai-query-error {
+  color: #8b6f4c;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.video-ai-retry {
+  flex: none;
+  margin: 0;
+  padding: 12rpx 20rpx;
+  color: #718367;
+  font-size: 22rpx;
+  line-height: 1.5;
+  border: 1rpx solid #dce5d6;
+  border-radius: 24rpx;
+  background: #ffffff;
+}
+
+.video-ai-retry::after {
+  border: 0;
+}
+
 .work-edit-content {
   display: flex;
   flex-direction: column;

@@ -15,6 +15,7 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.FileEntity;
 import org.apache.http.entity.ContentType;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.springframework.stereotype.Service;
@@ -67,14 +68,19 @@ public class PortfolioFontStorage {
                 .buildGeneralApiEndpoint(properties.getBucketName()) + "/" + key;
     }
 
+    /** 创建单次传输客户端，统一禁用重试、重定向和 Cookie，并应用调用方剩余预算。 */
+    CloseableHttpClient createClient(RequestConfig config) {
+        return HttpClients.custom().disableAutomaticRetries().disableRedirectHandling()
+                .disableCookieManagement().setDefaultRequestConfig(config).build();
+    }
+
     /** 预算内完成签名与一次传输；取消通过 abort 中断当前 HTTP 请求。 */
     private void execute(HttpRequestBase request, HttpMethodName method, String key,
                          PortfolioFontBudget budget, boolean deletion) throws Exception {
         int millis = (int) Math.min(budget.remaining(), Integer.MAX_VALUE);
         var config = RequestConfig.custom().setConnectTimeout(millis).setSocketTimeout(millis)
                 .setConnectionRequestTimeout(millis).build();
-        try (var client = HttpClients.custom().disableAutomaticRetries().disableRedirectHandling()
-                .disableCookieManagement().setDefaultRequestConfig(config).build()) {
+        try (var client = createClient(config)) {
             budget.attach(request);
             Map<String, String> headers = new HashMap<>();
             headers.put("Host", request.getURI().getHost());

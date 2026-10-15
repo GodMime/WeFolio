@@ -2,6 +2,7 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
+import com.jxc.wefolio.dto.MineWorkAiContentResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
@@ -51,6 +52,9 @@ public class MineWorkController {
 
     /** 删除作品标签路径，小程序端使用 POST 规避 DELETE 兼容问题 */
     private static final String WORK_TAG_DELETE_PATH = "/api/mine/works/tags/delete/{tagId}";
+
+    /** 作品已有 AI 内容的只读查询路径。 */
+    private static final String WORK_AI_CONTENT_PATH = "/api/mine/works/{workId}/ai-content";
 
     /** 已弃用媒体类型筛选参数命中日志 */
     private static final String DEPRECATED_MEDIA_TYPE_LOG_MESSAGE =
@@ -157,6 +161,12 @@ public class MineWorkController {
     @GetMapping("/api/mine/works/{workId}")
     public Response<MineWorkDetailResponse> detail(@PathVariable Long workId) {
         return Response.success(mineWorkService.getWorkDetail(workId));
+    }
+
+    /** 查询当前用户视频作品的已有摘要、音频文字和关键帧。 */
+    @GetMapping(WORK_AI_CONTENT_PATH)
+    public Response<MineWorkAiContentResponse> aiContent(@PathVariable Long workId) {
+        return Response.success(mineWorkService.getWorkAiContent(workId));
     }
 
     /**

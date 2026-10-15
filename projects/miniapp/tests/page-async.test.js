@@ -1583,9 +1583,11 @@ test('works page opens video edit sheet and saves video text without downloading
 
   assert.equal(navigateToCount, 0)
   assert.equal(downloadCount, 0)
-  assert.equal(requests[0].url, '/api/mine/works/18')
-  assert.equal(requests[0].method, 'PUT')
-  assert.deepEqual(requests[0].data, {
+  assert.equal(requests[0].url, '/api/mine/works/18/ai-content')
+  assert.equal(requests[0].method, 'GET')
+  const updateRequest = requests.find((item) => item.method === 'PUT')
+  assert.equal(updateRequest.url, '/api/mine/works/18')
+  assert.deepEqual(updateRequest.data, {
     title: '新标题',
     description: '新说明'
   })
