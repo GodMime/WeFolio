@@ -2,6 +2,8 @@ package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.dto.PortfolioFontManifestDto;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
+import java.util.function.Supplier;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioConfigGuard;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
@@ -94,6 +96,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class MinePortfolioService {
+
+    /** 参考附件只在显式提交清单时参与短事务锁和事实校验。 */
+    private final PortfolioAiReferenceService aiReferences;
 
     /** 字体同步准备、锁内认领与提交后一次性清理。 */
     private final PortfolioFontService portfolioFontService;
@@ -535,15 +540,24 @@ public class MinePortfolioService {
     /** 高级独立入口按显式模板复用相同业务算法。 */
     public MinePortfolioDetailResponse saveDraft(Long portfolioId, MinePortfolioDraftSaveRequest request, String templateType, AdvancedPortfolioSaveMetadata metadata) {
         PortfolioFontWrite write = new PortfolioFontWrite();
-        MinePortfolioDetailResponse result = portfolioPublishTransactionService.execute(
+        MinePortfolioDetailResponse result = referenceSaveTransaction(portfolioId, templateType, metadata,
                 () -> portfolioReferenceMutex.execute(() -> saveDraftInTransaction(portfolioId, request, write, templateType, metadata)));
         if (write.snapshot == null) { return result; }
         write.prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(
                 AuthContextHolder.requireUserId()), portfolioId);
         write.prepared = portfolioFontService.prepare(write.snapshot, write.plan, write.prefix);
-        result = portfolioPublishTransactionService.execute(() -> portfolioReferenceMutex.execute(() -> saveDraftInTransaction(portfolioId, request, write, templateType, metadata)));
+        result = referenceSaveTransaction(portfolioId, templateType, metadata,
+                () -> portfolioReferenceMutex.execute(() -> saveDraftInTransaction(portfolioId, request, write, templateType, metadata)));
         portfolioFontService.cleanup(write.released, write.prefix);
         return result;
+    }
+
+    /** owner 锁先于最终数据库事务，字体生成仍在两个短事务之间。 */
+    private <T> T referenceSaveTransaction(Long id, String templateType, AdvancedPortfolioSaveMetadata metadata, Supplier<T> action) {
+        if (metadata == null || !metadata.referencesPresent()) { return portfolioPublishTransactionService.execute(action); }
+        PortfolioEntity owner = requireOwnedPersonal(id, templateType);
+        return aiReferences.withOwnerLock(owner.getOwnerType(), owner.getOwnerId(),
+                () -> portfolioPublishTransactionService.execute(action));
     }
 
     /** 两次短事务共用相同校验顺序；首次仅预检，字体 I/O 位于两事务之间。 */
@@ -641,7 +655,7 @@ public class MinePortfolioService {
         if (!PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())) {
             portfolio.setPublicationStatus(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
         }
-        if (metadata != null) { metadata.apply(portfolio); }
+        if (metadata != null) { metadata.apply(portfolio, aiReferences); }
         int updated = portfolioEntityMapper.updateById(portfolio);
         if (updated != 1) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_CONCURRENT_UPDATE_MESSAGE);
@@ -1087,16 +1101,6 @@ public class MinePortfolioService {
                 : portfolioHyperlinkGraphService.listTargets(userId, sourcePortfolioId, selectedTargetPortfolioId);
     }
 
-    /**
-     * 校验作品集归属和模板。
-     *
-     * @param portfolioId 作品集 ID
-     * @return 作品集实体
-     */
-    private PortfolioEntity requireOwnedStandardPersonal(Long portfolioId) {
-        return requireOwnedPersonal(portfolioId, PortfolioTemplateTypeDict.STANDARD.getCode());
-    }
-
     /** 按入口显式选择模板，当前身份及原不存在提示保持不变。 */
     public PortfolioEntity requireOwnedPersonal(Long portfolioId, String templateType) {
         Long userId = AuthContextHolder.requireUserId();
@@ -1109,11 +1113,6 @@ public class MinePortfolioService {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_MAINTENANCE_UNAVAILABLE_MESSAGE);
         }
         return portfolio;
-    }
-
-    /** 校验团队引用预览目标仍为有效的标准个人作品集发布版本。 */
-    private PortfolioEntity requirePublishedStandardPersonal(Long portfolioId) {
-        return requirePublishedPersonal(portfolioId, false);
     }
 
     /** 高级团队仅在完成当前成员与有效引用鉴权后允许高级个人子作品集。 */

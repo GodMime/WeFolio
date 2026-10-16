@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
 import com.jxc.wefolio.config.PortfolioFontProperties;
@@ -403,6 +405,48 @@ class MineTeamPortfolioServiceTest {
         JSONObject aiContext = JSON.parseObject("{\"version\":1,\"nextSourceNo\":1,\"sources\":[]}");
         AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(aiContext, true, "团队描述", true, JSON.toJSONString(request));
         context.service.saveDraft(PORTFOLIO_ID, request, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(portfolio.getDraftRevision()).isEqualTo(1); assertThat(portfolio.getAiPrompt()).isEqualTo("团队描述");
+        ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(context.historyMapper).insert(history.capture());
+        JSONObject snapshot = JSON.parseObject(history.getValue().getSnapshotJson());
+        assertThat(snapshot.getJSONObject("aiContext")).isEqualTo(aiContext);
+        assertThat(snapshot.getInteger("resultDraftRevision")).isEqualTo(1);
+        assertThat(snapshot.getString("requestFingerprint")).hasSize(64);
+        verify(context.referenceService).rebuild(eq(PORTFOLIO_ID), eq(PortfolioConfigScopeDict.DRAFT.getCode()), eq(config),
+                eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1, null, true)));
+        verifyNoInteractions(context.pointService);
+    }
+
+    /** 团队附件使用团队 owner 锁，可信清单与最终高级草稿同批更新。 */
+    @Test
+    void advancedReferenceSaveUsesTeamOwnerAndAtomicMetadata() {
+        TestContext context = context(true);
+        PortfolioEntity portfolio = portfolio(TEAM_ID); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode()))
+                .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
+        doReturn(portfolio).when(context.portfolioMapper).lockById(PORTFOLIO_ID);
+        TeamPortfolioConfigDto config = config();
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class))).thenReturn(config);
+        when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
+        TeamPortfolioDraftSaveRequest request = new TeamPortfolioDraftSaveRequest(); request.setConfig(config);
+        request.setClientRevision(0); request.setIdempotencyKey("adv-team-save");
+        JSONObject aiContext = JSON.parseObject("{\"version\":1,\"nextSourceNo\":1,\"sources\":[]}");
+        var items = JsonNodeFactory.instance.arrayNode();
+        String resolved = "{\"version\":1,\"nextReferenceNo\":4,\"items\":[]}";
+        boolean[] held = {false};
+        when(context.aiReferences.withOwnerLock(eq("TEAM"), eq(TEAM_ID), any())).thenAnswer(invocation -> {
+            held[0] = true;
+            try { return invocation.<Supplier<?>>getArgument(2).get(); } finally { held[0] = false; }
+        });
+        when(context.aiReferences.resolveForSave(eq("TEAM"), eq(TEAM_ID), eq(items), isNull(), eq(4))).thenAnswer(invocation -> {
+            assertThat(held[0]).isTrue(); return resolved;
+        });
+        AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(aiContext, true, "团队描述", true,
+                JSON.toJSONString(request), items, true, 4);
+        context.service.saveDraft(PORTFOLIO_ID, request, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(portfolio.getAiReferenceAttachmentsJson()).isEqualTo(resolved);
+        assertThat(held[0]).isFalse();
         assertThat(portfolio.getDraftRevision()).isEqualTo(1); assertThat(portfolio.getAiPrompt()).isEqualTo("团队描述");
         ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
         verify(context.historyMapper).insert(history.capture());
@@ -1277,12 +1321,13 @@ class MineTeamPortfolioServiceTest {
             Supplier<?> publishAction = invocation.getArgument(0);
             return publishAction.get();
         });
-        MineTeamPortfolioService service = new MineTeamPortfolioService(fonts, properties, portfolioMapper, historyMapper,
+        PortfolioAiReferenceService aiReferences = mock(PortfolioAiReferenceService.class);
+        MineTeamPortfolioService service = new MineTeamPortfolioService(aiReferences, fonts, properties, portfolioMapper, historyMapper,
                 referenceMapper, shareMapper, teamMapper, memberMapper, access, validator, renderService,
                 referenceService, assetService, scheduleService,
                 visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,
                 pointService, publishTransactionService, new LocalPortfolioReferenceMutex());
-        return new TestContext(service, portfolioMapper, historyMapper, referenceMapper, shareMapper, teamMapper,
+        return new TestContext(aiReferences, service, portfolioMapper, historyMapper, referenceMapper, shareMapper, teamMapper,
                 memberMapper, access, validator, renderService, referenceService, assetService, scheduleService,
                 visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,
                 pointService, publishTransactionService);
@@ -1488,6 +1533,7 @@ class MineTeamPortfolioServiceTest {
     }
 
     private record TestContext(
+            PortfolioAiReferenceService aiReferences,
             MineTeamPortfolioService service,
             PortfolioEntityMapper portfolioMapper,
             PortfolioHistoryEntityMapper historyMapper,

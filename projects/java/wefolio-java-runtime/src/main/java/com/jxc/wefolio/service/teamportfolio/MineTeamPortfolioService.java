@@ -2,6 +2,8 @@ package com.jxc.wefolio.service.teamportfolio;
 
 import com.jxc.wefolio.dto.PortfolioFontManifestDto;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
+import java.util.function.Supplier;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioConfigGuard;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
@@ -91,6 +93,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class MineTeamPortfolioService {
+
+    /** 参考附件只在显式提交清单时参与短事务锁和事实校验。 */
+    private final PortfolioAiReferenceService aiReferences;
 
     /** 字体同步准备和一次性引用释放。 */
     private final PortfolioFontService portfolioFontService;
@@ -480,14 +485,22 @@ public class MineTeamPortfolioService {
             long userId
     , String templateType, AdvancedPortfolioSaveMetadata metadata) {
         PortfolioFontWrite write = new PortfolioFontWrite();
-        TeamPortfolioDetailResponse result = portfolioPublishTransactionService.execute(
+        TeamPortfolioDetailResponse result = referenceSaveTransaction(portfolioId, userId, templateType, metadata,
                 () -> portfolioReferenceMutex.execute(() -> saveDraftLocked(portfolioId, request, userId, write, templateType, metadata)));
         if (write.snapshot == null) { return result; }
         write.prepared = portfolioFontService.prepare(write.snapshot, write.plan, write.prefix);
-        result = portfolioPublishTransactionService.execute(
+        result = referenceSaveTransaction(portfolioId, userId, templateType, metadata,
                 () -> portfolioReferenceMutex.execute(() -> saveDraftLocked(portfolioId, request, userId, write, templateType, metadata)));
         portfolioFontService.cleanup(write.released, write.prefix);
         return result;
+    }
+
+    /** owner 锁在数据库事务外取得，字体生成期间不占用命名锁。 */
+    private <T> T referenceSaveTransaction(long id, long userId, String templateType, AdvancedPortfolioSaveMetadata metadata, Supplier<T> action) {
+        if (metadata == null || !metadata.referencesPresent()) { return portfolioPublishTransactionService.execute(action); }
+        PortfolioEntity owner = maintainableAccess(id, userId, templateType).portfolio();
+        return aiReferences.withOwnerLock(owner.getOwnerType(), owner.getOwnerId(),
+                () -> portfolioPublishTransactionService.execute(action));
     }
 
     /** 在作品集引用互斥区间内保存团队作品集草稿。 */
@@ -570,7 +583,7 @@ public class MineTeamPortfolioService {
         if (!PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())) {
             portfolio.setPublicationStatus(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
         }
-        if (metadata != null) { metadata.apply(portfolio); }
+        if (metadata != null) { metadata.apply(portfolio, aiReferences); }
         requireUpdated(portfolioEntityMapper.updateById(portfolio));
         referenceService.rebuild(portfolioId, PortfolioConfigScopeDict.DRAFT.getCode(), normalized,
                 componentContext(portfolio, access.team().getId(), portfolioId, nextDraftRevision));

@@ -639,6 +639,58 @@ Service 两项回归先复现旧逻辑 `FAILED/ARRAY_COUNT`，修复后相关 53
 
 证据：`/private/tmp/wefolio-summary-logging-red.log`、`/private/tmp/wefolio-media-summary-logging-focused.log`、`/private/tmp/wefolio-media-summary-logging-job-full-approved.log`、`/private/tmp/wefolio-media-summary-logging-package.log`、`/private/tmp/wefolio-media-summary-logging-artifact-check.json`、`/private/tmp/wefolio-media-summary-logging-deploy.log`、`/private/tmp/wefolio-media-summary-logging-release-result.json`。
 
+### 4.31 高级 AI 参考附件（2026-10-16，生产已启用）
+
+初始实现完成了代码、自动化验证与隔离 MySQL 验证。2026-10-16 生产核查确认两台 Runtime 与单台 Job 已包含附件协议，V66/V67 已成功执行，列和 owner 索引均与预期一致；此前附件入口不可用的直接原因是生产未设置附件开关。按用户确认，本轮补齐依赖并启用生产能力，未重新构建或替换应用 JAR，未再次执行数据库迁移。真实 TokenHub 生成和微信 iOS/Android 全链路验收尚未执行。
+
+| 配置 | 服务 | 代码默认及要求 |
+| --- | --- | --- |
+| `WEFOLIO_AI_REFERENCE_ENABLED` | Runtime / Job | `false`；Runtime 控制新附件接单，Job 控制未领取附件任务的领取；已有清单维护与清理仍可用 |
+| `WEFOLIO_AI_REFERENCE_MAX_ACTIVE_TASKS` | Runtime / Job | `10`；Runtime 准入最多为全局活动上限减一，Job 实例附件并发最多为工作线程数减一 |
+| `WEFOLIO_AI_REFERENCE_LOCK_POOL_SIZE` | Runtime / Job | Runtime 默认 `4`、Job 默认 `2`，必须大于零；命名锁使用独立池，空闲连接下限为零，借连接最多等待 1 秒 |
+| `WEFOLIO_AI_REFERENCE_TOKEN_SECRET` | Runtime | 默认空；启用时至少 32 字节，所有 Runtime 一致，独立于模型/COS 凭据，不写入本台账 |
+| `portfolio-ai.reference-cleanup-cron` | Job | 默认 `0 35 * * * ?`，沿既有 AI 调度器每小时执行 |
+
+当前参考附件采用客户端识别信息，Runtime 不下载原件、不创建媒体临时文件、不运行 ImageIO、`ffprobe` 或 `ffmpeg` 校验。格式、编码、大小、尺寸和时长由小程序识别并随确认请求提交，服务端只验证协议字段和产品上限，以及 COS HEAD、对象版本、签名和维护权限。此前安装的媒体工具保留供既有媒体业务使用；本节下方的解码记录属于此次调整前的历史验证。
+
+附件 COS 操作使用独立 HTTPS 客户端，每个请求最多 5 秒、不执行 SDK 自动重试；未改变其它业务 COS 默认超时。上传确认是同步接口，小程序仅对此请求显式使用 150 秒超时，附件上传使用 180 秒；反向代理对 `POST /api/mine/portfolio-ai/reference-attachments/complete` 的读取超时须至少 150 秒，不顺带放宽其它接口。真机验收须确认实际微信版本、代理与服务端完整超时链。
+
+迁移为 `V66__add_portfolio_ai_reference_attachments.sql`（作品集和任务各一列可空 JSON）及 `V67__index_ai_reference_owner_lookup.sql`（任务表 `owner_type, owner_id` 索引），均已同步 `full-schema.sql`。发布顺序：数据库新增列与索引 → 全部 Job 支持新协议 → Runtime → 小程序 → 验收通过后启用。旧 Job 未排空时不得接收新附件任务。关闭 Runtime 接单不影响已接受任务执行；关闭 Job 附件领取会暂停等待中的附件任务，已领取任务继续收尾，普通任务继续领取。Job 关闭时发现待领取附件会告警。继续保留签名密钥与清理任务；回执仍在使用时不要直接轮换单一密钥。
+
+存储路径固定为 `{ownerUniqueCode}/protfolio/ai-reference/{uuid}.{jpg|png|mp4}`，团队取团队唯一码。桶版本控制必须为 `Off`；源站匿名请求与 CDN 均须无法读取这些对象。保留条件为写入未满 24 小时、当前有效作品集引用、活动任务引用或任务终态未满 24 小时。清理每轮最多 1,000 个对象、200 次 COS 调用、60 秒，未知 owner/坏 JSON/403 等异常保守跳过并记录。未保存上传依靠 COS 前缀枚举发现，不依赖业务表中的上传台账。
+
+生产启用记录：两台 Runtime 增加 `/root/java/portfolio-ai-reference.env`，通过 `wefolio.service.d/90-portfolio-ai-reference.conf` 引入；Job 增加 `/root/java/job/portfolio-ai-reference.env`，通过对应 Job drop-in 引入。附件开关均为 `true`，Runtime 使用同一独立强随机签名密钥（只保存在服务器，运行进程一致性已验证），并在 `PATH` 加入 `/opt/wefolio/ffmpeg/5.1.10/bin`。文件权限为 `0600`；两服务实际共用的基础 `/root/java/.env` 内容及原 JAR 摘要均保持不变。Job 于 17:13 排空至活动任务 0 后重启；Runtime 于 17:14 依次切流重启，随后恢复 Nginx 双节点轮询。Runtime 构建时间仍为 `2026-10-16 15:37:35`，Job 为 `15:39:38`，版本均为 `cd7eb1a`；三进程健康 UP，Job 已出现新的正常周期调度日志，启动后未发现 ERROR/FATAL。Nginx 仅新增附件确认接口的精确 location，`proxy_read_timeout 150s`，原 `/api/` 配置保持原超时。
+
+存储核验发现：尽管桶和对象均非公开 ACL、源站匿名访问为 403，原 CDN/EdgeOne 回源授权仍允许匿名用户通过 CDN 读取私有测试对象。已备份完整桶策略，保留原两条授权，新增 `DenyAiReferenceCdnOriginRead`，仅拒绝原策略中 `service/edge_one`、`service/cdn` 两个主体对 `*/protfolio/ai-reference/*` 的 `GetObject` 与 `HeadObject`；读取回来的策略与候选语义一致。两台 Runtime 使用各自实际凭据、两个独立合成 owner 的新对象复测：源站、`cos.we-folio.dingchenyong.top`、`cdn2.we-folio.dingchenyong.top` 匿名 HEAD/GET 均为 403；SDK 与源站签名 GET 内容匹配，临时对象均精确删除并确认不存在。之前可读的测试 URL 复核也为 403，目录外公开 demo 头像仍为 200。桶版本控制持续为 `Off`。
+
+原 FFmpeg 5.1.10 为音频专用精简构建，虽然能够启动，但缺少附件视频完整解码组件。复用 §4.26 已验证签名的官方源码包（SHA-256 `392306d6fc45dab0e9e0ea55381e071842e83a2fb31d320aeda40477a7766293`），保留原编译参数，追加 H.264 decoder、wrapped_avframe encoder、null muxer/filter 和 pipe protocol；低优先级独立构建后，H.264 完整解码、ffprobe 格式检测及既有 MP4/AAC → 16kHz 单声道 PCM16 WAV 回归通过，才在两节点备份并原子替换工具。两节点 FFmpeg SHA-256 为 `acd62f33843105582dea3e3674aeec420aa6eaf1ecae909b42b328247aa683b3`，FFprobe 为 `bdce69232dc440787e86668fd2757c3176cc3f18593707b0ba4613b640f1fcab`。配置、Nginx、COS 策略与旧二进制的回退资料均位于服务器 `/root/java/reference-enable-20261016/`；关闭接单时保留签名密钥和目录私有策略，并让 Job 处理已接收任务。
+
+两台 Runtime 均使用已部署 JAR 的真实 `PortfolioAiReferenceStorage` 与 `PortfolioAiReferenceMediaProbe.inspect` 独立验证：本次合成 16×16 PNG、32×32/1 秒 H.264 MP4 上传后，实测 MIME、尺寸与时长正确，两个探测器均成功，所有测试对象精确删除。此验证未启动额外 Spring 实例、未写数据库、未调用模型；不等同于微信真机端到端上传、最长视频压力验证或真实 AI 生成验收。最终节点检查记录在 `/tmp/wefolio-reference-enabled-old.json`、`/tmp/wefolio-reference-enabled-new.json`。
+
+小程序附件入口已改为能力不可用时点击重新查询并给出明确提示；个人与团队页面同步，保留当前编辑状态。对应完整 Node 测试 2,763 项通过，证据 `/tmp/wefolio-reference-retry-full.tap`。本轮未提交 Git，也未发布新的小程序版本。
+
+**同日 HEVC 支持补充（17:55 完成线上核验）：** 用户提供的 iPhone 录屏为 MP4/HEVC，原服务端只接受 H.264，因而格式校验拒绝。Runtime 编码白名单扩展为 `h264`、`hevc`，保留 MP4 品牌、单视频流、100 MB、300 秒及全片解码限制；MOV、VP9、AV1 未纳入支持。个人与团队小程序同步接受 H.264/AVC、H.265/HEVC 及 `avc1`、`hvc1`、`hev1` 别名，合规的小体积 MP4 不再仅因 HEVC 编码触发压缩；未知编码仍交服务端实测。小程序代码未上传或发布，完整真机流程须使用最新预览或后续发布版本验收。
+
+两台 Runtime 从原生产 SHA-256 `65e29ae7075445e55864b3f1c1a21041a112e2de773c9677e27eb2a183366a6d` 制作最小补丁，仅替换 `PortfolioAiReferenceMediaProbe.class` 与 `version.properties`，未混入工作区其它改动。新版本 `cd7eb1a-hevc`，构建时间 `2026-10-16 17:45:44`，JAR SHA-256 `f163042629f76de71cc3d62bc9cdca990aaa07508a8c640bba7ba624cbf6407d`。滚动切流、备份、原子替换并重启后，旧/新节点 PID 分别为 `27666`、`870`，最终恢复 Nginx 双节点轮询；两节点及正式 HTTPS 入口健康 UP，版本匹配，Runtime 启动后 ERROR/FATAL 与附件告警均为 0，150 秒附件确认超时保留。
+
+媒体工具沿用上述已验证官方源码与当前构建参数，仅追加 HEVC decoder；两节点原子替换后的 FFmpeg SHA-256 为 `ade34c455d4101985f0d71882289538a2a71a64a2ba10e3a8a0cce669482d324`，FFprobe 为 `a90f47af7a0c6858dad2142db87439fe7e275e4fe639d586e525933c4ab5ed7c`。HEVC 完整解码与既有 MP4/AAC → PCM16 音频提取回归通过。两节点旧 JAR、旧工具与摘要清单均保存在 `/root/java/reference-hevc-20261016/`（`runtime.before.jar`、`ffmpeg.before`、`ffprobe.before`、`runtime-manifest.json`、`media-tools-manifest.json`）；如回滚，先切流并恢复旧 JAR，再按兼容需求恢复工具，逐节点检查健康后恢复轮询。
+
+验证：HEVC 8 位、10 位原生视频测试先在旧实现失败，修改后连同 H.264 接受、VP9/MOV 拒绝共 5 项通过且无跳过。Runtime 全量 2,888 项、0 失败/错误、35 项条件跳过；小程序附件及分包边界 82 项、完整 Node 2,786 项通过。用户实际录屏只在本机使用候选 JAR 的真实视频探测方法校验，通过结果为 MP4、888×1920、41,030 ms，耗时约 1.8 秒；未上传该用户录屏至生产或模型。两台生产节点分别用已部署存储与探测类校验合成 PNG 和 1 秒 HEVC，结果正确，4 个私有临时对象均精确删除并确认不存在，未写业务数据库或调用模型。
+
+另以合成蓝色视频进行有限的真实 TokenHub `glm-5.3-flash` 兼容验证：最初 64×64/1 秒 HEVC 样本返回 200，但未确认画面颜色，结果不足以证明识别成功；改为相同内容的 320×320/3 秒 H.264 与 HEVC 对照后，两者均返回可读取且识别为蓝色，各计 525 输入、14 输出 token。只产生少量供应商调用计量，未创建业务任务或扣用户积分；对应合成 COS 对象均已精确清理。该验证不等同于用户视频质量、所有设备或真实微信上传至生成的全链路验收。
+
+本次 HEVC 发布未迁移数据库、未替换或重启 Job、未修改基础 `/root/java/.env` 或附件签名密钥、未提交 Git。Job 仍为 PID `7848`、版本 `cd7eb1a`，健康 UP，正常周期任务持续运行；最终检查中的 3 条附件 WARN 均发生于本次滚动发布前的 17:35:04，类别为“无法确定根目录 owner，跳过”，无 ERROR/FATAL。证据：`/tmp/wefolio-hevc-runtime-full.log`、`/tmp/wefolio-hevc-runtime-red.log`、`/tmp/wefolio-hevc-artifact.json`、`/tmp/wefolio-hevc-smoke-old.json`、`/tmp/wefolio-hevc-smoke-new.json`、`/tmp/wefolio-hevc-enabled-old.json`、`/tmp/wefolio-hevc-enabled-new.json`、`/tmp/wefolio-hevc-job-warnings.json`。
+
+**同日改为客户端识别（19:07 完成生产核验）：** 按用户“信任前端识别的格式、编码、大小和时长，后端不下载校验”“修改后发布服务”和“不兼容处理”的明确要求，`complete` 必须携带完整 `mediaInfo`：`mimeType`、`codec`、`sizeBytes`、`width`、`height`、`durationMs`。图片时长为 `null`，微信未提供编码时 `codec` 使用空字符串；字段缺失、空对象、非法类型、与签票或 HEAD 大小不一致均拒绝。新上传票据的签名载荷必须包含 `sizeBytes`，不接受旧票据缺省；不生成宽高或 300 秒时长占位。既有已确认附件、持久 JSON 与 Job 合同保持不变。
+
+Runtime 删除 `PortfolioAiReferenceMediaProbe` 与 `PortfolioAiReferenceStorage.download`，以纯内存 `PortfolioAiReferenceMediaInfo` 接收前端识别值。保留附件归属、当前维护权限、签名、防覆盖、对象大小和 ETag/修改时间的一致性检查。个人和团队小程序的首次确认、上传结果未知重试、确认失败重试均提交最终上传成品的信息；压缩后重新读取成品尺寸、编码、时长和大小。小程序代码未上传或发布；旧客户端新上传请求会被明确拒绝，需使用本轮更新后的预览或发布版本。
+
+从 HEVC 生产基线仅新增 `PortfolioAiReferenceMediaInfo.class`，替换 `PortfolioAiReferenceService.class`、其 `ReferenceSnapshot` 内部类及 `PortfolioAiReferenceStorage.class`，删除旧 Probe class，并更新版本文件。最终版本 `cd7eb1a-clientmeta`、构建时间 `2026-10-16 19:04:24`、JAR SHA-256 `fe49bc0ff54b05881a01524155a9a71ae367b31bf95b8c46f9ff7fad4c6c47f6`。首次候选因版本文件键名错误显示 `unknown`，核验发现后仅修正 `build.version`/`build.time` 并再次滚动更新，业务 class 字节未变。两节点切流并排空连接后备份、原子替换、重启；最终旧/新节点 PID 为 `12994`/`17827`，健康 UP，正式 HTTPS 版本正确，Nginx 已恢复双节点轮询，启动后 ERROR/FATAL 与附件告警均为 0。
+
+严格版 Runtime 定向 49 项全部通过；全量 2,900 项、0 失败/错误、35 项既有 MySQL/字体环境条件跳过。小程序附件和分包边界 87 项、全量 2,791 项通过。候选包和两台实际部署 class 的纯内存验收均确认前端 HEVC/图片字段原样保留、缺失媒体信息拒绝、下载方法和 Probe class 不存在；验收没有 COS、数据库或模型调用。未进行真实用户微信上传至生成的端到端验收，未上传用户录屏。Job 进程及 JAR、基础 `.env`、附件配置与签名密钥均未变，无数据库迁移、无媒体工具变更、无 Git 提交。
+
+变更前 HEVC JAR 备份在两节点 `/root/java/reference-client-metadata-20261016/runtime.before.jar`，版本信息修正前的中间制品另存于 `/root/java/reference-client-metadata-version-20261016/runtime.before.jar`，各目录保留对应清单。回滚应使用前者，并与前端确认请求合同协调，避免将新客户端请求发往不支持 `mediaInfo` 的旧后端。证据：`/tmp/wefolio-reference-client-media-strict-focused.log`、`/tmp/wefolio-reference-client-media-strict-full.log`、`/tmp/wefolio-reference-mediainfo-full-tests.log`、`/tmp/wefolio-reference-client-metadata-artifact.json`、`/tmp/wefolio-reference-client-metadata-smoke-{old,new}.json`、`/tmp/wefolio-reference-client-metadata-release-{old,new}.json`、`/tmp/wefolio-reference-client-metadata-startup-{old,new}.json`。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |

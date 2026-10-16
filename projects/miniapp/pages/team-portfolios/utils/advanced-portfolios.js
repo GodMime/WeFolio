@@ -1,3 +1,4 @@
+const { referenceBasis, hasReferenceState, referencePayload } = require('./advanced-reference-attachments')
 const ADVANCED_API_PREFIX = '/api/mine/advanced-portfolios'
 const AI_API_PREFIX = '/api/mine/portfolio-ai'
 const ADVANCED_TEMPLATE = 'ADVANCED'
@@ -45,7 +46,7 @@ function validatePrompt(prompt, raw, unavailable = []) {
   const value = text(prompt)
   if (!value) return '请描述希望调整的内容'
   if (Array.from(value).length > PROMPT_MAX_LENGTH) return '描述不能超过 2,000 个字符'
-  const numbers = Array.from(value.matchAll(/(\d+)\s*号/g), match => Number(match[1]))
+  const numbers = Array.from(value.replace(/A\d+\s*号?/g, '').matchAll(/(\d+)\s*号/g), match => Number(match[1]))
   const context = normalizeContext(raw)
   const invalid = numbers.find(number => !context.sources.some(source => source.sourceNo === number) || unavailable.includes(number))
   return invalid === undefined ? '' : `${invalid} 号已移除或不可用，请调整描述`
@@ -53,7 +54,7 @@ function validatePrompt(prompt, raw, unavailable = []) {
 
 function captureBasis(current = {}) {
   return JSON.stringify([current.ownerType, text(current.ownerId), text(current.portfolioId), Number(current.draftRevision) || 0,
-    Number(current.localEditRevision) || 0, current.config || null, normalizeContext(current.aiContext)])
+    Number(current.localEditRevision) || 0, current.config || null, normalizeContext(current.aiContext), ...(hasReferenceState(current) ? [referenceBasis(current)] : [])])
 }
 
 /** 优先使用服务端具体原因，同时兼容旧任务的顶层错误字段与候选提示。 */
@@ -83,6 +84,7 @@ function buildTaskPayload(current, options, idempotencyKey) {
     localEditRevision: Number(current.localEditRevision) || 0,
     editorSchemaRevision: current.ownerType === 'TEAM' ? TEAM_EDITOR_SCHEMA_REVISION : PERSONAL_EDITOR_SCHEMA_REVISION, aiContractVersion: AI_CONTRACT_VERSION,
     clientCapabilities: { portfolioRemoteFont: 1 }, aiContext: normalizeContext(current.aiContext), prompt: text(options.prompt),
+    ...((current.aiReferenceAttachments || []).length ? { referenceAttachments: referencePayload(current.aiReferenceAttachments) } : {}),
     ...(options.clarificationAnswer ? { clarificationAnswer: clone(options.clarificationAnswer) } : {}), idempotencyKey
   }
 }

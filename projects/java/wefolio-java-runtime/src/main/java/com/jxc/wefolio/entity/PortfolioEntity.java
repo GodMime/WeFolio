@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+import lombok.ToString;
 
 
 /**
@@ -72,6 +73,10 @@ public class PortfolioEntity extends BaseEntity {
 
     /** 高级编辑器来源编号上下文，仅供具有维护权限的接口使用。 */
     private String aiContextJson;
+
+    /** 当前参考附件及编号高水位，仅供高级维护入口使用，不进入发布配置。 */
+    @ToString.Exclude
+    private String aiReferenceAttachmentsJson;
 
     /** 当前高级作品集自然语言描述 */
     private String aiPrompt;

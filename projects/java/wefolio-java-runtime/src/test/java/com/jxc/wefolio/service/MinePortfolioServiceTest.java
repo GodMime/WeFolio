@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
 import com.jxc.wefolio.config.PortfolioFontProperties;
@@ -106,6 +108,9 @@ class MinePortfolioServiceTest {
                 PortfolioHistoryEntity.class
         );
     }
+
+    /** 附件事实与 owner 锁边界。 */
+    @Mock private PortfolioAiReferenceService aiReferences;
 
     /** 作品集 Mapper 模拟 */
     @Mock
@@ -262,6 +267,46 @@ class MinePortfolioServiceTest {
         AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(context, true, "最终描述", true, JSON.toJSONString(request));
         var result = service().saveDraft(88L, request, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
         assertThat(result.getDraftRevision()).isEqualTo(1);
+        assertThat(portfolio.getAiContextJson()).isEqualTo(context.toJSONString()); assertThat(portfolio.getAiPrompt()).isEqualTo("最终描述");
+        ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(portfolioHistoryEntityMapper).insert(history.capture());
+        JSONObject snapshot = JSON.parseObject(history.getValue().getSnapshotJson());
+        assertThat(snapshot.getJSONObject("aiContext")).isEqualTo(context);
+        assertThat(snapshot.getString("requestHash")).hasSize(64);
+        assertThat(history.getValue().getAiPrompt()).isEqualTo("最终描述");
+        verifyNoInteractions(pointService);
+    }
+
+    /** 附件校验必须在 owner 锁内进行，最终实体与草稿配置一并更新。 */
+    @Test
+    void advancedReferenceSaveResolvesInsideOwnerLockAndOriginalTransaction() {
+        PortfolioEntity portfolio = ownedPortfolio(); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(portfolioHyperlinkGraphService.lockAdvancedUserGraph(7L, 88L))
+                .thenReturn(new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
+        PortfolioConfigDto config = config();
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(config), any())).thenReturn(config);
+        when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), config)).thenReturn(List.of());
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(config); request.setClientRevision(0); request.setIdempotencyKey("advanced-final-c");
+        JSONObject context = JSON.parseObject("{\"version\":1,\"nextSourceNo\":2,\"sources\":[{\"sourceNo\":1,\"kind\":\"WORK\",\"sourceId\":\"11\"}]}");
+        var items = JsonNodeFactory.instance.arrayNode();
+        String resolved = "{\"version\":1,\"nextReferenceNo\":4,\"items\":[]}";
+        boolean[] held = {false};
+        when(aiReferences.withOwnerLock(eq("USER"), eq(7L), any())).thenAnswer(invocation -> {
+            held[0] = true;
+            try { return invocation.<Supplier<?>>getArgument(2).get(); } finally { held[0] = false; }
+        });
+        when(aiReferences.resolveForSave(eq("USER"), eq(7L), eq(items), isNull(), eq(4))).thenAnswer(invocation -> {
+            assertThat(held[0]).isTrue(); return resolved;
+        });
+        AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(context, true, "最终描述", true,
+                JSON.toJSONString(request), items, true, 4);
+        var result = service().saveDraft(88L, request, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(result.getDraftRevision()).isEqualTo(1);
+        assertThat(portfolio.getAiReferenceAttachmentsJson()).isEqualTo(resolved);
+        assertThat(held[0]).isFalse();
         assertThat(portfolio.getAiContextJson()).isEqualTo(context.toJSONString()); assertThat(portfolio.getAiPrompt()).isEqualTo("最终描述");
         ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
         verify(portfolioHistoryEntityMapper).insert(history.capture());
@@ -1577,7 +1622,7 @@ class MinePortfolioServiceTest {
 
     /** 在字体接入边界注入可控结果，验证原保存错误映射。 */
     private MinePortfolioService service(PortfolioFontService fonts) {
-        return new MinePortfolioService(fonts,
+        return new MinePortfolioService(aiReferences, fonts,
                 portfolioEntityMapper,
                 portfolioHistoryEntityMapper,
                 portfolioReferenceEntityMapper,

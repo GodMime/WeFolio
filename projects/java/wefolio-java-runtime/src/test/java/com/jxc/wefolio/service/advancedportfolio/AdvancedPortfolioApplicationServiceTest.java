@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.advancedportfolio;
 
+import static org.mockito.Mockito.mock;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -12,6 +14,7 @@ import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.mapper.PortfolioEntityMapper;
 import com.jxc.wefolio.message.AdvancedPortfolioMessage;
+import com.jxc.wefolio.message.PortfolioAiReferenceMessage;
 import com.jxc.wefolio.service.MinePortfolioService;
 import com.jxc.wefolio.service.miniappcode.PortfolioMiniappCodeApplicationService;
 import com.jxc.wefolio.service.teamportfolio.MineTeamPortfolioService;
@@ -31,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 /** 高级维护入口在普通 DTO 转换前的严格请求和维护数据隔离测试。 */
@@ -56,6 +60,8 @@ class AdvancedPortfolioApplicationServiceTest {
     @Mock private TeamPortfolioAssetService assets;
     /** 团队来源查询。 */
     @Mock private AdvancedPortfolioSourceService sources;
+    /** 附件维护能力模拟。 */
+    @Mock private PortfolioAiReferenceService references;
     /** 小程序码。 */
     @Mock private PortfolioMiniappCodeApplicationService miniappCodes;
 
@@ -113,6 +119,38 @@ class AdvancedPortfolioApplicationServiceTest {
         assertThat(portfolio.getAiPrompt()).isNull();
     }
 
+    /** 正文已保存时附件刷新失败不能把保存响应改为失败，省略字段保持本地附件状态。 */
+    @Test void savedDraftSurvivesTemporaryReferenceRefreshFailure() {
+        PortfolioEntity portfolio=arrangePersonal();
+        String originalReferences="{\"version\":1,\"nextReferenceNo\":3,\"items\":[]}";
+        portfolio.setAiReferenceAttachmentsJson(originalReferences);
+        MinePortfolioDetailResponse detail=new MinePortfolioDetailResponse(); detail.setPortfolioId(PORTFOLIO_ID); detail.setDraftRevision(2);
+        when(personal.saveDraft(eq(PORTFOLIO_ID),any(),eq(ADVANCED),any())).thenReturn(detail);
+        when(references.maintenance(originalReferences,PortfolioOwnerTypeDict.USER.getCode(),USER_ID))
+                .thenThrow(new BusinessException(PortfolioAiReferenceMessage.STORAGE));
+        JSONObject response=service().saveDraft(PORTFOLIO_ID,"{\"config\":"+CONFIG+"}");
+        assertThat(response.getInteger("draftRevision")).isEqualTo(2);
+        assertThat(response).doesNotContainKeys("aiReferenceAttachments","aiReferenceNextNo");
+        ArgumentCaptor<AdvancedPortfolioSaveMetadata> metadata=ArgumentCaptor.forClass(AdvancedPortfolioSaveMetadata.class);
+        verify(personal).saveDraft(eq(PORTFOLIO_ID),any(),eq(ADVANCED),metadata.capture());
+        assertThat(metadata.getValue().referencesPresent()).isFalse();
+        metadata.getValue().apply(portfolio,references);
+        assertThat(portfolio.getAiReferenceAttachmentsJson()).isEqualTo(originalReferences);
+        verify(references,never()).resolveForSave(any(),eq(USER_ID),any(),any(),any());
+        verify(references,never()).cleanupRemoved(any(),eq(USER_ID),any(),any());
+    }
+
+    /** 未发生正文保存的详情查询仍须报告可重试错误，不能返回隐式空附件。 */
+    @Test void detailReadStillReportsTemporaryReferenceFailure() {
+        PortfolioEntity portfolio=arrangePersonal(); portfolio.setAiReferenceAttachmentsJson("stored-reference");
+        MinePortfolioDetailResponse detail=new MinePortfolioDetailResponse(); detail.setPortfolioId(PORTFOLIO_ID);
+        when(personal.getDetail(PORTFOLIO_ID,ADVANCED)).thenReturn(detail);
+        when(references.maintenance("stored-reference",PortfolioOwnerTypeDict.USER.getCode(),USER_ID))
+                .thenThrow(new BusinessException(PortfolioAiReferenceMessage.STORAGE));
+        assertThatThrownBy(()->service().getDetail(PORTFOLIO_ID))
+                .isInstanceOf(BusinessException.class).hasMessage(PortfolioAiReferenceMessage.STORAGE);
+    }
+
     /** 维护详情追加 AI 信息，预览继续只返回原 DTO。 */
     @Test void maintenanceDetailContainsContextButPreviewDoesNot() {
         PortfolioEntity portfolio = arrangePersonal(); portfolio.setAiPrompt("仅维护者可读");
@@ -131,6 +169,35 @@ class AdvancedPortfolioApplicationServiceTest {
                 .isInstanceOf(BusinessException.class).hasMessage(AdvancedPortfolioMessage.INVALID_REQUEST);
     }
 
+    /** 保存不接受 null 或脱离附件清单的编号高水位，避免误清空历史数据。 */
+    @Test void rejectsAmbiguousReferenceSaveFields() {
+        arrangePersonal();
+        for (String extra : new String[]{"\"aiReferenceAttachments\":null", "\"aiReferenceAttachments\":{}",
+                "\"aiReferenceNextNo\":2", "\"aiReferenceAttachments\":[],\"aiReferenceNextNo\":1.5"}) {
+            assertThatThrownBy(() -> service().saveDraft(PORTFOLIO_ID, "{\"config\":" + CONFIG + "," + extra + "}"))
+                    .isInstanceOf(BusinessException.class);
+        }
+        verify(personal, never()).saveDraft(any(), any(), any(), any());
+    }
+
+    /** 令牌刷新只改变传给事实校验的凭证，不改变业务保存指纹。 */
+    @Test void tokenRefreshDoesNotChangeSaveFingerprint() {
+        arrangePersonal();
+        MinePortfolioDetailResponse detail = new MinePortfolioDetailResponse(); detail.setPortfolioId(PORTFOLIO_ID);
+        when(personal.saveDraft(eq(PORTFOLIO_ID), any(), eq(ADVANCED), any())).thenReturn(detail);
+        String raw = "{\"config\":" + CONFIG + ",\"aiReferenceAttachments\":[{\"attachmentId\":\"11111111111111111111111111111111\","
+                + "\"referenceNo\":\"A2\",\"note\":\"配色\",\"attachmentToken\":\"receipt-one\"}],\"aiReferenceNextNo\":4}";
+        service().saveDraft(PORTFOLIO_ID, raw);
+        service().saveDraft(PORTFOLIO_ID, raw.replace("receipt-one", "receipt-two"));
+        ArgumentCaptor<AdvancedPortfolioSaveMetadata> metadata = ArgumentCaptor.forClass(AdvancedPortfolioSaveMetadata.class);
+        verify(personal, times(2)).saveDraft(eq(PORTFOLIO_ID), any(), eq(ADVANCED), metadata.capture());
+        assertThat(metadata.getAllValues().get(0).fingerprint()).isEqualTo(metadata.getAllValues().get(1).fingerprint())
+                .doesNotContain("receipt-one", "receipt-two", "attachmentToken");
+        assertThat(metadata.getValue().referenceAttachments().get(0).path("attachmentToken").asText()).isEqualTo("receipt-two");
+        assertThat(metadata.getValue().referencesPresent()).isTrue();
+        assertThat(metadata.getValue().referenceNextNo()).isEqualTo(4);
+    }
+
     /** 安排存在且属于当前人的高级实体。 */
     private PortfolioEntity arrangePersonal() {
         PortfolioEntity portfolio = entity(); when(portfolios.selectById(PORTFOLIO_ID)).thenReturn(portfolio);
@@ -138,7 +205,7 @@ class AdvancedPortfolioApplicationServiceTest {
     }
     /** 构造独立高级用例服务。 */
     private AdvancedPortfolioApplicationService service() {
-        return new AdvancedPortfolioApplicationService(personal, team, portfolios, access, assets, sources, miniappCodes);
+        return new AdvancedPortfolioApplicationService(references, personal, team, portfolios, access, assets, sources, miniappCodes);
     }
     /** 最小有效高级个人实体。 */
     private PortfolioEntity entity() {

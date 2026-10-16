@@ -56,6 +56,11 @@ public interface PortfolioAiModelClient {
                                  JsonNode entry, Duration remaining) {
         throw new PortfolioAiCallException("CONTRACT_UNAVAILABLE", "带音频文字的多模态客户端不可用", false);
     }
+    /** 参考附件独立分析，不复用作品摘要缓存或作品编号语义。 */
+    default Completion summarizeReferences(AiGenerationTaskEntity task, ObjectNode request, List<MediaInput> media,
+                                           List<JsonNode> items, Duration remaining) {
+        throw new PortfolioAiCallException("CONTRACT_UNAVAILABLE", "参考附件分析客户端不可用", false);
+    }
     /** 完整最终文字请求字节上界，供费用保守预留。 */
     default int textRequestBytes(AiGenerationTaskEntity task, ObjectNode request) {
         return request.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8).length + 32768;

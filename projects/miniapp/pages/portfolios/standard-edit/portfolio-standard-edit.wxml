@@ -19,6 +19,10 @@
         </view>
         <button class="advanced-ai-button" data-mode="MODIFY_PAGE" bindtap="handleAdvancedAi">AI 修改</button>
       </view>
+      <view wx:if="{{advancedEditing && aiReferenceAttachments.length}}" class="advanced-undo-notice">
+        <view class="advanced-reference-copy"><view class="advanced-reference-summary">参考附件 {{aiReferenceAttachments.length}} 个 · 随草稿保存</view><block wx:for="{{aiReferenceAttachments}}" wx:key="localKey"><view wx:if="{{item.saveDeadlineText}}">{{item.referenceNo}} · {{item.saveDeadlineText}}</view></block></view>
+        <button class="advanced-text-button" data-mode="MODIFY_PAGE" bindtap="handleAdvancedAi">管理附件</button>
+      </view>
       <view wx:if="{{advancedEditing && advancedCanUndo}}" class="advanced-undo-notice">
         <view>AI 修改已采用，尚未保存</view>
         <button class="advanced-text-button" bindtap="handleAdvancedUndo">撤销</button>

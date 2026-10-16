@@ -12,7 +12,7 @@ import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
 import com.jxc.wefolio.service.portfolioai.AiPortfolioProtocol;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -31,7 +31,6 @@ import java.util.Comparator;
 
 /** 按作品理解真实媒体、复用安全摘要，再以原v1协议生成；费用在每次发送前持久预留。 */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class PortfolioAiMediaExecutionService {
     /** 固定业务时区，与原任务总期限一致。 */
@@ -66,17 +65,37 @@ public class PortfolioAiMediaExecutionService {
     /** 启动开关及不可延期任务期限。 */
     private final PortfolioAiProperties properties;
 
+    /** 参考附件当前授权和私有原件版本核验。 */
+    private final PortfolioAiReferenceAccessService references;
+
+    /** 生产装配保持原媒体模块深度，附件只增加明确边界。 */
+    @Autowired
+    public PortfolioAiMediaExecutionService(PortfolioAiMediaRepository repository, PortfolioAiMediaAccessService access,
+            PortfolioAiModelClient client, PortfolioAiProperties properties, PortfolioAiReferenceAccessService references) {
+        this.repository = repository; this.access = access; this.client = client; this.properties = properties; this.references = references;
+    }
+
+    /** 旧无附件单测继续沿用原构造，附件路径显式要求完整依赖。 */
+    PortfolioAiMediaExecutionService(PortfolioAiMediaRepository repository, PortfolioAiMediaAccessService access,
+            PortfolioAiModelClient client, PortfolioAiProperties properties) {
+        this(repository, access, client, properties, null);
+    }
+
     /** 以 Runtime 已接单的冻结媒体版本为执行合同，不被 Job 局部开关撤销。 */
     public String generate(AiGenerationTaskEntity task, ObjectNode frozen, Runnable checkOwned) {
         checkOwned.run();
         String planVersion = frozen.path(KEY_FACTS).path(KEY_MEDIA_PLAN).path(KEY_VERSION).asText();
-        if (!STORED_SUMMARY_PLAN_VERSION.equals(planVersion) && !PLAN_VERSION.equals(planVersion) && !LEGACY_PLAN_VERSION.equals(planVersion)) {
+        boolean hasWorkPlan = frozen.path(KEY_FACTS).has(KEY_MEDIA_PLAN);
+        if (hasWorkPlan && !STORED_SUMMARY_PLAN_VERSION.equals(planVersion) && !PLAN_VERSION.equals(planVersion) && !LEGACY_PLAN_VERSION.equals(planVersion)) {
             throw failed(ERROR_CONTRACT_UNAVAILABLE, "真实媒体读取暂未启用");
         }
         ObjectNode request = frozen.deepCopy();
-        JsonNode entries = request.path(KEY_FACTS).path(KEY_MEDIA_PLAN).path(KEY_ENTRIES);
+        JsonNode entries = hasWorkPlan ? request.path(KEY_FACTS).path(KEY_MEDIA_PLAN).path(KEY_ENTRIES) : StrictAiJson.mapper().createArrayNode();
+        List<JsonNode> referenceItems = PortfolioAiReferenceContract.items(task.getReferenceAttachmentsJson(), false);
+        List<List<JsonNode>> referenceGroups = PortfolioAiReferenceContract.groups(referenceItems);
+        if (!referenceItems.isEmpty() && references == null) { throw failed(ERROR_CONTRACT_UNAVAILABLE, "参考附件模块不可用"); }
         if (!entries.isArray() || entries.size() > AiPortfolioProtocol.limits().path(KEY_MAX_SOURCE_COUNT).asInt()) { throw failed(ERROR_MEDIA_INVALID, "媒体输入计划不合法"); }
-        validateSelectedSources(request, entries);
+        if (hasWorkPlan) { validateSelectedSources(request, entries); }
         validateRoutes(task, entries, STORED_SUMMARY_PLAN_VERSION.equals(planVersion));
         try { PortfolioAiVideoAudioContext.validateAndNormalize(entries, !LEGACY_PLAN_VERSION.equals(planVersion)); }
         catch (AiProtocolException exception) { throw failed(ERROR_MEDIA_INVALID, exception.getMessage()); }
@@ -103,6 +122,21 @@ public class PortfolioAiMediaExecutionService {
             requiredCents += cents;
             if (summary == null) { requiredCalls++; }
         }
+        if (!referenceItems.isEmpty()) {
+            checkOwned.run(); remaining(task); references.verify(task, referenceItems);
+            ((ObjectNode) upperBound.path(KEY_FACTS)).set(PortfolioAiReferenceContract.SUMMARIES,
+                    PortfolioAiReferenceContract.maximumSummaries(referenceItems));
+            for (List<JsonNode> group : referenceGroups) {
+                if (PortfolioAiReferencePrompt.estimatedInput(group) > PortfolioAiReferenceContract.INPUT_TOKENS) {
+                    throw failed(ERROR_MEDIA_INVALID, "参考附件输入超过分析上限");
+                }
+            }
+            if (client.textRequestBytes(task, upperBound) > PortfolioAiReferenceContract.INPUT_TOKENS) {
+                throw failed(ERROR_BUDGET_EXHAUSTED, "参考摘要与作品内容超过布局输入上限");
+            }
+            requiredCents += referenceGroups.size() * referenceReservation();
+            requiredCalls += referenceGroups.size();
+        }
         requiredCents += textReservation(task, upperBound);
         if (requiredCents > Integer.MAX_VALUE) { throw failed(ERROR_BUDGET_EXHAUSTED, "生成输入超过预算"); }
         repository.checkCapacity(task, (int) requiredCents, requiredCalls, now());
@@ -111,6 +145,7 @@ public class PortfolioAiMediaExecutionService {
             checkOwned.run(); remaining(task); access.verifyCurrent(task, entry);
             ObjectNode summary = media.summary();
             if (summary == null) {
+                if (!referenceItems.isEmpty()) { references.verify(task, referenceItems); }
                 var signed = access.signedAfterVerification(task, entry);
                 checkOwned.run();
                 remaining(task);
@@ -128,8 +163,42 @@ public class PortfolioAiMediaExecutionService {
             }
             attach(request, entry.path(KEY_SOURCE_NO).asInt(), summary);
         }
+        if (!referenceItems.isEmpty()) {
+            var summaries = StrictAiJson.mapper().createArrayNode();
+            for (List<JsonNode> group : referenceGroups) {
+                checkOwned.run(); remaining(task); references.verify(task, referenceItems);
+                var signed = references.signedAfterVerification(group);
+                checkOwned.run(); remaining(task);
+                int referenceCall = repository.reserve(task, referenceReservation(), now());
+                var completion = client.summarizeReferences(task, request, signed, group,
+                        remainingBeforeSend(task, referenceCall, checkOwned));
+                repository.settle(task, referenceCall, completion.promptTokens(), completion.completionTokens(),
+                        completion.cachedTokens(), completion.cacheStatus(), now());
+                checkOwned.run(); remaining(task);
+                try {
+                    summaries.addAll(PortfolioAiReferenceContract.summaries(completion.content(), group));
+                } catch (PortfolioAiReferenceContract.SummaryValidationException exception) {
+                    // 只输出固定分类和数值，不记录模型原文、附件标识、资源地址或异常堆栈。
+                    log.warn("高级 AI 参考附件摘要校验失败 taskId={}, attempt={}, callNo={}, itemCount={}, promptTokens={}, completionTokens={}, errorCode={}, diagnostic={}",
+                            task.getId(), task.getAttemptCount(), referenceCall, group.size(),
+                            completion.promptTokens(), completion.completionTokens(), PortfolioAiReferenceContract.ERROR_ANALYSIS,
+                            exception.diagnostic());
+                    throw exception;
+                }
+            }
+            var ordered = StrictAiJson.mapper().createArrayNode();
+            for (JsonNode item : referenceItems) {
+                for (JsonNode summary : summaries) {
+                    if (item.path(PortfolioAiReferenceContract.NUMBER).asText().equals(summary.path(PortfolioAiReferenceContract.NUMBER).asText())) {
+                        ordered.add(((ObjectNode) summary).deepCopy().put(PortfolioAiReferenceContract.NOTE, item.path(PortfolioAiReferenceContract.NOTE).asText())); break;
+                    }
+                }
+            }
+            ((ObjectNode) request.path(KEY_FACTS)).set(PortfolioAiReferenceContract.SUMMARIES, ordered);
+        }
         checkOwned.run();
         access.requireOwner(task);
+        if (!referenceItems.isEmpty()) { references.verify(task, referenceItems); }
         for (JsonNode entry : entries) { checkOwned.run(); remaining(task); access.verifyCurrent(task, entry); }
         checkOwned.run();
         remaining(task);
@@ -142,7 +211,14 @@ public class PortfolioAiMediaExecutionService {
         // 晚到返回不能把已撤权、源替换或到期任务的结果发布为成功。
         remaining(task);
         for (JsonNode entry : entries) { checkOwned.run(); access.verify(task, entry); }
+        if (!referenceItems.isEmpty()) { references.verify(task, referenceItems); }
         return completion.content();
+    }
+
+    /** 金额按完整上下文预留，不能把经验视频估计当成实际费用保证。 */
+    private static int referenceReservation() {
+        return (int) PortfolioAiMediaRepository.costCents(PortfolioAiReferenceContract.INPUT_TOKENS,
+                PortfolioAiReferenceContract.OUTPUT_TOKENS);
     }
 
     /** 仅包围模型客户端调用之前的检查，已进入客户端的异常绝不能据此退款。 */

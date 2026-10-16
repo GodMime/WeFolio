@@ -4191,13 +4191,14 @@ Page({
         publishedRevision: response.publishedRevision || this.data.publishedRevision
       }, buildPublicationStatusState(response.publicationStatus || this.data.publicationStatus)))
       // 成功仅确认已发送的快照；期间产生的新编辑仍留在本页，由用户再次保存后才返回列表。
+      this.advancedReferencesSaved(pending.payload)
       const editorChanged = stableEditorConfigJson(buildDraftPayload(this.data.config).config) !== stableEditorConfigJson(pending.payload.config) || this.advancedDraftChanged(pending.payload)
       if (!editorChanged) {
         this.setData({ fontAssets: response.fontAssets || null })
         markAdvancedSaved(this)
       }
       if (options.showToast !== false) {
-        wx.showToast({ title: editorChanged ? UNSAVED_EDITOR_CHANGES_MESSAGE : '草稿已保存', icon: editorChanged ? 'none' : 'success' })
+        wx.showToast({ title: editorChanged ? this.advancedSaveMessage(UNSAVED_EDITOR_CHANGES_MESSAGE) : '草稿已保存', icon: editorChanged ? 'none' : 'success' })
       }
       if (options.returnToList !== false && !editorChanged) {
         this.returnToPortfolioList()

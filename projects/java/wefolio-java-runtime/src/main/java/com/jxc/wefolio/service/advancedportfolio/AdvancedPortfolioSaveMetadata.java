@@ -4,6 +4,8 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.entity.PortfolioEntity;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.message.AdvancedPortfolioMessage;
 import java.nio.charset.StandardCharsets;
@@ -15,7 +17,13 @@ import java.util.Set;
 
 /** 高级保存专有元数据；在普通最终保存短事务内校验并与配置一致写入。 */
 public record AdvancedPortfolioSaveMetadata(JSONObject context, boolean contextPresent,
-                                            String prompt, boolean promptPresent, String fingerprint) {
+                                            String prompt, boolean promptPresent, String fingerprint,
+                                            ArrayNode referenceAttachments, boolean referencesPresent, Integer referenceNextNo) {
+    /** 兼容不携带附件的既有保存调用。 */
+    public AdvancedPortfolioSaveMetadata(JSONObject context, boolean contextPresent, String prompt,
+            boolean promptPresent, String fingerprint) {
+        this(context, contextPresent, prompt, promptPresent, fingerprint, null, false, null);
+    }
     /** 上下文结构版本。 */
     private static final int CONTEXT_VERSION = 1;
     /** 来源上下文大小上限。 */
@@ -29,6 +37,15 @@ public record AdvancedPortfolioSaveMetadata(JSONObject context, boolean contextP
 
     /** 校验高水位和旧映射，在锁内重新读取的实体上应用明确提交的可选字段。 */
     public void apply(PortfolioEntity portfolio) {
+        apply(portfolio, null);
+    }
+
+    /** 最终事务内解析回执并核对当前清单；省略附件字段不解析旧列。 */
+    public void apply(PortfolioEntity portfolio, PortfolioAiReferenceService references) {
+        if (referencesPresent) {
+            portfolio.setAiReferenceAttachmentsJson(references.resolveForSave(portfolio.getOwnerType(),
+                    portfolio.getOwnerId(), referenceAttachments, portfolio.getAiReferenceAttachmentsJson(), referenceNextNo));
+        }
         if (contextPresent) {
             validateContext(context, portfolio.getAiContextJson());
             portfolio.setAiContextJson(context.toJSONString());

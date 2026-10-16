@@ -53,6 +53,7 @@ CREATE 或 INSERT_COMPONENT 新建 TEXT_SECTION 时，远程字体绑定到组�
 - “整体黑底”“页面背景”指 style.backgroundColor="#000000"；“组件间距”指 style.componentSpacingRpx，单位 rpx，仅个人当前契约开放。文字上的背景作品属于该文字组件的 backgroundWorkId，不替代整体底色。黑色背景配合可读文字颜色；不能把整体背景要求误写成文字网格单元格背景或分割线颜色。
 - “背景音乐”指全局 backgroundAudio；启用时绑定已选 AUDIO 作品到 workId 并设置 enabled=true；“关闭音乐”仅设置 enabled=false，保留未要求替换的曲目。displayStyle 的 DISC 为唱片、SLEEVE 为唱片封套、MINI_PLAYER 为迷你播放器；它是播放器外观，不是播放模式。
 - “多段文艺的描述”“分段描述”若共享同一背景，优先使用一个 STRUCTURED_TEXT_SECTION，按段落创建多个 PARAGRAPH，共享该组件的图片或视频背景；各文字块可以独立设置文艺字体，不因远程字体要求改用多个 TEXT_SECTION。用户只要求一段文字时使用 TEXT_SECTION，不擅自增加段落。
+- 结构化文字的水平对齐逐块决定。新建 STRUCTURED_TEXT_SECTION 时，在 params.blocks 中每个支持 alignment 的文字块显式填写 LEFT（居左）、CENTER（居中）或 RIGHT（居右）；标题、正文、提示、列表可以采用不同对齐，不把整个组件或首段的对齐套给所有块。优先遵循用户语义指定的范围，再依据参考中可确认的逐块对齐；没有明确要求或参考依据时按内容层级选取，不默认所有文字必须居左或居中。不用空格、缩进或换行模拟水平对齐，也不混淆文字对齐、背景位置与垂直布局。MODIFY_PAGE 只修改用户要求的文字块对齐，保留其他块及其他样式；仅改文案时不改变已有 alignment。输出前逐块核对对齐方向与作用范围。
 - “文艺字体”是对应文字节点的字体选择，没有全局 font/theme 参数。中文主持描述优先匹配可用的霞鹜文楷、思源宋体等中文字体 ref；文字的背景、遮罩、对齐、字号和行高一起按该节点契约配置。
 - “档期查询”使用 SCHEDULE_QUERY：MODAL_CALENDAR 为点击后弹出日历，INLINE_CALENDAR 为页面内展示日历；queryRange 只限制访客可查询的范围，不能表示预约、修改档期或虚构空档。未指定范围时可用 UNLIMITED；FUTURE_DAYS 需 futureDays；DATE_RANGE 需真实起止日期。
 - “预留联系信息”“让客户留下联系方式”“留资”使用 CONTACT_FORM，供访客填写；MODAL_FORM 为点击后弹出表单，INLINE_FORM 为页面内表单。fields 中 contactName 为姓名、phone 为手机、wechat 为微信、needs 为需求；必须含 contactName，且 phone/wechat 至少一项。“展示我的联系方式”使用 CONTACT_INFO 并绑定可信联系资料；“联系二维码”用 QR_CONTACT。不能把留资表单当作主持人的联系方式展示，不编造手机号、微信或二维码。

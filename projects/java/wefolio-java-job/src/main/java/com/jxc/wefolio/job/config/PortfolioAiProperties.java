@@ -26,6 +26,10 @@ public class PortfolioAiProperties {
     private boolean enabled;
     /** 媒体部署预期开关；新任务能力以 Runtime 冻结计划为准，差异会告警。 */
     private boolean mediaEnabled;
+    /** 附件领取开关；关闭后普通任务和已领取任务继续执行。 */
+    private boolean referenceEnabled;
+    /** 附件并发上限；本实例同时受 workerCount - 1 限制，保留普通任务处理能力。 */
+    private int referenceMaxActiveTasks = 10;
     /** 单任务全部真实请求及重试的费用上限，单位分。 */
     private int mediaTaskBudgetCents = 300;
     /** 每请求人每日真实请求预算，单位分。 */
@@ -77,6 +81,9 @@ public class PortfolioAiProperties {
                 || workerCount > 32 || batchSize <= 0 || batchSize > 1000 || maxCleanupBatches <= 0 || maxCleanupBatches > 1000 || maxResponseBytes <= 0
                 || maxResponseBytes > 2 * 1024 * 1024) {
             throw new IllegalStateException("portfolio-ai 的期限、数量与字节预算不合法");
+        }
+        if (referenceMaxActiveTasks < 1 || (referenceEnabled && workerCount < 2)) {
+            throw new IllegalStateException("参考附件需要至少两个工作线程及正数准入上限");
         }
         if (mediaTaskBudgetCents < 1 || mediaTaskBudgetCents > 10000 || mediaDailyBudgetCents < mediaTaskBudgetCents
                 || mediaDailyBudgetCents > 1000000 || mediaMaxCalls < 1 || mediaMaxCalls > 100 || mediaCacheDays != 7) {

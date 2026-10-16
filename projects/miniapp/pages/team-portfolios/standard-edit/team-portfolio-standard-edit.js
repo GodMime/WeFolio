@@ -2223,7 +2223,12 @@ Page({
         this.pendingDraftSave = {
           portfolioId, clientRevision, config: JSON.parse(JSON.stringify(uploadedConfig)),
           idempotencyKey: makeIdempotencyKey('team-draft'),
-          ...(this.data.advancedEditing ? { aiContext: JSON.parse(JSON.stringify(this.data.aiContext)), aiPrompt: this.data.aiPrompt || '' } : {})
+          ...(this.data.advancedEditing ? this.advancedDraftPayload({ aiContext: JSON.parse(JSON.stringify(this.data.aiContext)), aiPrompt: this.data.aiPrompt || '' }) : {})
+        }
+        if (this.data.advancedEditing) {
+          const snapshot = this.pendingDraftSave
+          snapshot.advancedPayload = this.advancedDraftPayload({ ...snapshot, clientCapabilities: { portfolioRemoteFont: 1 } })
+          delete snapshot.advancedPayload.portfolioId
         }
         this.setData({ pendingDraftKey: this.pendingDraftSave.idempotencyKey })
       }
@@ -2231,8 +2236,9 @@ Page({
       const pending = this.pendingDraftSave
       const result = this.data.advancedEditing
         ? await this.advancedRequest({ url: `/api/mine/advanced-portfolios/${pending.portfolioId}/draft`, method: 'PUT',
-          data: this.advancedDraftPayload({ ...(this.data.advancedEditing ? { aiContext: pending.aiContext, aiPrompt: pending.aiPrompt } : {}), config: pending.config, clientRevision: pending.clientRevision, idempotencyKey: pending.idempotencyKey, clientCapabilities: { portfolioRemoteFont: 1 } }) })
+          data: JSON.parse(JSON.stringify(pending.advancedPayload)) })
         : await saveTeamPortfolioDraft(request, pending.portfolioId, pending.config, pending.clientRevision, pending.idempotencyKey)
+      this.advancedReferencesSaved(pending)
       const editorChanged = stableEditorConfigJson(this.data.config) !== stableEditorConfigJson(pending.config) || this.advancedDraftChanged(pending)
       const draftRevision = Number(result && result.draftRevision) || pending.clientRevision
       const config = result && result.config ? normalizeTeamPortfolioConfig(result.config) : pending.config
@@ -2244,7 +2250,7 @@ Page({
         this.setData({ fontAssets: result.fontAssets || null })
         markAdvancedSaved(this)
       } else {
-        wx.showToast({ title: UNSAVED_EDITOR_CHANGES_MESSAGE, icon: 'none' })
+        wx.showToast({ title: this.advancedSaveMessage(UNSAVED_EDITOR_CHANGES_MESSAGE), icon: 'none' })
       }
       return Object.assign({}, result, { editorChanged })
     } catch (error) {

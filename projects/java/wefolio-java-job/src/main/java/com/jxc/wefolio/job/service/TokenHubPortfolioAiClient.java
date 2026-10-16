@@ -49,6 +49,7 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
     private static final String PROMPT_CACHE_NAMESPACE = "wefolio-portfolio-ai-cache-v1";
     private static final String GENERATION_CACHE_STAGE = "generation";
     private static final String MEDIA_SUMMARY_CACHE_STAGE = "media-summary";
+    private static final String REFERENCE_SUMMARY_CACHE_STAGE = "reference-summary";
     /** 缓存键采用固定长度的摘要，不传提示词原文、业务内容或用户身份。 */
     private static final String PROMPT_CACHE_DIGEST_ALGORITHM = "SHA-256";
     private static final String PROMPT_CACHE_DIGEST_UNAVAILABLE = "AI 缓存键摘要算法不可用";
@@ -157,6 +158,10 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
                 }
             }
         }
+        if (request.path(KEY_FACTS).has(PortfolioAiReferenceContract.SUMMARIES)) {
+            system += PortfolioAiReferencePrompt.LAYOUT_RULES;
+            user.set(PortfolioAiReferenceContract.SUMMARIES, request.path(KEY_FACTS).path(PortfolioAiReferenceContract.SUMMARIES).deepCopy());
+        }
         if ("INVALID_OUTPUT".equals(task.getErrorCode())) {
             system += "\n" + resource("retry.txt");
             user.putObject("retry").put("error_code", task.getErrorCode()).put("error_message", task.getErrorMessage());
@@ -195,6 +200,31 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
         prompt.apply(body, media, entry);
         // 实际摘要模板变化自动切换分组，签名地址、帧时刻和业务内容不进入稳定模板身份。
         body.put(PROMPT_CACHE_KEY_PARAMETER, promptCacheKey(body.path("model").asText(), MEDIA_SUMMARY_CACHE_STAGE, prompt.version()));
+        return body;
+    }
+
+    /** 参考附件沿独立语义发送，图像与原视频绝不混合。 */
+    @Override
+    public Completion summarizeReferences(AiGenerationTaskEntity task, ObjectNode request, List<MediaInput> media,
+                                           List<JsonNode> items, Duration remaining) {
+        return complete(task, request, referencePayload(task, request, media, items), remaining);
+    }
+
+    /** 构造单次参考输入；只有服务端签名的 HTTPS 原件进入媒体 URL 字段。 */
+    ObjectNode referencePayload(AiGenerationTaskEntity task, ObjectNode request, List<MediaInput> media, List<JsonNode> items) {
+        if (!hasSupportedMediaInputs(media) || media.size() > PortfolioAiReferenceContract.MAX_ITEMS) {
+            throw failed(ERROR_MEDIA_INVALID, "参考附件输入类型或数量不合法", false);
+        }
+        for (MediaInput input : media) {
+            URI uri = URI.create(input.url());
+            if (!"https".equals(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null || uri.getFragment() != null) {
+                throw failed(ERROR_MEDIA_INVALID, "参考附件读取地址不合法", false);
+            }
+        }
+        ObjectNode body = payload(task, request);
+        PortfolioAiReferencePrompt.apply(body, media, items);
+        body.put(PROMPT_CACHE_KEY_PARAMETER, promptCacheKey(body.path("model").asText(), REFERENCE_SUMMARY_CACHE_STAGE,
+                body.path("messages").get(0).path("content").asText()));
         return body;
     }
 

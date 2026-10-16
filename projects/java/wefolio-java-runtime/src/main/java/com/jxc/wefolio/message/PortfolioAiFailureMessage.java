@@ -46,6 +46,10 @@ public interface PortfolioAiFailureMessage {
     String MEDIA_BUDGET_INVALID = "AI 媒体处理费用记录异常，请联系管理员核对";
     /** 素材分析结果或摘要缓存不满足固定媒体协议。 */
     String INVALID_MEDIA_SUMMARY = "AI 返回的素材分析结果不符合要求，请重新生成";
+    /** 独立参考原件失效或当前维护权不再允许使用。 */
+    String REFERENCE_UNAVAILABLE = "参考附件已失效或无法访问，请重新选择文件或移除后生成";
+    /** 参考媒体摘要缺项、超限或包含不允许的资源信息。 */
+    String REFERENCE_ANALYSIS_FAILED = "参考附件分析未完成，请重试、更换文件或移除后生成";
     /** 冻结请求不能解析。 */
     String REQUEST_INVALID = "生成任务的原始输入不完整或已失效，请重新生成";
     /** 本次查询的基准校验失败。 */

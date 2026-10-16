@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service.portfolioai;
 
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -54,7 +55,7 @@ class PortfolioAiApplicationServiceTest {
     @BeforeEach void prepare() {
         AuthContextHolder.set(new AuthContext(101L, "test-token"));
         lenient().when(shareImages.snapshot(anyLong(), any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
-        service = new PortfolioAiApplicationService(properties, tasks, transactions, facts, configs, mock(PortfolioAiMediaPlanService.class), shareImages);
+        service = new PortfolioAiApplicationService(mock(PortfolioAiReferenceService.class), properties, tasks, transactions, facts, configs, mock(PortfolioAiMediaPlanService.class), shareImages);
     }
     /** 清理线程身份，避免影响相邻测试。 */
     @AfterEach void clear() { AuthContextHolder.clear(); }

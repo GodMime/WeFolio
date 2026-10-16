@@ -12,7 +12,7 @@ import lombok.ToString;
 
 
 /**
- * wf_ai_generation_task — AI 生成任务表 — 高级作品集 AI 生成请求与结果，共 21 列（16 个业务字段及 5 个公共字段）
+ * wf_ai_generation_task — AI 生成任务表 — 高级作品集 AI 生成请求与结果，共 22 列（17 个业务字段及 5 个公共字段）
  */
 @Data
 @TableName("wf_ai_generation_task")
@@ -36,6 +36,11 @@ public class AiGenerationTaskEntity extends BaseEntity {
     /** 冻结的编辑输入、授权事实、模型配置及契约版本，不含密钥。 */
     @ToString.Exclude
     private String requestJson;
+
+    /** 不可变参考附件快照；与原请求分列存储，不含回执或临时地址。 */
+    @ToString.Exclude
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String referenceAttachmentsJson;
 
     /** 任务状态，超时为 FAILED 加 TIMEOUT。@see AiTaskStatusDict */
     private String status;

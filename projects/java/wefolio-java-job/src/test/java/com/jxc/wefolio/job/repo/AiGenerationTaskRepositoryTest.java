@@ -42,10 +42,45 @@ class AiGenerationTaskRepositoryTest {
                 portfolio_id BIGINT,requested_by BIGINT,idempotency_key VARCHAR(64),request_json CLOB,result_json CLOB,status VARCHAR(32),
                 attempt_count INT,next_run_at TIMESTAMP(3),started_at TIMESTAMP(3),completed_at TIMESTAMP(3),error_code VARCHAR(64),
                 error_message VARCHAR(500),created_at TIMESTAMP(3),updated_at TIMESTAMP(3),deleted BIGINT DEFAULT 0,version INT DEFAULT 0,
-                media_budget_json CLOB,media_budget_unknown_count INT DEFAULT 0)
+                reference_attachments_json CLOB,media_budget_json CLOB,media_budget_unknown_count INT DEFAULT 0)
                 """);
         jdbc.execute("CREATE TABLE wf_user(id BIGINT PRIMARY KEY,status VARCHAR(32),deleted BIGINT)");
         jdbc.update("INSERT INTO wf_user VALUES(1,'ACTIVE',0)");
+    }
+
+    /** 普通 SQL 领取跳过排在前面的附件，不依赖先查小批再内存过滤。 */
+    @Test void ordinarySelectionSkipsReferenceHeadOfLineAndRowMapperKeepsSnapshot() {
+        var first = pending(businessNow().minusMinutes(2));
+        jdbc.update("UPDATE wf_ai_generation_task SET reference_attachments_json=? WHERE id=?", "{\"version\":1,\"items\":[]}", first.getId());
+        pending(businessNow().minusMinutes(1));
+        assertThat(repository.findPending(businessNow(), 1).getFirst().getReferenceAttachmentsJson()).isNotNull();
+        var ordinary = repository.findPendingWithoutReferences(businessNow(), 1);
+        assertThat(ordinary).hasSize(1); assertThat(ordinary.getFirst().getId()).isNotEqualTo(first.getId());
+    }
+
+    /** 暂停告警只探测当前可领取附件，不误报普通、退避、已结束或逻辑删除任务。 */
+    @Test void pendingReferenceProbeOnlySeesReadyActiveAttachments() {
+        var now = businessNow();
+        var task = pending(now.minusMinutes(1));
+        assertThat(repository.hasPendingReferences(now)).isFalse();
+        jdbc.update("UPDATE wf_ai_generation_task SET reference_attachments_json='{}' WHERE id=?", task.getId());
+        assertThat(repository.hasPendingReferences(now)).isTrue();
+        jdbc.update("UPDATE wf_ai_generation_task SET next_run_at=? WHERE id=?", now.plusMinutes(1), task.getId());
+        assertThat(repository.hasPendingReferences(now)).isFalse();
+        jdbc.update("UPDATE wf_ai_generation_task SET next_run_at=?,status='SUCCEEDED' WHERE id=?", now.minusMinutes(1), task.getId());
+        assertThat(repository.hasPendingReferences(now)).isFalse();
+        jdbc.update("UPDATE wf_ai_generation_task SET status='PENDING',deleted=id WHERE id=?", task.getId());
+        assertThat(repository.hasPendingReferences(now)).isFalse();
+    }
+
+    /** 到期未知费用保留最小账本时也销毁参考快照，不能遗留原件身份和说明。 */
+    @Test void privacyCleanupClearsReferencesOnRetainedUnknownCostRow() {
+        var task = pending(businessNow().minusDays(40));
+        jdbc.update("UPDATE wf_ai_generation_task SET status='FAILED',completed_at=?,media_budget_json='broken',media_budget_unknown_count=1,reference_attachments_json=? WHERE id=?",
+                businessNow().minusDays(31), "{\"version\":1,\"items\":[]}", task.getId());
+        assertThat(repository.deleteExpired(businessNow().minusDays(30), 10)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT reference_attachments_json FROM wf_ai_generation_task WHERE id=?", String.class, task.getId())).isNull();
+        assertThat(repository.deleteExpired(businessNow().minusDays(30), 10)).isZero();
     }
 
     /** 构造可直接领取的一条任务。 */

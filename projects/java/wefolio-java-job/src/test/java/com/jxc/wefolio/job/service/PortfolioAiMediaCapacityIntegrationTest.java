@@ -82,6 +82,51 @@ class PortfolioAiMediaCapacityIntegrationTest {
                 route, chineseBytes, chineseRequired, maximumBytes, maximumRequired);
     }
 
+    /** 附件网络或解码失败保留未知预留，再次执行必须先通过同一累计预算，不能降级成图片或文字。 */
+    @Test void referenceUnknownPaidCallRetainsReservationAndBlocksAnotherAttemptOverBudget() {
+        Fixture fixture = fixture("IMAGE", false);
+        fixture.request().withObject("facts").remove("mediaPlan");
+        fixture.request().withObject("facts").putArray("sources");
+        var item = PortfolioAiReferenceTestSupport.item(1, true);
+        fixture.task().setReferenceAttachmentsJson(PortfolioAiReferenceTestSupport.snapshot(false, item));
+        fixture.properties().setMediaTaskBudgetCents(100);
+        var references = mock(PortfolioAiReferenceAccessService.class);
+        when(references.signed(any(), anyList())).thenReturn(List.of(new PortfolioAiModelClient.MediaInput("video_url", "https://private.example/full.mp4", null)));
+        doThrow(new PortfolioAiCallException("REMOTE_ERROR", "视频解码或网络失败", true))
+                .when(fixture.client()).summarizeReferences(any(), any(), anyList(), anyList(), any());
+        var service = new PortfolioAiMediaExecutionService(fixture.repository(), mock(PortfolioAiMediaAccessService.class),
+                fixture.client(), fixture.properties(), references);
+        assertThatThrownBy(() -> service.generate(fixture.task(), fixture.request(), () -> {})).isInstanceOf(PortfolioAiCallException.class);
+        assertThat(budget(fixture).total()).isEqualTo(81);
+        assertThat(budget(fixture).unknownCount()).isEqualTo(1);
+        assertThatThrownBy(() -> service.generate(fixture.task(), fixture.request(), () -> {}))
+                .isInstanceOfSatisfying(PortfolioAiCallException.class, error -> assertThat(error.getCode()).isEqualTo("MEDIA_BUDGET_EXHAUSTED"));
+        verify(fixture.client(), times(1)).summarizeReferences(any(), any(), anyList(), anyList(), any());
+        verify(fixture.client(), never()).generateWithUsage(any(), any(), any());
+        verify(fixture.client(), never()).summarize(any(), any(), anyList(), any(), any());
+        assertThat(budget(fixture).total()).isEqualTo(81);
+    }
+
+    /** 供应商实际用量超出经验预算时如实记账，并在下一次布局付费前阻断。 */
+    @Test void actualReferenceCostAboveReservationBlocksFinalLayout() {
+        Fixture fixture = fixture("IMAGE", false);
+        fixture.request().withObject("facts").remove("mediaPlan"); fixture.request().withObject("facts").putArray("sources");
+        var item = PortfolioAiReferenceTestSupport.item(1, true);
+        fixture.task().setReferenceAttachmentsJson(PortfolioAiReferenceTestSupport.snapshot(false, item));
+        fixture.properties().setMediaTaskBudgetCents(100);
+        var references = mock(PortfolioAiReferenceAccessService.class);
+        when(references.signed(any(), anyList())).thenReturn(List.of(new PortfolioAiModelClient.MediaInput("video_url", "https://private.example/full.mp4", null)));
+        doReturn(new PortfolioAiModelClient.Completion("{\"version\":1,\"items\":[{\"referenceNo\":\"A1\",\"summary\":\"暖色\"}]}", 1_500_000L, 100L))
+                .when(fixture.client()).summarizeReferences(any(), any(), anyList(), anyList(), any());
+        var service = new PortfolioAiMediaExecutionService(fixture.repository(), mock(PortfolioAiMediaAccessService.class),
+                fixture.client(), fixture.properties(), references);
+        assertThatThrownBy(() -> service.generate(fixture.task(), fixture.request(), () -> {}))
+                .isInstanceOfSatisfying(PortfolioAiCallException.class, error -> assertThat(error.getCode()).isEqualTo("MEDIA_BUDGET_OVERRUN"));
+        assertThat(budget(fixture).total()).isGreaterThan(100);
+        assertThat(budget(fixture).unknownCount()).isZero();
+        verify(fixture.client(), never()).generateWithUsage(any(), any(), any());
+    }
+
     /** 读回真实持久账本，不依赖模型替身断言费用更新。 */
     private PortfolioAiMediaBudget budget(Fixture fixture) {
         return PortfolioAiMediaBudget.parse(fixture.jdbc().queryForObject("SELECT media_budget_json FROM wf_ai_generation_task WHERE id=1", String.class));

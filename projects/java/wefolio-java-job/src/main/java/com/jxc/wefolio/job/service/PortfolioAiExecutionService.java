@@ -36,6 +36,10 @@ public class PortfolioAiExecutionService {
     /** 业务时间来源，可替换以验证截止边界。 */ private final Clock clock;
     /** 固定工作线程池，不在内存维护无限候选队列。 */ private final ExecutorService executor;
     /** 领取前先获取并发额度，排队任务继续留在数据库。 */ private final Semaphore capacity;
+    /** 附件并发受配置约束，至少为普通任务保留一个工作线程。 */
+    private final Semaphore referenceCapacity;
+    /** 关闭附件接单却存在等待附件时只告警一次，避免每轮刷屏。 */
+    private boolean warnedDisabledReferences;
     /** 新媒体链路，旧冻结文字请求不经过该服务。 */ private final PortfolioAiMediaExecutionService mediaExecution;
     /** 摘要TTL清理，绝不删除持久帧。 */ private final PortfolioAiMediaRepository mediaRepository;
     /** 媒体执行续约独立于调度准入，排空期间仍保护当前实例活动代次。 */
@@ -57,6 +61,7 @@ public class PortfolioAiExecutionService {
         this.repository = repository; this.modelClient = modelClient; this.properties = properties;
         this.lifecycle = lifecycle; this.clock = clock; this.executor = executor;
         this.capacity = new Semaphore(properties.getWorkerCount());
+        this.referenceCapacity = new Semaphore(Math.max(0, Math.min(properties.getReferenceMaxActiveTasks(), properties.getWorkerCount() - 1)));
         // 文字测试也注入明确替身，禁止在启用媒体后才以 NPE 暴露不完整装配。
         this.mediaExecution = Objects.requireNonNull(mediaExecution, "媒体执行器不能为空");
         this.mediaRepository = Objects.requireNonNull(mediaRepository, "媒体仓储不能为空");
@@ -69,7 +74,7 @@ public class PortfolioAiExecutionService {
         for (AiGenerationTaskEntity task : repository.findRecoverable(now, properties.getTotalTimeoutSeconds(),
                 properties.getRecoverySeconds(), properties.getBatchSize())) {
             if (expired(task, now)) { repository.fail(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, now); }
-            else if (hasMediaPlan(task)) {
+            else if (requiresMediaExecution(task)) {
                 // 失去心跳的媒体只结束当前任务，不能重新发起已可能计费的调用；SQL 重验租约竞争。
                 repository.failInterruptedMedia(task, now, properties.getRecoverySeconds(), properties.getTotalTimeoutSeconds());
             }
@@ -82,12 +87,41 @@ public class PortfolioAiExecutionService {
     /** 仅开关启用时领取；每条任务均在真实网络调用前完成 CAS。 */
     public void dispatch() {
         if (!properties.isEnabled()) { return; }
-        for (AiGenerationTaskEntity task : repository.findPending(now(), Math.min(capacity.availablePermits(), properties.getBatchSize()))) {
+        int limit = Math.min(capacity.availablePermits(), properties.getBatchSize());
+        if (limit < 1) { return; }
+        warnReferenceSwitchMismatch();
+        boolean referencesAvailable = properties.isReferenceEnabled() && referenceCapacity.availablePermits() > 0;
+        dispatchTasks(referencesAvailable ? repository.findPending(now(), limit)
+                : repository.findPendingWithoutReferences(now(), limit));
+        if (referencesAvailable && referenceCapacity.availablePermits() == 0 && capacity.availablePermits() > 0) {
+            dispatchTasks(repository.findPendingWithoutReferences(now(), Math.min(capacity.availablePermits(), properties.getBatchSize())));
+        }
+    }
+
+    /** 已被 Runtime 接受的附件在本机暂停领取时记录部署差异，恢复接单后允许下次再次告警。 */
+    private void warnReferenceSwitchMismatch() {
+        if (properties.isReferenceEnabled()) { warnedDisabledReferences = false; return; }
+        boolean pending = repository.hasPendingReferences(now());
+        if (pending && !warnedDisabledReferences) {
+            log.warn("高级 AI 存在待执行附件，但 Job 附件接单已关闭，配置项=WEFOLIO_AI_REFERENCE_ENABLED");
+        }
+        warnedDisabledReferences = pending;
+    }
+
+    /** 在领取前占用附件槽位，整个真实执行完成后才归还。 */
+    private void dispatchTasks(java.util.List<AiGenerationTaskEntity> tasks) {
+        for (AiGenerationTaskEntity task : tasks) {
             if (!capacity.tryAcquire()) { return; }
             var permit = lifecycle.tryAcquire();
             if (permit.isEmpty()) { capacity.release(); return; }
             boolean handedOff = false;
+            boolean referencePermit = false;
             try {
+                if (PortfolioAiReferenceContract.hasReferences(task)) {
+                    if (!properties.isReferenceEnabled()) { continue; }
+                    referencePermit = referenceCapacity.tryAcquire();
+                    if (!referencePermit) { continue; }
+                }
                 LocalDateTime now = now();
                 if (expired(task, now)) { repository.fail(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, now); continue; }
                 if (task.getAttemptCount() >= properties.getMaxAttempts()) {
@@ -98,9 +132,10 @@ public class PortfolioAiExecutionService {
                 PortfolioAiModelContract.validate(request, properties);
                 PortfolioAiModelContract.warnMediaSwitchMismatch(task.getId(), request, properties);
                 if (!repository.claim(task, now, properties.getMaxAttempts(), properties.getTotalTimeoutSeconds())) { continue; }
+                boolean releaseReference = referencePermit;
                 executor.execute(() -> {
                     try (var ignored = permit.orElseThrow()) { executeClaimed(task, request); }
-                    finally { capacity.release(); }
+                    finally { capacity.release(); if (releaseReference) { referenceCapacity.release(); } }
                 });
                 handedOff = true;
             } catch (AiProtocolException exception) {
@@ -108,7 +143,7 @@ public class PortfolioAiExecutionService {
             } catch (RejectedExecutionException exception) {
                 repository.fail(task, "EXECUTION_INTERRUPTED", "执行器暂时不可用，现有内容已保留", now());
             } finally {
-                if (!handedOff) { permit.orElseThrow().close(); capacity.release(); }
+                if (!handedOff) { permit.orElseThrow().close(); capacity.release(); if (referencePermit) { referenceCapacity.release(); } }
             }
         }
     }
@@ -121,7 +156,7 @@ public class PortfolioAiExecutionService {
             if (remaining.isNegative() || remaining.isZero()) { failure(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, false); return; }
             PortfolioAiModelContract.validate(request, properties);
             String raw;
-            if (request.path("facts").has("mediaPlan")) {
+            if (requiresMediaExecution(task)) {
                 lease = mediaHeartbeat.track(task);
                 raw = mediaExecution.generate(task, request, lease::checkHeld);
                 lease.checkHeld();
@@ -160,7 +195,7 @@ public class PortfolioAiExecutionService {
     /** 统一错误预算；重试与终态都匹配当前 RUNNING/version。 */
     private void failure(AiGenerationTaskEntity task, String code, String message, boolean retryable) {
         LocalDateTime now = now();
-        boolean media = hasMediaPlan(task);
+        boolean media = requiresMediaExecution(task);
         if (expired(task, now)) { repository.fail(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, now); }
         else if (retryable && !(media && PortfolioAiMediaLeaseHeartbeat.INTERRUPTED_CODE.equals(code))
                 && task.getAttemptCount() < properties.getMaxAttempts()) {
@@ -189,8 +224,9 @@ public class PortfolioAiExecutionService {
         return StrictAiJson.parseObject(task.getRequestJson(), StrictAiJson.RESPONSE_MAX_BYTES, StrictAiJson.MAX_DEPTH + 3);
     }
 
-    /** 只认服务端冻结facts.mediaPlan字段，原文字里出现同名词不会延迟恢复。 */
-    private boolean hasMediaPlan(AiGenerationTaskEntity task) {
+    /** 只认服务端媒体计划及独立附件列，原文字里出现同名词不改变恢复规则。 */
+    private boolean requiresMediaExecution(AiGenerationTaskEntity task) {
+        if (PortfolioAiReferenceContract.hasReferences(task)) { return true; }
         try { return request(task).path("facts").has("mediaPlan"); }
         catch (AiProtocolException exception) { return false; }
     }

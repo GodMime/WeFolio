@@ -4,6 +4,9 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.PortfolioOwnerTypeDict;
 import com.jxc.wefolio.dict.PortfolioStatusDict;
@@ -23,23 +26,32 @@ import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAccessService;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAssetService;
 import com.jxc.wefolio.service.miniappcode.PortfolioMiniappCodeApplicationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
+import java.util.List;
 import java.util.Set;
 
 /** 高级维护入口：依据数据库真实归属分派普通算法，AI 上下文仅在维护详情返回。 */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AdvancedPortfolioApplicationService {
     /** 高级入口固定模板，不能由客户端替换。 */
     private static final String ADVANCED = PortfolioTemplateTypeDict.ADVANCED.getCode();
     /** 团队维护角色。 */
     private static final Set<String> ROLES = Set.of(TeamRoleDict.OWNER.getCode(), TeamRoleDict.MANAGER.getCode());
     /** 高级保存受理字段。 */
-    private static final Set<String> SAVE_KEYS = Set.of("config", "clientRevision", "idempotencyKey", "clientCapabilities", "aiContext", "aiPrompt");
+    private static final Set<String> SAVE_KEYS = Set.of("config", "clientRevision", "idempotencyKey", "clientCapabilities", "aiContext", "aiPrompt", "aiReferenceAttachments", "aiReferenceNextNo");
     /** 高级原始请求资源限额，配置仍沿完整普通手动编辑能力。 */
     private static final int REQUEST_MAX_BYTES = 2 * 1024 * 1024;
+    /** 附件维护字段。 */
+    private static final String REFERENCES = "aiReferenceAttachments";
+    /** 附件编号高水位。 */
+    private static final String REFERENCE_NEXT = "aiReferenceNextNo";
+    /** 附件可信事实和生命周期。 */
+    private final PortfolioAiReferenceService references;
     /** 个人普通业务算法。 */
     private final MinePortfolioService personal;
     /** 团队普通业务算法。 */
@@ -86,12 +98,33 @@ public class AdvancedPortfolioApplicationService {
         String prompt = promptPresent ? requireString(request.get("aiPrompt")) : null;
         if (prompt != null && prompt.codePointCount(0, prompt.length()) > 2000) { throw invalid(); }
         if (contextPresent) { AdvancedPortfolioSaveMetadata.validateContext(context, portfolio.getAiContextJson()); }
+        boolean referencesPresent = request.containsKey(REFERENCES);
+        if (!referencesPresent && request.containsKey(REFERENCE_NEXT)) { throw invalid(); }
+        ArrayNode referenceItems = null;
+        Integer referenceNext = null;
+        JSONObject fingerprint = new JSONObject(request);
+        if (referencesPresent) {
+            JsonNode rawItems = StrictAiJson.parseObject(request.toJSONString(), REQUEST_MAX_BYTES, 20).get(REFERENCES);
+            if (!(rawItems instanceof ArrayNode items)) { throw invalid(); }
+            referenceItems = items;
+            fingerprint.put(REFERENCES, JSON.parseArray(PortfolioAiReferenceService.normalizeBusinessProjection(items).toString()));
+            if (request.containsKey(REFERENCE_NEXT)) {
+                if (!(request.get(REFERENCE_NEXT) instanceof Integer next) || next < 1) { throw invalid(); }
+                referenceNext = next;
+            }
+        }
         AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(context, contextPresent,
-                prompt, promptPresent, JSON.toJSONString(request, JSONWriter.Feature.MapSortField, JSONWriter.Feature.WriteMapNullValue));
+                prompt, promptPresent, JSON.toJSONString(fingerprint, JSONWriter.Feature.MapSortField, JSONWriter.Feature.WriteMapNullValue),
+                referenceItems, referencesPresent, referenceNext);
         Object detail = isTeam(portfolio)
                 ? team.saveDraft(id, request.toJavaObject(TeamPortfolioDraftSaveRequest.class), actor(), ADVANCED, metadata)
                 : personal.saveDraft(id, request.toJavaObject(MinePortfolioDraftSaveRequest.class), ADVANCED, metadata);
-        return maintenanceDetail(detail, requireMaintainerPortfolio(id));
+        PortfolioEntity saved = requireMaintainerPortfolio(id);
+        if (referencesPresent) {
+            references.cleanupRemoved(portfolio.getOwnerType(), portfolio.getOwnerId(),
+                    portfolio.getAiReferenceAttachmentsJson(), saved.getAiReferenceAttachmentsJson());
+        }
+        return maintenanceDetail(detail, saved, true);
     }
 
     /** 发布独立检查，费用从现有高级发布积分规则读取。 */
@@ -114,6 +147,16 @@ public class AdvancedPortfolioApplicationService {
     /** 删除只允许当前维护者，沿普通资产及引用清理顺序。 */
     public void delete(Long id) {
         PortfolioEntity portfolio = requireMaintainerPortfolio(id);
+        if (portfolio.getAiReferenceAttachmentsJson() == null) { deleteOwned(id, portfolio); return; }
+        references.withOwnerLock(portfolio.getOwnerType(), portfolio.getOwnerId(), () -> {
+            deleteOwned(id, portfolio);
+            return null;
+        });
+        references.cleanupRemoved(portfolio.getOwnerType(), portfolio.getOwnerId(), portfolio.getAiReferenceAttachmentsJson(), null);
+    }
+
+    /** 删除继续委派普通用例，所有原引用守卫和事务语义保持。 */
+    private void deleteOwned(Long id, PortfolioEntity portfolio) {
         if (isTeam(portfolio)) { team.deletePortfolio(id, actor(), ADVANCED); }
         else { personal.deletePortfolio(id, ADVANCED); }
     }
@@ -231,9 +274,25 @@ public class AdvancedPortfolioApplicationService {
 
     /** 维护详情追加当前主表上下文，公开 DTO 始终不改动。 */
     private JSONObject maintenanceDetail(Object detail, PortfolioEntity portfolio) {
+        return maintenanceDetail(detail, portfolio, false);
+    }
+
+    /** 保存事务成功后允许延后附件展示刷新，客户端保留原清单；详情读取仍完整校验。 */
+    private JSONObject maintenanceDetail(Object detail, PortfolioEntity portfolio, boolean savedDraft) {
         JSONObject result = JSON.parseObject(JSON.toJSONString(detail));
         result.put("aiContext", portfolio.getAiContextJson() == null ? null : JSON.parseObject(portfolio.getAiContextJson()));
         result.put("aiPrompt", portfolio.getAiPrompt());
+        if (portfolio.getAiReferenceAttachmentsJson() == null) {
+            result.put(REFERENCES, List.of());
+            result.put(REFERENCE_NEXT, 1);
+        } else {
+            try {
+                result.putAll(references.maintenance(portfolio.getAiReferenceAttachmentsJson(), portfolio.getOwnerType(), portfolio.getOwnerId()));
+            } catch (BusinessException exception) {
+                if (!savedDraft) { throw exception; }
+                log.warn("高级草稿已保存，附件展示刷新延后: portfolioId={}, errorType={}", portfolio.getId(), exception.getClass().getSimpleName());
+            }
+        }
         return result;
     }
     /** 从普通详情获取创建后的真实 ID。 */

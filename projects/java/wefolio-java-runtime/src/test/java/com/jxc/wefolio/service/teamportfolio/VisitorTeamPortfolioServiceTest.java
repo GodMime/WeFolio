@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontSavedFlowAssertions;
 import com.alibaba.fastjson2.JSON;
@@ -714,7 +715,7 @@ class VisitorTeamPortfolioServiceTest {
         VisitRecordEntityMapper recordMapper = mock(VisitRecordEntityMapper.class);
         TeamScheduleQueryRecordEntityMapper scheduleRecordMapper = mock(TeamScheduleQueryRecordEntityMapper.class);
         TeamContactFormComponentService contactService = mock(TeamContactFormComponentService.class);
-        MineTeamPortfolioService service = new MineTeamPortfolioService(mock(PortfolioFontService.class),
+        MineTeamPortfolioService service = new MineTeamPortfolioService(mock(PortfolioAiReferenceService.class), mock(PortfolioFontService.class),
                 properties,
                 mock(PortfolioEntityMapper.class),
                 mock(com.jxc.wefolio.mapper.PortfolioHistoryEntityMapper.class),

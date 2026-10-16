@@ -1,3 +1,4 @@
+const { referenceBasis, normalizeReferenceItems, referenceNextNo, referenceSaveFields, referenceSaveDeferred, hasReferenceState } = require('./advanced-reference-attachments')
 const { request } = require('../../../utils/request.js')
 const { handleMaintainerAuthRequired } = require('../../../utils/session.js')
 const { PUBLISH_DISCLAIMER_CONTENT } = require('./portfolio-publish-disclaimer')
@@ -151,7 +152,7 @@ async function advancedTeamComponentSources(page, route, options, requestFn) {
 function editorState(page) {
   return { ownerType: page.data.advancedOwnerType, ownerId: page.data.advancedOwnerId || page.data.teamId,
     portfolioId: page.data.portfolioId || null, draftRevision: page.data.draftRevision, config: page.data.config,
-    aiContext: page.data.aiContext, localEditRevision: page.data.localEditRevision }
+    aiContext: page.data.aiContext, ...(hasReferenceState(page.data) ? { aiReferenceAttachments: page.data.aiReferenceAttachments, aiReferenceNextNo: page.data.aiReferenceNextNo } : {}), localEditRevision: page.data.localEditRevision }
 }
 
 /** setData 统一跟踪完整配置，覆盖普通编辑器全部手动参数入口。 */
@@ -159,7 +160,7 @@ function installAdvancedEditor(page, options = {}, team = false) {
   if (options.templateType !== 'ADVANCED') return
   page.setData({ advancedEditing: true, templateType: 'ADVANCED', advancedOwnerType: team ? 'TEAM' : 'USER',
     advancedOwnerId: options.teamId || options.ownerId || '', aiContext: normalizeContext(), aiPrompt: '', localEditRevision: 0,
-    advancedDirty: false, advancedCanUndo: false, advancedSourceItems: [] })
+    advancedDirty: false, advancedCanUndo: false, advancedSourceItems: [], aiReferenceAttachments: [], aiReferenceNextNo: 1 })
   const onUnload = page.onUnload
   page.onUnload = function (...args) {
     this.advancedSourceDisposed = true
@@ -168,7 +169,7 @@ function installAdvancedEditor(page, options = {}, team = false) {
   }
   const setData = page.setData.bind(page)
   let signature = captureBasis(editorState(page))
-  const contentSignature = () => JSON.stringify([page.data.config, normalizeContext(page.data.aiContext), page.data.aiPrompt || ''])
+  const contentSignature = () => JSON.stringify([page.data.config, normalizeContext(page.data.aiContext), page.data.aiPrompt || '', referenceBasis(page.data)])
   let savedContent = contentSignature()
   page.setData = function (patch, callback) {
     setData(patch, callback)
@@ -190,7 +191,7 @@ function installAdvancedEditor(page, options = {}, team = false) {
   const channel = page.getOpenerEventChannel && page.getOpenerEventChannel()
   if (channel && channel.on) channel.on('advancedInitial', initial => {
     page.advancedApplying = true
-    page.setData({ advancedOwnerId: initial.ownerId, aiContext: normalizeContext(initial.aiContext), aiPrompt: initial.prompt || '', localEditRevision: initial.localEditRevision || 1 })
+    page.setData({ advancedOwnerId: initial.ownerId, aiContext: normalizeContext(initial.aiContext), aiPrompt: initial.prompt || '', aiReferenceAttachments: normalizeReferenceItems(initial.aiReferenceAttachments), aiReferenceNextNo: referenceNextNo(initial.aiReferenceAttachments, initial.aiReferenceNextNo), localEditRevision: initial.localEditRevision || 1 })
     refreshAdvancedSourceItems(page, initial.sourceItems)
     if (team) page.updateConfig(initial.config)
     else page.applyEditorConfig(initial.config)
@@ -204,7 +205,7 @@ function installAdvancedEditor(page, options = {}, team = false) {
 function loadAdvancedMetadata(page, detail) {
   if (!page.data.advancedEditing) return
   page.setData({ advancedOwnerId: detail.ownerId || page.data.advancedOwnerId,
-    aiContext: normalizeContext(detail.aiContext), aiPrompt: detail.aiPrompt || '' })
+    aiContext: normalizeContext(detail.aiContext), aiPrompt: detail.aiPrompt || '', aiReferenceAttachments: normalizeReferenceItems((detail.aiReferenceAttachments || []).map(item => ({ ...item, saved: true }))), aiReferenceNextNo: referenceNextNo(detail.aiReferenceAttachments, detail.aiReferenceNextNo) })
   markAdvancedSaved(page)
   return page.advancedSourceHydration = hydrateAdvancedSourceItems(page)
 }
@@ -213,7 +214,8 @@ function markAdvancedSaved(page) {
   if (!page.data.advancedEditing) return
   page.advancedUndo = null
   page.advancedDraftCreatedLocally = false
-  page.setData({ advancedDirty: false, advancedCanUndo: false })
+  page.setData({ advancedDirty: false, advancedCanUndo: false,
+    aiReferenceAttachments: normalizeReferenceItems((page.data.aiReferenceAttachments || []).map(item => ({ ...item, saved: true }))) })
   if (typeof wx !== 'undefined' && wx.disableAlertBeforeUnload) wx.disableAlertBeforeUnload()
 }
 
@@ -226,12 +228,25 @@ const advancedEditorPageMethods = {
   },
   advancedDraftPayload(payload) {
     return this.data.advancedEditing ? { ...payload,
+      ...referenceSaveFields(Object.prototype.hasOwnProperty.call(payload, 'aiReferenceAttachments') ? payload : this.data),
       aiContext: normalizeContext(Object.prototype.hasOwnProperty.call(payload, 'aiContext') ? payload.aiContext : this.data.aiContext),
       aiPrompt: Object.prototype.hasOwnProperty.call(payload, 'aiPrompt') ? payload.aiPrompt : this.data.aiPrompt || '' } : payload
   },
+  /** 只标记本次成功请求包含的附件，期间新编辑仍由脏状态保留。 */
+  advancedReferencesSaved(payload) {
+    if (!this.data.advancedEditing || !Array.isArray(payload.aiReferenceAttachments)) return
+    const savedIds = new Set(payload.aiReferenceAttachments.map(item => item.attachmentId))
+    this.setData({ aiReferenceAttachments: normalizeReferenceItems((this.data.aiReferenceAttachments || [])
+      .map(item => savedIds.has(item.attachmentId) ? { ...item, saved: true } : item)) })
+  },
+  advancedSaveMessage(fallback) {
+    return this.data.advancedEditing && referenceSaveDeferred(this.data)
+      ? '正文草稿已保存，附件待就绪后再次保存' : fallback
+  },
   advancedDraftChanged(payload) {
     return this.data.advancedEditing && (JSON.stringify(normalizeContext(this.data.aiContext)) !== JSON.stringify(normalizeContext(payload.aiContext))
-      || (this.data.aiPrompt || '') !== (payload.aiPrompt || ''))
+      || (this.data.aiPrompt || '') !== (payload.aiPrompt || '')
+      || JSON.stringify(referenceBasis(this.data)) !== JSON.stringify(referenceBasis(payload)))
   },
   createAdvancedDraft() {
     if (this.advancedCreationResultUnknown) return Promise.reject(new Error('创建结果暂无法确认，请先核对列表中的草稿'))
@@ -288,12 +303,12 @@ const advancedEditorPageMethods = {
     wx.navigateTo({ url: `/pages/${team ? 'team-portfolios' : 'portfolios'}/advanced-ai/advanced-ai?mode=${mode}`,
       events: {
         contextChange: detail => {
-          this.setData({ aiContext: normalizeContext(detail.aiContext), aiPrompt: detail.prompt, localEditRevision: detail.localEditRevision })
+          this.setData({ aiContext: normalizeContext(detail.aiContext), aiPrompt: detail.prompt, localEditRevision: detail.localEditRevision, aiReferenceAttachments: normalizeReferenceItems(detail.aiReferenceAttachments), aiReferenceNextNo: referenceNextNo(detail.aiReferenceAttachments, detail.aiReferenceNextNo) })
           refreshAdvancedSourceItems(this, detail.sourceItems)
         },
         adopt: detail => {
           if (captureBasis(editorState(this)) !== detail.basis) { wx.showToast({ title: '当前编辑已变化，请重新生成', icon: 'none' }); return }
-          this.advancedUndo = { config: clone(this.data.config), aiContext: clone(this.data.aiContext), prompt: this.data.aiPrompt,
+          this.advancedUndo = { config: clone(this.data.config), aiContext: clone(this.data.aiContext), prompt: this.data.aiPrompt, aiReferenceAttachments: clone(this.data.aiReferenceAttachments || []), aiReferenceNextNo: this.data.aiReferenceNextNo,
             renderData: { backgroundAudio: this.data.backgroundAudioSelected || null } }
           this.advancedApplying = true
           if (team) this.updateConfig(detail.config)
@@ -302,7 +317,7 @@ const advancedEditorPageMethods = {
           refreshAdvancedSourceItems(this, detail.sourceItems)
           if (team && this.loadSingleWorkRowSummaries) this.loadSingleWorkRowSummaries(detail.config)
           if (!team && this.loadSingleWorkSummaries) this.loadSingleWorkSummaries(detail.config)
-          this.setData({ advancedDirty: true, advancedCanUndo: true })
+          this.setData({ advancedDirty: true, advancedCanUndo: true, aiReferenceAttachments: normalizeReferenceItems(detail.aiReferenceAttachments || this.data.aiReferenceAttachments), aiReferenceNextNo: referenceNextNo(detail.aiReferenceAttachments || this.data.aiReferenceAttachments, detail.aiReferenceNextNo || this.data.aiReferenceNextNo) })
           this.advancedApplying = false
         }
       }, success: result => result.eventChannel.emit('initialize', { ...state, mode, targetMenuKey: menuKey,
@@ -315,7 +330,7 @@ const advancedEditorPageMethods = {
     if (this.data.advancedOwnerType === 'TEAM') this.updateConfig(undo.config)
     else this.applyEditorConfig(undo.config)
     this.applyAdvancedRenderMetadata(undo.renderData)
-    this.setData({ aiContext: undo.aiContext, aiPrompt: undo.prompt, advancedCanUndo: false, advancedDirty: true })
+    this.setData({ aiContext: undo.aiContext, aiPrompt: undo.prompt, aiReferenceAttachments: normalizeReferenceItems(undo.aiReferenceAttachments), aiReferenceNextNo: Math.max(this.data.aiReferenceNextNo || 1, undo.aiReferenceNextNo || 1), advancedCanUndo: false, advancedDirty: true })
     this.advancedUndo = null
     this.advancedApplying = false
   },

@@ -2,6 +2,8 @@ package com.jxc.wefolio.config;
 
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
+import lombok.ToString;
+import java.nio.charset.StandardCharsets;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -32,6 +34,13 @@ public class PortfolioAiProperties {
     private boolean mediaAudioTextEnabled;
     /** 全部 Job 消费者升级后才开启 v3，优先冻结持久摘要并同时包含音频文字。 */
     private boolean mediaStoredVideoSummaryEnabled;
+    /** 新参考附件接单开关；关闭后已有附件仍可维护。 */
+    private boolean referenceEnabled;
+    /** 全局附件活动额度，实际还需为普通任务保留一个位置。 */
+    private int referenceMaxActiveTasks = 10;
+    /** 所有 Runtime 实例共用的附件回执签名密钥，不参与日志输出。 */
+    @ToString.Exclude
+    private String referenceTokenSecret;
     /** 单次描述的 Unicode 码点上限。 */
     private int maxPromptCodePoints = 2000;
     /** 完整普通配置的字节上限。 */
@@ -60,6 +69,10 @@ public class PortfolioAiProperties {
     /** 新任务启用时限制官方端点和模型，关闭时允许旧环境配置先完成部署。 */
     @PostConstruct
     public void validateWhenEnabled() {
+        if (referenceEnabled && (maxActiveTasks < 2 || referenceMaxActiveTasks < 1
+                || referenceTokenSecret == null || referenceTokenSecret.getBytes(StandardCharsets.UTF_8).length < 32)) {
+            throw new IllegalStateException("参考附件需要至少两个任务名额、正数附件额度和至少32字节的独立签名密钥");
+        }
         if (!enabled) { return; }
         if (!TOKENHUB_BASE_URL.equals(baseUrl) && !(TOKENHUB_BASE_URL + "/").equals(baseUrl)) {
             throw new IllegalStateException("portfolio-ai.base-url 必须为 TokenHub 官方接口地址");

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.config.PortfolioAiProperties;
 import com.jxc.wefolio.dict.AiTaskStatusDict;
@@ -44,6 +45,12 @@ public class PortfolioAiApplicationService {
     private static final String FROZEN_MEDIA_ENABLED = "mediaEnabled";
     /** 所有终态。 */
     private static final Set<String> TERMINAL = Set.of(AiTaskStatusDict.SUCCEEDED.getCode(), AiTaskStatusDict.FAILED.getCode(), AiTaskStatusDict.CANCELLED.getCode());
+    /** 新附件 HTTP 字段，独立于旧 input 冻结。 */
+    private static final String REFERENCE_ATTACHMENTS = "referenceAttachments";
+    /** 本次终态任务可保存窗口截止字段。 */
+    private static final String REFERENCE_SAVE_UNTIL = "referenceSaveUntil";
+    /** 可信附件快照和 owner 锁。 */
+    private final PortfolioAiReferenceService references;
     /** 当前有效运行预算与开关。 */
     private final PortfolioAiProperties properties;
     /** 任务读写访问器。 */
@@ -65,6 +72,7 @@ public class PortfolioAiApplicationService {
         expire(requester);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put(KEY_ENABLED, properties.isEnabled());
+        result.put(REFERENCE_ATTACHMENTS, references.capabilities());
         result.put(KEY_MODES, List.of(MODE_CREATE, MODE_MODIFY_PAGE));
         result.put(KEY_AI_CONTRACT_VERSION, AiPortfolioProtocol.CONTRACT_VERSION);
         result.put(KEY_PROMPT_VERSION, AiPortfolioProtocol.PROMPT_VERSION);
@@ -90,13 +98,24 @@ public class PortfolioAiApplicationService {
     private Map<String, Object> submitChecked(String raw) {
         Long requester = AuthContextHolder.requireUserId();
         ObjectNode http = StrictAiJson.parseObject(raw, TASK_MAX_BYTES, properties.getMaxJsonDepth() + WRAPPER_DEPTH);
+        JsonNode referenceValue = http.remove(REFERENCE_ATTACHMENTS);
+        ArrayNode referenceProjection = PortfolioAiReferenceService.normalizeBusinessProjection(referenceValue);
+        ArrayNode referenceItems = referenceValue instanceof ArrayNode values ? values : NODES.arrayNode();
         ObjectNode input = PortfolioAiInput.normalize(http, properties);
         PortfolioEntity portfolio = facts.requireOwner(input, requester);
         String key = http.path(KEY_IDEMPOTENCY_KEY).textValue();
         expire(requester);
         AiGenerationTaskEntity replay = transactions.find(requester, key);
-        if (replay != null) { requireRetained(replay); transactions.requireSame(replay, input); return status(replay); }
+        if (replay != null) {
+            requireRetained(replay);
+            if (referenceProjection.isEmpty() && replay.getReferenceAttachmentsJson() == null) { transactions.requireSame(replay, input); }
+            else { transactions.requireSame(replay, input, referenceItems); }
+            return status(replay);
+        }
         if (!properties.isEnabled()) { throw new BusinessException(PortfolioAiMessage.DISABLED); }
+        if (!referenceProjection.isEmpty() && (!properties.isReferenceEnabled() || properties.getMaxActiveTasks() < 2)) {
+            throw new BusinessException(PortfolioAiMessage.DISABLED);
+        }
         if (portfolio != null && !input.path(KEY_BASE_DRAFT_REVISION).isIntegralNumber()) { throw new BusinessException(PortfolioAiMessage.INVALID_INPUT); }
         requireRevision(input, portfolio);
         JsonNode context = input.path(KEY_AI_CONTEXT);
@@ -125,7 +144,9 @@ public class PortfolioAiApplicationService {
         // 投影在提交时预检，不能把无法定位的菜单、组件或未支持基准交给 Job。
         AiPortfolioProtocol.project(frozen);
         StrictAiJson.parseObject(frozen.toString(), TASK_MAX_BYTES, properties.getMaxJsonDepth() + WRAPPER_DEPTH);
-        return status(transactions.submit(requester, key, frozen));
+        if (referenceProjection.isEmpty()) { return status(transactions.submit(requester, key, frozen)); }
+        return references.withOwnerLock(input.path(KEY_OWNER_TYPE).asText(), PortfolioAiInput.id(input, KEY_OWNER_ID, false),
+                () -> status(transactions.submit(requester, key, frozen, referenceItems)));
     }
 
     /** 查询成功任务每次重编译、重验，状态 SUCCEEDED 不代表永久可采用。 */
@@ -135,6 +156,10 @@ public class PortfolioAiApplicationService {
         AiGenerationTaskEntity task = requireTask(taskId, requester);
         PortfolioEntity portfolio = requireTaskOwner(task, requester);
         Map<String, Object> response = status(task);
+        if (task.getReferenceAttachmentsJson() != null) {
+            response.put(REFERENCE_ATTACHMENTS, references.taskResponse(task.getReferenceAttachmentsJson(), task.getOwnerType(), task.getOwnerId()));
+            if (task.getCompletedAt() != null) { response.put(REFERENCE_SAVE_UNTIL, task.getCompletedAt().plusHours(24)); }
+        }
         Map<String, Object> usage = PortfolioAiTokenUsage.summarize(task.getId(), task.getMediaBudgetJson(), task.getMediaBudgetUnknownCount());
         if (usage != null) { response.put(PortfolioAiTokenUsage.RESPONSE_KEY, usage); }
         ObjectNode request;

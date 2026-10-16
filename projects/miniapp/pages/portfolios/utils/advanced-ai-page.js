@@ -1,10 +1,12 @@
+const { referencePageMethods, referenceExampleText } = require('./advanced-reference-page')
+const { normalizeReferenceItems, referenceNextNo, hasReferenceState, referenceUiState } = require('./advanced-reference-attachments')
 const { request: defaultRequest } = require('../../../utils/request.js')
 const { hasLocalToken, handleMaintainerAuthRequired } = require('../../../utils/session.js')
 const { AI_API_PREFIX, ADVANCED_API_PREFIX, ACTIVE_STATUSES, AI_TASK_MODES, PROMPT_MAX_LENGTH, normalizeContext, addSource, removeSource,
   captureBasis, candidateError, taskErrorMessage, buildTaskPayload, statusMessage, makeKey, clone, text, validatePrompt } = require('./advanced-portfolios')
 const PAGE_SIZE = 20
+const CAPABILITY_CHECK_FAILED_MESSAGE = '暂时无法检查附件服务，请重试'
 /** 创建示例统一用于页面展示与一键填入。 */
-const CREATE_PROMPT_EXAMPLE = '1号图片作品作为封面；2号视频作品当背景，配合多段文艺的描述，字体要文艺范；3号视频作品单独展示；4号作为背景音乐；后面加一个档期查询；最后再加一个预留联系信息；整体背景使用黑色；并帮我想一个作品集名称；'
 /** 媒体枚举只用于显示，提交仍保留原始类型。 */
 const MEDIA_TYPE_LABELS = Object.freeze({ IMAGE: '图片', VIDEO: '视频', ANIMATION: '动图', AUDIO: '音频' })
 
@@ -31,9 +33,12 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
   const request = requestFn
   const packageRoot = team ? 'team-portfolios' : 'portfolios'
   return {
+    ...referencePageMethods(request),
     data: { team, ownerType: team ? 'TEAM' : 'USER', ownerId: '', portfolioId: null, draftRevision: 0, localEditRevision: 0,
-      config: null, aiContext: normalizeContext(), prompt: '', promptCount: 0, promptMaxLength: PROMPT_MAX_LENGTH,
-      mode: 'CREATE', createPromptExample: CREATE_PROMPT_EXAMPLE, targetMenuKey: null, managingSources: false, step: 'sources', loading: true,
+      config: null, aiContext: normalizeContext(), aiReferenceAttachments: [], aiReferenceNextNo: 1, prompt: '', promptCount: 0, promptMaxLength: PROMPT_MAX_LENGTH,
+      referenceSheet: '', referenceReplacingKey: '', referenceNoteOpen: {}, referenceUi: referenceUiState(), referenceExampleText: referenceExampleText(),
+      referenceCapabilityChecking: false, capabilityError: '',
+      mode: 'CREATE', targetMenuKey: null, managingSources: false, step: 'sources', loading: true,
       errorMessage: '', sourceLoading: false, sourceError: '', sourceOptions: [], selectedSources: [], keyword: '', tagId: '', tags: [],
       sourceKind: team ? 'WORK' : '', members: [], memberIndex: 0, page: 1, total: 0, hasMore: false, capabilities: null,
       submitting: false, submissionUncertain: false, waiting: false, adopting: false, task: null, statusText: '', result: null, summaryText: '', candidateTitle: '',
@@ -51,9 +56,10 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
         if (this.channel && this.channel.on) this.channel.on('initialize', state => {
           this.invalidateTaskQuery()
           this.sourceNumbers = {}
-          this.setData({ ...state, aiContext: normalizeContext(state.aiContext), promptCount: Array.from(state.prompt || '').length,
+          this.setData({ ...state, aiContext: normalizeContext(state.aiContext), aiReferenceAttachments: normalizeReferenceItems(state.aiReferenceAttachments), aiReferenceNextNo: referenceNextNo(state.aiReferenceAttachments, state.aiReferenceNextNo), promptCount: Array.from(state.prompt || '').length,
             step: options.mode === 'MANAGE_SOURCES' || options.mode === 'CREATE' ? 'sources' : 'prompt',
             mode: options.mode === 'MANAGE_SOURCES' ? 'MODIFY_PAGE' : options.mode, managingSources: options.mode === 'MANAGE_SOURCES', tokenUsageText: '' })
+          this.refreshReferenceUi()
           this.bootstrap()
         })
       } else {
@@ -64,6 +70,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
     onShow() { if (this.data.waiting && !this.pollTimer) this.schedulePoll() },
     onHide() { clearTimeout(this.pollTimer); this.pollTimer = null },
     onUnload() {
+      this.stopReferenceProcessing()
       this.disposed = true
       clearTimeout(this.pollTimer)
       this.pollSequence = (this.pollSequence || 0) + 1
@@ -72,17 +79,20 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
     async bootstrap() {
       if (!hasLocalToken()) { handleMaintainerAuthRequired(); return }
       this.setData({ loading: true, errorMessage: '' })
+      let capabilityError = ''
       try {
         const results = await Promise.all([request({ url: `${AI_API_PREFIX}/capabilities` }).catch(error => {
           if (error.authRequired) throw error
+          capabilityError = CAPABILITY_CHECK_FAILED_MESSAGE
           return { enabled: false, unavailableReason: 'AI 服务暂不可用，可继续管理内容与手动编辑' }
         }),
           !team && !this.data.ownerId ? request({ url: '/api/auth/session' }) : Promise.resolve(null),
           !team ? request({ url: '/api/mine/works/tags' }) : Promise.resolve([])])
         const capabilities = results[0] || {}
-        this.setData({ capabilities, ownerId: team ? this.data.ownerId : text(results[1] && results[1].userId || this.data.ownerId),
+        this.setData({ capabilities, capabilityError, ownerId: team ? this.data.ownerId : text(results[1] && results[1].userId || this.data.ownerId),
           tags: Array.isArray(results[2]) ? results[2] : results[2] && results[2].tags || [],
           activeTaskId: capabilities.activeTask && capabilities.activeTask.taskId || '' })
+        this.refreshReferenceUi()
         await this.loadSources(false)
         await this.hydrateSelectedSources()
         this.refreshSelection()
@@ -91,12 +101,31 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
         else this.setData({ errorMessage: error.message || '加载失败，请重试' })
       } finally { if (!this.disposed) this.setData({ loading: false }) }
     },
+    /** 仅刷新服务能力，不重新加载用户已选内容或覆盖当前编辑与候选。 */
+    async refreshCapabilities() {
+      if (this.disposed || this.data.referenceCapabilityChecking) return false
+      this.setData({ referenceCapabilityChecking: true })
+      try {
+        const capabilities = await request({ url: `${AI_API_PREFIX}/capabilities` }) || {}
+        if (this.disposed) return false
+        this.setData({ capabilities, capabilityError: '', activeTaskId: capabilities.activeTask && capabilities.activeTask.taskId || '' })
+        this.refreshReferenceUi()
+        return true
+      } catch (error) {
+        if (error.authRequired) handleMaintainerAuthRequired(error.message)
+        else if (!this.disposed) {
+          this.setData({ capabilityError: CAPABILITY_CHECK_FAILED_MESSAGE })
+          wx.showToast({ title: CAPABILITY_CHECK_FAILED_MESSAGE, icon: 'none' })
+        }
+        return false
+      } finally { if (!this.disposed) this.setData({ referenceCapabilityChecking: false }) }
+    },
     currentState() {
       return { ownerType: this.data.ownerType, ownerId: this.data.ownerId, portfolioId: this.data.portfolioId,
-        draftRevision: this.data.draftRevision, localEditRevision: this.data.localEditRevision, config: this.data.config, aiContext: this.data.aiContext }
+        draftRevision: this.data.draftRevision, localEditRevision: this.data.localEditRevision, config: this.data.config, aiContext: this.data.aiContext, ...(hasReferenceState(this.data) ? { aiReferenceAttachments: this.data.aiReferenceAttachments, aiReferenceNextNo: this.data.aiReferenceNextNo } : {}) }
     },
     emitContext() {
-      if (this.channel && this.channel.emit) this.channel.emit('contextChange', { aiContext: this.data.aiContext, prompt: this.data.prompt, localEditRevision: this.data.localEditRevision, sourceItems: this.data.selectedSources })
+      if (this.channel && this.channel.emit) this.channel.emit('contextChange', { aiContext: this.data.aiContext, prompt: this.data.prompt, localEditRevision: this.data.localEditRevision, sourceItems: this.data.selectedSources, aiReferenceAttachments: this.data.aiReferenceAttachments, aiReferenceNextNo: this.data.aiReferenceNextNo })
     },
     /** 仅在当前选择会话记住来源编号，搜索与取消不会让同一内容重新领号。 */
     rememberSourceNumbers() {
@@ -209,9 +238,9 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       if (this.data.managingSources) { this.emitContext(); wx.navigateBack(); return }; this.setData({ step: 'prompt' }) },
     handleBackToSources() { this.setData({ step: 'sources' }) },
     handlePromptInput(event) {
-      if (this.data.waiting || this.data.adopting || this.data.submissionUncertain) return
+      if (this.data.waiting || this.data.submitting || this.data.adopting || this.data.submissionUncertain) return
       this.invalidateTaskQuery()
-      this.setData({ prompt: event.detail.value, promptCount: Array.from(event.detail.value).length, tokenUsageText: '' })
+      this.setData({ prompt: event.detail.value, promptCount: Array.from(event.detail.value).length, tokenUsageText: '', result: null, canAdopt: false, taskError: '' })
       this.emitContext()
     },
     handleInsertNumber(event) {
@@ -223,18 +252,6 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       this.emitContext()
     },
     handleSelectedSourceTap(event) { if (this.data.step === 'prompt') this.handleInsertNumber(event) },
-    /** 创建时填入完整示例，修改时沿用当前有效编号。 */
-    handleUseExample() {
-      if (this.data.waiting || this.data.adopting || this.data.submitting || this.data.submissionUncertain) return
-      const sources = this.data.selectedSources.filter(source => source.available !== false).slice(0, 3)
-      const references = sources.map(source => `${source.sourceNo}号`).join('、')
-      const prompt = this.data.mode === 'CREATE'
-        ? CREATE_PROMPT_EXAMPLE
-        : `${references ? `把${sources[0].sourceNo}号放在最上面，` : ''}介绍缩短成一句话，其他保持不变。`
-      this.invalidateTaskQuery()
-      this.setData({ prompt, promptCount: Array.from(prompt).length, tokenUsageText: '' })
-      this.emitContext()
-    },
     handleQuestionInput(event) { this.setData({ clarificationAnswer: { questionId: event.currentTarget.dataset.id, answerText: event.detail.value } }) },
     handleQuestionOption(event) { this.setData({ clarificationAnswer: { questionId: event.currentTarget.dataset.id,
       optionId: event.currentTarget.dataset.option, answerText: event.currentTarget.dataset.value } }) },
@@ -242,6 +259,8 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       if (this.data.submitting || this.data.waiting || this.data.adopting) return
       if (!this.data.capabilities || !this.data.capabilities.enabled) { wx.showToast({ title: 'AI 服务暂未开放，可继续手动编辑', icon: 'none' }); return }
       if (this.data.activeTaskId && !this.data.task) { wx.showToast({ title: '已有生成任务，请先取消或等待结束', icon: 'none' }); return }
+      const referenceError = this.pendingSubmission ? '' : this.referenceGenerationError()
+      if (referenceError) { wx.showToast({ title: referenceError, icon: 'none' }); return }
       const message = validatePrompt(this.data.prompt, this.data.aiContext, this.data.selectedSources.filter(source => source.available === false).map(source => source.sourceNo))
       if (message) { wx.showToast({ title: message, icon: 'none' }); return }
       if (this.data.questions.length && (!this.data.clarificationAnswer || !text(this.data.clarificationAnswer.answerText))) {
@@ -298,14 +317,16 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       }
     },
     applyTask(task) {
+      this.refreshReferenceTokens(task)
+      const referenceError = this.referenceReadyError()
       const result = task.result || null
       const summary = result && result.summary
       const summaryText = typeof summary === 'string' ? summary : Array.isArray(summary) ? summary.map(item => typeof item === 'string' ? item : item.description || item.message || '').join('\n') : summary && (summary.description || summary.message || JSON.stringify(summary)) || ''
       this.setData({ task, waiting: ACTIVE_STATUSES.includes(task.status), statusText: statusMessage(task), result,
         candidateTitle: result && result.available === false ? '生成失败' : result && result.hasChanges === false ? '当前内容已满足要求' : this.data.mode === 'CREATE' ? '作品集已生成' : '修改已生成',
         summaryText: result && result.available === false ? '' : result && result.hasChanges === false ? '当前内容已满足要求' : summaryText,
-        questions: result && result.questions || [], canAdopt: task.status === 'SUCCEEDED' && !!result && result.kind === 'CANDIDATE' && result.available === true && result.hasChanges === true,
-        taskError: taskErrorMessage(task), tokenUsageText: task.status === 'SUCCEEDED' || task.status === 'FAILED' ? normalizeTokenUsage(task.usage) : '' })
+        questions: result && result.questions || [], canAdopt: task.status === 'SUCCEEDED' && !referenceError && !!result && result.kind === 'CANDIDATE' && result.available === true && result.hasChanges === true,
+        taskError: taskErrorMessage(task) || (result && result.kind === 'CANDIDATE' ? referenceError : ''), tokenUsageText: task.status === 'SUCCEEDED' || task.status === 'FAILED' ? normalizeTokenUsage(task.usage) : '' })
     },
     async handleCancel() {
       const id = this.data.task && this.data.task.taskId || this.data.activeTaskId
@@ -334,6 +355,9 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       try {
         const response = await request({ url: `${AI_API_PREFIX}/tasks/${this.data.task.taskId}` })
         if (this.disposed) return
+        this.refreshReferenceTokens(response)
+        const referenceError = this.referenceReadyError()
+        if (referenceError) { this.setData({ taskError: referenceError, canAdopt: false }); return }
         const message = candidateError(response, this.taskBasis, this.currentState())
         if (message) { this.applyTask(response); this.setData({ taskError: message, canAdopt: false }); return }
         const state = this.currentState()
@@ -347,7 +371,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
             } })
         } else {
           this.emitContext()
-          if (this.channel && this.channel.emit) this.channel.emit('adopt', { config: response.result.candidate, renderData: response.result.renderData, basis: this.taskBasis })
+          if (this.channel && this.channel.emit) this.channel.emit('adopt', { config: response.result.candidate, renderData: response.result.renderData, basis: this.taskBasis, aiReferenceAttachments: this.data.aiReferenceAttachments, aiReferenceNextNo: this.data.aiReferenceNextNo })
           wx.navigateBack()
         }
       } catch (error) { this.setData({ taskError: error.message || '采用前校验失败，当前内容已保留' }) }

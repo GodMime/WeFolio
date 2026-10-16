@@ -40,7 +40,7 @@ class JobSchedulingCoverageIntegrationTest {
     private JobScheduledTaskRegistry scheduledTaskRegistry;
 
     @Test
-    void shouldRegisterAllNineScheduledMethodsIncludingSnapshotCleanupInProtectedSchedulers() {
+    void shouldRegisterAllTenScheduledMethodsIncludingSnapshotCleanupInProtectedSchedulers() {
         long scheduledMethodCount = Arrays.stream(applicationContext.getBeanDefinitionNames())
                 .map(applicationContext::getBean)
                 .map(AopUtils::getTargetClass)
@@ -52,9 +52,9 @@ class JobSchedulingCoverageIntegrationTest {
 
         applicationContext.getBeansOfType(ThreadPoolTaskScheduler.class)
                 .values().forEach(scheduler -> assertThat(scheduler).isInstanceOf(JobLifecycleTaskScheduler.class));
-        // 历史截图扫尾也必须进入同一注册器，随全部后台任务接受停用和排空保护。
-        assertThat(scheduledMethodCount).isEqualTo(9);
-        assertThat(scheduledTaskRegistry.scheduledTasks()).hasSize(9)
+        // 历史截图及参考附件扫尾也必须进入同一注册器，随全部后台任务接受停用和排空保护。
+        assertThat(scheduledMethodCount).isEqualTo(10);
+        assertThat(scheduledTaskRegistry.scheduledTasks()).hasSize(10)
                 .extracting(task -> task.getTask().getRunnable().toString())
                 .contains(VideoFrameBackfillExecutionService.class.getName() + ".cleanupFinishedSnapshots");
     }

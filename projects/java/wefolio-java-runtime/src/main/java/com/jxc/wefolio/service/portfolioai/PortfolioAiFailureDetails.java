@@ -59,6 +59,8 @@ final class PortfolioAiFailureDetails {
         /** 媒体实际用量超额。 */ MEDIA_BUDGET_OVERRUN(PortfolioAiMediaContract.ERROR_BUDGET_OVERRUN, PortfolioAiFailureMessage.MEDIA_BUDGET_OVERRUN),
         /** 媒体费用账本异常。 */ MEDIA_BUDGET_INVALID(PortfolioAiMediaContract.ERROR_BUDGET_INVALID, PortfolioAiFailureMessage.MEDIA_BUDGET_INVALID),
         /** 素材分析结果非法。 */ INVALID_MEDIA_SUMMARY(PortfolioAiMediaContract.ERROR_INVALID_SUMMARY, PortfolioAiFailureMessage.INVALID_MEDIA_SUMMARY),
+        /** 独立参考原件不可用。 */ REFERENCE_UNAVAILABLE("REFERENCE_UNAVAILABLE", PortfolioAiFailureMessage.REFERENCE_UNAVAILABLE),
+        /** 独立参考媒体分析不完整。 */ REFERENCE_ANALYSIS_FAILED("REFERENCE_ANALYSIS_FAILED", PortfolioAiFailureMessage.REFERENCE_ANALYSIS_FAILED),
         /** 契约版本。 */ CONTRACT_UNAVAILABLE(ERROR_CONTRACT_UNAVAILABLE, PortfolioAiMessage.CONTRACT_UNAVAILABLE),
         /** 丢失字段。 */ FIELD_DROPPED(ERROR_NORMALIZATION_FIELD_DROPPED, PortfolioAiFailureMessage.NORMALIZATION_FIELD_DROPPED),
         /** 改变类型。 */ TYPE_CHANGED(ERROR_NORMALIZATION_TYPE_CHANGED, PortfolioAiFailureMessage.NORMALIZATION_TYPE_CHANGED),

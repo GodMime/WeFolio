@@ -52,10 +52,59 @@ for (const folder of ['portfolios', 'team-portfolios']) {
     assert.deepEqual(Array.from(new Set(Array.from(wxml.matchAll(/mode === '([^']+)'/g), match => match[1]))), ['CREATE'])
   })
 
+  test(`${folder} A 版描述卡先写描述，再以单行示例和选填附件入口补充`, () => {
+    const wxml = read(folder, 'wxml')
+    const wxss = read(folder, 'wxss')
+    const markers = ['<textarea class="prompt-input"', 'class="counter ', 'class="prompt-example"', 'class="reference-section"']
+    const positions = markers.map(marker => wxml.indexOf(marker))
+    assert.ok(positions.every(position => position >= 0), '描述、字数、示例与附件入口均应保留')
+    assert.ok(positions.every((position, index) => index === 0 || position > positions[index - 1]), '顺序应为描述输入、字数、单行示例、选填附件')
+    const example = wxml.slice(positions[2], positions[3])
+    assert.match(example, /查看示例/)
+    assert.doesNotMatch(example, /class="example-copy"|createPromptExample/, '长示例只放在示例弹层中，避免默认描述卡被撑高')
+    const exampleRule = readRule(wxss, '.prompt-example')
+    assert.match(exampleRule, /display:\s*flex;/)
+    assert.match(exampleRule, /justify-content:\s*space-between;/)
+    const attachmentRule = readRule(wxss, '.reference-section')
+    assert.match(attachmentRule, /border-top:\s*(?!0(?:;|\s))[^;]+;/, '附件入口与描述区通过细分隔线连接')
+    assert.doesNotMatch(attachmentRule, /border-bottom:\s*(?!0(?:;|\s))[^;]+;/)
+    const addButton = wxml.match(/<button\b[^>]*bindtap="handleOpenReferencePicker"[^>]*>/)?.[0]
+    assert.ok(addButton, '附件入口应先打开规格说明与选择面板')
+    assert.doesNotMatch(addButton, /class="[^"]*(?:full-width|secondary-button)/)
+    assert.match(wxml, /添加参考附件/)
+    assert.match(example, /bindtap="handleOpenReferenceExample"/)
+  })
+
+  test(`${folder} A 版附件卡提供编号角标、可收起参考重点和引用入口`, () => {
+    const wxml = read(folder, 'wxml')
+    const wxss = read(folder, 'wxss')
+    assert.match(wxml, /class="reference-number"[^>]*>\{\{item\.referenceNo\}\}/)
+    assert.match(readRule(wxss, '.reference-number'), /position:\s*absolute;/)
+    const itemRule = readRule(wxss, '.reference-item')
+    assert.match(itemRule, /border:\s*(?!0(?:;|\s))[^;]+;/)
+    assert.match(itemRule, /border-radius:\s*(?!0(?:;|\s))[^;]+;/)
+    const note = wxml.match(/<textarea\b[^>]*class="reference-note"[^>]*>/)?.[0]
+    assert.ok(note, '参考重点采用可换行输入，不常驻占用附件卡空间')
+    assert.match(note, /wx:if="\{\{referenceNoteOpen\[item\.localKey\]\}\}"/)
+    assert.match(wxml, /bindtap="handleToggleReferenceNote"/)
+    assert.match(wxml, /bindtap="handleQuoteReference"/)
+  })
+
+  test(`${folder} 参考附件选择面板说明规格并分别选择图片或视频`, () => {
+    const wxml = read(folder, 'wxml')
+    assert.match(wxml, /class="reference-overlay"/)
+    assert.match(wxml, /class="reference-sheet"/)
+    assert.match(wxml, /referenceSheet/)
+    const choiceButtons = Array.from(wxml.matchAll(/<button\b[^>]*bindtap="handleChooseReference"[^>]*>/g), match => match[0])
+    assert.equal(choiceButtons.length, 2, '选择面板应包含图片和视频两个入口')
+    assert.deepEqual(choiceButtons.map(button => button.match(/data-media-type="([^"]+)"/)?.[1]).sort(), ['image', 'video'])
+    assert.match(wxml, /referenceUi\.blocked/)
+  })
+
   test(`${folder} 选择页保留双列封面、稳定编号与独立底部操作`, () => {
     const wxml = read(folder, 'wxml')
     const wxss = read(folder, 'wxss')
-    assert.ok(wxml.indexOf('class="ai-footer"') > wxml.lastIndexOf('</scroll-view>'))
+    assert.match(wxml, /<\/scroll-view>\s*<view class="ai-footer">/, '底部操作位于主滚动区外；附件面板可以有独立滚动区')
     assert.match(wxml, /wx:for="\{\{sourceOptions\}\}" wx:key="key" class="source-cell/)
     assert.match(wxml, /index % 2 === 0 \? 'source-cell-left' : 'source-cell-right'/)
     assert.match(wxml, /class="source-card[^>]*data-index="\{\{index\}\}"[^>]*bindtap="handleSourceTap"/)

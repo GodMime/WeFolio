@@ -65,7 +65,7 @@ for (const team of [false, true]) {
       () => page.handleDiscard(),
       () => page.handlePromptInput({ detail: { value: '调整留白' } }),
       () => page.handleInsertNumber({ currentTarget: { dataset: { no: 1 } } }),
-      () => page.handleUseExample()
+      () => page.handleUseReferenceExample()
     ]) {
       page.applyTask({ status: 'FAILED', usage: { complete: false, totalTokens: 12480 } })
       action()
@@ -141,7 +141,7 @@ for (const team of [false, true]) {
         page => page.handleDiscard(),
         page => page.handlePromptInput({ detail: { value: '调整留白' } }),
         page => page.handleInsertNumber({ currentTarget: { dataset: { no: 1 } } }),
-        page => page.handleUseExample(),
+        page => page.handleUseReferenceExample(),
         page => page.handleSourceTap({ currentTarget: { dataset: { index: 0 } } }),
         page => page.handleRemoveSelected({ currentTarget: { dataset: { no: 1 } } })
       ]) {
@@ -240,7 +240,7 @@ for (const team of [false, true]) {
       assert.equal(page.data.sourceOptions[0].sourceNo, 3)
       assert.equal(page.data.selectedSources[0].sourceNo, 3)
       assert.equal(page.data.aiContext.nextSourceNo, 5)
-      page.handleUseExample()
+      page.handleInsertNumber({ currentTarget: { dataset: { no: page.data.selectedSources[0].sourceNo } } })
       assert.match(page.data.prompt, /3号/)
       assert.equal(page.data.promptCount, Array.from(page.data.prompt).length)
     } finally { global.wx = oldWx }

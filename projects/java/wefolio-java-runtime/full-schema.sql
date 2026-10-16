@@ -39,6 +39,7 @@ CREATE TABLE `wf_ai_generation_task` (
     COMMENT '请求人作用域内的提交幂等键',
   `request_json` JSON NOT NULL
     COMMENT '冻结的编辑输入、来源事实、模型配置与契约版本，不含密钥',
+  `reference_attachments_json` JSON NULL COMMENT '本次任务不可变参考附件快照，不含临时地址与回执',
   `result_json` JSON NULL
     COMMENT '合法结果，kind为CANDIDATE或CLARIFICATION，output为模型信封',
   `media_budget_json` JSON DEFAULT NULL COMMENT '版本化逐调用预算JSON，费用单位分，未知用量不退还预留',
@@ -63,6 +64,7 @@ CREATE TABLE `wf_ai_generation_task` (
   KEY `idx_ai_task_running` (`status`, `deleted`, `started_at`),
   KEY `idx_ai_task_requester` (`requested_by`, `deleted`, `status`),
   KEY `idx_ai_task_portfolio` (`portfolio_id`, `deleted`, `created_at`),
+  KEY `idx_ai_task_owner` (`owner_type`, `owner_id`),
   CONSTRAINT `chk_ai_task_owner_type` CHECK (`owner_type` IN ('USER', 'TEAM')),
   CONSTRAINT `chk_ai_task_status`
     CHECK (`status` IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')),
@@ -442,6 +444,7 @@ CREATE TABLE `wf_portfolio` (
   `draft_font_assets_json` json DEFAULT NULL COMMENT '草稿字体子集资源清单',
   `published_font_assets_json` json DEFAULT NULL COMMENT '发布字体子集资源清单',
   `ai_context_json` JSON NULL COMMENT '高级草稿来源编号上下文，含nextSourceNo与当前来源列表，不进入访客配置',
+  `ai_reference_attachments_json` JSON NULL COMMENT '高级草稿参考附件清单及编号高水位，仅维护者可见',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_portfolio_share_code` (`share_code`,`deleted`),
   KEY `idx_portfolio_owner_list` (`owner_type`,`owner_id`,`deleted`,`status`,`updated_at`),

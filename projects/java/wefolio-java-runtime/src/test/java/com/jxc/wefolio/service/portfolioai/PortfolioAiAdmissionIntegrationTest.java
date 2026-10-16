@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service.portfolioai;
 
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
@@ -225,7 +226,7 @@ class PortfolioAiAdmissionIntegrationTest {
             jdbc.execute("""
                     CREATE TABLE wf_ai_generation_task(
                       id BIGINT AUTO_INCREMENT PRIMARY KEY,owner_type VARCHAR(32),owner_id BIGINT,portfolio_id BIGINT,
-                      requested_by BIGINT,idempotency_key VARCHAR(64),request_json CLOB,result_json CLOB,status VARCHAR(32),
+                      requested_by BIGINT,idempotency_key VARCHAR(64),request_json CLOB,reference_attachments_json CLOB,result_json CLOB,status VARCHAR(32),
                       media_budget_json CLOB,media_budget_unknown_count INT NOT NULL DEFAULT 0,
                       attempt_count INT,next_run_at TIMESTAMP,started_at TIMESTAMP,completed_at TIMESTAMP,
                       error_code VARCHAR(64),error_message VARCHAR(500),created_at TIMESTAMP,updated_at TIMESTAMP,
@@ -257,11 +258,11 @@ class PortfolioAiAdmissionIntegrationTest {
         @Bean PortfolioAiProperties properties() { return new PortfolioAiProperties(); }
         /** 由容器生成提交服务事务代理。 */
         @Bean PortfolioAiTaskTransactionService service(UserEntityMapper users, AiGenerationTaskEntityMapper tasks,
-                PortfolioAiProperties properties, PortfolioAiFactsService facts) { return new PortfolioAiTaskTransactionService(users, tasks, properties, facts); }
+                PortfolioAiProperties properties, PortfolioAiFactsService facts) { return new PortfolioAiTaskTransactionService(mock(PortfolioAiReferenceService.class), users, tasks, properties, facts); }
         /** 查询保持真实服务及任务 Mapper，候选渲染和远端媒体能力在活动态测试中不使用。 */
         @Bean PortfolioAiApplicationService application(PortfolioAiProperties properties, AiGenerationTaskEntityMapper tasks,
                 PortfolioAiTaskTransactionService transactions, PortfolioAiFactsService facts) {
-            return new PortfolioAiApplicationService(properties, tasks, transactions, facts,
+            return new PortfolioAiApplicationService(mock(PortfolioAiReferenceService.class), properties, tasks, transactions, facts,
                     mock(PortfolioAiConfigService.class), mock(PortfolioAiMediaPlanService.class), mock(PortfolioAiShareImageService.class));
         }
         /** 查询断言使用相同临时数据源。 */

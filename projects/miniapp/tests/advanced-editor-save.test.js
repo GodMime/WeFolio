@@ -93,3 +93,111 @@ test('高级发布费用来自生效试算响应，取消确认不自动发布',
   assert.equal(calls[0].data.sceneCode, 'MAINTAIN_ADVANCED_PORTFOLIO')
   assert.equal(calls.length, 1)
 })
+
+for (const team of [false, true]) {
+  const name = team ? '团队' : '个人'
+  const firstReference = { attachmentId: 'a'.repeat(32), referenceNo: 'A2', mediaType: 'IMAGE', note: '参考配色', attachmentToken: 'receipt', status: 'READY' }
+  test(`${name}高级首次保存把参考清单写入最终草稿，创建请求不携附件`, async () => {
+    const calls = []
+    const page = loadEditor(team, async options => { calls.push(JSON.parse(JSON.stringify(options))); return { portfolioId: '90', draftRevision: calls.length + 3 } })
+    try {
+      page.setData({ aiReferenceAttachments: [firstReference], aiReferenceNextNo: 4 })
+      if (team) await page.saveDraft(); else await page.performSaveDraft()
+      assert.equal(calls[0].data.aiReferenceAttachments, undefined)
+      assert.deepEqual(calls[1].data.aiReferenceAttachments, [{ attachmentId: firstReference.attachmentId, referenceNo: 'A2', note: '参考配色', attachmentToken: 'receipt' }])
+      assert.equal(calls[1].data.aiReferenceNextNo, 4)
+      assert.equal(calls[1].data.aiReferenceAttachments[0].mediaType, undefined)
+      assert.equal(page.data.portfolioId, team ? 90 : '90')
+    } finally { page.cleanup() }
+  })
+  test(`${name}高级未知保存重试冻结附件，新编辑仍被标记为未保存`, async () => {
+    const calls = []; let attempted = false
+    const page = loadEditor(team, async options => {
+      calls.push(JSON.parse(JSON.stringify(options)))
+      if (options.url === '/api/mine/advanced-portfolios') return { portfolioId: '90', draftRevision: 4 }
+      if (!attempted) { attempted = true; throw new Error('timeout') }
+      return { portfolioId: '90', draftRevision: 5 }
+    })
+    try {
+      page.setData({ aiReferenceAttachments: [firstReference], aiReferenceNextNo: 4 })
+      if (team) await page.saveDraft(); else await page.performSaveDraft()
+      const original = calls[1].data
+      page.setData({ aiReferenceAttachments: [], aiReferenceNextNo: 5 })
+      const response = team ? await page.saveDraft() : await page.saveDraftForPortfolio('90', undefined, { returnToList: false })
+      assert.deepEqual(calls[2].data, original)
+      assert.equal(response.editorChanged, true)
+      assert.deepEqual(page.data.aiReferenceAttachments, [])
+      assert.equal(page.data.aiReferenceNextNo, 5)
+    } finally { page.cleanup() }
+  })
+  test(`${name}原本无附件的未知保存重试不会混入后来添加的附件`, async () => {
+    const calls = []; let attempted = false
+    const page = loadEditor(team, async options => {
+      calls.push(JSON.parse(JSON.stringify(options)))
+      if (options.url === '/api/mine/advanced-portfolios') return { portfolioId: '90', draftRevision: 4 }
+      if (!attempted) { attempted = true; throw new Error('timeout') }
+      return { portfolioId: '90', draftRevision: 5 }
+    })
+    try {
+      if (team) await page.saveDraft(); else await page.performSaveDraft()
+      page.setData({ aiReferenceAttachments: [firstReference], aiReferenceNextNo: 4 })
+      const response = team ? await page.saveDraft() : await page.saveDraftForPortfolio('90', undefined, { returnToList: false })
+      assert.deepEqual(calls[2].data, calls[1].data)
+      assert.equal(calls[2].data.aiReferenceAttachments, undefined)
+      assert.equal(response.editorChanged, true)
+    } finally { page.cleanup() }
+  })
+}
+
+for (const team of [false, true]) {
+  for (const referenceState of ['UPLOADING', 'EXPIRED', 'SAVE_WINDOW_ELAPSED']) {
+    test(`${team ? '团队' : '个人'}${referenceState}附件不阻断正文保存，也不发送删除附件指令`, async () => {
+      const calls = []
+      const page = loadEditor(team, async options => {
+        calls.push(JSON.parse(JSON.stringify(options)))
+        return { portfolioId: '90', draftRevision: 5 }
+      })
+      try {
+        const item = referenceState === 'UPLOADING'
+          ? { localKey: 'local-A1', referenceNo: 'A1', status: 'UPLOADING' }
+          : { attachmentId: 'a'.repeat(32), referenceNo: 'A1', status: 'READY', available: referenceState !== 'EXPIRED', attachmentToken: 'last-receipt',
+              ...(referenceState === 'SAVE_WINDOW_ELAPSED' ? { referenceSaveUntil: '2000-01-01T00:00:00' } : {}) }
+        page.setData({ portfolioId: '90', aiReferenceAttachments: [item], aiReferenceNextNo: 2, advancedDirty: true })
+        const result = team ? await page.saveDraft() : await page.saveDraftForPortfolio('90', undefined, { returnToList: false })
+        assert.equal(calls.length, 1)
+        assert.equal(calls[0].method, 'PUT')
+        assert.equal(calls[0].data.aiReferenceAttachments, undefined, '字段省略要求后端保留已存清单')
+        assert.equal(calls[0].data.aiReferenceNextNo, undefined)
+        assert.equal(calls[0].data.aiPrompt, '精简文字')
+        assert.equal(result.editorChanged, true, '附件仍待保存，不得静默离开编辑器')
+        assert.equal(page.data.advancedDirty, true)
+        assert.deepEqual(page.data.aiReferenceAttachments, [item])
+      } finally { page.cleanup() }
+    })
+  }
+}
+
+for (const team of [false, true]) {
+  test(`${team ? '团队' : '个人'}附件已随旧快照存成后，新编辑保持未保存但不再受旧任务期限限制`, async () => {
+    let resolveSave
+    const calls = []
+    const page = loadEditor(team, options => {
+      calls.push(options)
+      return new Promise(resolve => { resolveSave = resolve })
+    })
+    try {
+      const item = { attachmentId: 'a'.repeat(32), referenceNo: 'A1', status: 'READY', attachmentToken: 'receipt', referenceSaveUntil: '2099-01-01T00:00:00' }
+      page.setData({ portfolioId: '90', aiReferenceAttachments: [item], aiReferenceNextNo: 2 })
+      const saving = team ? page.saveDraft() : page.saveDraftForPortfolio('90', undefined, { returnToList: false })
+      for (let index = 0; index < 20 && !resolveSave; index++) await Promise.resolve()
+      assert.ok(resolveSave)
+      page.setData({ aiPrompt: '新的本地描述' })
+      resolveSave({ portfolioId: '90', draftRevision: 5 })
+      const result = await saving
+      assert.equal(result.editorChanged, true)
+      assert.equal(page.data.aiReferenceAttachments[0].saved, true)
+      assert.equal(page.data.aiReferenceAttachments[0].saveDeadlineText, '')
+      assert.equal(page.data.aiPrompt, '新的本地描述')
+    } finally { page.cleanup() }
+  })
+}

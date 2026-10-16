@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 /** 高级作品集 AI 异步任务及独立媒体费用记录。 */
 @Data
 @EqualsAndHashCode(callSuper = true)
-@ToString(exclude = {"requestJson", "resultJson", "mediaBudgetJson"})
+@ToString(exclude = {"requestJson", "resultJson", "mediaBudgetJson", "referenceAttachmentsJson"})
 @TableName("wf_ai_generation_task")
 public class AiGenerationTaskEntity extends BaseEntity {
     /** 真实归属类型 USER 或 TEAM。 */
@@ -27,6 +27,8 @@ public class AiGenerationTaskEntity extends BaseEntity {
     private String idempotencyKey;
     /** 不可变业务请求、可信事实、模型配置及版本，不含密钥。 */
     private String requestJson;
+    /** 本次参考附件不可变快照，不含回执或私有读取链接。 */
+    private String referenceAttachmentsJson;
     /** 合法中间模型结果，不是作品集配置。 */
     private String resultJson;
     /** 独立逐调用费用协议，由专用短事务更新，禁止普通实体更新回带旧值。 */

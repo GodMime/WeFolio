@@ -207,6 +207,10 @@ portfolio-ai:
   # 与 Runtime 共用全局开关，默认关闭；启动读取，重启生效。
   enabled: ${WEFOLIO_AI_ENABLED:false}
   media-enabled: ${WEFOLIO_AI_MEDIA_ENABLED:false}
+  reference-enabled: ${WEFOLIO_AI_REFERENCE_ENABLED:false}
+  # 命名锁使用独立小池，不占用业务事务连接。
+  reference-lock-pool-size: ${WEFOLIO_AI_REFERENCE_LOCK_POOL_SIZE:2}
+  reference-max-active-tasks: ${WEFOLIO_AI_REFERENCE_MAX_ACTIVE_TASKS:10}
   media-task-budget-cents: ${WEFOLIO_AI_MEDIA_TASK_BUDGET_CENTS:300}
   media-daily-budget-cents: ${WEFOLIO_AI_MEDIA_DAILY_BUDGET_CENTS:2000}
   media-max-calls: ${WEFOLIO_AI_MEDIA_MAX_CALLS:100}

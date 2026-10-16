@@ -77,6 +77,7 @@
               <view class="section-title">{{mode === 'CREATE' ? '页面编排' : '本次变化'}}</view>
               <text class="summary-text">{{summaryText}}</text>
               <view wx:if="{{taskError}}" class="notice error">{{taskError}}</view>
+              <block wx:for="{{aiReferenceAttachments}}" wx:key="localKey"><text wx:if="{{item.saveDeadlineText}}" class="help-text">{{item.referenceNo}} · {{item.saveDeadlineText}}</text></block>
               <button wx:if="{{result.available && result.renderData}}" class="secondary-button full-width" bindtap="handleCandidatePreview">查看完整效果 →</button>
               <text class="help-text">采用只更新编辑内容，保存与发布仍由你决定。</text>
             </block>
@@ -92,20 +93,110 @@
             <view class="field-label">{{mode === 'CREATE' ? '描述你的想法' : '描述整体修改需求'}}</view>
             <textarea class="prompt-input" placeholder-class="input-placeholder" value="{{prompt}}" bindinput="handlePromptInput" disabled="{{adopting || submitting || submissionUncertain}}" maxlength="-1" placeholder="例如：把1号放在顶部，再放一段简短介绍，最后放档期查询。"></textarea>
             <view class="counter {{promptCount > promptMaxLength ? 'over-limit' : ''}}">{{promptCount}} / {{promptMaxLength}}</view>
-            <view class="prompt-example"><text class="help-text">试试这样说</text><text class="example-copy">{{mode === 'CREATE' ? createPromptExample : '介绍缩短成一句话，其他保持不变。'}}</text><button class="text-button example-button" bindtap="handleUseExample" disabled="{{adopting || submitting || submissionUncertain}}">使用示例</button></view>
+            <view class="prompt-example"><text class="help-text">试试这样说</text><button class="text-button example-button" bindtap="handleOpenReferenceExample" disabled="{{adopting || submitting || submissionUncertain}}">查看示例 ↗</button></view>
+            <view class="reference-section">
+              <button class="reference-add" bindtap="handleOpenReferencePicker" disabled="{{referenceCapabilityChecking || waiting || adopting || submitting || submissionUncertain}}" aria-label="添加参考附件，选填">
+                <view class="reference-entry-title"><image class="reference-clip" src="/assets/system/reference-attachment.svg" mode="aspectFit"></image><text>{{referenceCapabilityChecking ? '正在检查附件服务' : aiReferenceAttachments.length ? '参考附件' : '添加参考附件'}}</text><text class="reference-optional">· 选填</text></view><text class="reference-plus">＋</text>
+              </button>
+              <text class="reference-subtitle">仅供 AI 参考，不展示在作品集中。
+随作品集保存；删除作品集时一并删除。</text>
+              <text wx:if="{{capabilityError}}" class="reference-subtitle">暂时无法检查附件服务，请点击 ＋ 重试。</text>
+              <text wx:elif="{{!capabilities.referenceAttachments.enabled}}" class="reference-subtitle">参考附件暂未开放，可点击 ＋ 重新检查。仍可使用已选内容生成作品集。</text>
+              <view wx:for="{{aiReferenceAttachments}}" wx:key="localKey" class="reference-item">
+                <view class="reference-top">
+                  <button class="reference-preview" data-key="{{item.localKey}}" bindtap="handlePreviewReference" disabled="{{item.status !== 'READY' || !item.available}}" aria-label="预览参考附件{{item.referenceNo}}">
+                    <image wx:if="{{item.thumbnailPath}}" class="reference-thumbnail" src="{{item.thumbnailPath}}" mode="aspectFill"></image>
+                    <text wx:else>{{item.mediaType === 'VIDEO' ? '视频' : '图片'}}</text>
+                    <text class="reference-number">{{item.referenceNo}}</text>
+                    <view wx:if="{{item.mediaType === 'VIDEO'}}" class="reference-play"><view class="reference-play-triangle"></view></view>
+                  </button>
+                  <view class="reference-info">
+                    <text class="reference-name">{{item.originalFileName}}</text><text class="reference-meta">{{item.detailsText}}</text>
+                    <view class="reference-status {{item.status === 'FAILED' || !item.available ? 'warning' : ''}}"><view wx:if="{{item.status !== 'READY' && item.status !== 'FAILED'}}" class="reference-spinner"></view><text>{{item.available ? item.statusText : '暂不可用'}}{{item.status === 'UPLOADING' ? ' ' + item.progress + '%' : ''}}</text></view>
+                    <view wx:if="{{item.status === 'UPLOADING'}}" class="reference-progress"><view class="reference-progress-fill" style="width: {{item.progress}}%;"></view></view>
+                    <text wx:if="{{item.saveDeadlineText}}" class="reference-meta">{{item.saveDeadlineText}}</text>
+                  </view>
+                  <button class="reference-remove" data-key="{{item.localKey}}" bindtap="handleRemoveReference" disabled="{{waiting || adopting || submitting || submissionUncertain}}" aria-label="移除参考附件{{item.referenceNo}}">×</button>
+                </view>
+                <view class="reference-actions">
+                  <block wx:if="{{item.status === 'READY' && item.available}}"><button class="text-button" data-key="{{item.localKey}}" bindtap="handleToggleReferenceNote" disabled="{{waiting || adopting || submitting || submissionUncertain}}">{{referenceNoteOpen[item.localKey] ? '收起参考重点' : item.note ? '编辑参考重点' : '＋ 参考重点 · 选填'}}</button><button class="text-button" data-key="{{item.localKey}}" bindtap="handleQuoteReference" disabled="{{waiting || adopting || submitting || submissionUncertain}}">引用 {{item.referenceNo}}</button></block>
+                  <block wx:elif="{{item.status === 'FAILED' || !item.available}}"><button wx:if="{{item.status === 'FAILED'}}" class="text-button" data-key="{{item.localKey}}" bindtap="handleRetryReference" disabled="{{waiting || adopting || submitting || submissionUncertain}}">重试</button><button class="text-button" data-key="{{item.localKey}}" bindtap="handleReplaceReference" disabled="{{waiting || adopting || submitting || submissionUncertain}}">更换文件</button></block>
+                  <button wx:if="{{index > 0}}" class="text-button" data-key="{{item.localKey}}" bindtap="handleMoveReference" disabled="{{waiting || adopting || submitting || submissionUncertain}}">上移</button>
+                </view>
+                <textarea wx:if="{{referenceNoteOpen[item.localKey]}}" class="reference-note" placeholder="例如：只参考配色与留白，不使用图中的文字。" placeholder-class="input-placeholder" value="{{item.note}}" maxlength="-1" data-key="{{item.localKey}}" bindinput="handleReferenceNote" disabled="{{waiting || adopting || submitting || submissionUncertain}}"></textarea>
+                <text wx:if="{{item.errorMessage}}" class="reference-error">{{item.errorMessage}}</text>
+              </view>
+              <view wx:if="{{aiReferenceAttachments.length}}" class="reference-summary"><button class="text-button" bindtap="handleOpenReferencePicker" disabled="{{referenceCapabilityChecking || waiting || adopting || submitting || submissionUncertain}}">＋ 继续添加</button><text>{{aiReferenceAttachments.length}}/{{referenceUi.maxCount}} 个 · 视频 {{referenceUi.videoCount}}/{{referenceUi.maxVideos}} · {{referenceUi.totalMB}} MB</text></view>
+              <view wx:if="{{referenceUi.warning}}" class="reference-warning"><text>{{referenceUi.warning}}</text><button wx:if="{{referenceUi.pendingCount}}" class="text-button" bindtap="handleRemovePendingReferences" disabled="{{waiting || adopting || submitting || submissionUncertain}}">移除未就绪附件，继续生成</button></view>
+            </view>
             <view wx:for="{{questions}}" wx:key="id" class="question"><view class="field-label">{{item.prompt}}</view><button wx:for="{{item.options}}" wx:for-item="option" wx:key="id" class="secondary-button question-option {{clarificationAnswer.optionId === option.id ? 'chosen' : ''}}" data-id="{{item.id}}" data-option="{{option.id}}" data-value="{{option.answerText}}" bindtap="handleQuestionOption">{{option.label}}</button><input class="question-input" placeholder="或说明你的选择" placeholder-class="input-placeholder" data-id="{{item.id}}" bindinput="handleQuestionInput" /></view>
             <view wx:if="{{statusText && task.status !== 'FAILED'}}" class="notice">{{statusText}}</view><view wx:if="{{taskError && task.status !== 'FAILED'}}" class="notice error">{{taskError}}</view>
+          </view>
+          <!-- 生成期间保留附件信息和预览入口，修改操作仍由描述页承接。 -->
+          <view wx:if="{{waiting && aiReferenceAttachments.length}}" class="panel generation-references">
+            <view class="section-title">参考附件 {{aiReferenceAttachments.length}} 个 <text class="reference-optional">· 仅供 AI 参考</text></view>
+            <text class="reference-subtitle">生成中可查看附件，取消生成后可修改。</text>
+              <view wx:for="{{aiReferenceAttachments}}" wx:key="localKey" class="reference-item">
+                <view class="reference-top">
+                  <button class="reference-preview" data-key="{{item.localKey}}" bindtap="handlePreviewReference" disabled="{{item.status !== 'READY' || !item.available}}" aria-label="预览参考附件{{item.referenceNo}}">
+                    <image wx:if="{{item.thumbnailPath}}" class="reference-thumbnail" src="{{item.thumbnailPath}}" mode="aspectFill"></image>
+                    <text wx:else>{{item.mediaType === 'VIDEO' ? '视频' : '图片'}}</text>
+                    <text class="reference-number">{{item.referenceNo}}</text>
+                    <view wx:if="{{item.mediaType === 'VIDEO'}}" class="reference-play"><view class="reference-play-triangle"></view></view>
+                  </button>
+                  <view class="reference-info">
+                    <text class="reference-name">{{item.originalFileName}}</text><text class="reference-meta">{{item.detailsText}}</text>
+                    <view class="reference-status {{item.status === 'FAILED' || !item.available ? 'warning' : ''}}"><view wx:if="{{item.status !== 'READY' && item.status !== 'FAILED'}}" class="reference-spinner"></view><text>{{item.available ? item.statusText : '暂不可用'}}{{item.status === 'UPLOADING' ? ' ' + item.progress + '%' : ''}}</text></view>
+                    <view wx:if="{{item.status === 'UPLOADING'}}" class="reference-progress"><view class="reference-progress-fill" style="width: {{item.progress}}%;"></view></view>
+                    <text wx:if="{{item.saveDeadlineText}}" class="reference-meta">{{item.saveDeadlineText}}</text>
+                  </view>
+                </view>
+                <text wx:if="{{item.note}}" class="reference-readonly-note">参考重点：{{item.note}}</text>
+              </view>
           </view>
           <text class="help-text form-tip">AI 会使用现有作品集组件生成，可继续手动调整。</text>
         </block>
       </view>
     </scroll-view>
     <view class="ai-footer">
+      <text wx:if="{{step === 'prompt' && !waiting && !result && referenceUi.warning}}" class="reference-footer-warning">{{referenceUi.warning}}</text>
       <block wx:if="{{step === 'sources'}}"><template wx:if="{{selectedSources.length}}" is="selected-strip" data="{{selectedSources, step, waiting, adopting, submitting, submissionUncertain}}"></template><view class="footer-actions"><view class="footer-copy">已选 <text class="footer-count">{{selectedSources.length}}</text> 项</view><button class="primary-button next-button" bindtap="handleNext" disabled="{{mode === 'CREATE' && !selectedSources.length}}">{{managingSources ? '完成选择' : '下一步'}}</button></view></block>
-      <view wx:elif="{{result && (result.kind === 'CANDIDATE' || result.available === false)}}" class="footer-actions"><button class="secondary-button" bindtap="handleDiscard" disabled="{{adopting || submitting}}">{{result.available === false ? '修改描述' : '放弃结果'}}</button><button wx:if="{{result.available === false}}" class="primary-button" bindtap="handleGenerate" loading="{{submitting}}" disabled="{{submitting || adopting || !capabilities.enabled}}">重新生成</button><button wx:elif="{{canAdopt}}" class="primary-button" bindtap="handleAdopt" loading="{{adopting}}" disabled="{{adopting}}">{{mode === 'CREATE' ? '采用并编辑' : '采用修改'}}</button></view>
+      <view wx:elif="{{result && (result.kind === 'CANDIDATE' || result.available === false)}}" class="footer-actions"><button class="secondary-button" bindtap="handleDiscard" disabled="{{adopting || submitting}}">{{result.available === false ? '修改描述' : '放弃结果'}}</button><button wx:if="{{result.available === false}}" class="primary-button" bindtap="handleGenerate" loading="{{submitting}}" disabled="{{submitting || adopting || !capabilities.enabled}}">重新生成</button><button wx:elif="{{canAdopt}}" class="primary-button" bindtap="handleAdopt" loading="{{adopting}}" disabled="{{adopting}}">{{mode === 'CREATE' ? '采用并编辑' : '采用修改'}}</button><button wx:elif="{{!canAdopt && result.hasChanges !== false}}" class="primary-button" bindtap="queryTask" disabled="{{adopting || submitting}}">重试查询</button></view>
       <view wx:elif="{{waiting}}" class="footer-actions"><button wx:if="{{taskError}}" class="secondary-button" bindtap="queryTask">重试查询</button><button class="secondary-button" bindtap="handleCancel">取消生成</button></view>
       <view wx:elif="{{cancelFailed}}" class="footer-actions"><button class="secondary-button" bindtap="handleCancel">重试取消</button></view>
-      <view wx:else class="footer-actions"><button class="secondary-button" bindtap="handleBackToSources" disabled="{{adopting || submitting || submissionUncertain}}">{{mode === 'CREATE' ? '上一步' : '管理内容'}}</button><button class="primary-button" bindtap="handleGenerate" loading="{{submitting}}" disabled="{{submitting || adopting || !capabilities.enabled || !!activeTaskId}}"><text wx:if="{{!submissionUncertain && !questions.length && !taskError}}" class="ai-spark">✧</text>{{submissionUncertain ? '重试提交' : questions.length ? '回答后继续' : taskError ? '重试生成' : mode === 'CREATE' ? '生成作品集' : '生成修改'}}</button></view>
+      <view wx:else class="footer-actions"><button class="secondary-button" bindtap="handleBackToSources" disabled="{{adopting || submitting || submissionUncertain}}">{{mode === 'CREATE' ? '上一步' : '管理内容'}}</button><button class="primary-button" bindtap="handleGenerate" loading="{{submitting}}" disabled="{{submitting || adopting || !capabilities.enabled || !!activeTaskId || (referenceUi.blocked && !submissionUncertain)}}"><text wx:if="{{!submissionUncertain && !questions.length && !taskError}}" class="ai-spark">✧</text>{{submissionUncertain ? '重试提交' : questions.length ? '回答后继续' : taskError ? '重试生成' : mode === 'CREATE' ? '生成作品集' : '生成修改'}}</button></view>
     </view>
   </block>
+  <view wx:if="{{referenceSheet}}" class="reference-overlay">
+    <view class="reference-mask" bindtap="handleCloseReferenceSheet"></view>
+    <view class="reference-sheet" aria-role="dialog" aria-label="{{referenceSheet === 'picker' ? '添加参考附件' : '参考附件可以这样用'}}">
+      <view class="reference-sheet-handle"></view>
+      <view class="reference-sheet-heading"><text>{{referenceSheet === 'picker' ? (referenceReplacingKey ? '更换参考附件' : '添加参考附件') : '参考附件可以这样用'}}</text><button class="reference-sheet-close" bindtap="handleCloseReferenceSheet" aria-label="关闭">×</button></view>
+      <scroll-view class="reference-sheet-scroll" scroll-y type="list">
+        <block wx:if="{{referenceSheet === 'picker'}}">
+          <text class="help-text">供 AI 参考风格或内容，不直接展示到作品集。</text>
+          <view class="reference-choices">
+            <button class="reference-choice" data-media-type="image" bindtap="handleChooseReference" disabled="{{!referenceUi.canAdd}}"><text class="reference-choice-icon">▧</text><text>选择图片</text><text class="reference-choice-hint">每张不超过 {{referenceUi.imageMaxMB}} MB</text></button>
+            <button class="reference-choice" data-media-type="video" bindtap="handleChooseReference" disabled="{{!referenceUi.canChooseVideo}}"><text class="reference-choice-icon">▷</text><text>选择视频</text><text class="reference-choice-hint">{{referenceUi.canChooseVideo ? '最长 ' + referenceUi.videoMaxMinutes + ' 分钟' : '视频数量已达上限'}}</text></button>
+          </view>
+          <view class="reference-sheet-limits">
+            <text>最多 {{referenceUi.maxCount}} 个附件，其中视频最多 {{referenceUi.maxVideos}} 个。</text>
+            <text>图片最终 ≤ {{referenceUi.imageMaxMB}} MB；视频最终 ≤ {{referenceUi.videoMaxMB}} MB、≤ {{referenceUi.videoMaxMinutes}} 分钟。</text>
+            <text>视频源文件 ≤ {{referenceUi.sourceVideoMaxMB}} MB；超过 {{referenceUi.videoMaxMB}} MB 将先在手机压缩。</text>
+            <text>全部附件最终总量 ≤ {{referenceUi.totalMaxMB}} MB（1 MB = 1,000,000 B）。</text>
+            <text>原视频直接供 AI 参考；超过可用上下文时，请截短视频后重试。</text>
+            <text>随作品集保存；删除作品集时一并删除。</text>
+          </view>
+        </block>
+        <block wx:else>
+          <text class="help-text">参考文件搭配一句说明，让 AI 更容易理解重点。</text>
+          <text class="reference-example-quote">{{referenceExampleText}}</text>
+          <view class="reference-example-item"><text class="field-label">图片 · 色调、版式、构图</text><text class="help-text">参考重点可以写：只参考配色与留白，不使用图中的文字。</text></view>
+          <view class="reference-example-item"><text class="field-label">视频 · 氛围、节奏、内容要点</text><text class="help-text">原视频直接供 AI 参考，不会把视频放进生成的页面。</text></view>
+          <button class="primary-button reference-use-example" bindtap="handleUseReferenceExample">使用文字示例</button>
+          <text class="reference-subtitle">未添加附件时，示例只插入作品与风格描述。</text>
+        </block>
+      </scroll-view>
+    </view>
+  </view>
 </view>

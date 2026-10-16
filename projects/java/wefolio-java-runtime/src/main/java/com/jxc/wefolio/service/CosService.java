@@ -114,6 +114,9 @@ public class CosService {
     /** COS 表单上传对象访问权限：公有读私有写 */
     private static final String POST_ACL_PUBLIC_READ = CannedAccessControlList.PublicRead.toString();
 
+    /** 参考附件仅允许私有读取，不改变其它素材的默认权限。 */
+    private static final String POST_ACL_PRIVATE = CannedAccessControlList.Private.toString();
+
     /** COS policy 存储桶字段 */
     private static final String POST_POLICY_BUCKET = "bucket";
 
@@ -261,6 +264,18 @@ public class CosService {
             ZoneId zoneId,
             boolean forbidOverwrite
     ) {
+        return createPostUploadTicket(objectKey, contentType, maxBytes, expiresAt, zoneId, forbidOverwrite, POST_ACL_PUBLIC_READ);
+    }
+
+    /** 仅做本地签名；附件调用方先通过专用短超时客户端确认桶禁止覆盖能力。 */
+    public PostUploadTicket createPrivatePostUploadTicket(String objectKey,String contentType,
+            long maxBytes,LocalDateTime expiresAt,ZoneId zoneId) {
+        return createPostUploadTicket(objectKey, contentType, maxBytes, expiresAt, zoneId, true, POST_ACL_PRIVATE);
+    }
+
+    /** 构造指定访问权限的精确对象表单，权限同时进入签名条件。 */
+    private PostUploadTicket createPostUploadTicket(String objectKey, String contentType,
+            long maxBytes, LocalDateTime expiresAt, ZoneId zoneId, boolean forbidOverwrite, String acl) {
         ZoneId safeZoneId = Objects.requireNonNull(zoneId, POST_UPLOAD_ZONE_REQUIRED_MESSAGE);
         LocalDateTime now = LocalDateTime.now(safeZoneId);
         if (expiresAt != null && expiresAt.isBefore(now)) {
@@ -274,7 +289,7 @@ public class CosService {
         String normalizedContentType = contentType == null ? "" : contentType.trim();
         String policy = buildPostPolicy(
                 objectKey, normalizedContentType, maxBytes, safeExpiresAt, safeZoneId, keyTime,
-                forbidOverwrite);
+                forbidOverwrite, acl);
         String encodedPolicy = Base64.getEncoder().encodeToString(policy.getBytes(StandardCharsets.UTF_8));
         String signature = new COSSigner().buildPostObjectSignature(
                 cosProperties.getSecretKey(),
@@ -290,7 +305,7 @@ public class CosService {
         formData.put(POST_FIELD_POLICY, encodedPolicy);
         formData.put(POST_FIELD_SIGNATURE, signature);
         formData.put(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS);
-        formData.put(POST_FIELD_ACL, POST_ACL_PUBLIC_READ);
+        formData.put(POST_FIELD_ACL, acl);
         if (!normalizedContentType.isBlank()) {
             formData.put(POST_FIELD_CONTENT_TYPE, normalizedContentType);
         }
@@ -712,7 +727,8 @@ public class CosService {
             LocalDateTime expiresAt,
             ZoneId zoneId,
             String keyTime,
-            boolean forbidOverwrite
+            boolean forbidOverwrite,
+            String acl
     ) {
         String expiration = expiresAt.atZone(zoneId)
                 .withZoneSameInstant(ZoneOffset.UTC)
@@ -725,7 +741,7 @@ public class CosService {
         conditions.add(postPolicyCondition(POST_FIELD_ACCESS_KEY, cosProperties.getSecretId()));
         conditions.add(postPolicyCondition(POST_FIELD_SIGN_TIME, keyTime));
         conditions.add(postPolicyCondition(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS));
-        conditions.add(postPolicyCondition(POST_FIELD_ACL, POST_ACL_PUBLIC_READ));
+        conditions.add(postPolicyCondition(POST_FIELD_ACL, acl));
         if (contentType != null && !contentType.isBlank()) {
             conditions.add(postPolicyCondition(POST_FIELD_CONTENT_TYPE, contentType));
         }

@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.portfolioai;
 
+import static org.mockito.Mockito.mock;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.config.PortfolioAiProperties;
 import com.jxc.wefolio.entity.AiGenerationTaskEntity;
@@ -32,7 +34,7 @@ class PortfolioAiTaskTransactionServiceTest {
 
     /** 每个场景均先确认请求人有效。 */
     @BeforeEach void prepare() {
-        service = new PortfolioAiTaskTransactionService(users, tasks, new PortfolioAiProperties(), facts);
+        service = new PortfolioAiTaskTransactionService(mock(PortfolioAiReferenceService.class), users, tasks, new PortfolioAiProperties(), facts);
         when(users.lockActiveUserById(101L)).thenReturn(101L);
     }
 

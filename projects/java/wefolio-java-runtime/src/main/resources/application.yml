@@ -22,6 +22,11 @@ spring:
 portfolio-ai:
   enabled: ${WEFOLIO_AI_ENABLED:false}
   media-enabled: ${WEFOLIO_AI_MEDIA_ENABLED:false}
+  reference-enabled: ${WEFOLIO_AI_REFERENCE_ENABLED:false}
+  # 命名锁使用独立小池，不占用业务事务连接。
+  reference-lock-pool-size: ${WEFOLIO_AI_REFERENCE_LOCK_POOL_SIZE:4}
+  reference-max-active-tasks: ${WEFOLIO_AI_REFERENCE_MAX_ACTIVE_TASKS:10}
+  reference-token-secret: ${WEFOLIO_AI_REFERENCE_TOKEN_SECRET:}
   media-audio-text-enabled: ${WEFOLIO_AI_MEDIA_AUDIO_TEXT_ENABLED:false}
   media-stored-video-summary-enabled: ${WEFOLIO_AI_MEDIA_STORED_VIDEO_SUMMARY_ENABLED:false}
   base-url: ${WEFOLIO_AI_BASE_URL:https://tokenhub.tencentmaas.com/v1}

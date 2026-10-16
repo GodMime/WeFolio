@@ -93,6 +93,15 @@
   line-height: 1.6;
 }
 
+.advanced-reference-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.advanced-reference-summary {
+  white-space: nowrap;
+}
+
 .advanced-recovery {
   padding: 24rpx;
   border-radius: 24rpx;
@@ -152,7 +161,8 @@
 }
 
 /* 管理入口按文字宽度贴齐右侧，覆盖 WebView 普通按钮的宽度与自动外边距。 */
-.advanced-source-heading .advanced-text-button {
+.advanced-source-heading .advanced-text-button,
+.advanced-undo-notice .advanced-text-button {
   width: auto;
   margin: 0;
   box-sizing: border-box;

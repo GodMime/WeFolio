@@ -216,6 +216,100 @@ class PortfolioAiExecutionServiceTest {
         task.setRequestJson(request.toString()); return task;
     }
 
+    /** 独立附件列没有 mediaPlan 也必须启用心跳，并在陈旧租约恢复时终止而非重新付费。 */
+    @Test void referenceOnlyTasksUseMediaExecutionAndInterruptedRecovery() {
+        AiGenerationTaskEntity running = task(1);
+        running.setReferenceAttachmentsJson(PortfolioAiReferenceTestSupport.snapshot(false, PortfolioAiReferenceTestSupport.item(1, true)));
+        when(repository.findRecoverable(any(), anyInt(), anyInt(), anyInt())).thenReturn(List.of(running));
+        service.maintain();
+        verify(repository).failInterruptedMedia(eq(running), eq(now), eq(90), eq(180));
+        verify(repository, never()).recover(any(), any(), anyInt());
+        when(repository.renewMediaLease(eq(running), eq(90), eq(180))).thenReturn(true);
+        when(mediaExecution.generate(eq(running), any(), any())).thenThrow(new PortfolioAiCallException("REFERENCE_UNAVAILABLE", "失效", false));
+        service.executeClaimed(running, request(running));
+        verify(mediaExecution).generate(eq(running), any(), any()); verifyNoInteractions(client);
+    }
+
+    /** 实例只有一个附件槽，数据库排在它后面的普通任务仍能使用另一线程。 */
+    @Test void oneReferenceWorkerStillClaimsOrdinaryTaskBehindQueuedReferences() {
+        var config = new PortfolioAiProperties(); config.setEnabled(true); config.setReferenceEnabled(true);
+        var worker = mock(java.util.concurrent.ExecutorService.class);
+        var pending = new java.util.ArrayList<Runnable>();
+        doAnswer(call -> { pending.add(call.getArgument(0)); return null; }).when(worker).execute(any(Runnable.class));
+        var dispatcher = new PortfolioAiExecutionService(repository, client, config, new JobExecutionLifecycle(),
+                Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")), worker, mediaExecution, mediaRepository);
+        var referenceA = task(0); referenceA.setId(11L); referenceA.setStatus("PENDING"); referenceA.setReferenceAttachmentsJson("{\"version\":1,\"items\":[]}");
+        var referenceB = task(0); referenceB.setId(12L); referenceB.setStatus("PENDING"); referenceB.setReferenceAttachmentsJson(referenceA.getReferenceAttachmentsJson());
+        var ordinary = task(0); ordinary.setId(13L); ordinary.setStatus("PENDING");
+        when(repository.findPending(any(), anyInt())).thenReturn(List.of(referenceA, referenceB));
+        when(repository.findPendingWithoutReferences(any(), anyInt())).thenReturn(List.of(ordinary));
+        when(repository.claim(any(), any(), anyInt(), anyInt())).thenReturn(true);
+        try {
+            dispatcher.dispatch();
+            verify(repository).claim(eq(referenceA), any(), anyInt(), anyInt());
+            verify(repository).claim(eq(ordinary), any(), anyInt(), anyInt());
+            verify(repository, never()).claim(eq(referenceB), any(), anyInt(), anyInt());
+            assertThat(pending).hasSize(2);
+        } finally { pending.forEach(Runnable::run); dispatcher.close(); }
+    }
+
+    /** 附件开关关闭后不能领取队首附件，后续普通任务仍正常领取。 */
+    @Test void disabledReferenceSwitchLeavesAttachmentsQueuedAndClaimsOrdinaryTasks() {
+        var config = new PortfolioAiProperties(); config.setEnabled(true); config.setReferenceEnabled(false);
+        var worker = mock(java.util.concurrent.ExecutorService.class);
+        var dispatcher = new PortfolioAiExecutionService(repository, client, config, new JobExecutionLifecycle(),
+                Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")), worker, mediaExecution, mediaRepository);
+        var reference = task(0); reference.setId(21L); reference.setReferenceAttachmentsJson("{}");
+        var ordinary = task(0); ordinary.setId(22L);
+        when(repository.findPending(any(), anyInt())).thenReturn(List.of(reference));
+        when(repository.findPendingWithoutReferences(any(), anyInt())).thenReturn(List.of(ordinary));
+        when(repository.claim(any(), any(), anyInt(), anyInt())).thenReturn(true);
+        try {
+            dispatcher.dispatch();
+            verify(repository, never()).claim(eq(reference), any(), anyInt(), anyInt());
+            verify(repository).claim(eq(ordinary), any(), anyInt(), anyInt());
+            verify(worker, times(1)).execute(any());
+        } finally { dispatcher.close(); }
+    }
+
+    /** 暂停但队列已有附件会告警，连续调度不重复刷屏。 */
+    @Test void disabledReferenceSwitchWarnsOnceWhileAcceptedReferencesAreWaiting() {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(PortfolioAiExecutionService.class);
+        var events = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        events.start(); logger.addAppender(events);
+        properties.setEnabled(true); properties.setReferenceEnabled(false);
+        when(repository.hasPendingReferences(any())).thenReturn(true);
+        try {
+            service.dispatch(); service.dispatch();
+            assertThat(events.list).hasSize(1);
+            assertThat(events.list.getFirst().getFormattedMessage()).contains("WEFOLIO_AI_REFERENCE_ENABLED");
+            verify(repository, never()).findPending(any(), anyInt());
+        } finally { logger.detachAppender(events); events.stop(); }
+    }
+
+    /** 附件槽位读取配置，并至少为普通任务保留一个工作线程。 */
+    @Test void configuredReferenceLimitCanUseTwoOfFourWorkers() {
+        var config = new PortfolioAiProperties(); config.setEnabled(true); config.setReferenceEnabled(true);
+        config.setWorkerCount(4); config.setReferenceMaxActiveTasks(2);
+        var worker = mock(java.util.concurrent.ExecutorService.class);
+        var dispatcher = new PortfolioAiExecutionService(repository, client, config, new JobExecutionLifecycle(),
+                Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")), worker, mediaExecution, mediaRepository);
+        var first = task(0); first.setId(31L); first.setReferenceAttachmentsJson("{}");
+        var second = task(0); second.setId(32L); second.setReferenceAttachmentsJson("{}");
+        var third = task(0); third.setId(33L); third.setReferenceAttachmentsJson("{}");
+        var ordinary = task(0); ordinary.setId(34L);
+        when(repository.findPending(any(), anyInt())).thenReturn(List.of(first, second, third));
+        when(repository.findPendingWithoutReferences(any(), anyInt())).thenReturn(List.of(ordinary));
+        when(repository.claim(any(), any(), anyInt(), anyInt())).thenReturn(true);
+        try {
+            dispatcher.dispatch();
+            verify(repository).claim(eq(first), any(), anyInt(), anyInt());
+            verify(repository).claim(eq(second), any(), anyInt(), anyInt());
+            verify(repository, never()).claim(eq(third), any(), anyInt(), anyInt());
+            verify(repository).claim(eq(ordinary), any(), anyInt(), anyInt());
+        } finally { dispatcher.close(); }
+    }
+
     /** 旧文字facts中的同名字段不属于媒体计划，仍按90秒恢复。 */
     @Test void legacyTextContainingMediaPlanWordRetainsOriginalRecovery() {
         AiGenerationTaskEntity running = task(1); running.setStartedAt(now.minusSeconds(95));
@@ -315,7 +409,7 @@ class PortfolioAiExecutionServiceTest {
     void unsupportedContractNeverCallsModelAndIsNotRetried() {
         properties.setEnabled(true); AiGenerationTaskEntity task = task(0); task.setStatus("PENDING");
         task.setRequestJson(task.getRequestJson().replace("ai-portfolio-v1", "ai-portfolio-v99"));
-        when(repository.findPending(any(), anyInt())).thenReturn(List.of(task));
+        when(repository.findPendingWithoutReferences(any(), anyInt())).thenReturn(List.of(task));
         service.dispatch();
         verify(repository).fail(eq(task), eq("CONTRACT_UNAVAILABLE"), anyString(), eq(now));
         verify(repository, never()).claim(any(), any(), anyInt(), anyInt()); verifyNoInteractions(client);
@@ -329,7 +423,7 @@ class PortfolioAiExecutionServiceTest {
         request.withObject("modelConfig").put("provider", "DEEPSEEK").put("model", "deepseek-flash")
                 .put("baseUrl", "https://api.deepseek.com");
         task.setRequestJson(request.toString());
-        when(repository.findPending(any(), anyInt())).thenReturn(List.of(task));
+        when(repository.findPendingWithoutReferences(any(), anyInt())).thenReturn(List.of(task));
         service.dispatch();
         verify(repository).fail(eq(task), eq("CONTRACT_UNAVAILABLE"), anyString(), eq(now));
         verify(repository, never()).claim(any(), any(), anyInt(), anyInt());
@@ -360,7 +454,7 @@ class PortfolioAiExecutionServiceTest {
         ObjectNode regenerateRequest = request(regenerateTask);
         regenerateRequest.withObject("input").put("mode", "REGENERATE_PAGE");
         regenerateTask.setRequestJson(regenerateRequest.toString());
-        when(repository.findPending(any(), anyInt())).thenReturn(List.of(componentTask, regenerateTask));
+        when(repository.findPendingWithoutReferences(any(), anyInt())).thenReturn(List.of(componentTask, regenerateTask));
         service.dispatch();
         verify(repository).fail(eq(componentTask), eq("INVALID_OUTPUT"), eq("任务模式不支持"), eq(now));
         verify(repository).fail(eq(regenerateTask), eq("INVALID_OUTPUT"), eq("任务模式不支持"), eq(now));

@@ -87,6 +87,19 @@ class CosServiceTest {
                 .noneMatch(method -> "uploadFromUrl".equals(method.getName()));
     }
 
+    /** 参考附件的私有 ACL 与禁止覆盖必须进入签名 policy，不能只改表单字段。 */
+    @Test
+    void referenceTicketShouldSignPrivateAndImmutableConditions() {
+        when(cosProperties.getSecretId()).thenReturn("test-id");
+        when(cosProperties.getSecretKey()).thenReturn("test-key");
+        CosService.PostUploadTicket ticket=cosService.createPrivatePostUploadTicket(
+                "WFTEST/protfolio/ai-reference/0123456789abcdef0123456789abcdef.png","image/png",4_000_000,
+                LocalDateTime.now(SHANGHAI_ZONE).plusMinutes(15),SHANGHAI_ZONE);
+        String policy=new String(Base64.getDecoder().decode(ticket.formData().get("policy")),java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(ticket.formData()).containsEntry("x-cos-acl","private").containsEntry("x-cos-forbid-overwrite","true");
+        assertThat(policy).contains("\"x-cos-acl\":\"private\"","\"x-cos-forbid-overwrite\":\"true\"").doesNotContain("public-read");
+    }
+
     /** 私有对象只生成当前桶的 GET 临时地址，不更改 ACL 或输出签名凭证。 */
     @Test
     void signedGetShouldUseCurrentBucketAndBoundExpiration(CapturedOutput output) throws Exception {

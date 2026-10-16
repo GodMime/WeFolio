@@ -1,6 +1,7 @@
 package com.jxc.wefolio.job.repo;
 
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
+import com.jxc.wefolio.job.dict.AiTaskStatusDict;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,7 +25,7 @@ public class AiGenerationTaskRepository {
     /** 媒体收尾必须在同一 SQL 重验租约，Java 检查之后的进程暂停也不能发布或重试。 */
     private static final String LIVE_MEDIA_LEASE = " AND updated_at>TIMESTAMPADD(SECOND, ?, " + PortfolioAiDatabaseTime.NOW_SQL + ")";
     /** 清理仅允许终态任务；空对象代表隐私原文已经销毁。 */
-    private static final Set<String> TERMINAL = Set.of("SUCCEEDED", "FAILED", "CANCELLED");
+    private static final Set<String> TERMINAL = Set.of(AiTaskStatusDict.SUCCEEDED.getCode(), AiTaskStatusDict.FAILED.getCode(), AiTaskStatusDict.CANCELLED.getCode());
     private static final String CLEARED_REQUEST = "{}";
     /** 完整任务读取，物理清理显式包含逻辑删除行。 */
     private static final RowMapper<AiGenerationTaskEntity> ROW = (rs, row) -> {
@@ -32,6 +33,7 @@ public class AiGenerationTaskRepository {
         task.setId(rs.getLong("id")); task.setOwnerType(rs.getString("owner_type")); task.setOwnerId(rs.getLong("owner_id"));
         task.setPortfolioId(rs.getObject("portfolio_id", Long.class)); task.setRequestedBy(rs.getLong("requested_by"));
         task.setIdempotencyKey(rs.getString("idempotency_key")); task.setRequestJson(rs.getString("request_json"));
+        task.setReferenceAttachmentsJson(rs.getString("reference_attachments_json"));
         task.setResultJson(rs.getString("result_json")); task.setStatus(rs.getString("status"));
         task.setMediaBudgetJson(rs.getString("media_budget_json"));
         task.setMediaBudgetUnknownCount(rs.getInt("media_budget_unknown_count"));
@@ -74,6 +76,18 @@ public class AiGenerationTaskRepository {
     /** 读取可领取队列；最终领取仍以 version 防并发。 */
     public List<AiGenerationTaskEntity> findPending(LocalDateTime now, int limit) {
         return jdbc.query("SELECT * FROM wf_ai_generation_task WHERE deleted=0 AND status='PENDING' AND next_run_at<=? ORDER BY next_run_at,id LIMIT ?", ROW, now, limit);
+    }
+
+    /** 附件额度耗尽时在 SQL 内排除附件，避免队首附件阻塞普通请求。 */
+    public List<AiGenerationTaskEntity> findPendingWithoutReferences(LocalDateTime now, int limit) {
+        return jdbc.query("SELECT * FROM wf_ai_generation_task WHERE deleted=0 AND status='PENDING' AND next_run_at<=? "
+                + "AND reference_attachments_json IS NULL ORDER BY next_run_at,id LIMIT ?", ROW, now, limit);
+    }
+
+    /** 仅探测可领取附件是否存在，用于关闭接单后的部署差异诊断。 */
+    public boolean hasPendingReferences(LocalDateTime now) {
+        return !jdbc.queryForList("SELECT id FROM wf_ai_generation_task WHERE deleted=0 AND status=? AND next_run_at<=? "
+                + "AND reference_attachments_json IS NOT NULL LIMIT 1", Long.class, AiTaskStatusDict.PENDING.getCode(), now).isEmpty();
     }
 
     /** CAS 领取并立即消耗尝试预算，数据库期限为最终准绳。 */
@@ -152,16 +166,16 @@ public class AiGenerationTaskRepository {
         List<Long> ids = jdbc.queryForList("""
                 SELECT id FROM wf_ai_generation_task WHERE status IN ('SUCCEEDED','FAILED','CANCELLED')
                 AND completed_at<=? AND (media_budget_unknown_count=0 OR deleted<>id
-                    OR CHAR_LENGTH(request_json)>2 OR result_json IS NOT NULL OR error_message IS NOT NULL)
+                    OR CHAR_LENGTH(request_json)>2 OR result_json IS NOT NULL OR error_message IS NOT NULL OR reference_attachments_json IS NOT NULL)
                 ORDER BY id LIMIT ?
                 """, Long.class, cutoff, limit);
         int processed = 0;
         for (Long id : ids) {
             List<CleanupRow> rows = jdbc.query("""
                     SELECT status,completed_at,media_budget_json,media_budget_unknown_count,deleted,
-                    request_json,result_json,error_message FROM wf_ai_generation_task WHERE id=? FOR UPDATE
+                    request_json,result_json,error_message,reference_attachments_json FROM wf_ai_generation_task WHERE id=? FOR UPDATE
                     """, (rs, n) -> new CleanupRow(rs.getString(1), rs.getObject(2, LocalDateTime.class), rs.getString(3),
-                            rs.getInt(4), rs.getLong(5), rs.getString(6), rs.getString(7), rs.getString(8)), id);
+                            rs.getInt(4), rs.getLong(5), rs.getString(6), rs.getString(7), rs.getString(8), rs.getString(9)), id);
             if (rows.isEmpty()) { continue; }
             CleanupRow row = rows.getFirst();
             if (!TERMINAL.contains(row.status()) || row.completed() == null || row.completed().isAfter(cutoff)) { continue; }
@@ -177,9 +191,9 @@ public class AiGenerationTaskRepository {
             if (unknown == 0) {
                 processed += jdbc.update("DELETE FROM wf_ai_generation_task WHERE id=?", id);
             } else if (row.deleted() != id || !CLEARED_REQUEST.equals(row.request())
-                    || row.result() != null || row.error() != null || row.unknown() != unknown) {
+                    || row.result() != null || row.error() != null || row.references() != null || row.unknown() != unknown) {
                 processed += jdbc.update("""
-                        UPDATE wf_ai_generation_task SET request_json=?,result_json=NULL,error_message=NULL,
+                        UPDATE wf_ai_generation_task SET request_json=?,result_json=NULL,error_message=NULL,reference_attachments_json=NULL,
                         media_budget_unknown_count=?,deleted=id,version=version+1,updated_at=%s
                         WHERE id=?
                         """.formatted(PortfolioAiDatabaseTime.NOW_SQL), CLEARED_REQUEST, unknown, id);
@@ -190,5 +204,5 @@ public class AiGenerationTaskRepository {
 
     /** 已锁定终态任务的隐私与费用字段。 */
     private record CleanupRow(String status, LocalDateTime completed, String budget, int unknown,
-            long deleted, String request, String result, String error) { }
+            long deleted, String request, String result, String error, String references) { }
 }
