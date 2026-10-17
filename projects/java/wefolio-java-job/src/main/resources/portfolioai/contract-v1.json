@@ -73,10 +73,10 @@
         "intro": {
           "type": "string",
           "maxCodePoints": 1000,
-          "description": "当前作品集展示的团队介绍，不回写团队基础资料。"
+          "description": "仅 MODIFY_PAGE 对已有 TEAM_PROFILE 使用 UPDATE_TEXT 修改 intro；不回写团队基础资料。CREATE 或 INSERT_COMPONENT 的 params 不接受 intro。"
         }
       },
-      "description": "展示当前团队的公开基础资料；用户要求展示团队资料时才新增，不是作品集默认首项。存在团队资料或可信 ref 不表示必须展示，不因完整布局的风格要求额外插入。修改介绍只影响本作品集展示，不修改团队资料。没有主素材，sourceNos=[]。"
+      "description": "展示当前团队的公开基础资料；用户要求展示团队资料时才新增，不是作品集默认首项。存在团队资料或可信 ref 不表示必须展示，不因完整布局的风格要求额外插入。CREATE 或 INSERT_COMPONENT 只能带入当前可信团队资料，params 必须为 {}，不能传入新的 intro。MODIFY_PAGE 可对已有组件使用 UPDATE_TEXT 修改 intro，只影响本作品集展示，不修改团队资料。团队名称、头像及 visibleFields 显示开关未向 AI 开放，需在普通编辑器手动调整；保留已有显示开关。没有主素材，sourceNos=[]。"
     },
     "TEXT_SECTION": {
       "params": {
@@ -341,7 +341,7 @@
           "description": "绑定已选图片、视频或动画作品的 sourceNo，作为当前文字区域的局部背景；同时设置 backgroundEnabled=true。不能写入 sourceNos 或用作全页背景。"
         }
       },
-      "description": "按顺序展示标题、段落、列表、提示和空白等文字块，各文字块独立设置字体与排版；多段或分段描述使用多个 PARAGRAPH，并可共享同一背景图片或视频。需要文艺字体时在各文字块绑定可信 FONT ref，不因此拆成多个 TEXT_SECTION。没有主素材，sourceNos=[]。"
+      "description": "按顺序展示标题、段落、列表、提示和空白等文字块，各文字块独立设置字体与排版；多段或分段描述使用多个 PARAGRAPH，并可共享同一背景图片或视频。整个组件所有 content 与 LIST.items 合计最多 2000 个 Unicode 码点，不是每块各 2000 字；修改已有文字时也要计入未修改的内容。必须至少包含一个非 SPACER 文字块，不能全部为留白块。需要文艺字体时在各文字块绑定可信 FONT ref，不因此拆成多个 TEXT_SECTION。没有主素材，sourceNos=[]。"
     },
     "TEXT_GRID": {
       "params": {
@@ -588,7 +588,7 @@
       ],
       "primarySource": null,
       "bindingSlots": {},
-      "description": "用行列、合并单元格、文字块和文字片段编排文字版面；不是作品图片网格。没有主素材，sourceNos=[]。"
+      "description": "用行列、合并单元格、文字块和文字片段编排文字版面；不是作品图片网格。整个组件所有单元格中 runs.text 合计最多 2000 个 Unicode 码点，不是每个片段各 2000 字；修改已有文字时也要计入未修改的内容。没有主素材，sourceNos=[]。"
     },
     "CAROUSEL": {
       "params": {},
@@ -779,7 +779,7 @@
         "description": "主成员作品集仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
       "bindingSlots": {},
-      "description": "在团队作品集中用网格展示已选成员作品集的整体入口；不展开或修改成员作品集内部内容。"
+      "description": "在团队作品集中用固定双列网格展示已选成员作品集的整体入口，不能配置其它列数；展示封面、标题，并由 showMemberName 控制成员姓名，点击进入对应成员作品集；不展开或修改成员作品集内部内容。"
     },
     "MEMBER_PORTFOLIO_LIST": {
       "params": {
@@ -797,7 +797,7 @@
         "description": "主成员作品集仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
       },
       "bindingSlots": {},
-      "description": "在团队作品集中用列表展示已选成员作品集的整体入口；不展开或修改成员作品集内部内容。"
+      "description": "在团队作品集中用固定单列列表展示已选成员作品集的整体入口，不能配置其它列数；展示封面、标题、有内容时展示简介，并由 showMemberName 控制成员姓名，点击进入对应成员作品集；不展开或修改成员作品集内部内容。"
     },
     "DIVIDER": {
       "params": {

@@ -123,6 +123,102 @@ class PortfolioAiContractDescriptionTest {
         }
     }
 
+    /** 模型实际收到的说明须包含跨节点总量、团队资料模式边界及成员入口的固定布局。 */
+    @Test
+    void modelContractsDescribeAggregateLimitsAndTeamCapabilities() {
+        for (String ownerType : List.of("USER", "TEAM")) {
+            for (String mode : MODES) {
+                JsonNode catalog = AiPortfolioProtocol.contract(request(ownerType, mode)).path("componentCatalog");
+                for (String type : List.of("STRUCTURED_TEXT_SECTION", "TEXT_GRID")) {
+                    assertThat(catalog.path(type).path(DESCRIPTION).asText())
+                            .contains("整个组件", "合计最多 2000 个 Unicode 码点", "未修改的内容");
+                }
+                assertThat(catalog.path("STRUCTURED_TEXT_SECTION").path(DESCRIPTION).asText())
+                        .contains("至少包含一个非 SPACER", "不能全部为留白块");
+                if ("TEAM".equals(ownerType)) {
+                    JsonNode profile = catalog.path("TEAM_PROFILE");
+                    assertThat(profile.path(DESCRIPTION).asText()).contains("CREATE", "INSERT_COMPONENT", "params 必须为 {}",
+                            "MODIFY_PAGE", "UPDATE_TEXT", "visibleFields", "手动调整");
+                    assertThat(profile.path("params")).isEmpty();
+                    assertThat(profile.path("textFields").path("intro").path(DESCRIPTION).asText())
+                            .contains("仅 MODIFY_PAGE", "已有 TEAM_PROFILE");
+                    assertThat(catalog.path("MEMBER_PORTFOLIO_GRID").path(DESCRIPTION).asText())
+                            .contains("固定双列", "不能配置其它列数", "点击进入");
+                    assertThat(catalog.path("MEMBER_PORTFOLIO_LIST").path(DESCRIPTION).asText())
+                            .contains("固定单列", "不能配置其它列数", "点击进入");
+                }
+            }
+        }
+    }
+
+    /** 用真实协议验证整个组件共享字数预算；边界按 Unicode 码点计数，并禁止纯留白结构。 */
+    @Test
+    void aggregateTextLimitsMatchDescriptions() {
+        ObjectNode request = request("TEAM", "CREATE");
+        for (String type : List.of("STRUCTURED_TEXT_SECTION", "TEXT_GRID")) {
+            ObjectNode output = candidate("CREATE");
+            ObjectNode page = output.putObject("page").put("menuKey", AiPortfolioProtocol.MENU_ALIAS);
+            page.putObject("settings");
+            ObjectNode component = page.putArray("components").addObject().put("type", type);
+            component.putArray("sourceNos"); component.putArray("bindings");
+            ObjectNode params = component.putObject("params");
+            ObjectNode first;
+            ObjectNode second;
+            String field;
+            if ("STRUCTURED_TEXT_SECTION".equals(type)) {
+                var blocks = params.putArray("blocks");
+                first = blocks.addObject().put("type", "PARAGRAPH");
+                second = blocks.addObject().put("type", "PARAGRAPH");
+                field = "content";
+            } else {
+                params.put("rows", 1).put("columns", 1);
+                var runs = params.putArray("cells").addObject().put("row", 0).put("column", 0)
+                        .put("rowSpan", 1).put("columnSpan", 1).putArray("blocks").addObject().putArray("runs");
+                first = runs.addObject(); second = runs.addObject(); field = "text";
+            }
+            first.put(field, "🌸".repeat(1000)); second.put(field, "文".repeat(1000));
+            assertThat(AiPortfolioProtocol.validate(request, output.toString())).isEqualTo(output);
+            second.put(field, "文".repeat(1001));
+            assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                    .isInstanceOf(AiProtocolException.class).hasMessageContaining("总长度");
+            if ("STRUCTURED_TEXT_SECTION".equals(type)) {
+                params.putArray("blocks").addObject().put("type", "SPACER").put("heightRpx", 32);
+                assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                        .isInstanceOf(AiProtocolException.class).hasMessageContaining("正文不合法");
+            }
+        }
+    }
+
+    /** 新建资料不能写入介绍或显示开关，已有团队资料仍允许通过文字操作修改介绍。 */
+    @Test
+    void teamProfileCreationAndModificationMatchDescriptions() {
+        ObjectNode request = request("TEAM", "CREATE");
+        ObjectNode output = candidate("CREATE");
+        ObjectNode page = output.putObject("page").put("menuKey", AiPortfolioProtocol.MENU_ALIAS);
+        page.putObject("settings");
+        ObjectNode proposal = page.putArray("components").addObject().put("type", "TEAM_PROFILE");
+        proposal.putArray("sourceNos"); proposal.putArray("bindings");
+        ObjectNode params = proposal.putObject("params");
+        assertThat(AiPortfolioProtocol.validate(request, output.toString())).isEqualTo(output);
+        params.put("intro", "作品集内的新介绍");
+        assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                .isInstanceOf(AiProtocolException.class);
+        params.removeAll(); params.putObject("visibleFields").put("avatar", false);
+        assertThatThrownBy(() -> AiPortfolioProtocol.validate(request, output.toString()))
+                .isInstanceOf(AiProtocolException.class);
+
+        request.withObject("input").put("mode", "MODIFY_PAGE");
+        ObjectNode component = request.withObject("facts").withObject("baseConfig").putArray("components")
+                .addObject().put("componentKey", "existing-team").put("componentType", "TEAM_PROFILE").put("enabled", true);
+        component.putObject("config").putObject("team").put("intro", "原介绍");
+        ObjectNode modification = candidate("MODIFY_PAGE");
+        ObjectNode operation = modification.withArray("operations").addObject().put("op", "UPDATE_TEXT")
+                .put("expectedHash", AiPortfolioProtocol.expectedHash(component)).put("reason", "更新团队介绍");
+        operation.putObject("target").put("menuKey", AiPortfolioProtocol.MENU_ALIAS).put("componentKey", "cmp_1");
+        operation.putObject("payload").put("field", "intro").put("value", "作品集内的新介绍");
+        assertThat(AiPortfolioProtocol.validate(request, modification.toString())).isEqualTo(modification);
+    }
+
     /** 结构化文字新建块可绑定字体，网格片段仍需准确区分生成与现有节点修改。 */
     @Test
     void nestedFontDescriptionsFollowActualCreationAndModificationCapabilities() {
