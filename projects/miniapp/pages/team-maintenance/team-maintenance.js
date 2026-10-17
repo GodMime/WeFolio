@@ -496,7 +496,7 @@ Page({
 
   handleTransferOwner(event) {
     const member = this.getMemberById(event.currentTarget.dataset.memberId)
-    if (!member || this.data.saving) {
+    if (!member || !member.canReceiveOwnership || this.data.saving) {
       return
     }
     wx.showModal({

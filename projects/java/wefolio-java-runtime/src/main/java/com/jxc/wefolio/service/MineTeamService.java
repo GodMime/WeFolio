@@ -794,6 +794,11 @@ public class MineTeamService {
             throw new BusinessException("对方已是团队拥有者");
         }
 
+        // 在角色变更前锁定正常账号，避免校验后被并发停用；锁由当前事务持有至结束。
+        if (userEntityMapper.lockActiveUserById(target.getUserId()) == null) {
+            throw new BusinessException(MineTeamMessage.OWNER_TRANSFER_TARGET_UNAVAILABLE_MESSAGE);
+        }
+
         String noticeIdempotencyKey = buildOwnerTransferIdempotencyKey(team, target);
         updateMemberRole(ownerMembership.getId(), ownerMembership.getVersion(), TeamRoleDict.OWNER.getCode(),
                 TeamRoleDict.MANAGER.getCode(), "团队拥有者变更失败，请刷新后重试");

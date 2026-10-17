@@ -89,7 +89,7 @@
               bindtouchend="handleMemberTouchEnd"
             >
               <view wx:if="{{detail.team.canManageMembers && item.role !== 'OWNER' && item.joinStatus === 'JOINED'}}" class="member-action-buttons" catchtap="noop">
-                <button class="member-action-button transfer" data-member-id="{{item.memberId}}" bindtap="handleTransferOwner">转让团队</button>
+                <button wx:if="{{item.canReceiveOwnership}}" class="member-action-button transfer" data-member-id="{{item.memberId}}" bindtap="handleTransferOwner">转让团队</button>
                 <button class="member-action-button remove" data-member-id="{{item.memberId}}" bindtap="handleRemoveMember">移除成员</button>
               </view>
               <view class="member-row-main">

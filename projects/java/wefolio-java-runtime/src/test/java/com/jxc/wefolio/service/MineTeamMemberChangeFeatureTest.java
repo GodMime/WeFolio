@@ -51,6 +51,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
@@ -75,6 +76,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -434,6 +436,33 @@ class MineTeamMemberChangeFeatureTest {
         verify(teamMemberEntityMapper, never()).update(any(TeamMemberEntity.class), any(Wrapper.class));
     }
 
+    /** 接收者账号不可用时，必须保留原拥有者并且不写入角色、团队或通知。 */
+    @Test
+    void transferOwnerRejectsUnavailableTargetBeforeAnyWrites() {
+        TeamEntity team = team();
+        TeamMemberEntity owner = member(21L, 7L, TeamRoleDict.OWNER);
+        TeamMemberEntity target = member(31L, 8L, TeamRoleDict.MANAGER);
+        MineTeamOwnerTransferRequest request = new MineTeamOwnerTransferRequest();
+        request.setTeamId(100L);
+        request.setMemberId(31L);
+        when(teamEntityMapper.selectById(100L)).thenReturn(team);
+        when(teamMemberEntityMapper.selectOne(any())).thenReturn(owner);
+        when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
+        when(userEntityMapper.lockActiveUserById(8L)).thenReturn(null);
+
+        assertThatThrownBy(() -> service().transferOwner(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("接收者账号不可用，无法转让团队");
+
+        verify(userEntityMapper).lockActiveUserById(8L);
+        verify(teamMemberEntityMapper, never()).update(any(TeamMemberEntity.class), any(Wrapper.class));
+        verify(teamEntityMapper, never()).update(any(TeamEntity.class), any(Wrapper.class));
+        verifyNoInteractions(systemMessageEntityMapper, teamMemberChangeRequestEntityMapper);
+        assertThat(owner.getRole()).isEqualTo(TeamRoleDict.OWNER.getCode());
+        assertThat(target.getRole()).isEqualTo(TeamRoleDict.MANAGER.getCode());
+        assertThat(team.getOwnerUserId()).isEqualTo(7L);
+    }
+
     @Test
     void transferOwnerPromotesTargetDemotesOriginalOwnerUpdatesTeamAndSendsNotice() {
         TeamEntity team = team();
@@ -446,6 +475,7 @@ class MineTeamMemberChangeFeatureTest {
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
         when(teamMemberEntityMapper.selectOne(any())).thenReturn(owner);
         when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
+        when(userEntityMapper.lockActiveUserById(8L)).thenReturn(8L);
         when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamEntityMapper.update(any(TeamEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamMemberChangeRequestEntityMapper.update(any(TeamMemberChangeRequestEntity.class), any(Wrapper.class))).thenReturn(1);
@@ -459,6 +489,11 @@ class MineTeamMemberChangeFeatureTest {
                 .thenReturn(List.of());
 
         MineTeamDetailResponse response = service().transferOwner(request);
+
+        InOrder transferOrder = inOrder(userEntityMapper, teamMemberEntityMapper, teamEntityMapper);
+        transferOrder.verify(userEntityMapper).lockActiveUserById(8L);
+        transferOrder.verify(teamMemberEntityMapper, times(2)).update(any(TeamMemberEntity.class), any(Wrapper.class));
+        transferOrder.verify(teamEntityMapper).update(any(TeamEntity.class), any(Wrapper.class));
 
         assertThat(response.getTeam().getRole()).isEqualTo(TeamRoleDict.MANAGER.getCode());
         assertThat(owner.getRole()).isEqualTo(TeamRoleDict.MANAGER.getCode());
@@ -503,6 +538,7 @@ class MineTeamMemberChangeFeatureTest {
         when(teamEntityMapper.selectById(100L)).thenReturn(team);
         when(teamMemberEntityMapper.selectOne(any())).thenReturn(owner);
         when(teamMemberEntityMapper.selectById(31L)).thenReturn(target);
+        when(userEntityMapper.lockActiveUserById(8L)).thenReturn(8L);
         when(teamMemberEntityMapper.update(any(TeamMemberEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamEntityMapper.update(any(TeamEntity.class), any(Wrapper.class))).thenReturn(1);
         when(teamMemberChangeRequestEntityMapper.selectList(any())).thenReturn(List.of()).thenReturn(List.of());

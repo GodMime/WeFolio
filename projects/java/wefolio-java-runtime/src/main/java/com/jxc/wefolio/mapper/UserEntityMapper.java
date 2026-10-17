@@ -14,10 +14,10 @@ import org.apache.ibatis.annotations.Select;
 public interface UserEntityMapper extends BaseMapper<UserEntity> {
 
     /**
-     * 锁定当前活动用户行，使同一用户的作品确认容量检查串行执行。
+     * 锁定正常且未删除的用户行，串行化作品容量检查，并保护团队转让期间的账号状态。
      *
      * @param userId 用户 ID
-     * @return 已锁定的用户 ID，不存在时返回空
+     * @return 已锁定的用户 ID；账号停用、已删除或不存在时返回空
      */
     @Select("""
             SELECT id

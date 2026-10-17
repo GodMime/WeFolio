@@ -2,6 +2,7 @@ const TEAM_NAME_MAX_LENGTH = 100
 const TEAM_INTRO_MAX_LENGTH = 1000
 const TEAM_UNIQUE_CODE_DISPLAY_LENGTH = 10
 const MEMBER_PROFESSION_MAX_LENGTH = 50
+const ACTIVE_USER_STATUS = 'ACTIVE'
 
 const ROLE_TEXT = {
   OWNER: '拥有者',
@@ -201,6 +202,8 @@ function normalizeMember(raw = {}) {
     // 团队加入状态标签的色调由后端决定，前端只做兜底，避免重复维护业务状态到颜色的映射。
     statusTone: raw.statusTone || 'muted',
     userStatus,
+    // 账号状态缺失时也不开放转让，最终资格由后端在事务中校验。
+    canReceiveOwnership: userStatus === ACTIVE_USER_STATUS,
     userStatusText,
     userStatusTone: raw.userStatusTone || 'muted',
     allowPortfolio: toBoolean(raw.allowPortfolio),
