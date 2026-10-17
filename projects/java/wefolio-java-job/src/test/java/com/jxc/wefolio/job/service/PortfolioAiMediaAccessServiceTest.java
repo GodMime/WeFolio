@@ -74,10 +74,10 @@ class PortfolioAiMediaAccessServiceTest {
         verify(storage).signedGet(eq("OWNER/work/video/test.mp4"), any());
     }
 
-    /** 默认三分钟模型调用保留一分钟签名前置与读取余量。 */
-    @Test void defaultThreeMinuteCallHasOneMinuteSignedLinkMargin() {
+    /** 默认五分钟模型调用保留一分钟签名前置与读取余量。 */
+    @Test void defaultFiveMinuteCallHasOneMinuteSignedLinkMargin() {
         assertThat(service.signed(task(), entry())).hasSize(1);
-        verify(storage).signedGet(eq("OWNER/work/video/test.mp4"), eq(Duration.ofSeconds(240)));
+        verify(storage).signedGet(eq("OWNER/work/video/test.mp4"), eq(Duration.ofSeconds(360)));
     }
 
     /** 覆写四分钟调用期限后，持久帧链接同样增加一分钟读取余量。 */

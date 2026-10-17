@@ -40,7 +40,7 @@ portfolio-ai:
   max-config-bytes: ${WEFOLIO_AI_MAX_CONFIG_BYTES:262144}
   max-context-bytes: ${WEFOLIO_AI_MAX_CONTEXT_BYTES:131072}
   max-json-depth: ${WEFOLIO_AI_MAX_JSON_DEPTH:16}
-  total-timeout-seconds: ${WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS:600}
+  total-timeout-seconds: ${WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS:1200}
   retention-days: ${WEFOLIO_AI_RETENTION_DAYS:30}
 
 mybatis-plus:

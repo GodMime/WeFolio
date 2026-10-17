@@ -47,13 +47,13 @@ public class PortfolioAiProperties {
     /** 用于供应商隔离标识的服务端 HMAC 密钥，缺省使用 API 密钥。 */
     private String userHmacSecret = "";
     /** 全任务总期限，覆盖排队、媒体分析、页面生成及全部自动重试。 */
-    private int totalTimeoutSeconds = 600;
+    private int totalTimeoutSeconds = 1200;
     /** 每次 HTTP 绝对截止时间，为较慢的媒体分析和页面生成保留等待预算。 */
-    private int callTimeoutSeconds = 180;
+    private int callTimeoutSeconds = 300;
     /** 连接期限不超过剩余调用时间。 */
     private int connectTimeoutSeconds = 5;
     /** 进程中断恢复窗口，比一次 HTTP 期限多留一分钟，避免正常文字调用被提前恢复。 */
-    private int recoverySeconds = 240;
+    private int recoverySeconds = 360;
     /** 初次及自动重试共用预算。 */
     private int maxAttempts = 3;
     /** 终态主库保留天数。 */

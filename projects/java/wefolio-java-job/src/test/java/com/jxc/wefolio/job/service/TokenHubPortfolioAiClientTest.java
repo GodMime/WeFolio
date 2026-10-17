@@ -1,6 +1,13 @@
 package com.jxc.wefolio.job.service;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.core.read.ListAppender;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import org.slf4j.LoggerFactory;
+import java.net.http.HttpTimeoutException;
+import java.util.stream.Collectors;
+
 import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
@@ -302,7 +309,7 @@ class TokenHubPortfolioAiClientTest {
         ArgumentCaptor<HttpRequest> requests = ArgumentCaptor.forClass(HttpRequest.class);
         verify(transport, times(2)).sendAsync(requests.capture(), any(HttpResponse.BodyHandler.class));
         assertThat(requests.getAllValues()).extracting(http -> http.timeout().orElseThrow())
-                .containsExactly(Duration.ofSeconds(180), Duration.ofSeconds(120));
+                .containsExactly(Duration.ofSeconds(300), Duration.ofSeconds(120));
     }
 
     /** 代表性已冻结请求。 */
@@ -671,6 +678,27 @@ class TokenHubPortfolioAiClientTest {
                 .isInstanceOf(PortfolioAiCallException.class).hasMessage("模型调用超过绝对期限");
         assertThat(pending.isCancelled()).isTrue(); verify(transport).shutdownNow();
         assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(2));
+    }
+
+    /** 网络异常日志保留阶段和类型，但不泄露远端异常中的凭据或原始输入。 */
+    @Test void networkFailureLogsSafeDiagnostics() {
+        var logger = (Logger) LoggerFactory.getLogger(TokenHubCompletionTransport.class);
+        var appender = new ListAppender<ILoggingEvent>();
+        appender.start(); logger.addAppender(appender);
+        try {
+            var client = spy(new TokenHubPortfolioAiClient(properties()));
+            HttpClient transport = mock(HttpClient.class);
+            doReturn(transport).when(client).createHttpClient(any());
+            when(transport.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                    .thenReturn(CompletableFuture.failedFuture(new HttpTimeoutException("secret-private-url")));
+            assertThatThrownBy(() -> client.generate(task(), request(), Duration.ofSeconds(400)))
+                    .isInstanceOf(PortfolioAiCallException.class);
+            String logs = appender.list.stream().map(ILoggingEvent::getFormattedMessage)
+                    .collect(Collectors.joining("\n"));
+            assertThat(logs).contains("portfolio:1:1:generation", "HttpTimeoutException", "timeoutMs=300000",
+                    "elapsedMs=", "errorCode=REMOTE_ERROR", "retryable=true")
+                    .doesNotContain("secret-private-url", "test-fake-key", "13800138000");
+        } finally { logger.detachAppender(appender); appender.stop(); }
     }
 
     /** 音频只进入当前作品的 user 文本块，最终真实 payload 也保留且实际字节预算随之增长。 */

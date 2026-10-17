@@ -43,16 +43,16 @@ class PortfolioAiExecutionServiceTest {
         return properties;
     }
 
-    /** 默认十分钟预算下，超过旧三分钟期限的媒体任务仍可通过真实执行入口完成。 */
+    /** 默认二十分钟预算下，超过旧十分钟期限的媒体任务仍可通过真实执行入口完成。 */
     @Test void defaultMediaTaskPastOldDeadlineCanStillSucceed() {
         PortfolioAiProperties defaults = new PortfolioAiProperties();
-        AiGenerationTaskEntity task = mediaTask(); task.setCreatedAt(now.minusSeconds(599));
-        when(repository.renewMediaLease(eq(task), eq(240), eq(600))).thenReturn(true);
+        AiGenerationTaskEntity task = mediaTask(); task.setCreatedAt(now.minusSeconds(1199));
+        when(repository.renewMediaLease(eq(task), eq(360), eq(1200))).thenReturn(true);
         when(mediaExecution.generate(eq(task), any(), any())).thenReturn("""
                 {"schemaVersion":"ai-portfolio-v1","promptVersion":"portfolio-ai-2026-10-10.2","status":"CANDIDATE",
                  "mode":"MODIFY_PAGE","page":null,"operations":[],"questions":[],"notes":[]}
                 """);
-        when(repository.succeedMedia(eq(task), anyString(), eq(now), eq(600), eq(240))).thenReturn(true);
+        when(repository.succeedMedia(eq(task), anyString(), eq(now), eq(1200), eq(360))).thenReturn(true);
         var defaultService = new PortfolioAiExecutionService(repository, client, defaults,
                 new JobExecutionLifecycle(), Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")),
                 Executors.newSingleThreadExecutor(), mediaExecution, mediaRepository);
@@ -60,7 +60,7 @@ class PortfolioAiExecutionServiceTest {
             defaultService.executeClaimed(task, request(task));
             verify(mediaExecution).generate(eq(task), any(), any());
             ArgumentCaptor<String> result = ArgumentCaptor.forClass(String.class);
-            verify(repository).succeedMedia(eq(task), result.capture(), eq(now), eq(600), eq(240));
+            verify(repository).succeedMedia(eq(task), result.capture(), eq(now), eq(1200), eq(360));
             assertThat(StrictAiJson.parseObject(result.getValue(), 10000, 16).path("kind").asText()).isEqualTo("CANDIDATE");
             verify(repository, never()).fail(any(), anyString(), anyString(), any());
             verify(repository, never()).retryMedia(any(), anyString(), anyString(), any(), anyInt(), anyInt());
@@ -68,9 +68,9 @@ class PortfolioAiExecutionServiceTest {
         } finally { defaultService.close(); }
     }
 
-    /** 新总期限仍有严格上限，到第六百秒时直接失败且不能再次调用付费模型。 */
-    @Test void defaultMediaTaskExpiresAtExactTenMinuteDeadline() {
-        AiGenerationTaskEntity task = mediaTask(); task.setCreatedAt(now.minusSeconds(600));
+    /** 新总期限仍有严格上限，到第一千二百秒时直接失败且不能再次调用付费模型。 */
+    @Test void defaultMediaTaskExpiresAtExactTwentyMinuteDeadline() {
+        AiGenerationTaskEntity task = mediaTask(); task.setCreatedAt(now.minusSeconds(1200));
         var defaultService = new PortfolioAiExecutionService(repository, client, new PortfolioAiProperties(),
                 new JobExecutionLifecycle(), Clock.fixed(now.atZone(ZoneId.of("Asia/Shanghai")).toInstant(), ZoneId.of("Asia/Shanghai")),
                 Executors.newSingleThreadExecutor(), mediaExecution, mediaRepository);

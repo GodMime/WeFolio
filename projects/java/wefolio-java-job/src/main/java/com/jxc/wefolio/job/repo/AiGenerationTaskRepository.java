@@ -142,10 +142,13 @@ public class AiGenerationTaskRepository {
 
     /** 按读出的状态和版本终态化，恢复、总超时及执行失败共用同一条件。 */
     public boolean fail(AiGenerationTaskEntity task, String code, String message, LocalDateTime now) {
-        return jdbc.update("""
+        boolean applied = jdbc.update("""
                 UPDATE wf_ai_generation_task SET status='FAILED',result_json=NULL,error_code=?,error_message=?,
                 completed_at=?,updated_at=?,version=version+1 WHERE id=? AND status=? AND version=? AND deleted=0
                 """, code, message, now, now, task.getId(), task.getStatus(), task.getVersion()) == 1;
+        log.warn("高级 AI 失败终态 taskId={}, attempt={}, errorCode={}, applied={}, completedAt={}",
+                task.getId(), task.getAttemptCount(), code, applied, now);
+        return applied;
     }
 
     /** 过期执行代次恢复为等待，旧 worker 的版本在同一写入中失效。 */

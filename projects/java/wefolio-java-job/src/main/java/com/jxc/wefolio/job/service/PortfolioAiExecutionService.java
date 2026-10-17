@@ -196,12 +196,18 @@ public class PortfolioAiExecutionService {
     private void failure(AiGenerationTaskEntity task, String code, String message, boolean retryable) {
         LocalDateTime now = now();
         boolean media = requiresMediaExecution(task);
+        log.warn("高级 AI 执行失败 taskId={}, attempt={}, errorCode={}, retryable={}, elapsedMs={}, remainingMs={}, maxAttempts={}",
+                task.getId(), task.getAttemptCount(), code, retryable, Duration.between(task.getCreatedAt(), now).toMillis(),
+                Math.max(0, Duration.between(now, task.getCreatedAt().plusSeconds(properties.getTotalTimeoutSeconds())).toMillis()),
+                properties.getMaxAttempts());
         if (expired(task, now)) { repository.fail(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, now); }
         else if (retryable && !(media && PortfolioAiMediaLeaseHeartbeat.INTERRUPTED_CODE.equals(code))
                 && task.getAttemptCount() < properties.getMaxAttempts()) {
             boolean retried = media
                     ? repository.retryMedia(task, code, message, now, properties.getTotalTimeoutSeconds(), properties.getRecoverySeconds())
                     : repository.retry(task, code, message, now, properties.getTotalTimeoutSeconds());
+            log.info("高级 AI 重试入队 taskId={}, attempt={}, errorCode={}, applied={}",
+                    task.getId(), task.getAttemptCount(), code, retried);
             if (!retried && expired(task, now())) {
                 repository.fail(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, now());
             }

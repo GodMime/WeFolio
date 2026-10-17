@@ -126,6 +126,10 @@ final class TokenHubCompletionTransport {
                 throw failed(ERROR_EXECUTION_INTERRUPTED, "模型调用中断", true);
             } catch (ExecutionException exception) {
                 future.cancel(true);
+                // 只记录异常类型，禁止输出可能包含签名地址或密钥的异常消息。
+                log.warn("TokenHub 网络失败: context={}, elapsedMs={}, timeoutMs={}, exceptionType={}", context,
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), timeout.toMillis(),
+                        exception.getCause() == null ? exception.getClass().getSimpleName() : exception.getCause().getClass().getSimpleName());
                 if (exception.getCause() instanceof PortfolioAiCallException failure) { throw failure; }
                 throw failed(ERROR_REMOTE_ERROR, "模型网络调用暂时失败", true);
             }
@@ -147,6 +151,15 @@ final class TokenHubCompletionTransport {
                     context, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), usage.promptTokens(),
                     usage.completionTokens(), usage.cachedTokens(), usage.cacheStatus());
             return usage;
+        } catch (PortfolioAiCallException exception) {
+            log.warn("TokenHub 调用失败: context={}, elapsedMs={}, timeoutMs={}, errorCode={}, retryable={}", context,
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), timeout.toMillis(),
+                    exception.getCode(), exception.isRetryable());
+            throw exception;
+        } catch (AiProtocolException exception) {
+            log.warn("TokenHub 协议失败: context={}, elapsedMs={}, timeoutMs={}, errorCode={}", context,
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), timeout.toMillis(), exception.getCode());
+            throw exception;
         }
     }
     /**

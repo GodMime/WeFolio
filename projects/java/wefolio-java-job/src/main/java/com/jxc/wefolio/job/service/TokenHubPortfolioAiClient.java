@@ -79,7 +79,7 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
     /** 带 usage 的最终生成，共用原有受控传输。 */
     @Override
     public Completion generateWithUsage(AiGenerationTaskEntity task, ObjectNode request, Duration remaining) {
-        return complete(task, request, payload(task, request), remaining);
+        return complete(task, request, payload(task, request), remaining, GENERATION_CACHE_STAGE);
     }
 
     /** 真实最终请求全部文字字节作为输入 token 保守上界。 */
@@ -91,11 +91,11 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
     /** 媒体摘要与最终布局生成分别调用同一官方客户端。 */
     @Override
     public Completion summarize(AiGenerationTaskEntity task, ObjectNode request, List<MediaInput> media, Duration remaining) {
-        return complete(task, request, mediaPayload(task, request, media), remaining);
+        return complete(task, request, mediaPayload(task, request, media), remaining, MEDIA_SUMMARY_CACHE_STAGE);
     }
 
     /** 保持任务合同验证，实际传输与费用解析使用任务无关组件。 */
-    private Completion complete(AiGenerationTaskEntity task, ObjectNode request, ObjectNode body, Duration remaining) {
+    private Completion complete(AiGenerationTaskEntity task, ObjectNode request, ObjectNode body, Duration remaining, String stage) {
         if (remaining.isZero() || remaining.isNegative()) { throw failed("TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, false); }
         PortfolioAiModelContract.validate(request, properties);
         ObjectNode config = (ObjectNode) request.path("modelConfig");
@@ -105,7 +105,7 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
                 ? timeout : Duration.ofSeconds(properties.getConnectTimeoutSeconds());
         String baseUrl = PortfolioAiProperties.canonicalBaseUrl(config.path("baseUrl").textValue());
         return TokenHubCompletionTransport.complete(URI.create(baseUrl + COMPLETION_PATH), properties.getApiKey(), body,
-                timeout, connection, properties.getMaxResponseBytes(), "portfolio:" + task.getId() + ":" + task.getAttemptCount(),
+                timeout, connection, properties.getMaxResponseBytes(), "portfolio:" + task.getId() + ":" + task.getAttemptCount() + ":" + stage,
                 this::createHttpClient);
     }
 
@@ -176,7 +176,7 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
     @Override
     public Completion summarize(AiGenerationTaskEntity task, ObjectNode request, List<MediaInput> media,
                                 JsonNode entry, Duration remaining) {
-        return complete(task, request, mediaPayload(task, request, media, entry), remaining);
+        return complete(task, request, mediaPayload(task, request, media, entry), remaining, MEDIA_SUMMARY_CACHE_STAGE);
     }
 
     /** 服务端构造受限媒体消息，链接仅出现在 content 的指定媒体字段。 */
@@ -207,7 +207,7 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
     @Override
     public Completion summarizeReferences(AiGenerationTaskEntity task, ObjectNode request, List<MediaInput> media,
                                            List<JsonNode> items, Duration remaining) {
-        return complete(task, request, referencePayload(task, request, media, items), remaining);
+        return complete(task, request, referencePayload(task, request, media, items), remaining, REFERENCE_SUMMARY_CACHE_STAGE);
     }
 
     /** 构造单次参考输入；只有服务端签名的 HTTPS 原件进入媒体 URL 字段。 */

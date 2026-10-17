@@ -50,7 +50,7 @@ public class PortfolioAiProperties {
     /** JSON 根容器计第一层的深度上限。 */
     private int maxJsonDepth = 16;
     /** 总等待期限，覆盖排队、媒体分析、页面生成及全部自动重试，与 Job 保持一致。 */
-    private int totalTimeoutSeconds = 600;
+    private int totalTimeoutSeconds = 1200;
     /** 终态记录留存天数。 */
     private int retentionDays = 30;
     /** 服务级活动任务队列容量。 */

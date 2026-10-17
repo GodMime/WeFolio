@@ -225,11 +225,11 @@ portfolio-ai:
   worker-count: ${WEFOLIO_AI_WORKER_COUNT:2}
   batch-size: ${WEFOLIO_AI_BATCH_SIZE:100}
   # 与 Runtime 共用任务总期限，包含排队及所有重试。
-  total-timeout-seconds: ${WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS:600}
+  total-timeout-seconds: ${WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS:1200}
   # 单次调用与中断恢复窗口配套调整，避免慢响应在正常执行中被提前重领。
-  call-timeout-seconds: ${WEFOLIO_AI_CALL_TIMEOUT_SECONDS:180}
+  call-timeout-seconds: ${WEFOLIO_AI_CALL_TIMEOUT_SECONDS:300}
   connect-timeout-seconds: 5
-  recovery-seconds: ${WEFOLIO_AI_RECOVERY_SECONDS:240}
+  recovery-seconds: ${WEFOLIO_AI_RECOVERY_SECONDS:360}
   max-attempts: 3
   # 解压响应读取中限制预算，终态到期按小时小批物理清理。
   max-response-bytes: 2097152

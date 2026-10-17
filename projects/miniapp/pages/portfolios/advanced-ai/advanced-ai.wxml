@@ -92,7 +92,7 @@
           <view wx:else class="panel prompt-panel">
             <view class="field-label">{{mode === 'CREATE' ? '描述你的想法' : '描述整体修改需求'}}</view>
             <textarea class="prompt-input" placeholder-class="input-placeholder" value="{{prompt}}" bindinput="handlePromptInput" disabled="{{adopting || submitting || submissionUncertain}}" maxlength="-1" placeholder="例如：把1号放在顶部，再放一段简短介绍，最后放档期查询。"></textarea>
-            <view class="counter {{promptCount > promptMaxLength ? 'over-limit' : ''}}">{{promptCount}} / {{promptMaxLength}}</view>
+            <view class="counter {{promptCount > promptMaxLength ? 'over-limit' : ''}}"><text class="counter-value">{{promptCount}} / {{promptMaxLength}}</text></view>
             <view class="prompt-example"><text class="help-text">试试这样说</text><button class="text-button example-button" bindtap="handleOpenReferenceExample" disabled="{{adopting || submitting || submissionUncertain}}">查看示例 ↗</button></view>
             <view class="reference-section">
               <button class="reference-add" bindtap="handleOpenReferencePicker" disabled="{{referenceCapabilityChecking || waiting || adopting || submitting || submissionUncertain}}" aria-label="添加参考附件，选填">

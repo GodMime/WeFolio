@@ -32,8 +32,8 @@ class PortfolioAiPropertiesTest {
             PortfolioAiProperties defaults = new PortfolioAiProperties();
             assertThat(defaults.getMaxTokens()).isEqualTo(32768);
             assertThat(defaults.getReasoningEffort()).isEqualTo("high");
-            assertThat(properties.getTotalTimeoutSeconds()).isEqualTo(600);
-            assertThat(new PortfolioAiProperties().getTotalTimeoutSeconds()).isEqualTo(600);
+            assertThat(properties.getTotalTimeoutSeconds()).isEqualTo(1200);
+            assertThat(new PortfolioAiProperties().getTotalTimeoutSeconds()).isEqualTo(1200);
         });
     }
 

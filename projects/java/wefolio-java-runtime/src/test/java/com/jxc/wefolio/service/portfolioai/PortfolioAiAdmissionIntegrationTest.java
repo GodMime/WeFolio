@@ -72,9 +72,9 @@ class PortfolioAiAdmissionIntegrationTest {
     /** 查询测试使用的维护者身份不能泄漏到相邻测试。 */
     @AfterEach void clearIdentity() { AuthContextHolder.clear(); }
 
-    /** 超过原三分钟但仍在十分钟内的任务保持运行，也继续占用本人活动额度。 */
+    /** 超过原十分钟但仍在二十分钟内的任务保持运行，也继续占用本人活动额度。 */
     @ParameterizedTest
-    @ValueSource(ints = {181, 540})
+    @ValueSource(ints = {601, 1140})
     void longerRunningTaskRemainsActiveBeforeExtendedDeadline(int ageSeconds) {
         AiGenerationTaskEntity task = runningTask(ageSeconds);
 
@@ -90,9 +90,9 @@ class PortfolioAiAdmissionIntegrationTest {
                 .isInstanceOf(BusinessException.class).hasMessage(PortfolioAiMessage.ACTIVE_TASK);
     }
 
-    /** 到达十分钟后查询仍正常收口失败、作废旧执行代次并释放本人活动额度。 */
+    /** 到达二十分钟后查询仍正常收口失败、作废旧执行代次并释放本人活动额度。 */
     @ParameterizedTest
-    @ValueSource(ints = {600, 601})
+    @ValueSource(ints = {1200, 1201})
     void extendedDeadlineStillExpiresTaskAndReleasesRequesterSlot(int ageSeconds) {
         AiGenerationTaskEntity task = runningTask(ageSeconds);
         LocalDateTime beforeQuery = PortfolioAiTime.now();
