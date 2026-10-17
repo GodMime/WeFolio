@@ -17,6 +17,15 @@
   padding: 18rpx 0;
 }
 
+.contact-empty {
+  padding: 24rpx;
+  border: 1rpx dashed #dcdde1;
+  border-radius: 18rpx;
+  color: #868e96;
+  font-size: 26rpx;
+  line-height: 1.65;
+}
+
 .contact-copy {
   flex: 1;
   min-width: 0;
@@ -143,6 +152,11 @@
 
 .theme-dark {
   color: #fff;
+}
+
+.theme-dark .contact-empty {
+  color: #adb5bd;
+  border-color: #45464a;
 }
 
 .theme-dark .copy-button {

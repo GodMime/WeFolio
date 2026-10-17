@@ -224,7 +224,7 @@ test('真实页面在原片视频信息缺失时使用picker元数据完成压�
       options.success({ tempFilePath: outputPath })
     },
     getFileSystemManager: () => ({
-      statSync: filePath => ({ size: filePath === sourcePath ? 120 * MB : 97 * MB }),
+      statSync: filePath => ({ size: filePath === sourcePath ? 120 * MB : 98000000 }),
       unlinkSync: filePath => deleted.push(filePath)
     })
   })
@@ -237,12 +237,12 @@ test('真实页面在原片视频信息缺失时使用picker元数据完成压�
     assert.equal(page.data.files.length, 1)
     const selected = page.data.files[0]
     assert.equal(selected.tempFilePath, outputPath)
-    assert.equal(selected.size, 97 * MB)
+    assert.equal(selected.size, 98000000)
     assert.equal(selected.width, 1280)
     assert.equal(selected.height, 720)
     assert.equal(selected.durationMs, 60000)
     assert.equal(selected.mimeType, 'video/mp4')
-    assert.equal(selected.compressionText, '已压缩：120.0MB → 97.0MB')
+    assert.equal(selected.compressionText, '已压缩：125.8MB → 98.0MB')
     assert.ok(page.patches.some(patch => patch.choosingTitle === '正在压缩视频'))
     assert.equal(page.data.choosing, false)
     assert.deepEqual(events, [['info', sourcePath], ['compress', sourcePath], ['info', outputPath]])
@@ -669,14 +669,14 @@ test('上传失败后清除已结束task，旧请求结束不能移除同id的�
   assert.equal(page.uploadTasks.a, undefined)
 })
 
-test('真实视频预处理成品格式、字节数、SHA与保存上传契约一致', async () => {
+test('低于旧100MiB但超过100MB的视频按实测字节压缩后再生成票据和上传', async () => {
   const events = [], tickets = [], uploads = []
   const { page, toasts } = loadPage({
     chooseMedia(options) { options.success({ tempFiles: [{ tempFilePath: '/original.mp4', size: 1, fileType: 'video', duration: 1 }] }) },
     getVideoInfo(options) { options.success({ width: 1920, height: 1080, duration: 10, fps: 30, bitrate: 100000, type: options.src === '/result.mov' ? 'mov' : 'mp4' }) },
     compressVideo(options) { events.push(['compress', options.src]); options.success({ tempFilePath: '/result.mov' }) },
     getFileSystemManager: () => ({
-      statSync: p => ({ size: p === '/original.mp4' ? 110 * MB : 98 * MB }),
+      statSync: p => ({ size: p === '/original.mp4' ? 102090765 : 98000000 }),
       getFileInfo(options) { events.push(['sha', options.filePath]); options.success({ digest: 'b'.repeat(64) }) }
     }),
     uploadFile(options) { uploads.push(options); events.push(['upload', options.filePath]); options.success({ statusCode: 204 }); return { abort() {}, onProgressUpdate() {} } },
@@ -693,15 +693,47 @@ test('真实视频预处理成品格式、字节数、SHA与保存上传契约�
   assert.deepEqual(toasts, [])
   assert.equal(page.data.files[0].tempFilePath, '/result.mov')
   assert.equal(page.data.files[0].durationMs, 10000)
+  assert.equal(page.data.files[0].compressionText, '已压缩：102.1MB → 98.0MB')
   assert.deepEqual(events, [['compress', '/original.mp4']])
   await page.handleSubmit()
-  assert.deepEqual(events, [['compress', '/original.mp4'], ['sha', '/result.mov'], ['ticket', 98 * MB], ['upload', '/result.mov']])
+  assert.deepEqual(events, [['compress', '/original.mp4'], ['sha', '/result.mov'], ['ticket', 98000000], ['upload', '/result.mov']])
   assert.equal(tickets[0].mimeType, 'video/quicktime')
   assert.equal(tickets[0].fileName, 'original.mov')
   assert.equal(tickets[0].durationMs, 10000)
   assert.equal(tickets[0].sha256, 'b'.repeat(64))
   assert.equal(uploads[0].formData['Content-Type'], tickets[0].mimeType)
   assert.equal(page.data.files[0].status, 'CONFIRMED')
+})
+
+test('视频每轮压缩实测仍超过100000000字节时阻止入列和上传', async () => {
+  let attempts = 0
+  const deleted = []
+  const { page, modals } = loadPage({
+    chooseMedia(options) { options.success({ tempFiles: [{ tempFilePath: '/original.mp4', size: 1, fileType: 'video', duration: 60 }] }) },
+    getVideoInfo(options) { options.success({ width: 1920, height: 1080, duration: 60, fps: 30, bitrate: 18000, type: 'mp4', size: 1 }) },
+    compressVideo(options) { attempts += 1; options.success({ tempFilePath: `/result-${attempts}.mp4`, size: 1 }) },
+    getFileSystemManager: () => ({
+      statSync: p => ({ size: p === '/original.mp4' ? 102090765 : 100000001 }),
+      unlinkSync: p => deleted.push(p)
+    }),
+    uploadFile() { assert.fail('超限成品不得上传') }
+  })
+  await page.handleChooseMedia()
+  assert.equal(attempts, 3)
+  assert.equal(page.data.files.length, 0)
+  assert.equal(page.data.errorMessage, '视频压缩后仍超过 100MB，请选择较小文件')
+  assert.equal(modals[0].content, page.data.errorMessage)
+  assert.deepEqual(deleted, ['/result-1.mp4', '/result-2.mp4', '/result-3.mp4'])
+  await page.handleSubmit()
+  assert.equal(page.data.saving, false)
+})
+
+test('提交阶段仍会阻止超过100000000字节的视频申请票据', async () => {
+  const { page, toasts } = loadPage({ uploadFile() { assert.fail('超限视频不得上传') } })
+  page.data.files = [{ clientId: 'oversize', mediaType: 'VIDEO', size: 100000001, durationMs: 60000 }]
+  await page.handleSubmit()
+  assert.deepEqual(toasts, ['视频作品不能超过 100MB'])
+  assert.equal(page.data.saving, false)
 })
 
 test('旧取消批次finally结束时新批次仍保持choosing与可取消状态', async () => {

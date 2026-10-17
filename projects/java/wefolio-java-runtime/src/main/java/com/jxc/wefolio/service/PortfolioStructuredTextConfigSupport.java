@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
 import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 import com.jxc.wefolio.constant.PortfolioTextTypographyConstants;
 import com.jxc.wefolio.dict.PortfolioTextBlockTypeDict;
@@ -105,6 +106,9 @@ public final class PortfolioStructuredTextConfigSupport {
                 Object font = value(block,FONT,PortfolioTextFontFamilyDict.SYSTEM.getCode());
                 if (!(font instanceof String name) || PortfolioTextFontFamilyDict.fromCode(name) == null) { throw invalid(); }
                 result.put(FONT,font);
+                if (block.get(PortfolioFontConfigSupport.FONT_ID) instanceof String fontId) {
+                    result.put(PortfolioFontConfigSupport.FONT_ID, fontId);
+                }
                 result.put(SIZE,integer(block,SIZE,defaultSize(type),
                         PortfolioTextTypographyConstants.FONT_SIZE_MIN_RPX,
                         PortfolioTextTypographyConstants.FONT_SIZE_MAX_RPX,1));

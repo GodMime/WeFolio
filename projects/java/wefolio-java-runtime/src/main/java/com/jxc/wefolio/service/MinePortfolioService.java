@@ -1,5 +1,16 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.dto.PortfolioFontManifestDto;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
+import java.util.function.Supplier;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioConfigGuard;
+import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontWrite;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontManifests;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
@@ -86,6 +97,13 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MinePortfolioService {
 
+    /** 参考附件只在显式提交清单时参与短事务锁和事实校验。 */
+    private final PortfolioAiReferenceService aiReferences;
+
+    /** 字体同步准备、锁内认领与提交后一次性清理。 */
+    private final PortfolioFontService portfolioFontService;
+
+
     /** 未携带能力版本的旧客户端按 revision 2 处理。 */
     private static final int COMPONENT_LIBRARY_LEGACY_REVISION = 2;
 
@@ -120,6 +138,8 @@ public class MinePortfolioService {
 
     /** 发布标准个人作品集积分备注 */
     private static final String PUBLISH_POINT_REMARK = "发布标准个人作品集";
+    /** 高级个人作品集发布积分备注。 */
+    private static final String ADVANCED_PUBLISH_POINT_REMARK = "发布高级个人作品集";
 
     /** 默认分享编码前缀 */
     private static final String SHARE_CODE_PREFIX = "PF";
@@ -385,6 +405,12 @@ public class MinePortfolioService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MinePortfolioDetailResponse createStandardPersonal(MinePortfolioCreateRequest request) {
+        return createStandardPersonal(request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public MinePortfolioDetailResponse createStandardPersonal(MinePortfolioCreateRequest request, String templateType) {
         Long userId = AuthContextHolder.requireUserId();
         contentLimitService.ensurePersonalPortfolioCapacity(userId);
         PortfolioConfigDto initialConfig = defaultConfig();
@@ -394,7 +420,7 @@ public class MinePortfolioService {
         portfolio.setShareCode(generateShareCode());
         portfolio.setOwnerType(PortfolioOwnerTypeDict.USER.getCode());
         portfolio.setOwnerId(userId);
-        portfolio.setTemplateType(PortfolioTemplateTypeDict.STANDARD.getCode());
+        portfolio.setTemplateType(templateType);
         portfolio.setStatus(PortfolioStatusDict.ACTIVE.getCode());
         portfolio.setSchemaVersion(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
         portfolio.setDraftConfigJson(configJson);
@@ -424,8 +450,17 @@ public class MinePortfolioService {
             Long portfolioId,
             MinePortfolioAssetUploadTicketRequest request
     ) {
+        return createAssetUploadTicket(portfolioId, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public MinePortfolioAssetUploadTicketResponse createAssetUploadTicket(
+            Long portfolioId,
+            MinePortfolioAssetUploadTicketRequest request,
+            String templateType
+    ) {
         Long userId = AuthContextHolder.requireUserId();
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
         String assetType = normalizePortfolioAssetType(request);
         String contentType = normalizePortfolioAssetContentType(request, assetType);
         String uniqueCode = miniappAuthService.getUniqueCodeByUserId(userId);
@@ -453,8 +488,42 @@ public class MinePortfolioService {
      * @return 作品集详情
      */
     public MinePortfolioDetailResponse getDetail(Long portfolioId) {
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        return getDetail(portfolioId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public MinePortfolioDetailResponse getDetail(Long portfolioId, String templateType) {
+        PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
         return buildDetail(portfolio, parseConfig(portfolio.getDraftConfigJson()));
+    }
+
+    /** 同步刷新候选字体；仅返回本次产物，不隐式保存或赋予后续请求认领权。 */
+    public PortfolioFontManifestDto prepareFonts(Long portfolioId, MinePortfolioDraftSaveRequest request) {
+        return prepareFonts(portfolioId, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public PortfolioFontManifestDto prepareFonts(Long portfolioId, MinePortfolioDraftSaveRequest request, String templateType) {
+        PortfolioFontWrite write = portfolioPublishTransactionService.execute(() -> {
+            PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
+            if (request == null || request.getConfig() == null) {
+                throw new BusinessException(PortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
+            }
+            PortfolioConfigDto previous = parseConfig(portfolio.getDraftConfigJson());
+            PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(
+                    AuthContextHolder.requireUserId(), request.getConfig(), previous);
+            PortfolioFontConfigSupport.merge(normalized, request.getConfig(), previous,
+                    request.getClientCapabilities() != null && request.getClientCapabilities().supportsRemoteFonts());
+            PortfolioFontWrite context = new PortfolioFontWrite();
+            context.snapshot = portfolio;
+            context.plan = PortfolioFontPlan.from(normalized);
+            return context;
+        });
+        String prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(
+                AuthContextHolder.requireUserId()), portfolioId);
+        var response = portfolioFontService.prepare(write.snapshot, write.plan, prefix).response();
+        requireOwnedPersonal(portfolioId, templateType);
+        return response;
     }
 
     /**
@@ -464,8 +533,36 @@ public class MinePortfolioService {
      * @param request 保存请求
      * @return 作品集详情
      */
-    @Transactional(rollbackFor = Exception.class)
     public MinePortfolioDetailResponse saveDraft(Long portfolioId, MinePortfolioDraftSaveRequest request) {
+        return saveDraft(portfolioId, request, PortfolioTemplateTypeDict.STANDARD.getCode(), null);
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public MinePortfolioDetailResponse saveDraft(Long portfolioId, MinePortfolioDraftSaveRequest request, String templateType, AdvancedPortfolioSaveMetadata metadata) {
+        PortfolioFontWrite write = new PortfolioFontWrite();
+        MinePortfolioDetailResponse result = referenceSaveTransaction(portfolioId, templateType, metadata,
+                () -> portfolioReferenceMutex.execute(() -> saveDraftInTransaction(portfolioId, request, write, templateType, metadata)));
+        if (write.snapshot == null) { return result; }
+        write.prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(
+                AuthContextHolder.requireUserId()), portfolioId);
+        write.prepared = portfolioFontService.prepare(write.snapshot, write.plan, write.prefix);
+        result = referenceSaveTransaction(portfolioId, templateType, metadata,
+                () -> portfolioReferenceMutex.execute(() -> saveDraftInTransaction(portfolioId, request, write, templateType, metadata)));
+        portfolioFontService.cleanup(write.released, write.prefix);
+        return result;
+    }
+
+    /** owner 锁先于最终数据库事务，字体生成仍在两个短事务之间。 */
+    private <T> T referenceSaveTransaction(Long id, String templateType, AdvancedPortfolioSaveMetadata metadata, Supplier<T> action) {
+        if (metadata == null || !metadata.referencesPresent()) { return portfolioPublishTransactionService.execute(action); }
+        PortfolioEntity owner = requireOwnedPersonal(id, templateType);
+        return aiReferences.withOwnerLock(owner.getOwnerType(), owner.getOwnerId(),
+                () -> portfolioPublishTransactionService.execute(action));
+    }
+
+    /** 两次短事务共用相同校验顺序；首次仅预检，字体 I/O 位于两事务之间。 */
+    private MinePortfolioDetailResponse saveDraftInTransaction(Long portfolioId,
+            MinePortfolioDraftSaveRequest request, PortfolioFontWrite write, String templateType, AdvancedPortfolioSaveMetadata metadata) {
         Long userId = AuthContextHolder.requireUserId();
         if (request == null || request.getConfig() == null) {
             throw new BusinessException(PortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
@@ -474,16 +571,23 @@ public class MinePortfolioService {
             throw new BusinessException(PortfolioMessage.DRAFT_CLIENT_REVISION_REQUIRED_MESSAGE);
         }
         // 先保留既有的归属与模板错误语义，事务内图锁仍负责重新确认当前有效状态。
-        requireOwnedStandardPersonal(portfolioId);
+        requireOwnedPersonal(portfolioId, templateType);
         PortfolioHyperlinkGraphService.LockedGraph graph =
-                portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
+                lockPersonalGraph(userId, portfolioId, templateType);
         PortfolioEntity portfolio = graph.source();
         String requestHash = hasDraftIdempotencyKey(request)
-                ? sha256(toJson(sortJsonKeys(JSON.parse(toJson(request))))) : null;
+                ? sha256(PortfolioFontConfigSupport.hasFontIntent(request)
+                        ? PortfolioFontConfigSupport.fingerprint(request)
+                        : toJson(sortJsonKeys(PortfolioFontConfigSupport.legacyRequest(request)))) : null;
+        if (metadata != null && requestHash != null) { requestHash = sha256(requestHash + metadata.fingerprint()); }
         if (restoreSavedDraft(portfolio, request, requestHash)) {
             return buildDetail(portfolio, parseConfig(portfolio.getDraftConfigJson()));
         }
         if (request.getClientRevision() != null && !request.getClientRevision().equals(safeInt(portfolio.getDraftRevision()))) {
+            throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+        }
+        if (write.prepared != null && !Objects.equals(
+                write.prepared.revision(), portfolio.getCurrentRevision())) {
             throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
         }
         PortfolioConfigDto oldDraftConfig = parseConfig(portfolio.getDraftConfigJson());
@@ -493,6 +597,8 @@ public class MinePortfolioService {
                 request.getConfig(),
                 oldDraftConfig
         );
+        PortfolioFontConfigSupport.merge(normalized, request.getConfig(), oldDraftConfig,
+                request.getClientCapabilities() != null && request.getClientCapabilities().supportsRemoteFonts());
         List<PortfolioReferenceEntity> draftReferences = portfolioConfigValidator.buildReferences(
                 portfolio.getId(),
                 userId,
@@ -505,6 +611,24 @@ public class MinePortfolioService {
                 draftReferences,
                 normalized
         );
+        PortfolioFontPlan fontPlan = PortfolioFontPlan.from(normalized);
+        if (metadata != null) {
+            AdvancedPortfolioConfigGuard.assertNormalized(
+                    StrictAiJson.parseObject(metadata.fingerprint(), 2 * 1024 * 1024, 20).withObject("config"),
+                    StrictAiJson.parseObject(JSON.toJSONString(normalized), 2 * 1024 * 1024, 20));
+        }
+        if (metadata != null && metadata.contextPresent()) {
+            AdvancedPortfolioSaveMetadata.validateContext(metadata.context(), portfolio.getAiContextJson());
+        }
+        if (write.capture(portfolio, fontPlan)) { return null; }
+        if (write.prepared != null) {
+            String assets;
+            try { assets = portfolioFontService.accept(portfolio, fontPlan, write.prepared); }
+            catch (PortfolioFontService.PlanConflict conflict) { throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE); }
+            write.changed(portfolio, assets, portfolio.getPublishedFontAssetsJson());
+            portfolioEntityMapper.updateDraftFontAssets(portfolioId, assets);
+            portfolio.setDraftFontAssetsJson(assets);
+        }
         List<String> deletedObjectKeys = resolveUnreferencedAssetObjectKeys(
                 userId,
                 portfolio.getId(),
@@ -531,6 +655,7 @@ public class MinePortfolioService {
         if (!PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())) {
             portfolio.setPublicationStatus(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
         }
+        if (metadata != null) { metadata.apply(portfolio, aiReferences); }
         int updated = portfolioEntityMapper.updateById(portfolio);
         if (updated != 1) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_CONCURRENT_UPDATE_MESSAGE);
@@ -549,7 +674,12 @@ public class MinePortfolioService {
      * @return 作品集详情
      */
     public MinePortfolioDetailResponse preview(Long portfolioId) {
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        return preview(portfolioId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public MinePortfolioDetailResponse preview(Long portfolioId, String templateType) {
+        PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
         PortfolioConfigDto config = parseConfig(portfolio.getDraftConfigJson());
         MinePortfolioDetailResponse response = buildDetail(portfolio, config);
         response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
@@ -563,7 +693,12 @@ public class MinePortfolioService {
      * @return 作品集详情
      */
     public MinePortfolioDetailResponse previewPublished(Long portfolioId) {
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        return previewPublished(portfolioId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public MinePortfolioDetailResponse previewPublished(Long portfolioId, String templateType) {
+        PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
         if (!PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())
                 || !hasText(portfolio.getPublishedConfigJson())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
@@ -571,6 +706,8 @@ public class MinePortfolioService {
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         MinePortfolioDetailResponse response = buildDetail(portfolio, config);
         response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
+        response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config), portfolio.getPublishedFontAssetsJson()));
+        response.getRenderData().setFonts(response.getFontAssets());
         return response;
     }
 
@@ -581,10 +718,17 @@ public class MinePortfolioService {
      * @return 作品集发布版本预览
      */
     public MinePortfolioDetailResponse previewPublishedReferencedPortfolio(Long portfolioId) {
-        PortfolioEntity portfolio = requirePublishedStandardPersonal(portfolioId);
+        return previewPublishedReferencedPortfolio(portfolioId, false);
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public MinePortfolioDetailResponse previewPublishedReferencedPortfolio(Long portfolioId, boolean allowAdvanced) {
+        PortfolioEntity portfolio = requirePublishedPersonal(portfolioId, allowAdvanced);
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         MinePortfolioDetailResponse response = buildDetail(portfolio, config);
         response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
+        response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config), portfolio.getPublishedFontAssetsJson()));
+        response.getRenderData().setFonts(response.getFontAssets());
         return response;
     }
 
@@ -603,7 +747,18 @@ public class MinePortfolioService {
             String componentKey,
             String scope
     ) {
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        return queryPreviewScheduleOptions(portfolioId, month, componentKey, scope, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public PortfolioScheduleOptionsResponse queryPreviewScheduleOptions(
+            Long portfolioId,
+            String month,
+            String componentKey,
+            String scope,
+            String templateType
+    ) {
+        PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
         PortfolioConfigDto config = resolvePreviewConfig(portfolio, scope);
         requireScheduleComponentConfig(config, componentKey);
         return buildScheduleOptions(portfolio.getOwnerId(), parseMonth(month));
@@ -622,10 +777,20 @@ public class MinePortfolioService {
             PortfolioScheduleQueryRequest request,
             String scope
     ) {
+        return submitPreviewScheduleQuery(portfolioId, request, scope, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public PortfolioScheduleQueryResponse submitPreviewScheduleQuery(
+            Long portfolioId,
+            PortfolioScheduleQueryRequest request,
+            String scope,
+            String templateType
+    ) {
         if (request == null) {
             throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_REQUEST_REQUIRED_MESSAGE);
         }
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
         PortfolioConfigDto config = resolvePreviewConfig(portfolio, scope);
         requireScheduleComponentConfig(config, request.getComponentKey());
         return buildScheduleQueryResponse(portfolio.getOwnerId(), request);
@@ -639,7 +804,16 @@ public class MinePortfolioService {
             String month,
             String componentKey
     ) {
-        PortfolioEntity portfolio = requirePublishedStandardPersonal(portfolioId);
+        return queryPublishedReferencedPreviewScheduleOptions(portfolioId, month, componentKey, false);
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public PortfolioScheduleOptionsResponse queryPublishedReferencedPreviewScheduleOptions(
+            Long portfolioId,
+            String month,
+            String componentKey
+    , boolean allowAdvanced) {
+        PortfolioEntity portfolio = requirePublishedPersonal(portfolioId, allowAdvanced);
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         requireScheduleComponentConfig(config, componentKey);
         return buildScheduleOptions(portfolio.getOwnerId(), parseMonth(month));
@@ -652,10 +826,18 @@ public class MinePortfolioService {
             Long portfolioId,
             PortfolioScheduleQueryRequest request
     ) {
+        return submitPublishedReferencedPreviewScheduleQuery(portfolioId, request, false);
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public PortfolioScheduleQueryResponse submitPublishedReferencedPreviewScheduleQuery(
+            Long portfolioId,
+            PortfolioScheduleQueryRequest request
+    , boolean allowAdvanced) {
         if (request == null) {
             throw new BusinessException(PortfolioMessage.SCHEDULE_QUERY_REQUEST_REQUIRED_MESSAGE);
         }
-        PortfolioEntity portfolio = requirePublishedStandardPersonal(portfolioId);
+        PortfolioEntity portfolio = requirePublishedPersonal(portfolioId, allowAdvanced);
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         requireScheduleComponentConfig(config, request.getComponentKey());
         return buildScheduleQueryResponse(portfolio.getOwnerId(), request);
@@ -669,20 +851,29 @@ public class MinePortfolioService {
      * @return 作品集详情
      */
     public MinePortfolioDetailResponse publish(Long portfolioId, MinePortfolioPublishRequest request) {
+        return publish(portfolioId, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public MinePortfolioDetailResponse publish(Long portfolioId, MinePortfolioPublishRequest request, String templateType) {
         Long userId = AuthContextHolder.requireUserId();
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
         String idempotencyKey = validatePublishRequest(portfolio, request);
         pointService.assertCanConsume(
                 userId,
-                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                publishScene(templateType),
                 POINT_BUSINESS_TYPE_PORTFOLIO,
                 String.valueOf(portfolio.getId()),
                 1,
                 idempotencyKey
         );
-        return portfolioPublishTransactionService.execute(
-                () -> publishInTransaction(portfolioId, request, userId)
-        );
+        PortfolioFontWrite write = new PortfolioFontWrite();
+        MinePortfolioDetailResponse response = portfolioPublishTransactionService.execute(
+                () -> portfolioReferenceMutex.execute(() -> publishInTransaction(portfolioId, request, userId, write, templateType)));
+        if (!write.released.isEmpty()) {
+            portfolioFontService.cleanup(write.released, write.prefix);
+        }
+        return response;
     }
 
     /**
@@ -696,10 +887,11 @@ public class MinePortfolioService {
     private MinePortfolioDetailResponse publishInTransaction(
             Long portfolioId,
             MinePortfolioPublishRequest request,
-            Long userId
+            Long userId,
+            PortfolioFontWrite write, String templateType
     ) {
         PortfolioHyperlinkGraphService.LockedGraph graph =
-                portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
+                lockPersonalGraph(userId, portfolioId, templateType);
         PortfolioEntity portfolio = graph.source();
         String idempotencyKey = validatePublishRequest(portfolio, request);
         String draftConfigJson = portfolio.getDraftConfigJson();
@@ -732,6 +924,14 @@ public class MinePortfolioService {
         String configJson = toJson(normalized);
         String hash = sha256(configJson);
         LocalDateTime now = LocalDateTime.now();
+        if (portfolio.getDraftFontAssetsJson() != null || portfolio.getPublishedFontAssetsJson() != null
+                || !PortfolioFontPlan.from(normalized).groups().isEmpty()) {
+            write.prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(userId), portfolioId);
+            String assets = portfolioFontService.publish(portfolio, PortfolioFontPlan.from(normalized));
+            write.changed(portfolio, portfolio.getDraftFontAssetsJson(), assets);
+            portfolioEntityMapper.updatePublishedFontAssets(portfolioId, assets);
+            portfolio.setPublishedFontAssetsJson(assets);
+        }
         portfolio.setPublishedConfigJson(configJson);
         portfolio.setPublishedRevision(nextPublishedRevision);
         portfolio.setPublishedContentHash(hash);
@@ -750,12 +950,13 @@ public class MinePortfolioService {
         insertHistory(portfolio, nextHistoryRevision, normalized, hash, userId, now, HISTORY_ACTION_PUBLISH);
         pointService.consume(
                 userId,
-                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                publishScene(templateType),
                 POINT_BUSINESS_TYPE_PORTFOLIO,
                 String.valueOf(portfolio.getId()),
                 1,
                 idempotencyKey,
-                PUBLISH_POINT_REMARK
+                PortfolioTemplateTypeDict.ADVANCED.getCode().equals(templateType)
+                        ? ADVANCED_PUBLISH_POINT_REMARK : PUBLISH_POINT_REMARK
         );
         deleteUnreferencedAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
         return buildDetail(portfolio, normalized);
@@ -793,8 +994,13 @@ public class MinePortfolioService {
      * @param request 分享记录请求
      */
     public void createShareRecord(Long portfolioId, MinePortfolioShareRecordRequest request) {
+        createShareRecord(portfolioId, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public void createShareRecord(Long portfolioId, MinePortfolioShareRecordRequest request, String templateType) {
         Long userId = AuthContextHolder.requireUserId();
-        PortfolioEntity portfolio = requireOwnedStandardPersonal(portfolioId);
+        PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
         PortfolioShareRecordEntity record = new PortfolioShareRecordEntity();
         record.setPortfolioId(portfolio.getId());
         record.setPortfolioRevision(safeInt(portfolio.getPublishedRevision()));
@@ -818,24 +1024,35 @@ public class MinePortfolioService {
      *
      * @param portfolioId 作品集 ID
      */
-    @Transactional(rollbackFor = Exception.class)
     public void deletePortfolio(Long portfolioId) {
-        portfolioReferenceMutex.execute(() -> {
-            deletePortfolioLocked(portfolioId);
+        deletePortfolio(portfolioId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public void deletePortfolio(Long portfolioId, String templateType) {
+        PortfolioFontWrite write = new PortfolioFontWrite();
+        portfolioPublishTransactionService.execute(() -> portfolioReferenceMutex.execute(() -> {
+            deletePortfolioLocked(portfolioId, write, templateType);
             return null;
-        });
+        }));
+        if (!write.released.isEmpty()) { portfolioFontService.cleanup(write.released, write.prefix); }
     }
 
     /** 在作品集引用互斥区间内删除标准个人作品集。 */
-    private void deletePortfolioLocked(Long portfolioId) {
+    private void deletePortfolioLocked(Long portfolioId, PortfolioFontWrite write, String templateType) {
         Long userId = AuthContextHolder.requireUserId();
         // 非标准模板沿用维护能力不可用提示，避免图锁过滤后降级为“作品集不存在”。
-        requireOwnedStandardPersonal(portfolioId);
+        requireOwnedPersonal(portfolioId, templateType);
         PortfolioHyperlinkGraphService.LockedGraph graph =
-                portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
+                lockPersonalGraph(userId, portfolioId, templateType);
         PortfolioEntity portfolio = graph.source();
         teamPortfolioReferenceGuardService.assertPersonalPortfolioNotReferenced(portfolio.getId());
         portfolioHyperlinkGraphService.assertNoIncomingLinks(graph, portfolio.getId());
+        if (portfolio.getDraftFontAssetsJson() != null || portfolio.getPublishedFontAssetsJson() != null) {
+            write.changed(portfolio, null, null);
+            write.prefix = PortfolioFontWrite.prefix(miniappAuthService.getUniqueCodeByUserId(userId), portfolioId);
+            portfolioEntityMapper.clearFontAssets(portfolioId);
+        }
         List<String> deletedObjectKeys = resolveDeletedPortfolioAssetObjectKeys(userId, portfolio);
         portfolioReferenceEntityMapper.delete(
                 Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
@@ -869,39 +1086,42 @@ public class MinePortfolioService {
             Long sourcePortfolioId,
             Long selectedTargetPortfolioId
     ) {
-        Long userId = AuthContextHolder.requireUserId();
-        return portfolioHyperlinkGraphService.listTargets(
-                userId,
-                sourcePortfolioId,
-                selectedTargetPortfolioId
-        );
+        return listHyperlinkTargets(sourcePortfolioId, selectedTargetPortfolioId, PortfolioTemplateTypeDict.STANDARD.getCode());
     }
 
-    /**
-     * 校验作品集归属和模板。
-     *
-     * @param portfolioId 作品集 ID
-     * @return 作品集实体
-     */
-    private PortfolioEntity requireOwnedStandardPersonal(Long portfolioId) {
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public PortfolioHyperlinkTargetResponse listHyperlinkTargets(
+            Long sourcePortfolioId,
+            Long selectedTargetPortfolioId,
+            String templateType
+    ) {
+        Long userId = AuthContextHolder.requireUserId();
+        return PortfolioTemplateTypeDict.ADVANCED.getCode().equals(templateType)
+                ? portfolioHyperlinkGraphService.listTargets(userId, sourcePortfolioId, selectedTargetPortfolioId, templateType)
+                : portfolioHyperlinkGraphService.listTargets(userId, sourcePortfolioId, selectedTargetPortfolioId);
+    }
+
+    /** 按入口显式选择模板，当前身份及原不存在提示保持不变。 */
+    public PortfolioEntity requireOwnedPersonal(Long portfolioId, String templateType) {
         Long userId = AuthContextHolder.requireUserId();
         PortfolioEntity portfolio = portfolioEntityMapper.selectById(portfolioId);
         if (portfolio == null || !PortfolioOwnerTypeDict.USER.getCode().equals(portfolio.getOwnerType())
                 || !userId.equals(portfolio.getOwnerId())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_NOT_FOUND_MESSAGE);
         }
-        if (!PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())) {
+        if (!templateType.equals(portfolio.getTemplateType())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_MAINTENANCE_UNAVAILABLE_MESSAGE);
         }
         return portfolio;
     }
 
-    /** 校验团队引用预览目标仍为有效的标准个人作品集发布版本。 */
-    private PortfolioEntity requirePublishedStandardPersonal(Long portfolioId) {
+    /** 高级团队仅在完成当前成员与有效引用鉴权后允许高级个人子作品集。 */
+    private PortfolioEntity requirePublishedPersonal(Long portfolioId, boolean allowAdvanced) {
         PortfolioEntity portfolio = portfolioEntityMapper.selectById(portfolioId);
         if (portfolio == null
                 || !PortfolioOwnerTypeDict.USER.getCode().equals(portfolio.getOwnerType())
-                || !PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                || !(PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                    || allowAdvanced && PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType()))
                 || !PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1.equals(portfolio.getSchemaVersion())
                 || !PortfolioStatusDict.ACTIVE.getCode().equals(portfolio.getStatus())
                 || !PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())
@@ -909,6 +1129,20 @@ public class MinePortfolioService {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
         }
         return portfolio;
+    }
+
+    /** 高级源使用独立锁入口，普通来源图及目标范围不变。 */
+    private PortfolioHyperlinkGraphService.LockedGraph lockPersonalGraph(Long userId, Long portfolioId, String templateType) {
+        return PortfolioTemplateTypeDict.ADVANCED.getCode().equals(templateType)
+                ? portfolioHyperlinkGraphService.lockAdvancedUserGraph(userId, portfolioId)
+                : portfolioHyperlinkGraphService.lockUserGraph(userId, portfolioId);
+    }
+
+    /** 发布场景取自已有积分字典，金额由生效积分规则提供。 */
+    private String publishScene(String templateType) {
+        return PortfolioTemplateTypeDict.ADVANCED.getCode().equals(templateType)
+                ? PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode()
+                : PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode();
     }
 
     /**
@@ -965,6 +1199,9 @@ public class MinePortfolioService {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put(HISTORY_KEY_ACTION, actionType);
         snapshot.put(HISTORY_KEY_CONFIG, config);
+        if (PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType())) {
+            snapshot.put("aiContext", JSON.parse(portfolio.getAiContextJson()));
+        }
         if (idempotencyKey != null) {
             snapshot.put(HISTORY_KEY_IDEMPOTENCY, idempotencyKey);
             snapshot.put(HISTORY_KEY_REQUEST_HASH, requestHash);
@@ -976,6 +1213,7 @@ public class MinePortfolioService {
         history.setSchemaVersion(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
         history.setSnapshotJson(toJson(snapshot));
         history.setSourceType(SOURCE_TYPE_MANUAL);
+        if (PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType())) { history.setAiPrompt(portfolio.getAiPrompt()); }
         history.setContentHash(hash);
         history.setSavedBy(userId);
         history.setSavedAt(savedAt);
@@ -1063,6 +1301,8 @@ public class MinePortfolioService {
         response.setDraftRevision(safeInt(portfolio.getDraftRevision()));
         response.setPublishedRevision(safeInt(portfolio.getPublishedRevision()));
         response.setConfig(config);
+        response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config),
+                portfolio.getDraftFontAssetsJson(), portfolio.getPublishedFontAssetsJson()));
         return response;
     }
 

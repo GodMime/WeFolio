@@ -62,6 +62,18 @@ public class WorkAuditTaskEntity extends BaseEntity {
     /** 视频截帧数量 */
     private Integer snapshotCount;
 
+    /** 冻结截帧模式，旧任务保持 INTERVAL，新持久帧任务使用 AVERAGE */
+    private String snapshotMode;
+
+    /** 本轮前端上报时长副本，禁止恢复时从作品重新计算 */
+    private Integer snapshotDurationMs;
+
+    /** 本轮持久帧采样策略版本 */
+    private String snapshotPolicyVersion;
+
+    /** COS HEAD 与媒体摘要组成的冻结源指纹 */
+    private String snapshotSourceVersion;
+
     /** 动图当前审核轮次抽中的两个帧号 JSON 数组 */
     private String sampledFrameNumbers;
 

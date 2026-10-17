@@ -1,6 +1,8 @@
 package com.jxc.wefolio.job.config;
 
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import com.jxc.wefolio.job.WefolioJavaJobApplication;
+import com.jxc.wefolio.job.service.VideoFrameBackfillExecutionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +29,8 @@ class JobSchedulingCoverageIntegrationTest {
             "",
             VirtualPaymentSchedulingConfig.DEFAULT_TASK_SCHEDULER_BEAN_NAME,
             VirtualPaymentSchedulingConfig.TASK_SCHEDULER_BEAN_NAME,
-            FeedbackUploadCleanupSchedulingConfig.TASK_SCHEDULER_BEAN_NAME
+            FeedbackUploadCleanupSchedulingConfig.TASK_SCHEDULER_BEAN_NAME,
+            PortfolioAiSchedulingConfig.SCHEDULER
     );
 
     @Autowired
@@ -37,7 +40,7 @@ class JobSchedulingCoverageIntegrationTest {
     private JobScheduledTaskRegistry scheduledTaskRegistry;
 
     @Test
-    void shouldRegisterAllSixScheduledMethodsInProtectedSchedulers() {
+    void shouldRegisterAllTenScheduledMethodsIncludingSnapshotCleanupInProtectedSchedulers() {
         long scheduledMethodCount = Arrays.stream(applicationContext.getBeanDefinitionNames())
                 .map(applicationContext::getBean)
                 .map(AopUtils::getTargetClass)
@@ -47,8 +50,13 @@ class JobSchedulingCoverageIntegrationTest {
                 .peek(this::assertProtectedScheduler)
                 .count();
 
-        assertThat(scheduledMethodCount).isEqualTo(6);
-        assertThat(scheduledTaskRegistry.scheduledTasks()).hasSize(6);
+        applicationContext.getBeansOfType(ThreadPoolTaskScheduler.class)
+                .values().forEach(scheduler -> assertThat(scheduler).isInstanceOf(JobLifecycleTaskScheduler.class));
+        // 历史截图及参考附件扫尾也必须进入同一注册器，随全部后台任务接受停用和排空保护。
+        assertThat(scheduledMethodCount).isEqualTo(10);
+        assertThat(scheduledTaskRegistry.scheduledTasks()).hasSize(10)
+                .extracting(task -> task.getTask().getRunnable().toString())
+                .contains(VideoFrameBackfillExecutionService.class.getName() + ".cleanupFinishedSnapshots");
     }
 
     private void assertProtectedScheduler(ScheduledMethod scheduledMethod) {

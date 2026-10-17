@@ -1,3 +1,4 @@
+<import src="../templates/portfolio-opening.wxml" />
 <view
   class="page-shell portfolio-preview-page mock-preview-page portfolio-theme-{{portfolio.themeMode}}"
   style="background-color: {{portfolio.style.backgroundColor}};"
@@ -8,7 +9,7 @@
     background="{{portfolio.style.backgroundColor}}"
   ></navigation-bar>
 
-  <scroll-view scroll-y class="preview-scroll" scroll-top="{{portfolioScrollTop}}">
+  <scroll-view scroll-y="{{!fontOpening}}" class="preview-scroll" scroll-top="{{portfolioScrollTop}}">
     <view class="preview-toolbar">
       <view class="preview-note">体验预览：不请求后端，不统计访问，不提交真实表单。</view>
     </view>
@@ -66,10 +67,10 @@
         bindopenmodal="handleOpenContactFormModal"
       ></mock-portfolio-contact-form>
 
-      <mock-portfolio-renderer
+      <mock-portfolio-renderer class="portfolio-font-grid"
         wx:else
         component="{{item}}"
-        active="{{mediaActive}}"
+        active="{{mediaActive && !fontOpening && !loading}}"
         copied-field="{{copiedComponentKey === item.componentKey ? copiedField : ''}}"
         bindcopy="handleCopyContact"
         bindhyperlink="handleHyperlink"
@@ -135,3 +136,5 @@
     bindclosemodal="handleCloseContactFormModal"
   ></mock-portfolio-contact-form>
 </view>
+
+<template is="portfolio-opening" data="{{active: loading || fontOpeningVisible, top: fontOpeningTop, dark: portfolio.themeMode === 'dark', background: portfolio.style.backgroundColor, preview: true}}" />

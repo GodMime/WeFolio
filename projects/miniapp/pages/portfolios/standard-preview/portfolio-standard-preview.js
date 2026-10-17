@@ -1,8 +1,11 @@
+const { advancedEditorPageMethods, editorRequest } = require('../utils/advanced-editor-page')
+const { portfolioOpeningPageMethods } = require('../utils/portfolio-opening')
+const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { openWorkDetail } = require('../utils/portfolio-work-detail')
 const { openVideoPlayer } = require('../utils/portfolio-video-player')
 const VIDEO_PLAYER_ROUTE = '/pages/portfolios/video-player/video-player'
 const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
-const { request } = require('../../../utils/request')
+const { request } = require('../../../utils/request.js')
 const { createContactLeadForm } = require('../utils/contact-lead')
 const {
   createActiveContactFormComponent,
@@ -34,7 +37,10 @@ const IMAGE_MISSING_MESSAGE = '图片地址缺失'
 const VIDEO_MISSING_MESSAGE = '视频地址缺失'
 
 Page({
+  ...advancedEditorPageMethods,
+  advancedRequest(options) { return editorRequest(this, options, request) },
   ...portfolioAudioPageMethods,
+  ...portfolioOpeningPageMethods,
   data: {
     backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
     portfolioId: null,
@@ -58,7 +64,14 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.remoteFontPage = installRemoteFontPage(this, { editor: false, team: false })
     this.positionBackgroundAudio()
+    this.setData({ advancedEditing: options.templateType === 'ADVANCED', candidatePreview: options.candidate === '1' })
+    if (this.data.candidatePreview) {
+      const channel = this.getOpenerEventChannel && this.getOpenerEventChannel()
+      if (channel && channel.on) channel.on('candidatePreview', payload => this.setData({ portfolio: normalizeVisitorPortfolio(payload), loading: false, errorMessage: '' }))
+      return
+    }
     const teamPortfolioId = Number(options.teamPortfolioId) || 0
     const teamPreviewScope = teamPortfolioId && options.teamScope === PUBLISHED_PREVIEW_SCOPE
       ? PUBLISHED_PREVIEW_SCOPE
@@ -79,11 +92,10 @@ Page({
     }
     this.setData({ loading: true, errorMessage: '' })
     if (this.data.teamPortfolioId) {
-      return request({
+      return this.advancedRequest({
         url: `${TEAM_PORTFOLIO_API_PREFIX}/${this.data.teamPortfolioId}/member-portfolios/${this.data.portfolioId}/published-preview`,
         data: { scope: this.data.teamPreviewScope }
       }).then((response) => {
-        this.syncBackgroundAudio(normalizeVisitorPortfolio(response).backgroundAudio, true)
         this.setData({
           portfolio: normalizeVisitorPortfolio(response),
           loading: false,
@@ -97,9 +109,8 @@ Page({
       })
     }
     const previewPath = this.data.previewScope === PUBLISHED_PREVIEW_SCOPE ? 'published-preview' : 'preview'
-    return request({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}/${previewPath}` })
+    return this.advancedRequest({ url: `${PORTFOLIO_API_PREFIX}/${this.data.portfolioId}/${previewPath}` })
       .then((response) => {
-        this.syncBackgroundAudio(normalizeVisitorPortfolio(response).backgroundAudio, true)
         this.setData({
           portfolio: normalizeVisitorPortfolio(response),
           loading: false,
@@ -142,6 +153,7 @@ Page({
   },
 
   handleHyperlinkTap(event) {
+    if (this.data.candidatePreview) { wx.showToast({ title: '采用并保存后可预览链接', icon: 'none' }); return Promise.resolve(false) }
     const hyperlink = readPortfolioRenderEventData(event)
     if (hyperlink.actionType === 'INTERNAL_PORTFOLIO') {
       const targetPortfolioId = Number(hyperlink.targetPortfolioId)
@@ -205,6 +217,7 @@ Page({
   },
 
   onUnload() {
+    if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.videoPlayerDisposed = true
     this.destroyBackgroundAudio()
     clearPortfolioMenuTransitionTimers(this)
@@ -217,6 +230,7 @@ Page({
   },
 
   onHide() {
+    if (this.remoteFontPage) this.remoteFontPage.hide()
     this.hideBackgroundAudio()
     this.stopActiveSingleWorkVideo()
     if (this.clipboardPromptController) {
@@ -225,8 +239,10 @@ Page({
   },
 
   onShow() {
+
     this.clearVideoPreview()
     this.showBackgroundAudio()
+    if (this.remoteFontPage) this.remoteFontPage.show()
     if (this.clipboardPromptController) {
       this.clipboardPromptController.resume()
     }

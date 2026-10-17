@@ -56,6 +56,8 @@
 
     <!-- MyBatis SQL 日志：开发环境输出到控制台，文件中也记录 -->
     <logger name="com.jxc.wefolio.mapper" level="DEBUG"/>
+    <!-- AI 冻结输入与结果含用户描述和隐藏绑定，禁止 MyBatis 参数调试日志输出原文。 -->
+    <logger name="com.jxc.wefolio.mapper.AiGenerationTaskEntityMapper" level="INFO"/>
 
     <!-- 根日志 -->
     <root level="INFO">

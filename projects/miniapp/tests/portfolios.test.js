@@ -892,6 +892,7 @@ test('builds draft and publish payloads', () => {
   const config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.PROFILE)] })
 
   assert.deepEqual(buildDraftPayload(config, 3, 'draft-1'), {
+    clientCapabilities: { portfolioRemoteFont: 1 },
     config,
     clientRevision: 3,
     idempotencyKey: 'draft-1'

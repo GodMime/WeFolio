@@ -3,6 +3,8 @@ package com.jxc.wefolio.dto.teamportfolio;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.alibaba.fastjson2.annotation.JSONField;
 
 import java.util.List;
 
@@ -23,6 +25,20 @@ public class TeamPortfolioConfigDto {
 
     /** 编辑器配置能力版本 */
     private Integer editorSchemaRevision;
+
+    /** 作品集统一字体版本表；保留原始类型以在业务校验阶段区分非法结构。 */
+    private Object fonts;
+
+    /** 请求是否显式提供字体表，不参与持久化或响应。 */
+    @JsonIgnore
+    @JSONField(serialize = false, deserialize = false)
+    private boolean fontsProvided;
+
+    /** 保存字体表及字段存在性，显式 null 不等于省略。 */
+    public void setFonts(Object fonts) {
+        this.fonts = fonts;
+        this.fontsProvided = true;
+    }
 
     /** 分享信息 */
     private Share share;

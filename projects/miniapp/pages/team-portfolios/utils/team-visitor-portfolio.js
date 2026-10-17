@@ -105,6 +105,7 @@ function normalizeTeamVisitorPortfolio(payload = {}) {
   const bottomNav = normalizeBottomNavigation(renderData.bottomNav)
   const activeMenuKey = bottomNav.enabled ? bottomNav.items[0].key : ''
   return {
+    fonts: renderData.fonts || null,
     shareCode: text(payload.shareCode || renderData.shareCode),
     portfolioId: normalizeId(payload.portfolioId || renderData.portfolioId),
     teamId: normalizeId(payload.teamId || renderData.teamId),

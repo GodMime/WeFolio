@@ -21,7 +21,8 @@ const {
   updateMockSingleWorkConfig
 } = require('../utils/mock-experience')
 const {
-  PORTFOLIO_TEXT_FONT_OPTIONS,
+  PORTFOLIO_TEXT_SELECTION_OPTIONS: PORTFOLIO_TEXT_FONT_OPTIONS,
+  applyPortfolioFontSelection,
   LEGACY_TEXT_SECTION_LINE_HEIGHT,
   buildPortfolioTextLineHeightEditor,
   parsePortfolioTextLineHeightInput,
@@ -37,6 +38,7 @@ const {
 const { selectMockWorksFor } = require('../utils/mock-work-media')
 const { createMockAudioController } = require('../utils/mock-portfolio-audio')
 const textTools = require('../utils/mock-portfolio-text')
+const { createMockFontSession, collectMockFontNodes } = require('../utils/mock-portfolio-fonts')
 const gridTools = require('../utils/mock-portfolio-text-grid')
 const { MOCK_CONTACT_PROFILE } = require('../utils/mock-portfolio-hyperlink')
 const COMPLEX_TYPES = ['VIDEO_CAROUSEL','STRUCTURED_TEXT_SECTION','TEXT_GRID','CONTACT_INFO','HYPERLINK']
@@ -290,8 +292,8 @@ function buildDisplayGroupState(config, requestedKey) {
   }
 }
 
-function buildGridPreview(config, draft, metrics) {
-  try { return gridTools.buildMockGridViewModel(config, draft.renderData.themeMode, metrics ? metrics.widthRpx + 2 * (config.horizontalMarginRpx || 0) : undefined, metrics ? metrics.heights : {}) }
+function buildGridPreview(config, draft, metrics, fontContext = {}) {
+  try { return gridTools.buildMockGridViewModel(config, draft.renderData.themeMode, metrics ? metrics.widthRpx + 2 * (config.horizontalMarginRpx || 0) : undefined, metrics ? metrics.heights : {}, fontContext) }
   catch (_) { return {cells:[]} }
 }
 
@@ -368,7 +370,7 @@ function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY
     textSectionTypography,
     textSectionContentCount: Array.from(textSectionConfig.content || '').length,
     textSectionLineHeightEditor: buildPortfolioTextLineHeightEditor(textSectionConfig.lineHeight, LEGACY_TEXT_SECTION_LINE_HEIGHT),
-    textSectionFontOptions: PORTFOLIO_TEXT_FONT_OPTIONS.map((item) => Object.assign({}, item, {
+    textSectionFontOptions: PORTFOLIO_TEXT_FONT_OPTIONS.filter(item=>!item.remote || item.value===textSectionConfig.fontId).map((item) => Object.assign({}, item, {
       available: textTools.isMockTextFontAvailable(item.value)
     })),
     textSectionSizeOptions: buildPortfolioTextFontSizeOptions(textSectionTypography.fontSizeRpx),
@@ -422,17 +424,19 @@ Page({
   }, buildState(getMockPortfolioDraft())),
 
   onLoad() {
-    textTools.registerMockTextFont(wx, capability => this.setData({
-      mockFontAvailability: {SYSTEM:true,WECHAT_SANS_SS:textTools.isMockTextFontAvailable('WECHAT_SANS_SS',capability)},
-      textSectionFontOptions: PORTFOLIO_TEXT_FONT_OPTIONS.map(item => Object.assign({}, item, {available:textTools.isMockTextFontAvailable(item.value,capability)}))
-    }))
+    this.mockFontSession = createMockFontSession({wxApi:wx,onChange:()=>this.refreshMockFonts(false)})
+    textTools.registerMockTextFont(wx, capability => {
+      if(this.mockFontDisposed)return
+      this.setData({mockFontAvailability:{SYSTEM:true,WECHAT_SANS_SS:textTools.isMockTextFontAvailable('WECHAT_SANS_SS',capability)}})
+      this.refreshMockFonts(false)
+    })
     this.loadDraft()
     if(this.data.draft.draftWarning) wx.showToast({title:this.data.draft.draftWarning,icon:'none'})
   },
 
   onHide() { if (this.mockAudio) this.mockAudio.hide() },
 
-  onUnload() { if (this.mockAudio) this.mockAudio.destroy() },
+  onUnload() { this.mockFontDisposed=true; if(this.mockFontSession)this.mockFontSession.destroy(); if (this.mockAudio) this.mockAudio.destroy() },
 
   onShow() {
     if (this.mockAudio) this.mockAudio.show()
@@ -462,6 +466,8 @@ Page({
         nextOptions.extraData || {}
       ),
       () => {
+        this.mockCandidateVersions = null
+        this.refreshMockFonts()
         if (nextOptions.resetViewport) {
           this.resetEditViewport()
         }
@@ -484,6 +490,81 @@ Page({
       ),
       nextExtraData
     ))
+    this.refreshMockFonts()
+  },
+
+  mockFontContext() {
+    return this.mockFontSession ? this.mockFontSession.context(this.mockCandidateVersions || this.data.draft.config.fonts || {}) : {}
+  },
+
+  mockFontCommitDraft() {
+    const draft=JSON.parse(JSON.stringify(this.data.draft))
+    const config=this.mockFontCandidateConfig()
+    const ids=new Set(collectMockFontNodes(config).map(node=>node.fontId))
+    const versions=Object.fromEntries(Object.entries(this.mockCandidateVersions || config.fonts || {}).filter(([id])=>ids.has(id)))
+    if(Object.keys(versions).length)draft.config.fonts=versions
+    else delete draft.config.fonts
+    return draft
+  },
+
+  mockFontCandidateConfig() {
+    const config=JSON.parse(JSON.stringify(this.data.draft.config))
+    config.fonts=this.mockCandidateVersions || config.fonts || {}
+    if(this.data.componentEditSheetVisible) {
+      const menus=config.bottomNav && config.bottomNav.items || []
+      const selectedMenu=menus.find(item=>item.key===this.data.activeMenuKey)
+      const list=selectedMenu && menus[0]!==selectedMenu ? selectedMenu.components || [] : config.components || []
+      const component=list.find(item=>item.componentKey===this.data.selectedComponentKey)
+      if(component)component.config=JSON.parse(JSON.stringify(COMPLEX_TYPES.includes(this.data.selectedComponentType)?this.data.complexConfig:this.data.componentConfig))
+    }
+    return config
+  },
+
+  handleMockFontSelect(event) {
+    const fontId=event.detail.fontId
+    if(!fontId || !this.mockFontSession || event.detail.previousFontId===fontId)return
+    // 网格第一个字体动作前记录原根表，撤销能够恢复旧版本。
+    if(this.data.selectedComponentType==='TEXT_GRID'&&!this.gridHistory)this.gridHistory=gridTools.createMockGridHistory(this.data.complexConfig,this.mockCandidateVersions || this.data.draft.config.fonts || {})
+    this.mockCandidateVersions=this.mockFontSession.versions({fontId},this.mockCandidateVersions || this.data.draft.config.fonts || {})
+  },
+
+  handleMockFontRepair(event) {
+    const fontId=event.detail && event.detail.fontId || event.currentTarget && event.currentTarget.dataset.value
+    if(!fontId || !this.mockFontSession)return
+    const option=this.data.mockFontChoices.find(item=>item.value===fontId)
+    const version=(this.mockCandidateVersions || this.data.draft.config.fonts || {})[fontId]
+    if(!option || !option.repairable)return
+    const next=this.mockFontSession.versions({fontId},this.mockCandidateVersions || this.data.draft.config.fonts || {},{repair:fontId})
+    if(version && next[fontId] && version.fontVersion===next[fontId].fontVersion)return
+    if(this.data.selectedComponentType==='TEXT_GRID') {
+      if(!this.gridHistory)this.gridHistory=gridTools.createMockGridHistory(this.data.complexConfig,this.mockCandidateVersions || this.data.draft.config.fonts || {})
+      this.gridHistory.apply(this.data.complexConfig,next)
+      this.setData({gridUndoCount:this.gridHistory.size()})
+    }
+    this.mockCandidateVersions=next
+    this.refreshMockFonts()
+  },
+
+  handleMoreMockFonts() {this.setData({mockFontsExpanded:!this.data.mockFontsExpanded});this.refreshMockFonts(false)},
+  handleMockSampleError(event) {const value=event.currentTarget.dataset.value;this.setData({textSectionFontOptions:this.data.textSectionFontOptions.map(item=>item.value===value?{...item,sampleUrl:''}:item)})},
+
+  /** 候选和已确认配置使用同一页面缓存，版本只在确认时进入本地草稿。 */
+  refreshMockFonts(load=true) {
+    if(!this.mockFontSession || this.mockFontDisposed || !this.data.draft)return
+    const config=this.mockFontCandidateConfig()
+    const versions=config.fonts
+    const context=this.mockFontSession.context(versions)
+    const selected=this.data.textSectionForm && (this.data.textSectionForm.fontId || this.data.textSectionForm.fontFamily)
+    const common={builtIn:this.data.mockFontAvailability,versions}
+    const renderData=buildMockPortfolioRenderData(this.data.draft.config,context)
+    this.setData({mockFontChoices:this.mockFontSession.options({...common,expanded:true}),
+      textSectionFontOptions:this.mockFontSession.options({...common,expanded:this.data.mockFontsExpanded===true,selected}),
+      mockFontRepairable:this.mockFontSession.options({...common,selected}).some(item=>item.value===selected && item.repairable),
+      mockFontContext:context,
+      draft:{...this.data.draft,renderData},
+      textSectionTypography:buildPortfolioTextTypography(this.data.componentConfig,undefined,context),
+      gridPreviewViewModel:this.data.selectedComponentType==='TEXT_GRID'?buildGridPreview(this.data.complexConfig,this.data.draft,this.gridPreviewMetrics,context):this.data.gridPreviewViewModel})
+    if(load)this.mockFontSession.load({fonts:versions,components:getMockMenuComponents(config,this.data.activeMenuKey)})
   },
 
   resetEditViewport() {
@@ -684,6 +765,8 @@ Page({
       this.setData({ revealedComponentKey: '' })
       return
     }
+    this.mockCandidateVersions = JSON.parse(JSON.stringify(this.data.draft.config.fonts || {}))
+    this.setData({mockFontsExpanded:false})
     this.componentEditSnapshot = JSON.parse(JSON.stringify(this.data.draft))
     this.setDraftState(this.data.draft, componentKey, {
       componentEditSheetVisible: true
@@ -818,13 +901,15 @@ Page({
   handleTextSectionFontTap(event) {
     if (!this.data.componentEditSheetVisible) return
     const fontFamily = event.currentTarget.dataset.value || 'SYSTEM'
-    if (!textTools.isMockTextFontAvailable(fontFamily)) return
+    const option=(this.data.textSectionFontOptions||[]).find(item=>item.value===fontFamily)
+    if (!option || !option.available) return
     const componentKey = this.data.selectedComponentKey
     if (this.data.selectedComponentType !== 'TEXT_SECTION') {
       return
     }
+    this.handleMockFontSelect({detail:{fontId:option.remote?fontFamily:null,previousFontId:this.data.componentConfig.fontId}})
     const draft = updateComponentConfig(this.data.draft, componentKey, (config) => {
-      return Object.assign({}, config, { fontFamily })
+      return Object.assign({}, config, applyPortfolioFontSelection(fontFamily))
     }, this.data.activeMenuKey)
     this.setDraftState(draft, componentKey)
   },
@@ -1000,6 +1085,8 @@ Page({
     }
     const option = this.data.componentOptions.find(item => item.componentType === componentType)
     if (!option || option.disabled) return
+    this.mockCandidateVersions = JSON.parse(JSON.stringify(this.data.draft.config.fonts || {}))
+    this.setData({mockFontsExpanded:false})
     this.componentEditSnapshot = JSON.parse(JSON.stringify(this.data.draft))
     const currentComponents = getMockMenuComponents(this.data.draft.config, this.data.activeMenuKey)
     const currentKeys = new Set(currentComponents.map((component) => component.componentKey))
@@ -1159,6 +1246,7 @@ Page({
     this.gridHasInvalidDraft = false
     const snapshot = this.componentEditSnapshot
     this.componentEditSnapshot = null
+    this.mockCandidateVersions = null
     if (snapshot) this.setDraftState(snapshot, null, { componentEditSheetVisible: false })
     else this.setData({ componentEditSheetVisible: false })
   },
@@ -1167,11 +1255,12 @@ Page({
     if (!this.data.componentEditSheetVisible) return
     if (event && event.detail && event.detail.config && COMPLEX_TYPES.includes(this.data.selectedComponentType)) this.setData({complexConfig:event.detail.config})
     if (COMPLEX_TYPES.includes(this.data.selectedComponentType)) {
-      const result = applyMockComponentConfig(this.data.draft,this.data.selectedComponentKey,this.data.complexConfig,this.data.activeMenuKey)
+      const result = applyMockComponentConfig(this.mockFontCommitDraft(),this.data.selectedComponentKey,this.data.complexConfig,this.data.activeMenuKey)
       if (!result.valid) { this.setData({complexError:result.message}); return }
       this.gridHistory = null
       this.gridHasInvalidDraft = false
       this.componentEditSnapshot = null
+      this.mockCandidateVersions=null
       this.setDraftState(result.draft,this.data.selectedComponentKey,{componentEditSheetVisible:false})
       return
     }
@@ -1192,10 +1281,11 @@ Page({
       })
       return
     }
-    const result = applyMockComponentConfig(this.data.draft,this.data.selectedComponentKey,this.data.componentConfig,this.data.activeMenuKey)
+    const result = applyMockComponentConfig(this.mockFontCommitDraft(),this.data.selectedComponentKey,this.data.componentConfig,this.data.activeMenuKey)
     if (!result.valid) { this.setData({complexError:result.message}); return }
     this.componentEditSnapshot = null
-    this.setDraftState(result.draft,this.data.selectedComponentKey,{componentEditSheetVisible:false})
+    this.mockCandidateVersions=null
+      this.setDraftState(result.draft,this.data.selectedComponentKey,{componentEditSheetVisible:false})
   },
 
   handlePreview() {
@@ -1231,6 +1321,7 @@ Page({
   handleComplexChange(event) {
     if (!this.data.componentEditSheetVisible) return
     this.setData({complexConfig:event.detail.config,complexError:'',hyperlinkSelectedWork:MOCK_WORK_LIBRARY.works.find(work=>work.id === Number(event.detail.config.workId)) || null})
+    this.refreshMockFonts()
   },
 
   handleConfigInput(event) {
@@ -1353,15 +1444,16 @@ Page({
     if(op.type === 'addListItem' && blocks[op.index].items.length<10) blocks[op.index].items.push('')
     if(op.type === 'removeListItem' && blocks[op.index].items.length>1) blocks[op.index].items.splice(op.item,1)
     this.setData({complexConfig:Object.assign(config,{blocks}),complexError:''})
+    this.refreshMockFonts()
   },
 
   handleGridChange(event) {
     if (!this.data.componentEditSheetVisible) return
     try {
-      if(!this.gridHistory) this.gridHistory=gridTools.createMockGridHistory(this.data.complexConfig)
-      this.gridHistory.apply(event.detail.config)
+      if(!this.gridHistory) this.gridHistory=gridTools.createMockGridHistory(this.data.complexConfig,this.mockCandidateVersions || this.data.draft.config.fonts || {})
+      this.gridHistory.apply(event.detail.config,this.mockCandidateVersions || {})
       this.gridHasInvalidDraft=false
-      this.setData({complexConfig:event.detail.config,gridPreviewViewModel:buildGridPreview(event.detail.config,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''})
+      this.setData({complexConfig:event.detail.config,gridPreviewViewModel:buildGridPreview(event.detail.config,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''});this.refreshMockFonts()
     } catch(error) {
       this.gridHasInvalidDraft=true
       this.setData({complexConfig:event.detail.config,complexError:error.message})
@@ -1379,24 +1471,26 @@ Page({
     const info = wx.getWindowInfo ? wx.getWindowInfo() : {windowWidth:375}
     const scale = 750 / (info.windowWidth || 375)
     this.gridPreviewMetrics = {widthRpx:widthPx*scale,heights:Object.fromEntries(Object.entries(heightsPx || {}).map(([key,height])=>[key,height*scale]))}
-    this.setData({gridPreviewViewModel:buildGridPreview(this.data.complexConfig,this.data.draft,this.gridPreviewMetrics)})
+    this.setData({gridPreviewViewModel:buildGridPreview(this.data.complexConfig,this.data.draft,this.gridPreviewMetrics,this.mockFontContext())})
   },
 
   handleGridOperation(event) {
     if (!this.data.componentEditSheetVisible) return
     const op=event.detail
     try {
-      if(!this.gridHistory) this.gridHistory=gridTools.createMockGridHistory(this.data.complexConfig)
+      if(!this.gridHistory) this.gridHistory=gridTools.createMockGridHistory(this.data.complexConfig,this.mockCandidateVersions || this.data.draft.config.fonts || {})
       let config=JSON.parse(JSON.stringify(op.config || this.data.complexConfig))
       if(op.type === 'undo' && this.gridHasInvalidDraft) {
         this.gridHasInvalidDraft=false
         const restored = this.gridHistory.get()
-        this.setData({complexConfig:restored,gridPreviewViewModel:buildGridPreview(restored,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''})
+        this.mockCandidateVersions=this.gridHistory.getFonts()
+        this.setData({complexConfig:restored,gridPreviewViewModel:buildGridPreview(restored,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''});this.refreshMockFonts()
         return
       }
       if(op.type === 'undo') {
         const restored = this.gridHistory.undo()
-        this.setData({complexConfig:restored,gridPreviewViewModel:buildGridPreview(restored,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''});return
+        this.mockCandidateVersions=this.gridHistory.getFonts()
+        this.setData({complexConfig:restored,gridPreviewViewModel:buildGridPreview(restored,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''});this.refreshMockFonts();return
       }
       if(op.type === 'merge') config=gridTools.mergeMockGridCells(config,op.selectedKeys)
       if(op.type === 'split') config=gridTools.splitMockGridCell(config,op.cellKey || op.selectedKeys[0])
@@ -1406,9 +1500,9 @@ Page({
       if(op.type === 'removeParagraph') cell.blocks.splice(op.blockIndex,1)
       if(op.type === 'addRun') {if(cell.blocks[op.blockIndex].runs.length>=8)throw new Error('每段最多 8 个片段');cell.blocks[op.blockIndex].runs.push(gridTools.createMockGridRun())}
       if(op.type === 'removeRun') cell.blocks[op.blockIndex].runs.splice(op.runIndex,1)
-      this.gridHistory.apply(config)
+      this.gridHistory.apply(config,this.mockCandidateVersions || {})
       this.gridHasInvalidDraft=false
-      this.setData({complexConfig:config,gridPreviewViewModel:buildGridPreview(config,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''})
+      this.setData({complexConfig:config,gridPreviewViewModel:buildGridPreview(config,this.data.draft,this.gridPreviewMetrics),gridUndoCount:this.gridHistory.size(),complexError:''});this.refreshMockFonts()
     } catch(error) {this.setData({complexError:error.message})}
   },
 

@@ -1,0 +1,15 @@
+<template name="portfolio-opening">
+  <root-portal>
+  <view class="portfolio-opening {{active ? 'portfolio-opening-visible' : ''}} {{dark ? 'portfolio-opening-dark' : ''}}" style="top:{{top}}px;background-color:{{background || (dark ? '#101112' : '#ffffff')}};" catchtouchmove="blockPortfolioOpeningTouch" catchtap="blockPortfolioOpeningTouch" aria-hidden="{{!active}}">
+    <view wx:if="{{preview}}" class="portfolio-opening-preview">预览模式：禁用真实提交，不统计访问，不扣积分。</view>
+    <view class="portfolio-opening-center">
+      <view class="portfolio-opening-spinner"></view>
+      <text class="portfolio-opening-copy">正在打开作品集</text>
+    </view>
+    <view class="portfolio-opening-brand">
+      <image class="portfolio-opening-logo" src="{{dark ? '/assets/system/folio-logo-stack-bold-dark-50kb.png' : '/assets/system/folio-logo-stack-bold-small-50kb.png'}}" mode="aspectFit" />
+      <text>映期Folio</text>
+    </view>
+  </view>
+  </root-portal>
+</template>

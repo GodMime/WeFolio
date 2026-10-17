@@ -37,6 +37,7 @@ test('request client injects bearer token and unwraps successful response data',
   assert.equal(capturedOptions.url, 'http://api.test/api/mine/dashboard')
   assert.equal(capturedOptions.header.Authorization, 'Bearer wf-dev-user-7')
   assert.equal(capturedOptions.header['X-WeFolio-Capabilities'], undefined)
+  assert.equal(Object.hasOwn(capturedOptions, 'timeout'), false, '普通请求保持微信默认超时')
   assert.deepEqual(data, { ok: true })
 })
 
@@ -280,4 +281,16 @@ test('request client attaches structured backend failure data to the error', asy
       return true
     }
   )
+})
+
+
+test('request client forwards an explicitly configured timeout without changing the default', async () => {
+  const calls = []
+  const client = createRequestClient({ baseUrl: 'http://api.test', getToken: () => '', wxApi: {
+    request(options) { calls.push(options); options.success({ statusCode: 200, data: { success: true, data: {} } }) }
+  } })
+  await client.request({ url: '/api/mine/portfolio-ai/reference-attachments/complete', method: 'POST', timeout: 150000 })
+  await client.request({ url: '/api/mine/dashboard' })
+  assert.equal(calls[0].timeout, 150000)
+  assert.equal(Object.hasOwn(calls[1], 'timeout'), false)
 })

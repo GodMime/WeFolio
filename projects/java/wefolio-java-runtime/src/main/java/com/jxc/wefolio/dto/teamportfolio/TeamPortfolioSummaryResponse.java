@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 @Data
 public class TeamPortfolioSummaryResponse {
 
+    /** 模板类型，供新版客户端选择对应维护入口。 */
+    private String templateType;
+
     /** 作品集 ID */
     private Long portfolioId;
 

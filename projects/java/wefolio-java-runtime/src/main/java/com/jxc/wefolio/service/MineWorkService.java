@@ -4,7 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
+import com.jxc.wefolio.service.teamportfolio.PortfolioReferenceMutex;
 import com.jxc.wefolio.common.lock.DistributedLockExecutor;
 import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
@@ -15,6 +18,7 @@ import com.jxc.wefolio.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.dict.WorkStatusDict;
 import com.jxc.wefolio.dict.WorkUploadTaskStatusDict;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteCheckResponse;
+import com.jxc.wefolio.dto.MineWorkAiContentResponse;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteRequest;
 import com.jxc.wefolio.dto.MineWorkBatchDeleteResponse;
 import com.jxc.wefolio.dto.MineWorkCoverUploadTicketRequest;
@@ -47,6 +51,10 @@ import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.mapper.WorkTagEntityMapper;
 import com.jxc.wefolio.mapper.WorkUploadTaskEntityMapper;
 import com.jxc.wefolio.message.MineWorkMessage;
+import com.jxc.wefolio.service.portfolioai.AiProtocolException;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiStoredVideoSummary;
+import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -56,9 +64,11 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -77,6 +87,18 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class MineWorkService {
+
+    /** 只读关键帧链接有效期；过期后由用户重新查询。 */
+    private static final Duration AI_FRAME_URL_TTL = Duration.ofMinutes(15);
+
+    /** 与既有帧消费者相同的文档边界。 */
+    private static final int AI_FRAME_MANIFEST_MAX_BYTES = 128 * 1024;
+
+    /** 与既有帧消费者相同的 JSON 深度上限。 */
+    private static final int AI_FRAME_MANIFEST_MAX_DEPTH = 12;
+
+    /** 视频源仅允许用户存储目录中的单个对象。 */
+    private static final String AI_VIDEO_SOURCE_KEY_PATTERN = "[A-Za-z0-9_-]+/work/video/[^/]+";
 
     /** 单批最大上传数量 */
     public static final int MAX_BATCH_COUNT = 9;
@@ -337,6 +359,9 @@ public class MineWorkService {
     /** 作品资料保存互斥，持有到提交或回滚完成。 */
     private final DistributedLockExecutor distributedLockExecutor;
 
+    /** 作品删除、封面共享及作品集引用写入共用互斥。 */
+    private final PortfolioReferenceMutex portfolioReferenceMutex;
+
     /**
      * 分页查询我的作品。
      *
@@ -547,6 +572,111 @@ public class MineWorkService {
                 .map(this::buildReferenceItem)
                 .toList());
         return response;
+    }
+
+    /** 查询已有 AI 结果；先验证作品归属，严格读取同一快照，不生成或修改任何数据。 */
+    public MineWorkAiContentResponse getWorkAiContent(Long workId) {
+        WorkEntity owned = requireOwnedWork(workId);
+        WorkEntity work = workEntityMapper.selectPortfolioAiMediaSnapshot(workId);
+        if (work == null || !Objects.equals(owned.getUserId(), work.getUserId())
+                || work.getDeleted() != null && work.getDeleted() != 0L) {
+            throw new BusinessException(MineWorkMessage.WORK_NOT_FOUND_MESSAGE);
+        }
+        MineWorkAiContentResponse response = new MineWorkAiContentResponse();
+        if (!MediaTypeDict.VIDEO.getCode().equals(work.getMediaType())) {
+            return response;
+        }
+        response.setAudioText(work.getVideoAudioText());
+        String identity = aiContentSourceVersion(work);
+        if (identity != null) {
+            ObjectNode summary = PortfolioAiStoredVideoSummary.contentOrNull(work.getVideoSummaryJson(), identity);
+            if (summary != null) {
+                response.setSummary(new MineWorkAiContentResponse.Summary(
+                        summary.path(PortfolioAiMediaContract.SUMMARY).asText(),
+                        aiSummaryItems(summary.path(PortfolioAiMediaContract.OBSERVATIONS)),
+                        aiSummaryItems(summary.path(PortfolioAiMediaContract.LIMITATIONS))));
+            }
+            response.setFrames(aiContentFrames(work, identity));
+        }
+        response.setHasContent(response.getSummary() != null || !response.getFrames().isEmpty()
+                || response.getAudioText() != null && !response.getAudioText().isBlank());
+        return response;
+    }
+
+    /** 没有摘要或帧时无需访问 COS；有持久结果时按真实源版本拒绝过期结果。 */
+    private String aiContentSourceVersion(WorkEntity work) {
+        if (!hasText(work.getVideoSummaryJson()) && !hasText(work.getVideoFramesJson())) {
+            return null;
+        }
+        String key = work.getMediaObjectKey();
+        if (key == null || !key.matches(AI_VIDEO_SOURCE_KEY_PATTERN)
+                || key.contains("..") || key.contains("%") || key.contains("\\")) {
+            return null;
+        }
+        CosService.VersionedObjectHead head = cosService.headObjectVersion(key);
+        if (head == null || head.contentLength() <= 0 || !hasText(head.eTag())) {
+            return null;
+        }
+        return PortfolioAiStoredVideoSummary.sourceVersion(key, head.eTag(), head.contentLength(), work.getMediaSha256());
+    }
+
+    /** 严格摘要合同已验证类型，展示时过滤无内容条目。 */
+    private List<String> aiSummaryItems(JsonNode values) {
+        List<String> result = new ArrayList<>();
+        values.forEach(value -> {
+            if (!value.asText().isBlank()) { result.add(value.asText()); }
+        });
+        return result;
+    }
+
+    /** 帧清单沿用既有数量、源身份、尺寸与路径合同；全部校验通过后才签名，忽略任何存储 URL。 */
+    private List<MineWorkAiContentResponse.Frame> aiContentFrames(WorkEntity work, String identity) {
+        if (!hasText(work.getVideoFramesJson())) { return List.of(); }
+        ObjectNode manifest;
+        try {
+            manifest = StrictAiJson.parseObject(work.getVideoFramesJson(), AI_FRAME_MANIFEST_MAX_BYTES,
+                    AI_FRAME_MANIFEST_MAX_DEPTH);
+        } catch (AiProtocolException exception) {
+            return List.of();
+        }
+        JsonNode count = manifest.path(PortfolioAiMediaContract.KEY_FRAME_COUNT);
+        JsonNode frames = manifest.path(PortfolioAiMediaContract.KEY_FRAMES);
+        if (!PortfolioAiMediaContract.FRAME_SCHEMA.equals(manifest.path(PortfolioAiMediaContract.KEY_SCHEMA_VERSION).asText())
+                || !identity.equals(manifest.path(PortfolioAiMediaContract.KEY_SOURCE_VERSION).asText())
+                || !count.isIntegralNumber() || !count.canConvertToInt()
+                || !PortfolioAiMediaContract.isSupportedFrameCount(count.asInt())
+                || !frames.isArray() || frames.size() != count.asInt()) {
+            return List.of();
+        }
+        String ownerCode = work.getMediaObjectKey().split("/", 2)[0];
+        String prefix = ownerCode + PortfolioAiMediaContract.FRAME_DIRECTORY + work.getId() + "/";
+        Set<String> keys = new HashSet<>();
+        Set<Long> times = new HashSet<>();
+        List<JsonNode> sorted = new ArrayList<>();
+        for (JsonNode frame : frames) {
+            String key = frame.path(PortfolioAiMediaContract.KEY_OBJECT_KEY).asText();
+            JsonNode time = frame.path(PortfolioAiMediaContract.KEY_TIME_MS);
+            JsonNode bytes = frame.path(PortfolioAiMediaContract.KEY_BYTES);
+            JsonNode width = frame.path(PortfolioAiMediaContract.KEY_WIDTH);
+            JsonNode height = frame.path(PortfolioAiMediaContract.KEY_HEIGHT);
+            if (!key.startsWith(prefix) || key.contains("..") || key.contains("%") || key.contains("\\") || !keys.add(key)
+                    || !time.isIntegralNumber() || !time.canConvertToLong() || time.asLong() < 0 || !times.add(time.asLong())
+                    || !bytes.isIntegralNumber() || !bytes.canConvertToLong() || bytes.asLong() <= 0
+                    || bytes.asLong() > PortfolioAiMediaContract.FRAME_MAX_BYTES
+                    || !width.isIntegralNumber() || !width.canConvertToInt() || width.asInt() <= 0
+                    || !height.isIntegralNumber() || !height.canConvertToInt() || height.asInt() <= 0
+                    || Math.max(width.asInt(), height.asInt()) > PortfolioAiMediaContract.FRAME_MAX_EDGE) {
+                return List.of();
+            }
+            sorted.add(frame);
+        }
+        sorted.sort(Comparator.comparingLong(frame -> frame.path(PortfolioAiMediaContract.KEY_TIME_MS).asLong()));
+        return sorted.stream().map(frame -> new MineWorkAiContentResponse.Frame(
+                frame.path(PortfolioAiMediaContract.KEY_TIME_MS).asLong(),
+                frame.path(PortfolioAiMediaContract.KEY_WIDTH).asInt(),
+                frame.path(PortfolioAiMediaContract.KEY_HEIGHT).asInt(),
+                cosService.signedGet(frame.path(PortfolioAiMediaContract.KEY_OBJECT_KEY).asText(), AI_FRAME_URL_TTL)))
+                .toList();
     }
 
     /**
@@ -973,8 +1103,8 @@ public class MineWorkService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MineWorkDetailResponse updateWork(Long workId, MineWorkUpdateRequest request) {
-        return distributedLockExecutor.executeFairUntilTransactionCompletion(
-                WORK_UPDATE_LOCK_PREFIX + workId, () -> updateWorkUnderLock(workId, request));
+        return portfolioReferenceMutex.execute(() -> distributedLockExecutor.executeFairUntilTransactionCompletion(
+                WORK_UPDATE_LOCK_PREFIX + workId, () -> updateWorkUnderLock(workId, request)));
     }
 
     /** 在读取作品前取得互斥，避免并发请求使用过期的封面和上传任务状态。 */
@@ -1228,6 +1358,14 @@ public class MineWorkService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteWork(Long workId) {
+        portfolioReferenceMutex.execute(() -> {
+            deleteWorkUnderReferenceLock(workId);
+            return null;
+        });
+    }
+
+    /** 在引用互斥区间内重新校验并删除作品。 */
+    private void deleteWorkUnderReferenceLock(Long workId) {
         WorkEntity work = requireOwnedWork(workId);
         long referenceCount = findWorkReferences(work.getId()).size();
         String blockedReason = workDeleteBlockedReason(work, referenceCount);
@@ -1245,6 +1383,11 @@ public class MineWorkService {
      */
     @Transactional(rollbackFor = Exception.class)
     public MineWorkBatchDeleteResponse deleteWorks(MineWorkBatchDeleteRequest request) {
+        return portfolioReferenceMutex.execute(() -> deleteWorksUnderReferenceLock(request));
+    }
+
+    /** 在引用互斥区间内保留批量删除的部分成功语义。 */
+    private MineWorkBatchDeleteResponse deleteWorksUnderReferenceLock(MineWorkBatchDeleteRequest request) {
         Long userId = AuthContextHolder.requireUserId();
         List<Long> workIds = normalizeWorkIds(request == null ? null : request.getWorkIds());
         if (workIds.isEmpty()) {
@@ -3102,7 +3245,7 @@ public class MineWorkService {
     }
 
     /**
-     * 收集作品原文件和封面/缩略图对象键。
+     * 收集作品原文件、封面和本作品持久帧对象键。
      *
      * @param work 作品实体
      * @return 去重后的对象键集合
@@ -3114,6 +3257,7 @@ public class MineWorkService {
         if (!MediaTypeDict.AUDIO.getCode().equals(work.getMediaType())) {
             addObjectKey(objectKeys, work.getCoverObjectKey());
         }
+        objectKeys.addAll(VideoFrameObjectKeys.collect(work));
         return objectKeys;
     }
 

@@ -69,7 +69,7 @@ java -jar target/wefolio-java-job.jar
 ## Mock 体验版规则
 
 - mock 体验版必须完全独立于正式维护者端页面和组件；除登录页的“体验”入口和跳转外，不要改动既有正式页面或正式组件来承载 mock 行为。
-- mock 页面统一放在 `projects/miniapp/pages/mock/`，mock 专用组件统一放在 `projects/miniapp/components/mock/`，mock 数据、作品集 JSON 和本地草稿逻辑统一放在 `projects/miniapp/utils/mock-experience.js` 或同级 mock 专用文件。
+- mock 页面统一放在 `projects/miniapp/pages/mock/`，mock 专用组件统一放在 `projects/miniapp/components/mock/`，mock 数据、作品集 JSON 和本地草稿逻辑统一放在 `projects/miniapp/pages/mock/utils/mock-experience.js` 或同级 mock 专用文件。
 - mock 页面禁止引入 `projects/miniapp/utils/request.js`、`projects/miniapp/utils/session.js`、上传工具或访客会话工具；禁止调用 `wx.request`、`wx.uploadFile`、`/api/`、维护者 token/session 或任何后端接口。
 - mock 的档期、作品、素材库、作品集、编辑、预览、“我的”等数据只使用本地 mock 数据或本地草稿态；新增、保存草稿、发布、档位操作等需要后端身份的动作统一提示 `请去“我的”页面注册登录`。
 - mock 页面可以复用不需要改动的展示组件和样式；如果复用会导致修改正式页面或正式组件，则新建 mock 专用组件。
@@ -154,12 +154,16 @@ Spring Boot 后台任务 (:8091)
 │   └── video/                  ← 视频类作品
 ├── protfolio/                  ← 作品集额外素材（封面/背景等）
 └── others/                     ← 头像、微信二维码等其它素材
+    └── fonts/                  ← 按作品集 ID 隔离的字体子集
 ```
 
 - 文件夹通过 0 字节空对象（Content-Type: application/x-directory）模拟
 - 初始化逻辑：`CosService.initUserStorage(uniqueCode)`，在 `MiniappAuthService.createWechatUser()` 中触发
-- 失败不影响注册主流程
+- 初始化失败会阻断注册，字体目录沿用现有失败语义
 - 上传接口：`CosService.upload(MultipartFile, String folderPrefix)` 传入前缀路径
+- 作品集字体 → `{ownerUniqueCode}/others/fonts/{portfolioId}/{uuid}.woff`；个人使用用户唯一码，团队使用团队唯一码，不使用当前操作者的个人目录。
+- 新用户 `initUserStorage` 和新团队 `initTeamStorage` 均创建 `others/fonts/` 的 0 字节目录占位对象；作品集 ID 子目录随首次上传产生，字体目录初始化沿用各自原失败语义。
+- 历史目录复用 `UserStorageFolderRepairService`：用户保留 `work/animation/`、`work/audio/` 并补 `others/fonts/`；同一执行内按独立团队 ID 游标分页，仅补团队 `others/fonts/`，不创建团队 work 目录。只补空目录，不生成或删除字体，也不新增字体 Job。
 
 ## 数据库约定
 
@@ -174,6 +178,7 @@ Spring Boot 后台任务 (:8091)
 - Flyway migration：已提交 Git 的脚本**绝对不可修改**（checksum 校验），所有变更必须追加新 V 版本文件
 - 所有 SQL 变更都必须走 `projects/java/wefolio-java-runtime/` 工程的 Flyway SQL 脚本，包括建表、改表、索引、约束、初始化数据和数据修正 SQL。
 - `wefolio-java-job` 不维护 migration；如后台任务需要数据库变更，仍在 `wefolio-java-runtime` 新增 Flyway migration。
+- 全量结构分析 SQL 位于 [`projects/java/wefolio-java-runtime/full-schema.sql`](projects/java/wefolio-java-runtime/full-schema.sql)，不执行、不参与 Flyway。每次数据库结构变更必须按根目录 [AGENTS.md 的数据库约定](AGENTS.md#数据库约定)，同步维护新增的增量 migration 与全量 DDL。
 - **禁止在 migration 中写入"重置/清理"类破坏性数据操作**（如 `DELETE` 全表、`UPDATE` 清零余额/流水）；数据重置与清理只能在对应环境手工执行并留痕，不得以 Flyway migration 形式进入迁移链。
 
 ## 编码规范

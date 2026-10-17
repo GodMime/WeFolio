@@ -1,5 +1,14 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.config.PortfolioFontProperties;
+import com.jxc.wefolio.dto.PortfolioClientCapabilities;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.mock;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
@@ -61,6 +70,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Arrays;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,6 +108,9 @@ class MinePortfolioServiceTest {
                 PortfolioHistoryEntity.class
         );
     }
+
+    /** 附件事实与 owner 锁边界。 */
+    @Mock private PortfolioAiReferenceService aiReferences;
 
     /** 作品集 Mapper 模拟 */
     @Mock
@@ -189,7 +203,7 @@ class MinePortfolioServiceTest {
         Method saveDraft = MinePortfolioService.class.getMethod("saveDraft", Long.class, MinePortfolioDraftSaveRequest.class);
         Method publish = MinePortfolioService.class.getMethod("publish", Long.class, MinePortfolioPublishRequest.class);
 
-        assertThat(saveDraft.getAnnotation(Transactional.class).rollbackFor()).contains(Exception.class);
+        assertThat(saveDraft.getAnnotation(Transactional.class)).isNull();
         assertThat(publish.getAnnotation(Transactional.class)).isNull();
         assertThat(Arrays.stream(MinePortfolioService.class.getMethods()).map(method -> method.getName()))
                 .doesNotContain("createCoverUploadTicket");
@@ -221,6 +235,104 @@ class MinePortfolioServiceTest {
         assertThat(response.getPublicationStatus()).isEqualTo(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
         verify(contentLimitService).ensurePersonalPortfolioCapacity(7L);
         verify(pointService, never()).consume(any(), any(), any(), any(), any(Integer.class), any(), any());
+    }
+
+    /** 高级基础草稿复用配额和初始配置，创建阶段不扣发布费用。 */
+    @Test
+    void advancedCreationUsesRealTemplateAndDoesNotConsumePoints() {
+        when(portfolioEntityMapper.insert(any(PortfolioEntity.class))).thenAnswer(invocation -> {
+            invocation.<PortfolioEntity>getArgument(0).setId(88L); return 1;
+        });
+        var result = service().createStandardPersonal(new MinePortfolioCreateRequest(), PortfolioTemplateTypeDict.ADVANCED.getCode());
+        assertThat(result.getTemplateType()).isEqualTo(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        assertThat(result.getConfig().getSchemaVersion()).isEqualTo(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
+        verify(contentLimitService).ensurePersonalPortfolioCapacity(7L);
+        verifyNoInteractions(pointService);
+    }
+
+    /** 高级最终配置、编号上下文和描述共用同一保存事务及原个人历史键。 */
+    @Test
+    void advancedSavePersistsFinalEditAndMetadataInOriginalHistory() {
+        PortfolioEntity portfolio = ownedPortfolio(); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(portfolioHyperlinkGraphService.lockAdvancedUserGraph(7L, 88L))
+                .thenReturn(new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
+        PortfolioConfigDto config = config();
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(config), any())).thenReturn(config);
+        when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), config)).thenReturn(List.of());
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(config); request.setClientRevision(0); request.setIdempotencyKey("advanced-final-c");
+        JSONObject context = JSON.parseObject("{\"version\":1,\"nextSourceNo\":2,\"sources\":[{\"sourceNo\":1,\"kind\":\"WORK\",\"sourceId\":\"11\"}]}");
+        AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(context, true, "最终描述", true, JSON.toJSONString(request));
+        var result = service().saveDraft(88L, request, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(result.getDraftRevision()).isEqualTo(1);
+        assertThat(portfolio.getAiContextJson()).isEqualTo(context.toJSONString()); assertThat(portfolio.getAiPrompt()).isEqualTo("最终描述");
+        ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(portfolioHistoryEntityMapper).insert(history.capture());
+        JSONObject snapshot = JSON.parseObject(history.getValue().getSnapshotJson());
+        assertThat(snapshot.getJSONObject("aiContext")).isEqualTo(context);
+        assertThat(snapshot.getString("requestHash")).hasSize(64);
+        assertThat(history.getValue().getAiPrompt()).isEqualTo("最终描述");
+        verifyNoInteractions(pointService);
+    }
+
+    /** 附件校验必须在 owner 锁内进行，最终实体与草稿配置一并更新。 */
+    @Test
+    void advancedReferenceSaveResolvesInsideOwnerLockAndOriginalTransaction() {
+        PortfolioEntity portfolio = ownedPortfolio(); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(portfolioHyperlinkGraphService.lockAdvancedUserGraph(7L, 88L))
+                .thenReturn(new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
+        PortfolioConfigDto config = config();
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(config), any())).thenReturn(config);
+        when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), config)).thenReturn(List.of());
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(config); request.setClientRevision(0); request.setIdempotencyKey("advanced-final-c");
+        JSONObject context = JSON.parseObject("{\"version\":1,\"nextSourceNo\":2,\"sources\":[{\"sourceNo\":1,\"kind\":\"WORK\",\"sourceId\":\"11\"}]}");
+        var items = JsonNodeFactory.instance.arrayNode();
+        String resolved = "{\"version\":1,\"nextReferenceNo\":4,\"items\":[]}";
+        boolean[] held = {false};
+        when(aiReferences.withOwnerLock(eq("USER"), eq(7L), any())).thenAnswer(invocation -> {
+            held[0] = true;
+            try { return invocation.<Supplier<?>>getArgument(2).get(); } finally { held[0] = false; }
+        });
+        when(aiReferences.resolveForSave(eq("USER"), eq(7L), eq(items), isNull(), eq(4))).thenAnswer(invocation -> {
+            assertThat(held[0]).isTrue(); return resolved;
+        });
+        AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(context, true, "最终描述", true,
+                JSON.toJSONString(request), items, true, 4);
+        var result = service().saveDraft(88L, request, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(result.getDraftRevision()).isEqualTo(1);
+        assertThat(portfolio.getAiReferenceAttachmentsJson()).isEqualTo(resolved);
+        assertThat(held[0]).isFalse();
+        assertThat(portfolio.getAiContextJson()).isEqualTo(context.toJSONString()); assertThat(portfolio.getAiPrompt()).isEqualTo("最终描述");
+        ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(portfolioHistoryEntityMapper).insert(history.capture());
+        JSONObject snapshot = JSON.parseObject(history.getValue().getSnapshotJson());
+        assertThat(snapshot.getJSONObject("aiContext")).isEqualTo(context);
+        assertThat(snapshot.getString("requestHash")).hasSize(64);
+        assertThat(history.getValue().getAiPrompt()).isEqualTo("最终描述");
+        verifyNoInteractions(pointService);
+    }
+
+    /** 高级发布选择高级规则，个人所有者承担费用，失败之前不写发布配置。 */
+    @Test
+    void advancedPublishSelectsAdvancedBillingScene() {
+        PortfolioEntity portfolio = ownedPortfolio(); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        portfolio.setDraftRevision(1); portfolio.setDraftConfigJson(JSON.toJSONString(config()));
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(portfolioHyperlinkGraphService.lockAdvancedUserGraph(7L, 88L))
+                .thenReturn(new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
+        PortfolioConfigDto config = config();
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(), any())).thenReturn(config);
+        when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), config)).thenReturn(List.of());
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        MinePortfolioPublishRequest request = new MinePortfolioPublishRequest(); request.setDraftRevision(1); request.setIdempotencyKey("adv-publish");
+        service().publish(88L, request, PortfolioTemplateTypeDict.ADVANCED.getCode());
+        verify(pointService).assertCanConsume(7L, PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode(), "PORTFOLIO", "88", 1, "adv-publish");
+        verify(pointService).consume(eq(7L), eq(PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode()), eq("PORTFOLIO"), eq("88"), eq(1), eq("adv-publish"), any());
     }
 
     @Test
@@ -598,7 +710,7 @@ class MinePortfolioServiceTest {
         portfolio.setCurrentRevision(8);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto incoming = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any())).thenReturn(incoming);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any())).thenAnswer(invocation -> JSON.parseObject(JSON.toJSONString(incoming), PortfolioConfigDto.class));
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
         request.setConfig(incoming);
@@ -628,6 +740,10 @@ class MinePortfolioServiceTest {
             return savedHistory;
         });
 
+        // 相同旧字段请求跨升级节点重放，新增能力声明不能改变旧指纹。
+        var capabilities = new PortfolioClientCapabilities();
+        capabilities.setPortfolioRemoteFont(1);
+        request.setClientCapabilities(capabilities);
         MinePortfolioDetailResponse replay = service().saveDraft(88L, request);
 
         assertThat(replay.getDraftRevision()).isEqualTo(4);
@@ -635,6 +751,103 @@ class MinePortfolioServiceTest {
         verify(portfolioHistoryEntityMapper, times(1)).insert(any(PortfolioHistoryEntity.class));
         verify(portfolioConfigValidator, times(1)).normalizeForDraft(any(), any(), any());
         verify(portfolioHistoryEntityMapper, never()).selectList(any());
+        request.getConfig().setFonts(null);
+        assertThatThrownBy(() -> service().saveDraft(88L, request))
+                .hasMessage(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+    }
+
+    /** 固定旧 DTO 与真实旧端序列化夹具的摘要不因节点升级或能力声明变化。 */
+    @Test
+    void actualLegacyRequestsKeepGoldenHashAcrossCapableReplay() throws Exception {
+        var fixture = JSON.parseObject(Files.readString(Path.of(
+                "src/test/resources/portfolio-font-legacy-goldens.json"))).getJSONObject("requests").getJSONObject("portfolios");
+        for (String variant : List.of("untouched", "edited")) {
+            clearInvocations(portfolioEntityMapper, portfolioHistoryEntityMapper, portfolioConfigValidator);
+            JSONObject golden = fixture.getJSONObject(variant);
+            MinePortfolioDraftSaveRequest request = golden.getJSONObject("request").to(MinePortfolioDraftSaveRequest.class);
+            PortfolioEntity portfolio = ownedPortfolio();
+            portfolio.setDraftRevision(7);
+            portfolio.setCurrentRevision(7);
+            when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+            when(portfolioHistoryEntityMapper.selectOne(any())).thenReturn(null);
+            when(portfolioConfigValidator.normalizeForDraft(any(), any(), any())).thenAnswer(invocation ->
+                    JSON.parseObject(JSON.toJSONString(request.getConfig()), PortfolioConfigDto.class));
+            when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+            service().saveDraft(88L, request);
+            ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+            verify(portfolioHistoryEntityMapper).insert(history.capture());
+            JSONObject snapshot = JSON.parseObject(history.getValue().getSnapshotJson());
+            assertThat(snapshot.getString("requestHash")).as(variant).isEqualTo(golden.getString("hash"));
+            when(portfolioHistoryEntityMapper.selectOne(any())).thenReturn(history.getValue());
+            var capabilities = new PortfolioClientCapabilities();
+            capabilities.setPortfolioRemoteFont(1);
+            // 旧编辑表单删除了两类节点字体，但网格透传仍构成显式字体意图，不能误回放。
+            request.setClientCapabilities(capabilities);
+            assertThatThrownBy(() -> service().saveDraft(88L, request))
+                    .hasMessage(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+            verify(portfolioEntityMapper, times(1)).updateById(any(PortfolioEntity.class));
+        }
+    }
+
+    /** 个人准备、保存及三类释放入口传递同一用户目录，不能误用其它主体。 */
+    @Test void fontPrefixesUsePersonalOwnerAcrossPrepareSavePublishDelete() {
+        var fonts = mock(PortfolioFontService.class);
+        var portfolio = ownedPortfolio(); portfolio.setCurrentRevision(0);
+        String prefix = "WFUSER01/others/fonts/88/";
+        String assets = "{\"assets\":[{\"status\":\"READY\",\"bucket\":\"test-bucket\",\"objectKey\":\"" + prefix + "old.woff\"}]}";
+        portfolio.setDraftFontAssetsJson(assets);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFUSER01");
+        when(portfolioConfigValidator.normalizeForDraft(any(), any(), any())).thenAnswer(call -> config());
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        when(portfolioEntityMapper.update(any(PortfolioEntity.class), any())).thenReturn(1);
+        when(fonts.prepare(any(), any(), eq(prefix))).thenAnswer(call -> {
+            var factory = new PortfolioFontService(new PortfolioFontProperties(), null, null, null);
+            try { return factory.prepare(call.getArgument(0), call.getArgument(1), call.getArgument(2)); }
+            finally { factory.close(); }
+        });
+        when(fonts.accept(any(), any(), any())).thenReturn("{}");
+        when(fonts.publish(any(), any())).thenReturn("{}");
+        var request = new MinePortfolioDraftSaveRequest(); request.setConfig(config()); request.setClientRevision(0);
+        var service = service(fonts);
+        service.prepareFonts(88L, request);
+        service.saveDraft(88L, request);
+        portfolio.setPublishedFontAssetsJson(assets);
+        var publish = new MinePortfolioPublishRequest(); publish.setDraftRevision(portfolio.getDraftRevision()); publish.setIdempotencyKey("font-prefix-publish");
+        service.publish(88L, publish);
+        portfolio.setDraftFontAssetsJson(assets);
+        service.deletePortfolio(88L);
+        verify(fonts, times(2)).prepare(any(), any(), eq(prefix));
+        verify(fonts, times(3)).cleanup(eq(List.of("test-bucket|" + prefix + "old.woff")), eq(prefix));
+    }
+
+    /** 计划变化映射原并发保存错误，一次性凭据重复消费仍是内部不变量故障。 */
+    @Test void fontPlanConflictMapsSaveErrorWithoutHidingInvariantFailures() {
+        var fonts = mock(PortfolioFontService.class);
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDraftFontAssetsJson("{}");
+        // 空计划通过真实 prepare 生成凭据，不反射私有构造器或模拟最终类。
+        var preparation = new PortfolioFontService(new PortfolioFontProperties(), null, null, null);
+        var prepared = preparation.prepare(portfolio, PortfolioFontPlan.from(config()), "test/");
+        preparation.close();
+
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
+        when(portfolioConfigValidator.normalizeForDraft(any(), any(), any())).thenAnswer(invocation -> config());
+        when(fonts.prepare(any(), any(), eq("WFA3B1E7A2/others/fonts/88/"))).thenReturn(prepared);
+        when(fonts.accept(any(), any(), eq(prepared))).thenThrow(new PortfolioFontService.PlanConflict());
+        MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
+        request.setConfig(config());
+        request.setClientRevision(0);
+        assertThatThrownBy(() -> service(fonts).saveDraft(88L, request))
+                .hasMessage(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+        IllegalStateException consumed = new IllegalStateException("字体凭据已消费");
+        doThrow(consumed).when(fonts).accept(any(), any(), eq(prepared));
+        assertThatThrownBy(() -> service(fonts).saveDraft(88L, request)).isSameAs(consumed);
+        verify(portfolioEntityMapper, never()).updateById(any(PortfolioEntity.class));
+        verify(portfolioEntityMapper, never()).updateDraftFontAssets(any(), any());
+        verify(portfolioHistoryEntityMapper, never()).insert(any(PortfolioHistoryEntity.class));
+        verify(fonts, never()).cleanup(any(), any());
     }
 
     /** 同一键改发其他内容必须冲突，不能把当前草稿误报为此次请求的保存结果。 */
@@ -1405,8 +1618,11 @@ class MinePortfolioServiceTest {
         assertThat(captor.getValue().getShareScene()).isEqualTo("PORTFOLIO_LIST");
     }
 
-    private MinePortfolioService service() {
-        return new MinePortfolioService(
+    private MinePortfolioService service() { return service(mock(PortfolioFontService.class)); }
+
+    /** 在字体接入边界注入可控结果，验证原保存错误映射。 */
+    private MinePortfolioService service(PortfolioFontService fonts) {
+        return new MinePortfolioService(aiReferences, fonts,
                 portfolioEntityMapper,
                 portfolioHistoryEntityMapper,
                 portfolioReferenceEntityMapper,

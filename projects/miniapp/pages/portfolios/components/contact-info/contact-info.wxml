@@ -1,5 +1,6 @@
 <view class="contact-spacing" style="{{spacingStyle}}">
   <view class="contact-info theme-{{themeMode}}" style="{{borderStyle}}">
+    <view wx:if="{{repairMode && (!config || (!config.contactPhone && !config.contactWechat))}}" class="contact-empty">联系信息未填写，请返回编辑页补充</view>
     <view wx:if="{{config.contactPhone}}" class="contact-row">
       <view class="contact-copy">
         <text class="contact-label">联系手机</text>

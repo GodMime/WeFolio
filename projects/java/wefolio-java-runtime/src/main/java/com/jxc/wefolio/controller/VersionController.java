@@ -2,61 +2,25 @@ package com.jxc.wefolio.controller;
 
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.annotation.SystemAccess;
-import org.springframework.core.io.ClassPathResource;
+import com.jxc.wefolio.service.SystemStatusService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.io.InputStream;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.Properties;
 
-/**
- * 系统接口控制器 — 提供健康检查和版本信息，供负载均衡器和监控系统调用。
- */
+/** 系统接口控制器，仅将系统状态映射为原 HTTP 响应。 */
 @SystemAccess
 @RestController
+@RequiredArgsConstructor
 public class VersionController {
+    /** 系统探活与版本应用入口。 */
+    private final SystemStatusService statusService;
 
-    /**
-     * 健康检查接口。
-     *
-     * @return 服务状态
-     */
+    /** 健康检查保持原整站状态，字体能力通过增量字段表达。 */
     @GetMapping("/api/health")
-    public Response<Map<String, String>> health() {
-        return Response.success(Map.of(
-                "status", "UP",
-                "timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-        ));
-    }
+    public Response<Map<String, Object>> health() { return Response.success(statusService.health()); }
 
-    /**
-     * 版本信息接口。
-     *
-     * @return 当前构建版本信息
-     */
+    /** 构建版本接口保持原字段及缺省值。 */
     @GetMapping("/api/version")
-    public Response<Map<String, String>> version() {
-        String version = "unknown";
-        String buildTime = "unknown";
-
-        try {
-            ClassPathResource resource = new ClassPathResource("version.properties");
-            try (InputStream is = resource.getInputStream()) {
-                Properties props = new Properties();
-                props.load(is);
-                version = props.getProperty("build.version", "unknown");
-                buildTime = props.getProperty("build.time", "unknown");
-            }
-        } catch (Exception e) {
-            // 读取失败时保留默认 unknown，避免健康探测受构建信息影响。
-        }
-
-        return Response.success(Map.of(
-                "version", version,
-                "buildTime", buildTime
-        ));
-    }
+    public Response<Map<String, String>> version() { return Response.success(statusService.version()); }
 }

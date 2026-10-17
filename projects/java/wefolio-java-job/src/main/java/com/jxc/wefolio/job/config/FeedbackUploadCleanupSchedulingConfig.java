@@ -25,10 +25,9 @@ public class FeedbackUploadCleanupSchedulingConfig {
     @Bean(name = TASK_SCHEDULER_BEAN_NAME)
     public ThreadPoolTaskScheduler feedbackUploadCleanupTaskScheduler(
             JobSchedulingTaskDecorator taskDecorator) {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        ThreadPoolTaskScheduler scheduler = new JobLifecycleTaskScheduler(taskDecorator);
         scheduler.setPoolSize(1);
         scheduler.setThreadNamePrefix(THREAD_NAME_PREFIX);
-        scheduler.setTaskDecorator(taskDecorator);
         return scheduler;
     }
 }

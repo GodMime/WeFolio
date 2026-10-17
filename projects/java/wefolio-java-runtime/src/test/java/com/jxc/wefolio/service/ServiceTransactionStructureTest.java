@@ -51,7 +51,7 @@ class ServiceTransactionStructureTest {
         String source = Files.readString(sourcePath);
         assertThat(source)
                 .contains("class UserRegistrationService")
-                .contains("@Transactional(rollbackFor = Exception.class)")
+                .contains("@Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)")
                 .contains("createWechatMaintainerUser(");
     }
 

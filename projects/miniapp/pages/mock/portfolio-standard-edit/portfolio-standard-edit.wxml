@@ -83,9 +83,9 @@
             <view wx:if="{{draft.config.backgroundAudio.workId}}" class="section-desc pe-page-card-description">{{audioSelectedWork.title || '已选择音频'}}</view>
             <button wx:if="{{draft.config.backgroundAudio.workId}}" class="background-audio-action pe-page-action-secondary" disabled="{{!audioSelectedWork.mediaUrl}}" bindtap="handleAudioAudition">{{audioPlaying ? '暂停试听' : '试听音频'}}</button>
             <view class="background-audio-styles">
-              <view wx:for="{{backgroundAudioStyles}}" wx:key="value" class="background-audio-style {{draft.config.backgroundAudio.displayStyle === item.value ? 'audio-style-selected' : ''}}" data-field="displayStyle" data-value="{{item.value}}" bindtap="handleAudioSetting" aria-role="radio" aria-checked="{{draft.config.backgroundAudio.displayStyle === item.value}}" aria-label="{{item.label}}">
+              <view wx:for="{{backgroundAudioStyles}}" wx:key="value" class="background-audio-style {{draft.config.backgroundAudio.displayStyle === item.value ? 'audio-style-selected' : ''}}" data-field="displayStyle" data-value="{{item.value}}" bindtap="handleAudioSetting" aria-role="radio" aria-checked="{{draft.config.backgroundAudio.displayStyle === item.value}}" aria-label="{{item.label}} {{item.languageLabel}}">
                 <view class="background-audio-sample"><mock-background-audio-control floating="{{false}}" display-style="{{item.value}}" cover-url="{{audioSelectedWork.coverUrl}}" title="{{audioSelectedWork.title}}" playing="{{audioPlaying}}" sample="{{true}}" /></view>
-                <view class="background-audio-style-label">{{item.label}}{{draft.config.backgroundAudio.displayStyle === item.value ? ' · 已选' : ''}}</view>
+                <view class="background-audio-style-label">{{item.label}} {{item.languageLabel}}{{draft.config.backgroundAudio.displayStyle === item.value ? ' · 已选' : ''}}</view>
               </view>
             </view>
             <button class="background-audio-action pe-page-action-secondary" bindtap="handleChooseBackgroundAudio">从音频作品中选择</button>
@@ -477,7 +477,7 @@
 
             <view class="profile-form-section">
               <view class="profile-form-section-title">展示字段</view>
-              <view wx:for="{{profileFields}}" wx:key="key" class="profile-visibility-option pe-sheet-choice"><view class="profile-visibility-label">{{item.label}}</view><switch checked="{{item.visible}}" color="#212529" data-field="{{item.key}}" bindchange="handleProfileVisibility" /></view>
+              <view wx:for="{{profileFields}}" wx:key="key" class="profile-visibility-option pe-sheet-choice"><view class="profile-visibility-label">{{item.label}} {{item.languageLabel}}</view><switch checked="{{item.visible}}" color="#212529" data-field="{{item.key}}" bindchange="handleProfileVisibility" /></view>
             </view>
           </block>
 
@@ -485,7 +485,7 @@
             <view class="form-row">
               <view class="field-heading"><view class="field-label">展示方式</view></view>
               <view class="schedule-query-mode-list">
-                <view wx:for="{{scheduleQueryDisplayModeOptions}}" wx:key="value" class="schedule-query-mode-option pe-sheet-choice {{componentConfig.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}" data-field="displayMode" data-value="{{item.value}}" catchtap="handleConfigChoice" aria-role="radio" aria-checked="{{componentConfig.displayMode === item.value}}"><view class="schedule-query-mode-radio"></view><view class="schedule-query-mode-label">{{item.label}}</view></view>
+                <view wx:for="{{scheduleQueryDisplayModeOptions}}" wx:key="value" class="schedule-query-mode-option pe-sheet-choice {{componentConfig.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}" data-field="displayMode" data-value="{{item.value}}" catchtap="handleConfigChoice" aria-role="radio" aria-checked="{{componentConfig.displayMode === item.value}}"><view class="schedule-query-mode-radio"></view><view class="schedule-query-mode-label">{{item.label}} {{item.languageLabel}}</view></view>
               </view>
             </view>
           </block>
@@ -494,7 +494,7 @@
             <view class="form-row">
               <view class="field-heading"><view class="field-label">展示方式</view></view>
               <view class="schedule-query-mode-list">
-                <view wx:for="{{contactFormDisplayModeOptions}}" wx:key="value" class="schedule-query-mode-option pe-sheet-choice {{componentConfig.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}" data-field="displayMode" data-value="{{item.value}}" catchtap="handleConfigChoice" aria-role="radio" aria-checked="{{componentConfig.displayMode === item.value}}"><view class="schedule-query-mode-radio"></view><view class="schedule-query-mode-label">{{item.label}}</view></view>
+                <view wx:for="{{contactFormDisplayModeOptions}}" wx:key="value" class="schedule-query-mode-option pe-sheet-choice {{componentConfig.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}" data-field="displayMode" data-value="{{item.value}}" catchtap="handleConfigChoice" aria-role="radio" aria-checked="{{componentConfig.displayMode === item.value}}"><view class="schedule-query-mode-radio"></view><view class="schedule-query-mode-label">{{item.label}} {{item.languageLabel}}</view></view>
               </view>
             </view>
           </block>
@@ -532,21 +532,26 @@
             </view>
 
             <view class="form-row">
-              <view class="field-heading"><view class="field-label">字体</view></view>
+              <view class="font-selector-heading">
+                <view class="font-selector-title">字体</view>
+                <button class="font-selector-more" bindtap="handleMoreMockFonts">{{mockFontsExpanded ? '收起字体' : '更多字体'}}</button>
+              </view>
               <view class="text-section-font-list">
                 <view wx:for="{{textSectionFontOptions}}" wx:key="value"
-                  class="text-section-font-option pe-sheet-choice {{textSectionForm.fontFamily === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
+                  class="text-section-font-option pe-sheet-choice {{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
                   data-value="{{item.value}}" catchtap="handleTextSectionFontTap"
-                  aria-role="radio" aria-checked="{{textSectionForm.fontFamily === item.value}}" aria-disabled="{{!item.available}}">
+                  aria-role="radio" aria-label="{{item.label}} {{item.languageLabel}}" aria-checked="{{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value}}" aria-disabled="{{!item.available}}">
                   <view class="text-section-font-copy">
-                    <view class="text-section-font-label">{{item.label}}</view>
-                    <view class="text-section-font-sample {{item.fontClass}}">{{item.sample}}</view>
-                    <view wx:if="{{!item.available}}" class="text-section-font-hint">当前设备不可用</view>
-                    <view wx:if="{{textSectionForm.fontFamily === item.value && !item.available}}" class="text-section-font-hint current">当前设备以系统字体预览</view>
+                    <view class="text-section-font-label">{{item.label}} {{item.languageLabel}}</view>
+                    <image wx:if="{{item.sampleUrl}}" src="{{item.sampleUrl}}" mode="aspectFit" class="mock-font-sample" data-value="{{item.value}}" binderror="handleMockSampleError" /><view wx:else class="text-section-font-sample {{item.fontClass}}">{{item.sample}}</view>
+                    <view wx:if="{{item.hint}}" class="text-section-font-hint">{{item.hint}}</view><view wx:elif="{{!item.available}}" class="text-section-font-hint">当前设备不可用</view>
+                    <view wx:if="{{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value && !item.available}}" class="text-section-font-hint current">当前设备以系统字体预览</view>
                   </view>
                   <view class="schedule-query-mode-radio"></view>
                 </view>
               </view>
+
+              <view wx:if="{{mockFontRepairable}}" bindtap="handleMockFontRepair" data-value="{{textSectionForm.fontId}}" aria-role="button">应用当前字体版本</view>
             </view>
 
             <view class="form-row">
@@ -555,7 +560,7 @@
                 <view wx:for="{{textSectionSizeOptions}}" wx:key="value"
                   class="text-section-size-option pe-sheet-choice {{textSectionForm.fontSizeRpx === item.value ? 'pe-sheet-choice-selected-filled' : ''}} {{item.custom ? 'custom' : ''}}"
                   data-value="{{item.value}}" catchtap="handleTextSectionFontSizeTap"
-                  aria-role="radio" aria-checked="{{textSectionForm.fontSizeRpx === item.value}}">{{item.label}}</view>
+                  aria-role="radio" aria-checked="{{textSectionForm.fontSizeRpx === item.value}}">{{item.label}} {{item.languageLabel}}</view>
               </view>
             </view>
 
@@ -577,7 +582,7 @@
                   class="schedule-query-mode-option pe-sheet-choice {{textSectionForm.alignment === item.value ? 'pe-sheet-choice-selected' : ''}}"
                   data-value="{{item.value}}" catchtap="handleTextSectionAlignmentTap"
                   aria-role="radio" aria-checked="{{textSectionForm.alignment === item.value}}">
-                  <view class="schedule-query-mode-radio"></view><view class="schedule-query-mode-label">{{item.label}}</view>
+                  <view class="schedule-query-mode-radio"></view><view class="schedule-query-mode-label">{{item.label}} {{item.languageLabel}}</view>
                 </view>
               </view>
             </view>
@@ -600,8 +605,8 @@
               <view class="component-work-copy">{{item.title}}</view><view class="component-work-check carousel-order">{{item.selectionOrder || ''}}</view>
             </view>
           </block>
-          <mock-structured-text-editor font-availability="{{mockFontAvailability}}" wx:elif="{{selectedComponentType === 'STRUCTURED_TEXT_SECTION' && componentEditSheetVisible}}" config="{{complexConfig}}" error="{{complexError}}" bindconfigchange="handleComplexChange" bindoperation="handleStructuredOperation" bindtabchange="handleStructuredTextTabChange" />
-          <mock-text-grid-editor font-availability="{{mockFontAvailability}}" wx:elif="{{selectedComponentType === 'TEXT_GRID' && componentEditSheetVisible}}" config="{{complexConfig}}" error="{{complexError}}" undo-count="{{gridUndoCount}}" preview-view-model="{{gridPreviewViewModel}}" bindpreviewmeasure="handleGridPreviewMeasure" bindconfigchange="handleGridChange" bindoperation="handleGridOperation" />
+          <mock-structured-text-editor font-context="{{mockFontContext}}" font-choices="{{mockFontChoices}}" bindfontselect="handleMockFontSelect" bindfontrepair="handleMockFontRepair" font-availability="{{mockFontAvailability}}" wx:elif="{{selectedComponentType === 'STRUCTURED_TEXT_SECTION' && componentEditSheetVisible}}" config="{{complexConfig}}" error="{{complexError}}" bindconfigchange="handleComplexChange" bindoperation="handleStructuredOperation" bindtabchange="handleStructuredTextTabChange" />
+          <mock-text-grid-editor font-context="{{mockFontContext}}" font-choices="{{mockFontChoices}}" bindfontselect="handleMockFontSelect" bindfontrepair="handleMockFontRepair" font-availability="{{mockFontAvailability}}" wx:elif="{{selectedComponentType === 'TEXT_GRID' && componentEditSheetVisible}}" config="{{complexConfig}}" error="{{complexError}}" undo-count="{{gridUndoCount}}" preview-view-model="{{gridPreviewViewModel}}" bindpreviewmeasure="handleGridPreviewMeasure" bindconfigchange="handleGridChange" bindoperation="handleGridOperation" />
           <mock-contact-info-editor wx:elif="{{selectedComponentType === 'CONTACT_INFO' && componentEditSheetVisible}}" config="{{complexConfig}}" bindconfigchange="handleComplexChange" bindfillprofile="handleFillContact" />
           <block wx:elif="{{selectedComponentType === 'HYPERLINK' && componentEditSheetVisible}}">
             <mock-hyperlink-editor config="{{complexConfig}}" work="{{hyperlinkSelectedWork}}" bindconfigchange="handleComplexChange" bindselectwork="handleToggleHyperlinkPicker" />

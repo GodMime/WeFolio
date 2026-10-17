@@ -1,0 +1,47 @@
+{
+  "fontId": "ZCOOL_XIAOWEI",
+  "intendedLanguageLabel": "只适合中文",
+  "purpose": "供服务端生成按作品集文字裁剪的字体子集；不能让小程序直接下载全量源字体。",
+  "repositoryUrl": "https://github.com/google/fonts",
+  "commit": "d427686494a89f0b7ecb9833273b6aabb83a6350",
+  "license": "SIL Open Font License 1.1",
+  "files": [
+    {
+      "file": "ZCOOLXiaoWei-Regular.ttf",
+      "originalFilename": "ZCOOLXiaoWei-Regular.ttf",
+      "role": "source-font",
+      "sourceUrl": "https://raw.githubusercontent.com/google/fonts/d427686494a89f0b7ecb9833273b6aabb83a6350/ofl/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf",
+      "bytes": 6313808,
+      "sha256": "a42b620140f493db42f741351dfbf343c0936d58588ee8004b8b2a218d997ff1",
+      "fontMetadata": {
+        "sfntSignature": "00010000",
+        "familyName": "ZCOOL XiaoWei",
+        "subfamilyName": "Regular",
+        "fullName": "ZCOOL XiaoWei Regular",
+        "fontVersion": "Version 1.000",
+        "postScriptName": "ZCOOLXiaoWei-Regular",
+        "weightClass": 400,
+        "glyphCount": 7019
+      },
+      "githubBlobSha": "2d8731a231f2e6625b32d96b87f84852e24f9d82",
+      "verifiedBlobApiUrl": "https://api.github.com/repos/google/fonts/git/blobs/2d8731a231f2e6625b32d96b87f84852e24f9d82"
+    },
+    {
+      "file": "OFL.txt",
+      "originalFilename": "OFL.txt",
+      "role": "license",
+      "sourceUrl": "https://raw.githubusercontent.com/google/fonts/d427686494a89f0b7ecb9833273b6aabb83a6350/ofl/zcoolxiaowei/OFL.txt",
+      "bytes": 4400,
+      "sha256": "a094514ca57cf8f9c5e8d8d1adab5d8cd3a377297ff016f9df2c05b3ecd77f0a",
+      "githubBlobSha": "8e5184b269289a6adda77caa05defe3acc309651",
+      "verifiedBlobApiUrl": "https://api.github.com/repos/google/fonts/git/blobs/8e5184b269289a6adda77caa05defe3acc309651"
+    }
+  ],
+  "upstreamFontRepository": "https://github.com/googlefonts/zcool-xiaowei",
+  "upstreamFontCommit": "e94fc01eed059b3396129a48f756a46f7737fe2f",
+  "upstreamMetadataUrl": "https://raw.githubusercontent.com/google/fonts/d427686494a89f0b7ecb9833273b6aabb83a6350/ofl/zcoolxiaowei/METADATA.pb",
+  "supportedWeights": [
+    400
+  ],
+  "weightNote": "上游仅提供常规字重 400，未生成伪造的 700 字体文件。"
+}

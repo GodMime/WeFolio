@@ -111,7 +111,7 @@ public class VisitorIdentityPersistenceService {
         if (!hasText(value)) {
             throw new BusinessException(VISITOR_PERSIST_FAILED_MESSAGE);
         }
-        String normalized = value.strip();
+        String normalized = value;
         if (normalized.length() > WECHAT_IDENTIFIER_MAX_LENGTH) {
             throw new BusinessException(VISITOR_PERSIST_FAILED_MESSAGE);
         }

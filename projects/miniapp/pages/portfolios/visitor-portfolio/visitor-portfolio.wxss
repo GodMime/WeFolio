@@ -1,3 +1,4 @@
+@import "../../../styles/portfolio-opening.wxss";
 @import "../../../styles/portfolio-theme.wxss";
 @import "../../../styles/portfolio-menu-transition.wxss";
 
@@ -340,6 +341,7 @@
 }
 
 .maintenance-mask {
+  z-index: 11000;
   position: fixed;
   left: 0;
   right: 0;

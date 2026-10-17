@@ -29,6 +29,9 @@ public interface TencentCiAuditClient {
      */
     TencentCiAuditResult submitVideo(String objectKey, int snapshotIntervalSeconds, int snapshotCount);
 
+    /** 使用任务行的冻结请求提交，不从全局配置推导模式。 */
+    TencentCiAuditResult submitVideo(String objectKey, TencentCiVideoAuditRequest request);
+
     /**
      * 查询视频审核结果。
      *
@@ -36,4 +39,7 @@ public interface TencentCiAuditClient {
      * @return 查询结果
      */
     TencentCiAuditResult queryVideo(String ciJobId);
+
+    /** 新持久帧任务使用无隐式重试、有界请求的客户端。 */
+    TencentCiAuditResult queryVideo(String ciJobId, boolean persistentFrames);
 }

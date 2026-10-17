@@ -114,7 +114,7 @@ public class TeamMemberPortfolioGridComponentValidator {
         Map<Long, PortfolioEntity> portfolios = portfolios(portfolioIds);
         for (TeamMemberPortfolioGridComponentConfig.Item item : items) {
             PortfolioEntity portfolio = portfolios.get(item.getPortfolioId());
-            if (!isAvailablePortfolio(portfolio, item.getMemberUserId()) || shareTitle(portfolio) == null) {
+            if (!isAvailablePortfolio(portfolio, item.getMemberUserId(), context.allowAdvancedMemberPortfolios()) || shareTitle(portfolio) == null) {
                 throw new BusinessException(UNAVAILABLE_PORTFOLIO_MESSAGE);
             }
         }
@@ -279,10 +279,11 @@ public class TeamMemberPortfolioGridComponentValidator {
      * @param memberUserId 对应成员用户 ID
      * @return 是否可引用
      */
-    private boolean isAvailablePortfolio(PortfolioEntity portfolio, long memberUserId) {
+    private boolean isAvailablePortfolio(PortfolioEntity portfolio, long memberUserId, boolean advancedAllowed) {
         return portfolio != null && portfolio.getOwnerId() != null && portfolio.getOwnerId() == memberUserId
                 && PortfolioOwnerTypeDict.USER.getCode().equals(portfolio.getOwnerType())
-                && PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                && (PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                    || advancedAllowed && PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType()))
                 && PortfolioStatusDict.ACTIVE.getCode().equals(portfolio.getStatus())
                 && STANDARD_PERSONAL_SCHEMA_VERSION.equals(portfolio.getSchemaVersion())
                 && PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())

@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+import lombok.ToString;
 
 
 /**
@@ -34,6 +35,12 @@ public class PortfolioEntity extends BaseEntity {
     /** 草稿完整配置 JSON，维护端读取和保存 */
     private String draftConfigJson;
 
+    /** 草稿字体资源清单，和草稿配置同事务保存。 */
+    private String draftFontAssetsJson;
+
+    /** 发布字体资源清单，仅发布时更新。 */
+    private String publishedFontAssetsJson;
+
     /** 草稿版本号，保存草稿成功后递增 */
     private Integer draftRevision;
 
@@ -63,6 +70,13 @@ public class PortfolioEntity extends BaseEntity {
 
     /** 发布状态：DRAFT_ONLY 草稿 / PUBLISHED 已发布 / OFFLINE 下线 */
     private String publicationStatus;
+
+    /** 高级编辑器来源编号上下文，仅供具有维护权限的接口使用。 */
+    private String aiContextJson;
+
+    /** 当前参考附件及编号高水位，仅供高级维护入口使用，不进入发布配置。 */
+    @ToString.Exclude
+    private String aiReferenceAttachmentsJson;
 
     /** 当前高级作品集自然语言描述 */
     private String aiPrompt;

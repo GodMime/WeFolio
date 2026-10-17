@@ -6,7 +6,7 @@ const COPY_SUCCESS_MESSAGE = '已复制'
 const COPY_FAILURE_MESSAGE = '复制失败，请重试'
 
 Component({
-  properties: { config: { type: Object, value: {} }, themeMode: { type: String, value: 'light' } },
+  properties: { config: { type: Object, value: {} }, themeMode: { type: String, value: 'light' }, repairMode: { type: Boolean, value: false } },
   data: {
     spacingStyle: '',
     borderStyle: '',

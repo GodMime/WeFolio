@@ -1,13 +1,17 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.dict.MediaTypeDict;
 import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.PortfolioRenderDto;
 import com.jxc.wefolio.dto.VisitorPortfolioOpenRequest;
 import com.jxc.wefolio.dto.VisitorPortfolioResponse;
 import com.jxc.wefolio.entity.VisitorEntity;
+import com.jxc.wefolio.entity.WorkEntity;
+import com.jxc.wefolio.mapper.WorkEntityMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -17,6 +21,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +53,10 @@ class VisitorPortfolioHyperlinkIntegrationTest {
 
     @Autowired
     private VisitorPortfolioService visitorPortfolioService;
+
+    /** 真实作品 Mapper，用于核对持久帧、摘要读取与普通作品更新隔离。 */
+    @Autowired
+    private WorkEntityMapper workEntityMapper;
 
     @MockBean
     private VisitorService visitorService;
@@ -86,6 +95,43 @@ class VisitorPortfolioHyperlinkIntegrationTest {
     void tearDown() {
         jdbcTemplate.execute("DROP TABLE IF EXISTS wf_work");
         jdbcTemplate.execute("DROP TABLE IF EXISTS wf_portfolio");
+    }
+
+    /** 即使 Job 写入未递增版本，普通标题更新也不能回带旧帧清单、摘要或过期时间。 */
+    @Test
+    void genericWorkUpdateShouldPreserveRefreshedMediaFields() {
+        WorkEntity original = workEntityMapper.selectById(11L);
+        assertThat(original.getVideoFramesJson()).isNull();
+        assertThat(original.getAiMediaSummaryJson()).isNull();
+        assertThat(original.getAiMediaSummaryExpiresAt()).isNull();
+        LocalDateTime previousExpiry = LocalDateTime.of(2026, 10, 10, 12, 0);
+        String oldFrames = "{\"frameCount\":1,\"frames\":[{\"objectKey\":\"旧帧\"}]}";
+        jdbcTemplate.update("UPDATE wf_work SET media_type=?,video_frames_json=?,"
+                        + "ai_media_summary_json=?,ai_media_summary_expires_at=? WHERE id=11",
+                MediaTypeDict.VIDEO.getCode(), oldFrames, "{\"version\":1,\"summary\":\"旧摘要\"}", previousExpiry);
+        WorkEntity stale = workEntityMapper.selectById(11L);
+        assertThat(stale.getVideoFramesJson()).isEqualTo(oldFrames);
+        assertThat(stale.getAiMediaSummaryJson()).isNull();
+        assertThat(stale.getAiMediaSummaryExpiresAt()).isNull();
+        String refreshedFrames = "{\"frameCount\":1,\"frames\":[{\"objectKey\":\"新帧\"}]}";
+        String refreshedSummary = "{\"version\":1,\"summary\":\"新摘要\"}";
+        LocalDateTime refreshedExpiry = previousExpiry.plusDays(7);
+        // 此处刻意保留版本，验证托管字段保护本身，而不依赖乐观锁拒绝整次编辑。
+        jdbcTemplate.update("UPDATE wf_work SET video_frames_json=?,ai_media_summary_json=?,"
+                        + "ai_media_summary_expires_at=? WHERE id=11",
+                refreshedFrames, refreshedSummary, refreshedExpiry);
+        stale.setTitle("媒体字段保护核查");
+        assertThat(workEntityMapper.updateById(stale)).isEqualTo(1);
+        WorkEntity updated = workEntityMapper.selectById(11L);
+        assertThat(updated.getTitle()).isEqualTo("媒体字段保护核查");
+        assertThat(updated.getVideoFramesJson()).isEqualTo(refreshedFrames);
+        // 普通查询不读取摘要；独立 SQL 验证标题编辑仍保留 Job 刷新的缓存。
+        assertThat(updated.getAiMediaSummaryJson()).isNull();
+        assertThat(updated.getAiMediaSummaryExpiresAt()).isNull();
+        assertThat(jdbcTemplate.queryForObject("SELECT ai_media_summary_json FROM wf_work WHERE id=11", String.class))
+                .isEqualTo(refreshedSummary);
+        assertThat(jdbcTemplate.queryForObject("SELECT ai_media_summary_expires_at FROM wf_work WHERE id=11", LocalDateTime.class))
+                .isEqualTo(refreshedExpiry);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -163,6 +209,8 @@ class VisitorPortfolioHyperlinkIntegrationTest {
         jdbcTemplate.execute("DROP TABLE IF EXISTS wf_portfolio");
         jdbcTemplate.execute("""
                 CREATE TABLE wf_portfolio (
+                    draft_font_assets_json CLOB,
+                    published_font_assets_json CLOB,
                   id BIGINT PRIMARY KEY,
                   share_code VARCHAR(32),
                   owner_type VARCHAR(16) NOT NULL,
@@ -182,6 +230,8 @@ class VisitorPortfolioHyperlinkIntegrationTest {
                   published_at TIMESTAMP,
                   publication_status VARCHAR(32),
                   ai_prompt CLOB,
+                  ai_context_json CLOB,
+                  ai_reference_attachments_json CLOB,
                   source_type VARCHAR(32),
                   content_hash VARCHAR(64),
                   current_revision INT NOT NULL DEFAULT 0,
@@ -209,6 +259,9 @@ class VisitorPortfolioHyperlinkIntegrationTest {
                   mime_type VARCHAR(100),
                   file_size BIGINT,
                   duration_ms INT,
+                  video_frames_json CLOB,
+                  ai_media_summary_json CLOB,
+                  ai_media_summary_expires_at TIMESTAMP(3),
                   frame_count INT,
                   cover_frame_number INT,
                   width INT,

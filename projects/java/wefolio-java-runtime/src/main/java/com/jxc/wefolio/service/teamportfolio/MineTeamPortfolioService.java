@@ -1,5 +1,16 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.dto.PortfolioFontManifestDto;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
+import java.util.function.Supplier;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioConfigGuard;
+import com.jxc.wefolio.service.portfolioai.StrictAiJson;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontWrite;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontManifests;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
 import com.alibaba.fastjson2.JSONObject;
@@ -83,6 +94,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MineTeamPortfolioService {
 
+    /** 参考附件只在显式提交清单时参与短事务锁和事实校验。 */
+    private final PortfolioAiReferenceService aiReferences;
+
+    /** 字体同步准备和一次性引用释放。 */
+    private final PortfolioFontService portfolioFontService;
+
+
     /** 未携带能力版本的旧客户端按 revision 2 处理。 */
     private static final int COMPONENT_LIBRARY_LEGACY_REVISION = 2;
 
@@ -110,6 +128,8 @@ public class MineTeamPortfolioService {
 
     /** 发布标准团队作品集积分备注。 */
     private static final String PUBLISH_POINT_REMARK = "发布标准团队作品集";
+    /** 发布高级团队作品集积分备注。 */
+    private static final String ADVANCED_PUBLISH_POINT_REMARK = "发布高级团队作品集";
 
     /** 团队作品集分享码前缀。 */
     private static final String SHARE_CODE_PREFIX = "TPF";
@@ -271,7 +291,6 @@ public class MineTeamPortfolioService {
                 Wrappers.lambdaQuery(PortfolioEntity.class)
                         .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.TEAM.getCode())
                         .in(PortfolioEntity::getOwnerId, teams.keySet())
-                        .eq(PortfolioEntity::getTemplateType, PortfolioTemplateTypeDict.STANDARD.getCode())
                         .eq(PortfolioEntity::getSchemaVersion,
                                 TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1)
                         .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
@@ -334,14 +353,25 @@ public class MineTeamPortfolioService {
             TeamPortfolioCreateRequest request,
             long userId
     ) {
-        return portfolioReferenceMutex.execute(() -> createStandardLocked(teamId, request, userId));
+        return createStandard(teamId, request, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public TeamPortfolioDetailResponse createStandard(
+            long teamId,
+            TeamPortfolioCreateRequest request,
+            long userId,
+            String templateType
+    ) {
+        return portfolioReferenceMutex.execute(() -> createStandardLocked(teamId, request, userId, templateType));
     }
 
     /** 在作品集引用互斥区间内创建标准团队作品集。 */
     private TeamPortfolioDetailResponse createStandardLocked(
             long teamId,
             TeamPortfolioCreateRequest request,
-            long userId
+            long userId, String templateType
     ) {
         accessService.requireTeamRole(teamId, userId, MAINTAINABLE_ROLES);
         contentLimitService.ensureTeamPortfolioCapacity(teamId);
@@ -353,7 +383,7 @@ public class MineTeamPortfolioService {
         portfolio.setShareCode(generateShareCode());
         portfolio.setOwnerType(PortfolioOwnerTypeDict.TEAM.getCode());
         portfolio.setOwnerId(teamId);
-        portfolio.setTemplateType(PortfolioTemplateTypeDict.STANDARD.getCode());
+        portfolio.setTemplateType(templateType);
         portfolio.setStatus(PortfolioStatusDict.ACTIVE.getCode());
         portfolio.setSchemaVersion(TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1);
         portfolio.setDraftConfigJson(initialJson);
@@ -375,7 +405,10 @@ public class MineTeamPortfolioService {
         TeamPortfolioConfigDto normalized = configValidator.normalizeForDraft(
                 initialConfig,
                 null,
-                new TeamPortfolioComponentContext(teamId, portfolio.getId(), 1));
+                componentContext(portfolio, teamId, portfolio.getId(), 1));
+        PortfolioFontConfigSupport.merge(normalized, initialConfig, null,
+                request != null && request.getClientCapabilities() != null
+                        && request.getClientCapabilities().supportsRemoteFonts());
         validateCoverIfPresent(teamId, portfolio.getId(), normalized);
         String normalizedJson = JSON.toJSONString(normalized);
         String contentHash = sha256(normalizedJson);
@@ -388,7 +421,7 @@ public class MineTeamPortfolioService {
             throw new BusinessException(TeamPortfolioMessage.CONCURRENT_UPDATE_MESSAGE);
         }
         referenceService.rebuild(portfolio.getId(), PortfolioConfigScopeDict.DRAFT.getCode(), normalized,
-                new TeamPortfolioComponentContext(teamId, portfolio.getId(), 1));
+                componentContext(portfolio, teamId, portfolio.getId(), 1));
         insertHistory(portfolio, 1, normalized, contentHash, userId, now,
                 HISTORY_ACTION_CREATE, null, null, null, null);
         return buildDetail(portfolio, normalized);
@@ -398,30 +431,87 @@ public class MineTeamPortfolioService {
      * 获取团队作品集维护详情。
      */
     public TeamPortfolioDetailResponse getDetail(long portfolioId, long userId) {
-        PortfolioEntity portfolio = accessService.requireMaintainablePortfolio(portfolioId, userId).portfolio();
+        return getDetail(portfolioId, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public TeamPortfolioDetailResponse getDetail(long portfolioId, long userId, String templateType) {
+        PortfolioEntity portfolio = maintainableAccess(portfolioId, userId, templateType).portfolio();
         return buildDetail(portfolio, parseConfig(portfolio.getDraftConfigJson()));
+    }
+
+    /** 团队编辑候选字体同步准备，保留维护权限且不写草稿或发布清单。 */
+    public PortfolioFontManifestDto prepareFonts(long portfolioId, TeamPortfolioDraftSaveRequest request, long userId) {
+        return prepareFonts(portfolioId, request, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public PortfolioFontManifestDto prepareFonts(long portfolioId, TeamPortfolioDraftSaveRequest request, long userId, String templateType) {
+        PortfolioFontWrite write = portfolioPublishTransactionService.execute(() -> {
+            var access = maintainableAccess(portfolioId, userId, templateType);
+            if (request == null || request.getConfig() == null) {
+                throw new BusinessException(TeamPortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
+            }
+            var previous = parseConfig(access.portfolio().getDraftConfigJson());
+            var normalized = configValidator.normalizeForDraft(request.getConfig(), previous,
+                    componentContext(access.portfolio(), access.team().getId(), portfolioId, safeInt(access.portfolio().getDraftRevision())));
+            PortfolioFontConfigSupport.merge(normalized, request.getConfig(), previous,
+                    request.getClientCapabilities() != null && request.getClientCapabilities().supportsRemoteFonts());
+            PortfolioFontWrite context = new PortfolioFontWrite();
+            context.snapshot = access.portfolio(); context.plan = PortfolioFontPlan.from(normalized);
+            context.prefix = PortfolioFontWrite.prefix(access.team().getUniqueCode(), portfolioId);
+            return context;
+        });
+        var response = portfolioFontService.prepare(write.snapshot, write.plan, write.prefix).response();
+        maintainableAccess(portfolioId, userId, templateType);
+        return response;
     }
 
     /**
      * 保存团队作品集草稿并重建草稿引用。
      */
-    @Transactional(rollbackFor = Exception.class)
     public TeamPortfolioDetailResponse saveDraft(
             long portfolioId,
             TeamPortfolioDraftSaveRequest request,
             long userId
     ) {
-        return portfolioReferenceMutex.execute(() -> saveDraftLocked(portfolioId, request, userId));
+        return saveDraft(portfolioId, request, userId, PortfolioTemplateTypeDict.STANDARD.getCode(), null);
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public TeamPortfolioDetailResponse saveDraft(
+            long portfolioId,
+            TeamPortfolioDraftSaveRequest request,
+            long userId
+    , String templateType, AdvancedPortfolioSaveMetadata metadata) {
+        PortfolioFontWrite write = new PortfolioFontWrite();
+        TeamPortfolioDetailResponse result = referenceSaveTransaction(portfolioId, userId, templateType, metadata,
+                () -> portfolioReferenceMutex.execute(() -> saveDraftLocked(portfolioId, request, userId, write, templateType, metadata)));
+        if (write.snapshot == null) { return result; }
+        write.prepared = portfolioFontService.prepare(write.snapshot, write.plan, write.prefix);
+        result = referenceSaveTransaction(portfolioId, userId, templateType, metadata,
+                () -> portfolioReferenceMutex.execute(() -> saveDraftLocked(portfolioId, request, userId, write, templateType, metadata)));
+        portfolioFontService.cleanup(write.released, write.prefix);
+        return result;
+    }
+
+    /** owner 锁在数据库事务外取得，字体生成期间不占用命名锁。 */
+    private <T> T referenceSaveTransaction(long id, long userId, String templateType, AdvancedPortfolioSaveMetadata metadata, Supplier<T> action) {
+        if (metadata == null || !metadata.referencesPresent()) { return portfolioPublishTransactionService.execute(action); }
+        PortfolioEntity owner = maintainableAccess(id, userId, templateType).portfolio();
+        return aiReferences.withOwnerLock(owner.getOwnerType(), owner.getOwnerId(),
+                () -> portfolioPublishTransactionService.execute(action));
     }
 
     /** 在作品集引用互斥区间内保存团队作品集草稿。 */
     private TeamPortfolioDetailResponse saveDraftLocked(
             long portfolioId,
             TeamPortfolioDraftSaveRequest request,
-            long userId
+            long userId,
+            PortfolioFontWrite write, String templateType, AdvancedPortfolioSaveMetadata metadata
     ) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireMaintainablePortfolio(portfolioId, userId);
+                maintainableAccess(portfolioId, userId, templateType);
         PortfolioEntity portfolio = access.portfolio();
         if (request == null || request.getConfig() == null) {
             throw new BusinessException(TeamPortfolioMessage.DRAFT_CONFIG_REQUIRED_MESSAGE);
@@ -432,12 +522,18 @@ public class MineTeamPortfolioService {
         String idempotencyKey = requireText(
                 request.getIdempotencyKey(), TeamPortfolioMessage.IDEMPOTENCY_KEY_REQUIRED_MESSAGE);
         String requestFingerprint = saveRequestFingerprint(request);
+        if (metadata != null) { requestFingerprint = sha256(requestFingerprint + metadata.fingerprint()); }
         PortfolioHistoryEntity idempotencyHistory = findIdempotencyHistory(
                 portfolioId, HISTORY_ACTION_DRAFT_SAVE, idempotencyKey);
         if (idempotencyHistory != null) {
             return restoreIdempotentSave(portfolio, idempotencyHistory, requestFingerprint);
         }
+        portfolio = portfolioEntityMapper.lockById(portfolioId);
+        if (portfolio == null) { throw new BusinessException(TeamPortfolioMessage.CONCURRENT_UPDATE_MESSAGE); }
         if (request.getClientRevision() != safeInt(portfolio.getDraftRevision())) {
+            throw new BusinessException(TeamPortfolioMessage.DRAFT_REVISION_CHANGED_MESSAGE);
+        }
+        if (write.prepared != null && !Objects.equals(write.prepared.revision(), portfolio.getCurrentRevision())) {
             throw new BusinessException(TeamPortfolioMessage.DRAFT_REVISION_CHANGED_MESSAGE);
         }
         String oldDraftConfigJson = portfolio.getDraftConfigJson();
@@ -446,8 +542,31 @@ public class MineTeamPortfolioService {
         TeamPortfolioConfigDto normalized = configValidator.normalizeForDraft(
                 request.getConfig(),
                 parseConfig(oldDraftConfigJson),
-                new TeamPortfolioComponentContext(access.team().getId(), portfolioId, nextDraftRevision));
+                componentContext(portfolio, access.team().getId(), portfolioId, nextDraftRevision));
+        PortfolioFontConfigSupport.merge(normalized, request.getConfig(), parseConfig(oldDraftConfigJson),
+                request.getClientCapabilities() != null && request.getClientCapabilities().supportsRemoteFonts());
         validateCoverIfPresent(access.team().getId(), portfolioId, normalized);
+        PortfolioFontPlan fontPlan = PortfolioFontPlan.from(normalized);
+        if (metadata != null) {
+            AdvancedPortfolioConfigGuard.assertNormalized(
+                    StrictAiJson.parseObject(metadata.fingerprint(), 2 * 1024 * 1024, 20).withObject("config"),
+                    StrictAiJson.parseObject(JSON.toJSONString(normalized), 2 * 1024 * 1024, 20), true);
+        }
+        if (metadata != null && metadata.contextPresent()) {
+            AdvancedPortfolioSaveMetadata.validateContext(metadata.context(), portfolio.getAiContextJson());
+        }
+        if (write.capture(portfolio, fontPlan)) {
+            write.prefix = PortfolioFontWrite.prefix(access.team().getUniqueCode(), portfolioId);
+            return null;
+        }
+        if (write.prepared != null) {
+            String assets;
+            try { assets = portfolioFontService.accept(portfolio, fontPlan, write.prepared); }
+            catch (PortfolioFontService.PlanConflict conflict) { throw new BusinessException(TeamPortfolioMessage.DRAFT_REVISION_CHANGED_MESSAGE); }
+            write.changed(portfolio, assets, portfolio.getPublishedFontAssetsJson());
+            portfolioEntityMapper.updateDraftFontAssets(portfolioId, assets);
+            portfolio.setDraftFontAssetsJson(assets);
+        }
         String configJson = JSON.toJSONString(normalized);
         String contentHash = sha256(configJson);
         int nextHistoryRevision = nextHistoryRevision(portfolio);
@@ -464,9 +583,10 @@ public class MineTeamPortfolioService {
         if (!PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())) {
             portfolio.setPublicationStatus(PortfolioPublicationStatusDict.DRAFT_ONLY.getCode());
         }
+        if (metadata != null) { metadata.apply(portfolio, aiReferences); }
         requireUpdated(portfolioEntityMapper.updateById(portfolio));
         referenceService.rebuild(portfolioId, PortfolioConfigScopeDict.DRAFT.getCode(), normalized,
-                new TeamPortfolioComponentContext(access.team().getId(), portfolioId, nextDraftRevision));
+                componentContext(portfolio, access.team().getId(), portfolioId, nextDraftRevision));
         insertHistory(portfolio, nextHistoryRevision, normalized, contentHash, userId, now,
                 HISTORY_ACTION_DRAFT_SAVE, idempotencyKey, requestFingerprint,
                 nextDraftRevision, null);
@@ -486,17 +606,32 @@ public class MineTeamPortfolioService {
             TeamPortfolioPublishRequest request,
             long userId
     ) {
-        return portfolioReferenceMutex.execute(() -> publishLocked(portfolioId, request, userId));
+        return publish(portfolioId, request, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public TeamPortfolioDetailResponse publish(
+            long portfolioId,
+            TeamPortfolioPublishRequest request,
+            long userId,
+            String templateType
+    ) {
+        PortfolioFontWrite write = new PortfolioFontWrite();
+        TeamPortfolioDetailResponse response = portfolioReferenceMutex.execute(
+                () -> publishLocked(portfolioId, request, userId, write, templateType));
+        if (!write.released.isEmpty()) { portfolioFontService.cleanup(write.released, write.prefix); }
+        return response;
     }
 
     /** 在作品集引用互斥区间内完成发布预检和发布事务。 */
     private TeamPortfolioDetailResponse publishLocked(
             long portfolioId,
             TeamPortfolioPublishRequest request,
-            long userId
+            long userId,
+            PortfolioFontWrite write, String templateType
     ) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireMaintainablePortfolio(portfolioId, userId);
+                maintainableAccess(portfolioId, userId, templateType);
         PortfolioEntity portfolio = access.portfolio();
         if (request == null || request.getDraftRevision() == null) {
             throw new BusinessException(TeamPortfolioMessage.PUBLISH_REVISION_REQUIRED_MESSAGE);
@@ -512,14 +647,14 @@ public class MineTeamPortfolioService {
         validatePublishDraft(portfolio, request);
         pointService.assertCanConsume(
                 userId,
-                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                publishScene(templateType),
                 POINT_BUSINESS_TYPE_PORTFOLIO,
                 String.valueOf(portfolioId),
                 1,
                 idempotencyKey
         );
         return portfolioPublishTransactionService.execute(
-                () -> publishInTransaction(portfolioId, request, userId)
+                () -> publishInTransaction(portfolioId, request, userId, write, templateType)
         );
     }
 
@@ -534,11 +669,13 @@ public class MineTeamPortfolioService {
     private TeamPortfolioDetailResponse publishInTransaction(
             long portfolioId,
             TeamPortfolioPublishRequest request,
-            long userId
+            long userId,
+            PortfolioFontWrite write, String templateType
     ) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireMaintainablePortfolio(portfolioId, userId);
-        PortfolioEntity portfolio = access.portfolio();
+                maintainableAccess(portfolioId, userId, templateType);
+        PortfolioEntity portfolio = portfolioEntityMapper.lockById(portfolioId);
+        if (portfolio == null) { throw new BusinessException(TeamPortfolioMessage.CONCURRENT_UPDATE_MESSAGE); }
         if (request == null || request.getDraftRevision() == null) {
             throw new BusinessException(TeamPortfolioMessage.PUBLISH_REVISION_REQUIRED_MESSAGE);
         }
@@ -554,13 +691,21 @@ public class MineTeamPortfolioService {
         int nextPublishedRevision = safeInt(portfolio.getPublishedRevision()) + 1;
         TeamPortfolioConfigDto normalized = configValidator.validateForPublish(
                 parseConfig(portfolio.getDraftConfigJson()),
-                new TeamPortfolioComponentContext(access.team().getId(), portfolioId, nextPublishedRevision));
+                componentContext(portfolio, access.team().getId(), portfolioId, nextPublishedRevision));
         validateCoverIfPresent(access.team().getId(), portfolioId, normalized);
         String configJson = JSON.toJSONString(normalized);
         String contentHash = sha256(configJson);
         String oldPublishedConfigJson = portfolio.getPublishedConfigJson();
         int nextHistoryRevision = nextHistoryRevision(portfolio);
         LocalDateTime now = LocalDateTime.now();
+        if (portfolio.getDraftFontAssetsJson() != null || portfolio.getPublishedFontAssetsJson() != null
+                || !PortfolioFontPlan.from(normalized).groups().isEmpty()) {
+            String assets = portfolioFontService.publish(portfolio, PortfolioFontPlan.from(normalized));
+            write.changed(portfolio, portfolio.getDraftFontAssetsJson(), assets);
+            write.prefix = PortfolioFontWrite.prefix(access.team().getUniqueCode(), portfolioId);
+            portfolioEntityMapper.updatePublishedFontAssets(portfolioId, assets);
+            portfolio.setPublishedFontAssetsJson(assets);
+        }
         portfolio.setPublishedConfigJson(configJson);
         portfolio.setPublishedRevision(nextPublishedRevision);
         portfolio.setPublishedContentHash(contentHash);
@@ -573,18 +718,19 @@ public class MineTeamPortfolioService {
         portfolio.setLastSavedAt(now);
         requireUpdated(portfolioEntityMapper.updateById(portfolio));
         referenceService.rebuild(portfolioId, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized,
-                new TeamPortfolioComponentContext(access.team().getId(), portfolioId, nextPublishedRevision));
+                componentContext(portfolio, access.team().getId(), portfolioId, nextPublishedRevision));
         insertHistory(portfolio, nextHistoryRevision, normalized, contentHash, userId, now,
                 HISTORY_ACTION_PUBLISH, idempotencyKey, requestFingerprint,
                 null, nextPublishedRevision);
         pointService.consume(
                 userId,
-                PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode(),
+                publishScene(templateType),
                 POINT_BUSINESS_TYPE_PORTFOLIO,
                 String.valueOf(portfolioId),
                 1,
                 idempotencyKey,
-                PUBLISH_POINT_REMARK
+                PortfolioTemplateTypeDict.ADVANCED.getCode().equals(templateType)
+                        ? ADVANCED_PUBLISH_POINT_REMARK : PUBLISH_POINT_REMARK
         );
         assetService.deleteUnreferencedAssetsAfterCommit(
                 access.team().getId(),
@@ -592,6 +738,33 @@ public class MineTeamPortfolioService {
                 assetStateJson(portfolio.getDraftConfigJson(), oldPublishedConfigJson),
                 assetStateJson(portfolio.getDraftConfigJson(), configJson));
         return buildDetail(portfolio, normalized);
+    }
+
+    /** 标准入口沿原访问方法；高级入口显式使用独立模板守卫。 */
+    private TeamPortfolioAccessService.TeamPortfolioAccess maintainableAccess(long id, long userId, String templateType) {
+        return PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)
+                ? accessService.requireMaintainablePortfolio(id, userId)
+                : accessService.requireMaintainablePortfolio(id, userId, templateType);
+    }
+
+    /** 标准成员预览行为不变，高级成员仅扩展模板身份。 */
+    private TeamPortfolioAccessService.TeamPortfolioAccess visibleAccess(long id, long userId, String templateType) {
+        return PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)
+                ? accessService.requireVisiblePortfolio(id, userId)
+                : accessService.requireVisiblePortfolio(id, userId, templateType);
+    }
+
+    /** 上下文按真实模板选择成员个人作品集范围，普通流程默认保持标准成员来源。 */
+    private TeamPortfolioComponentContext componentContext(PortfolioEntity portfolio, long teamId, long id, int revision) {
+        return new TeamPortfolioComponentContext(teamId, id, revision, null,
+                PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType()));
+    }
+
+    /** 高级发布使用既有高级积分场景。 */
+    private String publishScene(String templateType) {
+        return PortfolioTemplateTypeDict.ADVANCED.getCode().equals(templateType)
+                ? PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode()
+                : PointSceneCodeDict.MAINTAIN_STANDARD_PORTFOLIO.getCode();
     }
 
     /**
@@ -635,13 +808,18 @@ public class MineTeamPortfolioService {
      * 预览团队作品集草稿，已加入成员均可用。
      */
     public TeamPortfolioDetailResponse preview(long portfolioId, long userId) {
+        return preview(portfolioId, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public TeamPortfolioDetailResponse preview(long portfolioId, long userId, String templateType) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireVisiblePortfolio(portfolioId, userId);
+                visibleAccess(portfolioId, userId, templateType);
         PortfolioEntity portfolio = access.portfolio();
         TeamPortfolioConfigDto config = parseConfig(portfolio.getDraftConfigJson());
         TeamPortfolioDetailResponse response = buildDetail(portfolio, config);
         TeamPortfolioRenderDto render = renderService.render(portfolio.getDraftConfigJson(),
-                new TeamPortfolioComponentContext(access.team().getId(), portfolioId,
+                componentContext(portfolio, access.team().getId(), portfolioId,
                         safeInt(portfolio.getDraftRevision())));
         fillMaintenancePreviewRenderContext(render, portfolio, access.team());
         response.setRenderData(render);
@@ -652,15 +830,22 @@ public class MineTeamPortfolioService {
      * 预览已发布团队作品集，已加入成员均可用。
      */
     public TeamPortfolioDetailResponse previewPublished(long portfolioId, long userId) {
+        return previewPublished(portfolioId, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public TeamPortfolioDetailResponse previewPublished(long portfolioId, long userId, String templateType) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireVisiblePortfolio(portfolioId, userId);
+                visibleAccess(portfolioId, userId, templateType);
         PortfolioEntity portfolio = requirePublished(access.portfolio());
         TeamPortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
         TeamPortfolioDetailResponse response = buildDetail(portfolio, config);
         TeamPortfolioRenderDto render = renderService.render(portfolio.getPublishedConfigJson(),
-                new TeamPortfolioComponentContext(access.team().getId(), portfolioId,
+                componentContext(portfolio, access.team().getId(), portfolioId,
                         safeInt(portfolio.getPublishedRevision())));
         fillMaintenancePreviewRenderContext(render, portfolio, access.team());
+        render.setFonts(PortfolioFontManifests.project(PortfolioFontPlan.from(config), portfolio.getPublishedFontAssetsJson()));
+        response.setFontAssets(render.getFonts());
         response.setRenderData(render);
         return response;
     }
@@ -674,14 +859,25 @@ public class MineTeamPortfolioService {
             String scope,
             long userId
     ) {
+        return scheduleOptions(portfolioId, componentKey, scope, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public JSONObject scheduleOptions(
+            long portfolioId,
+            String componentKey,
+            String scope,
+            long userId,
+            String templateType
+    ) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireVisiblePortfolio(portfolioId, userId);
+                visibleAccess(portfolioId, userId, templateType);
         PortfolioEntity portfolio = access.portfolio();
         TeamPortfolioConfigDto config = resolvePreviewConfig(portfolio, scope);
         int revision = PREVIEW_SCOPE_PUBLISHED.equals(normalizeScope(scope))
                 ? safeInt(portfolio.getPublishedRevision()) : safeInt(portfolio.getDraftRevision());
         return scheduleQueryService.previewOptions(
-                new TeamPortfolioComponentContext(access.team().getId(), portfolioId, revision),
+                componentContext(portfolio, access.team().getId(), portfolioId, revision),
                 config,
                 componentKey);
     }
@@ -695,14 +891,25 @@ public class MineTeamPortfolioService {
             String scope,
             long userId
     ) {
+        return scheduleQueryPreview(portfolioId, request, scope, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public TeamPortfolioScheduleQueryResponse scheduleQueryPreview(
+            long portfolioId,
+            TeamPortfolioScheduleQueryRequest request,
+            String scope,
+            long userId,
+            String templateType
+    ) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireVisiblePortfolio(portfolioId, userId);
+                visibleAccess(portfolioId, userId, templateType);
         PortfolioEntity portfolio = access.portfolio();
         TeamPortfolioConfigDto config = resolvePreviewConfig(portfolio, scope);
         int revision = PREVIEW_SCOPE_PUBLISHED.equals(normalizeScope(scope))
                 ? safeInt(portfolio.getPublishedRevision()) : safeInt(portfolio.getDraftRevision());
         return scheduleQueryService.queryPreview(
-                new TeamPortfolioComponentContext(access.team().getId(), portfolioId, revision),
+                componentContext(portfolio, access.team().getId(), portfolioId, revision),
                 config, request);
     }
 
@@ -714,8 +921,18 @@ public class MineTeamPortfolioService {
             TeamPortfolioShareRecordRequest request,
             long userId
     ) {
+        createShareRecord(portfolioId, request, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public void createShareRecord(
+            long portfolioId,
+            TeamPortfolioShareRecordRequest request,
+            long userId,
+            String templateType
+    ) {
         PortfolioEntity portfolio = requirePublished(
-                accessService.requireVisiblePortfolio(portfolioId, userId).portfolio());
+                visibleAccess(portfolioId, userId, templateType).portfolio());
         PortfolioShareRecordEntity record = new PortfolioShareRecordEntity();
         record.setPortfolioId(portfolioId);
         record.setPortfolioRevision(safeInt(portfolio.getPublishedRevision()));
@@ -832,11 +1049,31 @@ public class MineTeamPortfolioService {
     /**
      * 删除团队作品集、引用并在提交后清理自有素材。
      */
-    @Transactional(rollbackFor = Exception.class)
     public void deletePortfolio(long portfolioId, long userId) {
+        deletePortfolio(portfolioId, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public void deletePortfolio(long portfolioId, long userId, String templateType) {
+        PortfolioFontWrite write = new PortfolioFontWrite();
+        portfolioPublishTransactionService.execute(() -> {
+            deletePortfolioInTransaction(portfolioId, userId, write, templateType);
+            return null;
+        });
+        if (!write.released.isEmpty()) { portfolioFontService.cleanup(write.released, write.prefix); }
+    }
+
+    /** 团队删除保留原业务守卫，字体清理共用作品集行锁。 */
+    private void deletePortfolioInTransaction(long portfolioId, long userId, PortfolioFontWrite write, String templateType) {
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                accessService.requireMaintainablePortfolio(portfolioId, userId);
-        PortfolioEntity portfolio = access.portfolio();
+                maintainableAccess(portfolioId, userId, templateType);
+        PortfolioEntity portfolio = portfolioEntityMapper.lockById(portfolioId);
+        if (portfolio == null) { throw new BusinessException(TeamPortfolioMessage.DELETE_FAILED_MESSAGE); }
+        if (portfolio.getDraftFontAssetsJson() != null || portfolio.getPublishedFontAssetsJson() != null) {
+            write.changed(portfolio, null, null);
+            write.prefix = PortfolioFontWrite.prefix(access.team().getUniqueCode(), portfolioId);
+            portfolioEntityMapper.clearFontAssets(portfolioId);
+        }
         portfolioReferenceEntityMapper.delete(Wrappers.lambdaQuery(PortfolioReferenceEntity.class)
                 .eq(PortfolioReferenceEntity::getPortfolioId, portfolioId));
         int updated = portfolioEntityMapper.update(
@@ -895,6 +1132,7 @@ public class MineTeamPortfolioService {
         }
         TeamPortfolioConfigDto config = parseConfig(resolveListConfigJson(portfolio));
         response.setPortfolioId(portfolio.getId());
+        response.setTemplateType(portfolio.getTemplateType());
         response.setShareCode(portfolio.getShareCode());
         response.setTitle(resolveTitle(config));
         response.setCoverUrl(resolveCoverUrl(config));
@@ -978,6 +1216,10 @@ public class MineTeamPortfolioService {
             snapshot.put(HISTORY_FIELD_RESULT_PUBLISHED_REVISION, resultPublishedRevision);
         }
         snapshot.put(HISTORY_FIELD_CONFIG, config);
+        if (PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType())) {
+            snapshot.put("aiContext", JSON.parse(portfolio.getAiContextJson()));
+            history.setAiPrompt(portfolio.getAiPrompt());
+        }
         history.setSnapshotJson(snapshot.toJSONString());
         history.setSourceType(SOURCE_TYPE_MANUAL);
         history.setContentHash(contentHash);
@@ -1029,9 +1271,12 @@ public class MineTeamPortfolioService {
      * 计算保存请求的稳定指纹，配置取自校验前的原始请求。
      */
     private String saveRequestFingerprint(TeamPortfolioDraftSaveRequest request) {
+        if (PortfolioFontConfigSupport.hasFontIntent(request)) {
+            return sha256(PortfolioFontConfigSupport.fingerprint(request));
+        }
         JSONObject fingerprintSource = new JSONObject();
         fingerprintSource.put(FINGERPRINT_FIELD_CLIENT_REVISION, request.getClientRevision());
-        fingerprintSource.put(HISTORY_FIELD_CONFIG, request.getConfig());
+        fingerprintSource.put(HISTORY_FIELD_CONFIG, PortfolioFontConfigSupport.legacyConfig(request.getConfig()));
         return sha256(JSON.toJSONString(fingerprintSource, JSONWriter.Feature.MapSortField));
     }
 
@@ -1148,6 +1393,8 @@ public class MineTeamPortfolioService {
         response.setDraftRevision(safeInt(portfolio.getDraftRevision()));
         response.setPublishedRevision(safeInt(portfolio.getPublishedRevision()));
         response.setConfig(config);
+        response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config),
+                portfolio.getDraftFontAssetsJson(), portfolio.getPublishedFontAssetsJson()));
         return response;
     }
 

@@ -1,12 +1,17 @@
 package com.jxc.wefolio.dto.teamportfolio;
 
 import lombok.Data;
+import com.jxc.wefolio.dto.PortfolioFontManifestDto;
 
 /**
  * 团队作品集维护详情响应。
  */
 @Data
 public class TeamPortfolioDetailResponse {
+
+    /** 当前配置快照的字体资源，保留原 renderData 空值语义。 */
+    private PortfolioFontManifestDto fontAssets;
+
 
     /** 作品集 ID。 */
     private Long portfolioId;

@@ -33,4 +33,19 @@ class UserStorageFolderRepairRepositoryTest {
                 .contains("status = ?", "deleted = 0", "id > ?", "ORDER BY id", "LIMIT ?")
                 .doesNotContain("OFFSET");
     }
+
+    /** 团队使用自己的 ID 游标并排除解散及逻辑删除记录。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void findActiveTeamsAfterShouldUseTeamCursorAndActiveNotDeletedFilter() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        var repository = new UserStorageFolderRepairRepository(jdbcTemplate);
+        repository.findActiveTeamsAfter(7L, 10);
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).query(sql.capture(), org.mockito.ArgumentMatchers.any(RowMapper.class),
+                eq("ACTIVE"), eq(7L), eq(10));
+        assertThat(sql.getValue()).contains("FROM wf_team", "status = ?", "deleted = 0", "id > ?", "ORDER BY id", "LIMIT ?")
+                .doesNotContain("OFFSET", "wf_portfolio");
+    }
+
 }

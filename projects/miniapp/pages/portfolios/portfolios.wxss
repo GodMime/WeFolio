@@ -453,6 +453,39 @@
   transition: transform 180ms ease;
 }
 
+/* 高级卡片只改变边框颜色，内部尺寸与标准卡片保持一致。 */
+.portfolio-item-card.advanced {
+  border-color: #ddc697;
+}
+
+/* 角标增加上下留白，绝对定位不影响卡片整体高度。 */
+.portfolio-type-badge {
+  position: absolute;
+  top: -1rpx;
+  right: 32rpx;
+  z-index: 1;
+  min-width: 72rpx;
+  height: 32rpx;
+  padding: 0 14rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #85642a;
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 0 0 8rpx 8rpx;
+  background: #f8f0e0;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* 团队角标保留原高度，避免遮挡紧邻的团队归属文字。 */
+.team-portfolio-card .portfolio-type-badge {
+  height: 24rpx;
+}
+
 .portfolio-swipe-row.revealed .portfolio-item-card {
   transform: translateX(-140rpx);
 }
@@ -740,8 +773,15 @@
 }
 
 .create-action.advanced {
-  color: #212529;
-  background: #e9ecef;
+  color: #eed5a1;
+  border: 1rpx solid #c6a264;
+  background: #191b1e;
+  background: radial-gradient(ellipse 65% 60% at 14% 0%, rgba(229, 195, 132, 0.85) 0%, rgba(229, 195, 132, 0.38) 28%, rgba(229, 195, 132, 0) 64%), linear-gradient(160deg, #806840 0%, #544834 22%, #25282b 47%, #0b0e12 76%, #4d3d25 100%);
+  box-shadow: 0 6rpx 18rpx rgba(28, 25, 20, 0.12);
+}
+
+.create-action.advanced:active {
+  opacity: 0.88;
 }
 
 .tabbar {

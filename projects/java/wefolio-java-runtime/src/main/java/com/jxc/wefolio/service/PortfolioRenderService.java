@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontManifests;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
 import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 import com.jxc.wefolio.common.PortfolioTextColorSupport;
 
@@ -259,6 +262,10 @@ public class PortfolioRenderService {
         render.setShare(copyShare(config == null ? null : config.getShare()));
         render.setTitle(resolveTitle(render.getShare()));
         render.setPreview(preview);
+        if (portfolio != null && !underMaintenance) {
+            render.setFonts(PortfolioFontManifests.project(PortfolioFontPlan.from(config), preview
+                    ? portfolio.getDraftFontAssetsJson() : portfolio.getPublishedFontAssetsJson()));
+        }
         render.setUnderMaintenance(underMaintenance);
         render.setMaintenanceText(maintenanceText);
         render.setVisitRecordId(visitRecordId);
@@ -919,6 +926,7 @@ public class PortfolioRenderService {
                 componentConfig.get(PortfolioTextTypographySupport.FONT_SIZE_RPX_CONFIG_KEY)));
         textSection.setColor(PortfolioTextColorSupport.forRender(
                 componentConfig.get(PortfolioTextColorSupport.COLOR_CONFIG_KEY)));
+        textSection.setFontId(asString(componentConfig.get(PortfolioFontConfigSupport.FONT_ID)));
         textSection.setLineHeight(PortfolioTextLineHeightSupport.forRender(componentConfig));
         return textSection;
     }

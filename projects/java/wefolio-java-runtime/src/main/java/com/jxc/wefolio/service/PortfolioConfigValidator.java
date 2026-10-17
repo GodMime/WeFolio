@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
 import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
 import com.jxc.wefolio.common.PortfolioTextColorSupport;
 import com.jxc.wefolio.common.PortfolioDividerColorSupport;
@@ -456,6 +457,8 @@ public class PortfolioConfigValidator {
                 ));
             }
         }
+        // 持久配置再次规范化仍保留字体；客户端能力合并由保存入口随后执行。
+        PortfolioFontConfigSupport.merge(normalized, incomingConfig, incomingConfig, false);
         return normalized;
     }
 

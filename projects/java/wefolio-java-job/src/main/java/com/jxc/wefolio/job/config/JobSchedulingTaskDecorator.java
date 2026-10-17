@@ -7,7 +7,7 @@ import org.springframework.core.task.TaskDecorator;
 import org.springframework.stereotype.Component;
 
 /**
- * 为每次 Spring 调度回调统一接入后台任务生命周期门闩。
+ * 为原始业务 Runnable 接入生命周期门闩；禁止挂到执行器的 TaskDecorator。
  */
 @Slf4j
 @Component
@@ -20,7 +20,7 @@ public class JobSchedulingTaskDecorator implements TaskDecorator {
     /**
      * 包装实际调度回调，使当前及未来注册的任务自动受停用状态约束。
      *
-     * @param callback Spring 调度器提交的原始回调
+     * @param callback 调度入口收到的原始业务回调
      * @return 带有准入和凭证释放逻辑的回调
      */
     @Override

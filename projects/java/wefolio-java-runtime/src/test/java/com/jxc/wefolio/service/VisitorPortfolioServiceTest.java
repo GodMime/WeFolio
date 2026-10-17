@@ -55,6 +55,9 @@ import java.util.Arrays;
 import java.util.List;
 
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontSavedFlowAssertions;
+import com.jxc.wefolio.mapper.WorkEntityMapper;
+import static org.mockito.Mockito.mock;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -203,6 +206,7 @@ class VisitorPortfolioServiceTest {
     @Test
     void openPortfolioShouldCreateGlobalVisitorRecordAndNotExposeOpenidOrVisitorId() {
         PortfolioEntity portfolio = publishedPortfolio();
+        PortfolioFontSavedFlowAssertions.withPublishedFont(portfolio);
         VisitRecordEntity record = new VisitRecordEntity();
         record.setId(33L);
         VisitorEntity visitor = new VisitorEntity();
@@ -220,10 +224,11 @@ class VisitorPortfolioServiceTest {
                 eq("open-1")))
                 .thenReturn(record);
         when(visitorService.createProfileToken(1024L, 88L, 33L)).thenReturn("profile-token-1");
-        PortfolioRenderDto renderData = new PortfolioRenderDto();
-        renderData.setVisitRecordId(33L);
+        var realRenderer = new PortfolioRenderService(mock(WorkEntityMapper.class), portfolioEntityMapper,
+                mock(CosService.class), mock(PortfolioBackgroundAudioService.class));
         when(portfolioRenderService.render(eq(portfolio), any(), eq(false), eq(false), eq(null), eq(33L)))
-                .thenReturn(renderData);
+                .thenAnswer(call -> realRenderer.render(call.getArgument(0), call.getArgument(1),
+                        call.getArgument(2), call.getArgument(3), call.getArgument(4), call.getArgument(5)));
         VisitorPortfolioOpenRequest request = new VisitorPortfolioOpenRequest();
         request.setLoginCode("wx-code");
         request.setSourceType("WECHAT_SHARE_CARD");
@@ -238,7 +243,8 @@ class VisitorPortfolioServiceTest {
         assertThat(response.isNewVisitor()).isTrue();
         assertThat(response.getVisitorProfileToken()).isEqualTo("profile-token-1");
         assertThat(response.getVisitRecordId()).isEqualTo(33L);
-        assertThat(response.getRenderData()).isSameAs(renderData);
+        var render = response.getRenderData();
+        PortfolioFontSavedFlowAssertions.assertPublishedVisitorFonts(render.getFonts());
         assertThat(JSON.toJSONString(response))
                 .contains("\"needVisitorProfile\":true")
                 .doesNotContain("openid")

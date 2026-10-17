@@ -71,6 +71,18 @@ public class PortfolioMiniappCodeApplicationService {
         return generate(() -> teamSnapshot(portfolioId, actorUserId), actorUserId);
     }
 
+    /** 高级入口同样前后复核权限和发布快照，普通分享门禁保持不变。 */
+    public PortfolioMiniappCodeResponse generateAdvanced(Long id, Long userId, boolean team) {
+        requireIdentity(userId);
+        Supplier<PortfolioMiniappCodeSnapshot> reader = () -> team
+                ? teamSnapshot(id, userId, PortfolioTemplateTypeDict.ADVANCED.getCode())
+                : personalSnapshot(id, userId, PortfolioTemplateTypeDict.ADVANCED.getCode());
+        PortfolioMiniappCodeSnapshot initial = reader.get();
+        PortfolioMiniappCodeResponse result = resourceService.generate(initial, userId, true);
+        if (!initial.equals(reader.get())) { throw new BusinessException(PortfolioMiniappCodeApplicationMessage.SNAPSHOT_CHANGED); }
+        return result;
+    }
+
     /** 无论原码来自缓存还是本次生成，返回前均重新读取权限和公开快照。 */
     private PortfolioMiniappCodeResponse generate(Supplier<PortfolioMiniappCodeSnapshot> snapshotReader,
                                                  Long actorUserId) {
@@ -85,13 +97,18 @@ public class PortfolioMiniappCodeApplicationService {
 
     /** 读取个人发布快照，头像严格来自所属用户个人资料。 */
     private PortfolioMiniappCodeSnapshot personalSnapshot(Long portfolioId, Long actorUserId) {
+        return personalSnapshot(portfolioId, actorUserId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 按独立入口显式模板读取个人快照。 */
+    private PortfolioMiniappCodeSnapshot personalSnapshot(Long portfolioId, Long actorUserId, String templateType) {
         PortfolioEntity portfolio = portfolioId == null ? null : portfolioEntityMapper.selectById(portfolioId);
         if (portfolio == null || isDeleted(portfolio)
                 || !PortfolioOwnerTypeDict.USER.getCode().equals(portfolio.getOwnerType())
                 || !Objects.equals(actorUserId, portfolio.getOwnerId())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_NOT_FOUND_MESSAGE);
         }
-        if (!PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())) {
+        if (!templateType.equals(portfolio.getTemplateType())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_MAINTENANCE_UNAVAILABLE_MESSAGE);
         }
         if (!PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1.equals(portfolio.getSchemaVersion())) {
@@ -110,11 +127,18 @@ public class PortfolioMiniappCodeApplicationService {
 
     /** 读取团队公开资料，绝不读取分享成员的姓名、城市或头像。 */
     private PortfolioMiniappCodeSnapshot teamSnapshot(Long portfolioId, Long actorUserId) {
+        return teamSnapshot(portfolioId, actorUserId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 按独立入口显式模板读取团队快照。 */
+    private PortfolioMiniappCodeSnapshot teamSnapshot(Long portfolioId, Long actorUserId, String templateType) {
         if (portfolioId == null) {
             throw new BusinessException(TeamPortfolioMessage.PORTFOLIO_NOT_FOUND);
         }
         TeamPortfolioAccessService.TeamPortfolioAccess access =
-                teamPortfolioAccessService.requireVisiblePortfolio(portfolioId, actorUserId);
+                PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)
+                        ? teamPortfolioAccessService.requireVisiblePortfolio(portfolioId, actorUserId)
+                        : teamPortfolioAccessService.requireVisiblePortfolio(portfolioId, actorUserId, templateType);
         PortfolioEntity portfolio = access.portfolio();
         TeamEntity team = access.team();
         if (!access.canShare() || isDeleted(portfolio) || isDeleted(team) || isDeleted(access.membership())) {

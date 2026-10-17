@@ -54,7 +54,8 @@
         "visitor-schedule/visitor-schedule",
         "unavailable/portfolio-unavailable",
         "work-detail/portfolio-work-detail",
-        "video-player/video-player"
+        "video-player/video-player",
+        "advanced-ai/advanced-ai"
       ]
     },
     {
@@ -75,7 +76,9 @@
         "contact-leads/team-contact-leads",
         "visitor-portfolio/team-visitor-portfolio",
         "work-detail/team-portfolio-work-detail",
-        "video-player/video-player"
+        "video-player/video-player",
+        "advanced-ai/advanced-ai",
+        "advanced-visitor/team-visitor-portfolio"
       ]
     }
   ],

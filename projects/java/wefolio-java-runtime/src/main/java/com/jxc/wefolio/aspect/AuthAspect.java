@@ -61,6 +61,9 @@ public class AuthAspect {
     /** 团队作品集访客接口路径前缀 */
     private static final String TEAM_VISITOR_PATH_PREFIX = "/api/visitor/team-portfolios/";
 
+    /** 高级团队独立访客路径，匿名作用域仍按TEAM和真实分享码绑定。 */
+    private static final String ADVANCED_TEAM_VISITOR_PATH_PREFIX = "/api/visitor/advanced-team-portfolios/";
+
     /** 分享码路径变量名 */
     private static final String SHARE_CODE_PATH_VARIABLE = "shareCode";
 
@@ -210,7 +213,7 @@ public class AuthAspect {
 
     /** 按访客接口路径解析朋友圈匿名令牌作用域类型。 */
     private String resolveTimelineScopePrefix(String requestUri) {
-        if (requestUri != null && requestUri.startsWith(TEAM_VISITOR_PATH_PREFIX)) {
+        if (requestUri != null && (requestUri.startsWith(TEAM_VISITOR_PATH_PREFIX) || requestUri.startsWith(ADVANCED_TEAM_VISITOR_PATH_PREFIX))) {
             return TEAM_TIMELINE_SCOPE_PREFIX;
         }
         if (requestUri != null && requestUri.startsWith(PERSONAL_VISITOR_PATH_PREFIX)) {

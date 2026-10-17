@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.payment;
 
+import java.util.List;
+import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
 import com.jxc.wefolio.dict.RechargePackageStatusDict;
@@ -103,6 +105,8 @@ class RechargeCommandServiceTest {
     @Mock private RechargeRefundTransactionService refunds;
     /** 权威余额同步边界。 */
     @Mock private WechatAuthoritativeBalanceSyncService balances;
+    /** 当前支付设备会话交换边界。 */
+    @Mock private RechargeWechatSessionService paymentSessions;
     /** 被测充值写业务服务。 */
     private RechargeCommandService service;
     /** 建单使用的积分账户。 */
@@ -117,7 +121,7 @@ class RechargeCommandServiceTest {
         properties.setOfferId(OFFER_ID);
         properties.setAppKey(APP_KEY);
         service = new RechargeCommandService(properties, users, auths, packages, orders, points,
-                transactions, client, signer, mutex, sessions, refunds, balances);
+                transactions, client, signer, mutex, sessions, refunds, balances, paymentSessions);
         account = new PointAccountEntity();
         account.setId(10L);
         account.setUserId(USER_ID);
@@ -155,7 +159,7 @@ class RechargeCommandServiceTest {
         ArgumentCaptor<LocalDateTime> expiry = ArgumentCaptor.forClass(LocalDateTime.class);
         InOrder sequence = inOrder(users, auths, packages, points, sessions, transactions, signer);
         sequence.verify(users).selectById(USER_ID);
-        sequence.verify(auths).selectOne(any());
+        sequence.verify(auths).selectList(any());
         sequence.verify(packages).selectOne(any());
         sequence.verify(points).ensureAccount(USER_ID);
         sequence.verify(sessions).findAvailableSession(USER_ID);
@@ -170,7 +174,48 @@ class RechargeCommandServiceTest {
         assertThat(response.getSignData()).isEqualTo(EXPECTED_SIGN_DATA);
         assertThat(response.getPaySig()).isEqualTo(PAY_SIGNATURE);
         assertThat(response.getSignature()).isEqualTo(USER_SIGNATURE);
+        verifyNoInteractions(paymentSessions);
         verifyNoInteractions(orders, client, mutex, refunds, balances);
+    }
+
+    /** 新版请求只能用此次 code 对应的密钥签名，不读取可能被其他设备覆盖的共享会话。 */
+    @Test
+    void newClientShouldSignWithCurrentDeviceSessionWithoutReadingSharedSession() {
+        prepareAvailableAccountAndPackage();
+        CreateRechargeOrderRequest request = request();
+        request.setCode("current-device-code");
+        when(paymentSessions.refreshForPayment(USER_ID, request.getCode())).thenReturn(SESSION_KEY);
+        RechargeOrderEntity order = new RechargeOrderEntity();
+        order.setMerchantOrderNo(ORDER_NO);
+        order.setBuyQuantity(500L);
+        when(transactions.createPendingOrder(eq(USER_ID), same(account), same(rechargePackage), any()))
+                .thenReturn(order);
+        when(signer.userSignature(SESSION_KEY, EXPECTED_SIGN_DATA)).thenReturn(USER_SIGNATURE);
+
+        CreateRechargeOrderResponse response = service.createOrder(USER_ID, request);
+
+        assertThat(response.getSignature()).isEqualTo(USER_SIGNATURE);
+        verifyNoInteractions(sessions);
+        InOrder sequence = inOrder(paymentSessions, transactions, signer);
+        sequence.verify(paymentSessions).refreshForPayment(USER_ID, request.getCode());
+        sequence.verify(transactions).createPendingOrder(eq(USER_ID), same(account), same(rechargePackage), any());
+        sequence.verify(signer).userSignature(SESSION_KEY, EXPECTED_SIGN_DATA);
+    }
+
+    /** 新 code 被拒绝时不能退回旧会话，也不能创建待支付订单。 */
+    @Test
+    void rejectedDeviceCodeShouldStopBeforeCreatingOrder() {
+        prepareAvailableAccountAndPackage();
+        CreateRechargeOrderRequest request = request();
+        request.setCode("wrong-device-code");
+        when(paymentSessions.refreshForPayment(USER_ID, request.getCode()))
+                .thenThrow(new BusinessException(RechargeMessage.PAYMENT_IDENTITY_MISMATCH_MESSAGE));
+
+        assertThatThrownBy(() -> service.createOrder(USER_ID, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(RechargeMessage.PAYMENT_IDENTITY_MISMATCH_MESSAGE);
+
+        verifyNoInteractions(sessions, transactions, signer);
     }
 
     /** 支付关闭时空请求仍优先返回功能关闭提示，不触发身份读取或任何写入。 */
@@ -220,9 +265,13 @@ class RechargeCommandServiceTest {
         user.setStatus(UserStatusDict.ACTIVE.getCode());
         when(users.selectById(USER_ID)).thenReturn(user);
         UserAuthEntity auth = new UserAuthEntity();
+        auth.setId(2L);
+        auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
         auth.setUserId(USER_ID);
         auth.setOpenId(OPEN_ID);
-        when(auths.selectOne(any())).thenReturn(auth);
+        when(auths.selectList(any())).thenReturn(List.of(auth));
         when(packages.selectOne(any())).thenReturn(rechargePackage);
         when(points.ensureAccount(USER_ID)).thenReturn(account);
     }

@@ -103,6 +103,21 @@ public class PortfolioHyperlinkGraphService {
         }
     }
 
+    /** 高级个人仅扩展源节点身份；目标图仍使用原普通已发布个人范围。 */
+    public LockedGraph lockAdvancedUserGraph(Long ownerId, Long sourcePortfolioId) {
+        List<PortfolioEntity> portfolios = new ArrayList<>(safeList(
+                portfolioEntityMapper.lockActiveStandardPersonalByOwnerId(ownerId)));
+        PortfolioEntity source = portfolioEntityMapper.lockById(sourcePortfolioId);
+        if (source == null || !Objects.equals(source.getOwnerId(), ownerId)
+                || !PortfolioOwnerTypeDict.USER.getCode().equals(source.getOwnerType())
+                || !PortfolioTemplateTypeDict.ADVANCED.getCode().equals(source.getTemplateType())
+                || !PortfolioStatusDict.ACTIVE.getCode().equals(source.getStatus())) {
+            throw new BusinessException(PortfolioMessage.PORTFOLIO_NOT_FOUND_MESSAGE);
+        }
+        portfolios.add(source);
+        return new LockedGraph(ownerId, source, List.copyOf(portfolios));
+    }
+
     /**
      * 在锁内校验候选作用域引用的目标和循环。
      *
@@ -166,6 +181,12 @@ public class PortfolioHyperlinkGraphService {
             Long sourcePortfolioId,
             Long selectedTargetPortfolioId
     ) {
+        return listTargets(ownerId, sourcePortfolioId, selectedTargetPortfolioId, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 独立高级源适配；目标查询和可发布范围始终只取普通个人作品集。 */
+    public PortfolioHyperlinkTargetResponse listTargets(Long ownerId, Long sourcePortfolioId,
+            Long selectedTargetPortfolioId, String sourceTemplateType) {
         List<PortfolioEntity> ownedPortfolios = safeList(portfolioEntityMapper.selectList(
                 Wrappers.<PortfolioEntity>query()
                         .eq("owner_type", PortfolioOwnerTypeDict.USER.getCode())
@@ -173,6 +194,17 @@ public class PortfolioHyperlinkGraphService {
                         .eq("template_type", PortfolioTemplateTypeDict.STANDARD.getCode())
                         .eq("status", PortfolioStatusDict.ACTIVE.getCode())
         ));
+        if (sourcePortfolioId != null && PortfolioTemplateTypeDict.ADVANCED.getCode().equals(sourceTemplateType)) {
+            PortfolioEntity source = portfolioEntityMapper.selectById(sourcePortfolioId);
+            if (source == null || !Objects.equals(source.getOwnerId(), ownerId)
+                    || !PortfolioOwnerTypeDict.USER.getCode().equals(source.getOwnerType())
+                    || !sourceTemplateType.equals(source.getTemplateType())
+                    || !PortfolioStatusDict.ACTIVE.getCode().equals(source.getStatus())) {
+                throw new BusinessException(PortfolioMessage.PORTFOLIO_NOT_FOUND_MESSAGE);
+            }
+            ownedPortfolios = new ArrayList<>(ownedPortfolios);
+            ownedPortfolios.add(source);
+        }
         if (sourcePortfolioId != null && ownedPortfolios.stream()
                 .noneMatch(item -> Objects.equals(sourcePortfolioId, item.getId()))) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_NOT_FOUND_MESSAGE);

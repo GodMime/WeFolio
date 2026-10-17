@@ -14,7 +14,10 @@
   <button class="grid-button grid-step-button" data-field="fontSizeRpx" data-delta="{{rpxStep}}" bindtap="handleRpxStep" disabled="{{run.fontSizeRpx >= rpxFields.fontSizeRpx.max}}" aria-label="增大字号">＋</button>
 </view></view>
 <view class="grid-label">字重</view><view class="grid-options"><view wx:for="{{weights}}" wx:key="value" class="grid-option {{run.fontWeight === item.value ? 'selected' : ''}}" data-field="fontWeight" data-value="{{item.value}}" bindtap="handleField">{{item.label}}</view></view>
-<view class="grid-label">字体</view><view class="grid-options"><view wx:for="{{fonts}}" wx:key="value" class="grid-option {{run.fontFamily === item.value ? 'selected' : ''}}" data-field="fontFamily" data-value="{{item.value}}" bindtap="handleField">{{item.label}}</view></view>
+<view class="font-selector-heading">
+  <view class="font-selector-title">字体</view>
+  <button class="grid-button font-selector-more" wx:if="{{!moreFontsExpanded}}" bindtap="handleExpandFonts">更多字体</button>
+</view><view class="font-selector-message" wx:if="{{fontMessage}}">{{fontMessage}}</view><view class="grid-options"><view wx:for="{{fonts}}" wx:if="{{!item.remote || moreFontsExpanded || run.fontId === item.value}}" wx:key="value" class="grid-option {{(run.fontId || run.fontFamily) === item.value ? 'selected' : ''}}" aria-role="radio" aria-checked="{{(run.fontId || run.fontFamily) === item.value}}" aria-label="{{item.label}} {{item.languageLabel}}" aria-disabled="{{!item.available}}" data-field="fontFamily" data-value="{{item.value}}" bindtap="handleField">{{item.label}} {{item.languageLabel}}<image wx:if="{{item.previewImageUrl}}" class="font-preview-image" src="{{item.previewImageUrl}}" mode="widthFix" /><view wx:else>{{item.sample}}</view></view></view>
 <view class="grid-label">文字颜色</view><text-color-editor color="{{run.color}}" active="{{visible && tab === 'content'}}" bindchange="handleRunColor" />
 <view class="grid-label">段落对齐</view><view class="grid-options"><view wx:for="{{alignments}}" wx:key="value" class="grid-option {{block.alignment === item.value ? 'selected' : ''}}" data-scope="block" data-field="alignment" data-value="{{item.value}}" bindtap="handleField">{{item.label}}</view></view>
 <view class="grid-field"><text>段落行间距（倍）</text><view class="grid-stepper">
@@ -63,5 +66,5 @@
   <block wx:for="{{inputRenderKeys}}" wx:for-item="inputRenderKey" wx:for-index="inputRenderIndex" wx:key="*this"><input class="grid-input" type="number" value="{{item}}" data-field="rowMinHeightsRpx" data-index="{{index}}" bindblur="handleArray" /></block>
   <button class="grid-button grid-step-button" data-field="rowMinHeightsRpx" data-index="{{index}}" data-delta="{{rpxStep}}" bindtap="handleRpxStep" disabled="{{item >= rpxFields.rowMinHeightsRpx.max}}" aria-label="增大第{{index + 1}}行最小高度">＋</button>
 </view></view></block>
-<view wx:if="{{error}}" class="grid-error">{{error}}</view><view class="grid-label">效果预览</view><text-grid config="{{draft}}" theme-mode="{{previewThemeMode}}" /></view></scroll-view>
+<view wx:if="{{error}}" class="grid-error">{{error}}</view><view class="grid-label">效果预览</view><text-grid config="{{draft}}" theme-mode="{{previewThemeMode}}"  font-context="{{fontContext}}"/></view></scroll-view>
 <view class="grid-actions"><button class="grid-button grid-action-button" bindtap="handleCancel">取消</button><button class="grid-button grid-action-button primary" bindtap="handleConfirm">完成</button></view></view></view>

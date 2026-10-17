@@ -2,6 +2,7 @@ package com.jxc.wefolio.job.service;
 
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.job.config.CosProperties;
+import com.jxc.wefolio.job.config.VideoFrameConfig;
 import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.ciModel.auditing.AudtingCommonInfo;
@@ -13,9 +14,10 @@ import com.qcloud.cos.model.ciModel.auditing.ImageAuditingResponse;
 import com.qcloud.cos.model.ciModel.auditing.SnapshotInfo;
 import com.qcloud.cos.model.ciModel.auditing.VideoAuditingRequest;
 import com.qcloud.cos.model.ciModel.auditing.VideoAuditingResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +28,6 @@ import java.util.Map;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class CosTencentCiAuditClient implements TencentCiAuditClient {
 
     /** 腾讯云审核结果：正常 */
@@ -50,6 +51,9 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
     /** 按时间间隔截帧 */
     private static final String SNAPSHOT_MODE_INTERVAL = "Interval";
 
+    /** 平均截帧；首尾存在约半个采样间隔盲区。 */
+    private static final String SNAPSHOT_MODE_AVERAGE = "Average";
+
     /** 腾讯云成功终态 */
     private static final String CI_STATE_SUCCESS = "Success";
 
@@ -68,24 +72,32 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
     /** 大图检测字段 */
     private static final String LARGE_IMAGE_DETECT_FIELD = "largeImageDetect";
 
-    /** 审核内容字段 */
-    private static final String DETECT_CONTENT_FIELD = "detectContent";
-
-    /** 截帧模式字段 */
-    private static final String SNAPSHOT_MODE_FIELD = "snapshotMode";
-
-    /** 截帧间隔字段 */
-    private static final String SNAPSHOT_INTERVAL_SECONDS_FIELD = "snapshotIntervalSeconds";
-
-    /** 截帧数量字段 */
-    private static final String SNAPSHOT_COUNT_FIELD = "snapshotCount";
-
     /** 腾讯云任务 ID 字段 */
     private static final String CI_JOB_ID_FIELD = "ciJobId";
+
+    /** 新策略日志里的临时媒体地址占位。 */
+    private static final String REDACTED_MEDIA_URL = "REDACTED_MEDIA_URL";
 
     private final COSClient cosClient;
 
     private final CosProperties cosProperties;
+
+    /** 新审核无隐式重试的有界客户端，旧审核保持原行为。 */
+    private final COSClient persistentVideoClient;
+
+    /** 生产按模式选择专用客户端。 */
+    @Autowired
+    public CosTencentCiAuditClient(COSClient cosClient, CosProperties cosProperties,
+                                   @Qualifier(VideoFrameConfig.COS_CLIENT_NAME) COSClient persistentVideoClient) {
+        this.cosClient = cosClient;
+        this.cosProperties = cosProperties;
+        this.persistentVideoClient = persistentVideoClient;
+    }
+
+    /** 兼容原客户端测试构造。 */
+    public CosTencentCiAuditClient(COSClient cosClient, CosProperties cosProperties) {
+        this(cosClient, cosProperties, cosClient);
+    }
 
     /** 复用异步审核结果结构，音频只提交 COS 对象地址。 */
     @Override
@@ -145,24 +157,33 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
 
     @Override
     public TencentCiAuditResult submitVideo(String objectKey, int snapshotIntervalSeconds, int snapshotCount) {
+        return submitVideo(objectKey, TencentCiVideoAuditRequest.interval(snapshotIntervalSeconds, snapshotCount));
+    }
+
+    /** 冻结参数决定腾讯请求体；Average 严格不设置 TimeInterval。 */
+    @Override
+    public TencentCiAuditResult submitVideo(String objectKey, TencentCiVideoAuditRequest frozen) {
         VideoAuditingRequest request = new VideoAuditingRequest();
         request.setBucketName(cosProperties.getBucketName());
         request.getInput().setObject(objectKey);
-        request.getConf().setDetectType(DETECT_TYPE_ALL);
-        request.getConf().setDetectContent(DETECT_CONTENT_VIDEO_FRAME);
-        request.getConf().getSnapshot().setMode(SNAPSHOT_MODE_INTERVAL);
-        request.getConf().getSnapshot().setTimeInterval(String.valueOf(snapshotIntervalSeconds));
-        request.getConf().getSnapshot().setCount(String.valueOf(snapshotCount));
+        request.getConf().setDetectType(frozen.detectType());
+        request.getConf().setDetectContent(frozen.detectContent());
+        request.getConf().setCallbackType(frozen.callbackType());
+        boolean average = TencentCiVideoAuditRequest.AVERAGE.equals(frozen.mode());
+        request.getConf().getSnapshot().setMode(average ? SNAPSHOT_MODE_AVERAGE : SNAPSHOT_MODE_INTERVAL);
+        if (!average) {
+            request.getConf().getSnapshot().setTimeInterval(String.valueOf(frozen.intervalSeconds()));
+        }
+        request.getConf().getSnapshot().setCount(String.valueOf(frozen.count()));
 
-        logTencentPayload("腾讯云视频审核提交原始入参",
-                videoSubmitRequestPayload(objectKey, snapshotIntervalSeconds, snapshotCount));
-        log.info("腾讯云视频审核提交请求: bucketName={}, objectKey={}, snapshotIntervalSeconds={}, snapshotCount={}",
-                cosProperties.getBucketName(), objectKey, snapshotIntervalSeconds, snapshotCount);
-        VideoAuditingResponse response = cosClient.createVideoAuditingJob(request);
+        logTencentPayload("腾讯云视频审核提交原始入参", request);
+        log.info("腾讯云视频审核提交请求: bucketName={}, objectKey={}, mode={}, snapshotIntervalSeconds={}, snapshotCount={}",
+                cosProperties.getBucketName(), objectKey, frozen.mode(), frozen.intervalSeconds(), frozen.count());
+        VideoAuditingResponse response = (average ? persistentVideoClient : cosClient).createVideoAuditingJob(request);
         AuditingJobsDetail detail = response.getJobsDetail();
         log.info("腾讯云视频审核提交响应: objectKey={}, jobId={}, state={}",
                 objectKey, detail == null ? null : detail.getJobId(), detail == null ? null : detail.getState());
-        logTencentPayload("腾讯云视频审核提交原始出参", JSON.toJSONString(response));
+        logTencentPayload("腾讯云视频审核提交原始出参", safePersistentPayload(JSON.toJSONString(response), average));
 
         TencentCiAuditResult result = toVideoResult(response);
         logAuditSummary("腾讯云视频审核提交简洁结果", objectKey, result);
@@ -171,18 +192,24 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
 
     @Override
     public TencentCiAuditResult queryVideo(String ciJobId) {
+        return queryVideo(ciJobId, false);
+    }
+
+    /** 原 job 查询选择与提交相同的客户端合同。 */
+    @Override
+    public TencentCiAuditResult queryVideo(String ciJobId, boolean persistentFrames) {
         VideoAuditingRequest request = new VideoAuditingRequest();
         request.setBucketName(cosProperties.getBucketName());
         request.setJobId(ciJobId);
 
         logTencentPayload("腾讯云视频审核查询原始入参", videoQueryRequestPayload(ciJobId));
         log.info("腾讯云视频审核查询请求: bucketName={}, ciJobId={}", cosProperties.getBucketName(), ciJobId);
-        VideoAuditingResponse response = cosClient.describeAuditingJob(request);
+        VideoAuditingResponse response = (persistentFrames ? persistentVideoClient : cosClient).describeAuditingJob(request);
         AuditingJobsDetail detail = response.getJobsDetail();
         log.info("腾讯云视频审核查询响应: ciJobId={}, state={}, result={}, label={}",
                 ciJobId, detail == null ? null : detail.getState(),
                 detail == null ? null : detail.getResult(), detail == null ? null : detail.getLabel());
-        logTencentPayload("腾讯云视频审核查询原始出参", JSON.toJSONString(response));
+        logTencentPayload("腾讯云视频审核查询原始出参", safePersistentPayload(JSON.toJSONString(response), persistentFrames));
 
         TencentCiAuditResult result = toVideoResult(response);
         logAuditSummary("腾讯云视频审核查询简洁结果", ciJobId, result);
@@ -212,8 +239,30 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
                 terminal,
                 failed,
                 rawPayload,
-                collectVideoRisks(detail)
+                collectVideoRisks(detail),
+                collectVideoSnapshots(detail),
+                parseInteger(detail.getSnapshotCount())
         );
+    }
+
+    /** 保留非法时间为 null 交由帧合同明确失败，禁止静默丢弃或伪造采样时刻。 */
+    private List<VideoFrameInput> collectVideoSnapshots(AuditingJobsDetail detail) {
+        if (detail.getSnapshotList() == null) {
+            return List.of();
+        }
+        List<VideoFrameInput> frames = new ArrayList<>();
+        for (SnapshotInfo snapshot : detail.getSnapshotList()) {
+            Long timeMs = null;
+            if (snapshot != null && snapshot.getSnapshotTime() != null) {
+                try {
+                    timeMs = Long.valueOf(snapshot.getSnapshotTime());
+                } catch (NumberFormatException ignored) {
+                    // 真实时间无法解析，完整帧校验会将本次审核置为技术失败。
+                }
+            }
+            frames.add(new VideoFrameInput(timeMs, snapshot == null ? null : snapshot.getUrl(), null));
+        }
+        return List.copyOf(frames);
     }
 
     private List<TencentCiAuditRisk> collectImageRisks(ImageAuditingResponse response) {
@@ -295,19 +344,6 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
         );
     }
 
-    private Map<String, Object> videoSubmitRequestPayload(String objectKey, int snapshotIntervalSeconds,
-                                                          int snapshotCount) {
-        return Map.of(
-                BUCKET_NAME_FIELD, cosProperties.getBucketName(),
-                OBJECT_KEY_FIELD, objectKey,
-                DETECT_TYPE_FIELD, DETECT_TYPE_ALL,
-                DETECT_CONTENT_FIELD, DETECT_CONTENT_VIDEO_FRAME,
-                SNAPSHOT_MODE_FIELD, SNAPSHOT_MODE_INTERVAL,
-                SNAPSHOT_INTERVAL_SECONDS_FIELD, snapshotIntervalSeconds,
-                SNAPSHOT_COUNT_FIELD, snapshotCount
-        );
-    }
-
     private Map<String, Object> videoQueryRequestPayload(String ciJobId) {
         return Map.of(
                 BUCKET_NAME_FIELD, cosProperties.getBucketName(),
@@ -318,6 +354,11 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
     private void logTencentPayload(String title, Object payload) {
         String rawPayload = payload instanceof String text ? text : JSON.toJSONString(payload);
         log.info("{}: {}", title, AuditLogSanitizer.sanitize(rawPayload, cosProperties));
+    }
+
+    /** 新帧日志不保留临时 URL，内容结论和实际截图数量仍可排查。 */
+    private String safePersistentPayload(String payload, boolean persistent) {
+        return persistent ? payload.replaceAll("https?://[^\\\"\\s]+", REDACTED_MEDIA_URL) : payload;
     }
 
     private void logAuditSummary(String title, String target, TencentCiAuditResult result) {

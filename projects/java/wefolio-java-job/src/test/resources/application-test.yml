@@ -34,6 +34,7 @@ cos:
 work-audit:
   # 单元测试默认关闭调度触发，只测试显式调用。
   enabled: false
+
   cron: "0 * * * * ?"
   lock-owner-prefix: test
   task-lock-seconds: 300
@@ -59,3 +60,7 @@ work-storage-billing:
 recharge-order-close:
   # 上下文测试不执行真实的过期订单关闭 SQL。
   enabled: false
+
+portfolio-ai:
+  # 上下文测试不执行队列维护 SQL，显式执行与 CAS 测试使用独立 H2 数据库。
+  scan-initial-delay: 1h

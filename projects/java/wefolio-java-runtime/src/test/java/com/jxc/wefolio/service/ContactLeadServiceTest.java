@@ -31,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -92,6 +93,34 @@ class ContactLeadServiceTest {
     @AfterEach
     void tearDown() {
         VisitorContextHolder.clear();
+    }
+
+    /** 新幂等键、不同访客提交历史相同内容时不计费、不新增、不占额度。 */
+    @Test
+    void sameContentShouldReturnHistoricalLeadBeforeLimitAndBilling() {
+        ContactLeadSubmitRequest request = request();
+        request.setIdempotencyKey("new-key");
+        ContactLeadEntity old = new ContactLeadEntity();
+        old.setId(991L);
+        old.setSubmittedAt(LocalDateTime.of(2026, 8, 1, 12, 0));
+        old.setContactName(request.getContactName());
+        old.setPhoneCiphertext(request.getPhone());
+        old.setWechatCiphertext(request.getWechat());
+        old.setDesiredSchedule(request.getDesiredSchedule());
+        old.setNeeds(request.getNeeds());
+        when(portfolioEntityMapper.selectOne(any())).thenReturn(portfolioWithContactForm());
+        when(visitRecordEntityMapper.selectOne(any())).thenReturn(visitRecord());
+        when(contactLeadEntityMapper.findContentCandidatesForUpdate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(old));
+        ContactLeadSubmitResponse response = service().submitV2("PF001", request);
+        assertThat(response.getLeadId()).isEqualTo(991L);
+        assertThat(response.getSubmittedAt()).isEqualTo(old.getSubmittedAt());
+        verify(contactLeadEntityMapper, never()).selectCount(any());
+        verify(contactLeadEntityMapper, never()).insert(any(ContactLeadEntity.class));
+        verifyNoInteractions(pointBillingWindowService, portfolioVisitService);
+        // 旧入口也参与同一内容去重，并保留 visitRecordId 可空。
+        request.setVisitRecordId(null);
+        assertThat(service().submit("PF001", request).getLeadId()).isEqualTo(991L);
     }
 
     @Test
@@ -183,8 +212,6 @@ class ContactLeadServiceTest {
         existingLead.setOwnerId(7L);
         existingLead.setIdempotencyKey("lead-1");
         existingLead.setSubmittedAt(LocalDateTime.of(2026, 7, 18, 12, 30));
-        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class)))
-                .thenThrow(new DuplicateKeyException("duplicate"));
         when(contactLeadEntityMapper.selectOne(any())).thenReturn(existingLead);
 
         ContactLeadSubmitResponse response = service().submit("PF001", request());
@@ -306,11 +333,11 @@ class ContactLeadServiceTest {
         ContactLeadEntity existing = new ContactLeadEntity();
         existing.setId(77L);
         existing.setSubmittedAt(LocalDateTime.of(2026, 8, 13, 10, 0));
-        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class)))
-                .thenThrow(new DuplicateKeyException("duplicate"));
         when(contactLeadEntityMapper.selectOne(any()))
                 .thenReturn(null, existing);
 
+        when(contactLeadEntityMapper.insert(any(ContactLeadEntity.class)))
+                .thenThrow(new DuplicateKeyException("duplicate"));
         ContactLeadSubmitResponse response = service().submitV2("PF001", request());
 
         assertThat(response.getLeadId()).isEqualTo(77L);

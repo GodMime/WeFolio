@@ -13,7 +13,8 @@ const MAX_BATCH_COUNT = 9
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024
 // 最大允许字节数采用包含边界的表达，确保单个动图严格小于 32MB。
 const ANIMATION_MAX_BYTES = 32 * 1024 * 1024 - 1
-const VIDEO_MAX_BYTES = 100 * 1024 * 1024
+// 与原视频摘要的十进制 100MB 上限一致，压缩器用实际文件字节验收成品。
+const VIDEO_MAX_BYTES = 100000000
 const VIDEO_MAX_DURATION_SECONDS = 10 * 60
 const AUDIO_MAX_BYTES = 50 * 1024 * 1024
 const AUDIO_MAX_DURATION_MS = 10 * 60 * 1000
@@ -716,7 +717,7 @@ async function prepareWorkMainFiles(files = [], options = {}) {
       session.assertActive()
       prepared.push(Object.assign({}, next, {
         compressionText: next.compressed
-          ? `${COMPRESSION_SUMMARY_PREFIX}${formatFileSize(next.originalSize)} → ${formatFileSize(next.size)}` : ''
+          ? `${COMPRESSION_SUMMARY_PREFIX}${formatFileSize(next.originalSize, next.mediaType)} → ${formatFileSize(next.size, next.mediaType)}` : ''
       }))
     }
     for (const file of prepared) ownedPathsByClientId[file.clientId] = session.transfer([file.tempFilePath])

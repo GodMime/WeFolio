@@ -95,7 +95,7 @@ tests/                         node:test 单元测试与静态布局测试
 ## Mock 体验版约定
 
 - mock 体验版必须完全独立于正式维护者端页面和组件；除登录页的“体验”入口和跳转外，不要改动既有正式页面或正式组件来承载 mock 行为。
-- mock 页面统一放在 `pages/mock/`，mock 专用组件统一放在 `components/mock/`，mock 数据、作品集 JSON 和本地草稿逻辑统一放在 `utils/mock-experience.js` 或同级 mock 专用文件。
+- mock 页面统一放在 `pages/mock/`，mock 专用组件统一放在 `components/mock/`，mock 数据、作品集 JSON 和本地草稿逻辑统一放在 `pages/mock/utils/mock-experience.js` 或同级 mock 专用文件。
 - mock 页面禁止引入 `utils/request.js`、`utils/session.js`、`utils/avatar.js`、`utils/team-avatar.js`、`utils/visitor-session.js`；禁止调用 `wx.request`、`wx.uploadFile`、`/api/`、维护者 token/session 或任何后端接口。
 - mock 的档期、作品、素材库、作品集、编辑、预览、“我的”等数据只使用本地 mock 数据或本地草稿态；新增、保存草稿、发布、档位操作等需要后端身份的动作统一提示 `请去“我的”页面注册登录`。
 - mock 页面可以复用不需要改动的展示组件和样式；如果复用会导致修改正式页面或正式组件，则新建 mock 专用组件。
@@ -204,7 +204,10 @@ if (!hasLocalToken()) {
 图片作品：{uniqueCode}/work/image/{uuid}.{ext}
 视频作品：{uniqueCode}/work/video/{uuid}.{ext}
 作品集素材：{uniqueCode}/protfolio/{uuid}.{ext}
+作品集字体：{ownerUniqueCode}/others/fonts/{portfolioId}/{uuid}.woff
 ```
+
+字体 ownerUniqueCode 由后端按作品集所属个人或团队确定，不取操作者个人目录；初始化和历史空目录补建遵守仓库根 COS 规则。小程序只使用后端返回的字体 URL。
 
 不要在小程序端拼最终 COS key；小程序只上传文件或提交后端返回的公开 URL。
 

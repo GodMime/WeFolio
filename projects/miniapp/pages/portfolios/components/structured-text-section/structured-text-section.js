@@ -4,18 +4,19 @@ Component({
   lifetimes: textBackgroundVideo.lifetimes,
   pageLifetimes: textBackgroundVideo.pageLifetimes,
   properties: {
+    fontContext: { type: Object, value: {} },
     ...textBackgroundVideo.properties,
     structuredTextSection: { type: Object, value: {} }, themeMode: { type: String, value: 'light' },
     repairMode: { type: Boolean, value: false }
   },
   data: { ...textBackgroundVideo.data, presentation: { blocks: [] }, background: {}, backgroundFailed: false, backgroundLoaded: false, frameStyle: '' },
-  observers: { ...textBackgroundVideo.observers, 'structuredTextSection, themeMode': function () { this.refreshPresentation() } },
+  observers: { ...textBackgroundVideo.observers, fontContext() { this.refreshPresentation() }, 'structuredTextSection, themeMode': function () { this.refreshPresentation() } },
   methods: {
     ...textBackgroundVideo.methods,
     refreshPresentation() {
       const config = this.properties.structuredTextSection || {}
       const background = buildTextBackgroundPresentation(config)
-      const presentation = buildStructuredTextPresentation(config, this.properties.themeMode)
+      const presentation = buildStructuredTextPresentation(config, this.properties.themeMode, this.properties.fontContext)
       presentation.blocks = presentation.blocks.map(block => Object.assign({}, block, {
         listItems: block.type === 'LIST' && Array.isArray(block.items)
           ? block.items.map((content, index) => ({ key: `${block.blockKey}-${index}`, content })) : []

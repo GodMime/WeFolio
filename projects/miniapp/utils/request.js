@@ -137,6 +137,7 @@ function createRequestClient(options = {}) {
         method,
         data: normalizeRequestData(method, requestOptions.data),
         header,
+        ...(requestOptions.timeout !== undefined ? { timeout: requestOptions.timeout } : {}),
         success(response) {
           const body = response.data || {}
           if (response.statusCode === 401) {

@@ -1,3 +1,5 @@
+const { portfolioOpeningPageMethods } = require('../utils/portfolio-opening')
+const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { createPortfolioVisitActivity } = require('../utils/visit-activity-page')
 const { openWorkDetail } = require('../utils/portfolio-work-detail')
@@ -26,7 +28,7 @@ const {
 } = require('../utils/visitor-portfolio')
 const { uploadVisitorAvatarProfile } = require('../utils/visitor-profile')
 const { createClipboardPromptController } = require('../utils/portfolio-hyperlink')
-const { request } = require('../../../utils/request')
+const { request } = require('../../../utils/request.js')
 const {
   SOURCE_TYPE_QR_CODE,
   resolvePersonalShareCode,
@@ -76,10 +78,14 @@ function buildWorkEventMetadata(work) {
   return workTitle ? { [WORK_TITLE_METADATA_KEY]: workTitle } : null
 }
 
+const SOURCE_TYPE_TEAM_PORTFOLIO = 'TEAM_PORTFOLIO'
+
 Page({
   ...portfolioAudioPageMethods,
+  ...portfolioOpeningPageMethods,
   data: {
     backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
+    loading: false,
     shareCode: '',
     showNavigationBack: false,
     timelineGuideRequested: false,
@@ -112,6 +118,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this.remoteFontPage = installRemoteFontPage(this, { editor: false, team: false })
     this.visitPageUnloaded = false
     this.positionBackgroundAudio()
     this.singleWorkPageVisible = true
@@ -119,9 +126,10 @@ Page({
     const shareCode = resolvePersonalShareCode(options)
     const showNavigationBack = hasPreviousPage()
     const timelineGuideRequested = options.shareGuide === TIMELINE_SHARE_GUIDE_VALUE
-    this.visitorSourceType = options.sourceType === SOURCE_TYPE_PERSONAL_PORTFOLIO
-      ? SOURCE_TYPE_PERSONAL_PORTFOLIO
-      : options.scene && !options.shareCode ? SOURCE_TYPE_QR_CODE : SOURCE_TYPE_WECHAT_SHARE_CARD
+    this.visitorSourceType = [SOURCE_TYPE_PERSONAL_PORTFOLIO, SOURCE_TYPE_TEAM_PORTFOLIO, SOURCE_TYPE_QR_CODE, SOURCE_TYPE_WECHAT_SHARE_CARD].includes(options.sourceType)
+      ? options.sourceType
+      : String(options.fromTeamPortfolio) === '1' ? SOURCE_TYPE_TEAM_PORTFOLIO
+        : options.scene && !options.shareCode ? SOURCE_TYPE_QR_CODE : SOURCE_TYPE_WECHAT_SHARE_CARD
     this.anonymousSessionId = isWechatTimelineSinglePage()
       ? createAnonymousSessionId()
       : ''
@@ -145,6 +153,7 @@ Page({
       return
     }
     if (!this.browserContext || this.browserContext.isInvalid()) this.browserContext = createPortfolioVisitActivity(this)
+    this.setData({ loading: true })
     try {
       const response = await openVisitorSession(this.data.shareCode, {
         sourceType: this.visitorSourceType,
@@ -157,13 +166,14 @@ Page({
       if (this.browserContext) this.browserContext.setDisplayable(false)
       this.setData({ timelineGuideVisible: false, timelineShareRecordEnabled: false })
       wx.showToast({ title: error.message || '作品集加载失败', icon: 'none' })
+    } finally {
+      if (!this.visitPageUnloaded) this.setData({ loading: false })
     }
   },
 
   applyVisitorOpenResponse(response, preferredMenuKey = '') {
     const normalized = normalizeVisitorPortfolio(response)
     const portfolio = preferredMenuKey ? switchPortfolioMenu(normalized, preferredMenuKey) : normalized
-    this.syncBackgroundAudio(portfolio.backgroundAudio, true)
     const displayable = !portfolio.underMaintenance && portfolio.components.length > 0
     this.setData({
       portfolio,
@@ -176,7 +186,7 @@ Page({
       )
     }, () => {
       if (this.browserContext) {
-        this.browserContext.setDisplayable(!portfolio.underMaintenance)
+        this.browserContext.setDisplayable(!portfolio.underMaintenance && !this.data.fontOpening && !this.data.loading)
         if (this.singleWorkPageVisible) this.browserContext.show(this)
       }
     })
@@ -355,6 +365,7 @@ Page({
   },
 
   onUnload() {
+    if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.videoPlayerDisposed = true
     this.visitPageUnloaded = true
     if (this.browserContext) this.browserContext.dispose()
@@ -371,6 +382,7 @@ Page({
   },
 
   onHide() {
+    if (this.remoteFontPage) this.remoteFontPage.hide()
     if (this.browserContext) this.browserContext.hide(this)
     this.hideBackgroundAudio()
     this.singleWorkPageVisible = false
@@ -382,9 +394,11 @@ Page({
   },
 
   onShow() {
+
     if (this.browserContext) this.browserContext.show(this)
     this.clearVideoPreview()
     this.showBackgroundAudio()
+    if (this.remoteFontPage) this.remoteFontPage.show()
     this.singleWorkPageVisible = true
     if (this.clipboardPromptController) {
       this.clipboardPromptController.resume()
@@ -637,6 +651,10 @@ Page({
         wx.showToast({ title: error.message || '作品打开失败', icon: 'none' })
         return false
       })
+  },
+
+  // 维护遮罩只消费触摸，不关闭或透传到底层页面。
+  handleMaintenanceMaskTouch() {
   },
 
   handleVisitorProfileMaskTap() {

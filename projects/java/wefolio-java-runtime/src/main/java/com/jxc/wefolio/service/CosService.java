@@ -3,12 +3,15 @@ package com.jxc.wefolio.service;
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.common.upload.AvatarImageFormat;
 import com.jxc.wefolio.config.CosProperties;
+import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.message.CosMessage;
+import com.qcloud.cos.COS;
 import com.qcloud.cos.exception.CosServiceException;
 import com.qcloud.cos.auth.COSSigner;
 import com.qcloud.cos.model.CannedAccessControlList;
 import com.qcloud.cos.model.BucketVersioningConfiguration;
 import com.qcloud.cos.model.COSObject;
+import com.qcloud.cos.model.CopyObjectRequest;
 import com.qcloud.cos.model.GetObjectRequest;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectRequest;
@@ -40,11 +43,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -56,6 +62,9 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class CosService {
+
+    /** 用户和团队字体目录，作品集 ID 子目录随上传产生。 */
+    private static final String FONT_STORAGE_FOLDER = "/others/fonts/";
 
     /** Java AWT 无头模式配置键 */
     private static final String JAVA_AWT_HEADLESS_PROPERTY = "java.awt.headless";
@@ -104,6 +113,9 @@ public class CosService {
 
     /** COS 表单上传对象访问权限：公有读私有写 */
     private static final String POST_ACL_PUBLIC_READ = CannedAccessControlList.PublicRead.toString();
+
+    /** 参考附件仅允许私有读取，不改变其它素材的默认权限。 */
+    private static final String POST_ACL_PRIVATE = CannedAccessControlList.Private.toString();
 
     /** COS policy 存储桶字段 */
     private static final String POST_POLICY_BUCKET = "bucket";
@@ -160,6 +172,9 @@ public class CosService {
 
     /** 未识别文件类型的默认 MIME */
     private static final String DEFAULT_CONTENT_TYPE = "application/octet-stream";
+
+    /** 同桶复制保留 ContentType 等源对象元数据，不重新推断媒体类型。 */
+    private static final String COPY_METADATA_DIRECTIVE = "COPY";
 
     /** 毫秒转秒的除数 */
     private static final double MILLIS_PER_SECOND = 1000D;
@@ -249,6 +264,18 @@ public class CosService {
             ZoneId zoneId,
             boolean forbidOverwrite
     ) {
+        return createPostUploadTicket(objectKey, contentType, maxBytes, expiresAt, zoneId, forbidOverwrite, POST_ACL_PUBLIC_READ);
+    }
+
+    /** 仅做本地签名；附件调用方先通过专用短超时客户端确认桶禁止覆盖能力。 */
+    public PostUploadTicket createPrivatePostUploadTicket(String objectKey,String contentType,
+            long maxBytes,LocalDateTime expiresAt,ZoneId zoneId) {
+        return createPostUploadTicket(objectKey, contentType, maxBytes, expiresAt, zoneId, true, POST_ACL_PRIVATE);
+    }
+
+    /** 构造指定访问权限的精确对象表单，权限同时进入签名条件。 */
+    private PostUploadTicket createPostUploadTicket(String objectKey, String contentType,
+            long maxBytes, LocalDateTime expiresAt, ZoneId zoneId, boolean forbidOverwrite, String acl) {
         ZoneId safeZoneId = Objects.requireNonNull(zoneId, POST_UPLOAD_ZONE_REQUIRED_MESSAGE);
         LocalDateTime now = LocalDateTime.now(safeZoneId);
         if (expiresAt != null && expiresAt.isBefore(now)) {
@@ -262,7 +289,7 @@ public class CosService {
         String normalizedContentType = contentType == null ? "" : contentType.trim();
         String policy = buildPostPolicy(
                 objectKey, normalizedContentType, maxBytes, safeExpiresAt, safeZoneId, keyTime,
-                forbidOverwrite);
+                forbidOverwrite, acl);
         String encodedPolicy = Base64.getEncoder().encodeToString(policy.getBytes(StandardCharsets.UTF_8));
         String signature = new COSSigner().buildPostObjectSignature(
                 cosProperties.getSecretKey(),
@@ -278,7 +305,7 @@ public class CosService {
         formData.put(POST_FIELD_POLICY, encodedPolicy);
         formData.put(POST_FIELD_SIGNATURE, signature);
         formData.put(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS);
-        formData.put(POST_FIELD_ACL, POST_ACL_PUBLIC_READ);
+        formData.put(POST_FIELD_ACL, acl);
         if (!normalizedContentType.isBlank()) {
             formData.put(POST_FIELD_CONTENT_TYPE, normalizedContentType);
         }
@@ -382,8 +409,10 @@ public class CosService {
      *     image/     ← 图片类作品
      *     video/     ← 视频类作品
      *     animation/ ← 动图类作品
+     *     audio/     ← 音频类作品
      *   protfolio/   ← 作品集额外素材
      *   others/      ← 头像等其它素材
+     *     fonts/     ← 作品集字体，作品集 ID 子目录随首次上传产生
      * </pre>
      * 通过创建键名为路径的空对象来模拟文件夹。
      *
@@ -398,7 +427,8 @@ public class CosService {
                 uniqueCode + "/work/animation/",
                 uniqueCode + "/work/audio/",
                 uniqueCode + "/protfolio/",
-                uniqueCode + "/others/"
+                uniqueCode + "/others/",
+                uniqueCode + FONT_STORAGE_FOLDER
         );
 
         for (String folder : folders) {
@@ -431,6 +461,7 @@ public class CosService {
      * {uniqueCode}/
      *   protfolio/   ← 团队作品集额外素材
      *   others/      ← 团队图标、二维码等其它素材
+     *     fonts/     ← 团队作品集字体，作品集 ID 子目录随首次上传产生
      * </pre>
      * 团队目录不包含 work 目录，团队作品引用成员个人作品或团队作品集素材。
      *
@@ -441,7 +472,8 @@ public class CosService {
         List<String> folders = List.of(
                 uniqueCode + "/",
                 uniqueCode + "/others/",
-                uniqueCode + "/protfolio/"
+                uniqueCode + "/protfolio/",
+                uniqueCode + FONT_STORAGE_FOLDER
         );
 
         for (String folder : folders) {
@@ -537,6 +569,18 @@ public class CosService {
             if (exception.getStatusCode() == 404) return null;
             throw exception;
         }
+    }
+
+    /** 为已完成业务归属校验的本桶对象生成只读临时地址，不更改对象 ACL 或记录签名凭证。 */
+    public String signedGet(String objectKey, Duration ttl) {
+        if (objectKey == null || objectKey.isBlank()) {
+            throw new IllegalArgumentException(CosMessage.OBJECT_KEY_REQUIRED_MESSAGE);
+        }
+        if (ttl == null || ttl.isNegative() || ttl.isZero() || ttl.compareTo(Duration.ofHours(1)) > 0) {
+            throw new IllegalArgumentException(CosMessage.SIGNED_URL_TTL_INVALID_MESSAGE);
+        }
+        return transferManager.getCOSClient().generatePresignedUrl(cosProperties.getBucketName(), objectKey,
+                Date.from(Instant.now().plus(ttl))).toExternalForm();
     }
 
     /** 不改变既有 ObjectHead 构造器，独立承载版本与更新时间。 */
@@ -641,6 +685,30 @@ public class CosService {
         return baseUrl.replaceAll(TRAILING_SLASH_REGEX, "") + "/" + key.replaceAll("^/+", "");
     }
 
+    /** 仅在目标不存在时复制同桶对象，保留原始媒体元数据并提供公有读访问。 */
+    public void copyObjectIfAbsent(String sourceKey, String targetKey) {
+        if (sourceKey == null || sourceKey.isBlank() || targetKey == null || targetKey.isBlank()) {
+            throw new BusinessException(CosMessage.OBJECT_KEY_REQUIRED_MESSAGE);
+        }
+        try {
+            COS client = transferManager.getCOSClient();
+            String bucket = cosProperties.getBucketName();
+            if (client.doesObjectExist(bucket, targetKey)) {
+                log.info("COS 同桶复制复用已有目标: sourceKey={}, targetKey={}", sourceKey, targetKey);
+                return;
+            }
+            CopyObjectRequest request = new CopyObjectRequest(bucket, sourceKey, bucket, targetKey);
+            request.setMetadataDirective(COPY_METADATA_DIRECTIVE);
+            request.setCannedAccessControlList(CannedAccessControlList.PublicRead);
+            log.info("COS 同桶复制入参: sourceKey={}, targetKey={}", sourceKey, targetKey);
+            client.copyObject(request);
+            log.info("COS 同桶复制成功: sourceKey={}, targetKey={}", sourceKey, targetKey);
+        } catch (Exception exception) {
+            log.error("COS 同桶复制失败: sourceKey={}, targetKey={}", sourceKey, targetKey, exception);
+            throw new BusinessException(CosMessage.OBJECT_COPY_FAILED_MESSAGE, exception);
+        }
+    }
+
     /**
      * 构造 COS 表单上传策略。
      *
@@ -659,7 +727,8 @@ public class CosService {
             LocalDateTime expiresAt,
             ZoneId zoneId,
             String keyTime,
-            boolean forbidOverwrite
+            boolean forbidOverwrite,
+            String acl
     ) {
         String expiration = expiresAt.atZone(zoneId)
                 .withZoneSameInstant(ZoneOffset.UTC)
@@ -672,7 +741,7 @@ public class CosService {
         conditions.add(postPolicyCondition(POST_FIELD_ACCESS_KEY, cosProperties.getSecretId()));
         conditions.add(postPolicyCondition(POST_FIELD_SIGN_TIME, keyTime));
         conditions.add(postPolicyCondition(POST_FIELD_SUCCESS_STATUS, POST_SUCCESS_STATUS));
-        conditions.add(postPolicyCondition(POST_FIELD_ACL, POST_ACL_PUBLIC_READ));
+        conditions.add(postPolicyCondition(POST_FIELD_ACL, acl));
         if (contentType != null && !contentType.isBlank()) {
             conditions.add(postPolicyCondition(POST_FIELD_CONTENT_TYPE, contentType));
         }

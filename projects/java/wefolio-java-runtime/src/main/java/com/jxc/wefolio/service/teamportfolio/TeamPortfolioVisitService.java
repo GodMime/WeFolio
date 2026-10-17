@@ -28,9 +28,11 @@ import com.jxc.wefolio.mapper.PortfolioReferenceEntityMapper;
 import com.jxc.wefolio.mapper.VisitEventEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedTeamSourceAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
@@ -45,7 +47,7 @@ import java.util.TreeMap;
  * 标准团队作品集访问汇总、事件幂等与发布资源归属服务。
  */
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class TeamPortfolioVisitService {
 
     /** 查询单条记录限制。 */
@@ -161,6 +163,15 @@ public class TeamPortfolioVisitService {
     /** 可信作品主数据访问器。 */
     private final WorkEntityMapper workEntityMapper;
 
+    /** 高级入口复验来源撤权，不扩展普通历史事件规则。 */
+    private final AdvancedTeamSourceAccessService advancedSources;
+
+    /** 保留普通算法的显式构造入口，高级互动须使用完整依赖构造。 */
+    public TeamPortfolioVisitService(VisitRecordEntityMapper recordMapper, VisitEventEntityMapper eventMapper,
+            PortfolioReferenceEntityMapper referenceMapper, WorkEntityMapper workMapper) {
+        this(recordMapper, eventMapper, referenceMapper, workMapper, null);
+    }
+
     /**
      * 记录团队作品集打开行为。
      *
@@ -179,7 +190,20 @@ public class TeamPortfolioVisitService {
             String sourceType,
             String idempotencyKey
     ) {
-        validatePortfolio(portfolio);
+        return recordOpen(portfolio, visitorId, visitorKey, sourceType, idempotencyKey, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public VisitRecordEntity recordOpen(
+            PortfolioEntity portfolio,
+            Long visitorId,
+            String visitorKey,
+            String sourceType,
+            String idempotencyKey,
+            String templateType
+    ) {
+        validatePortfolio(portfolio, templateType);
         validateVisitor(visitorId, visitorKey);
         VisitorTeamPortfolioEventRequest event = new VisitorTeamPortfolioEventRequest();
         event.setEventType(VisitEventTypeDict.PORTFOLIO_OPENED.getCode());
@@ -213,7 +237,19 @@ public class TeamPortfolioVisitService {
             String visitorKey,
             VisitorTeamPortfolioEventRequest request
     ) {
-        validatePortfolio(portfolio);
+        return recordEvent(portfolio, visitorId, visitorKey, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public EventRecordResult recordEvent(
+            PortfolioEntity portfolio,
+            Long visitorId,
+            String visitorKey,
+            VisitorTeamPortfolioEventRequest request,
+            String templateType
+    ) {
+        validatePortfolio(portfolio, templateType);
         validateVisitor(visitorId, visitorKey);
         VisitEventTypeDict type = validateExactEventRequest(request);
         if (!CLIENT_EVENT_TYPES.contains(type)) {
@@ -242,7 +278,19 @@ public class TeamPortfolioVisitService {
             String visitorKey,
             TeamPortfolioScheduleQueryRequest request
     ) {
-        validatePortfolio(portfolio);
+        return recordScheduleQuery(portfolio, visitorId, visitorKey, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public EventRecordResult recordScheduleQuery(
+            PortfolioEntity portfolio,
+            Long visitorId,
+            String visitorKey,
+            TeamPortfolioScheduleQueryRequest request,
+            String templateType
+    ) {
+        validatePortfolio(portfolio, templateType);
         validateVisitor(visitorId, visitorKey);
         VisitorTeamPortfolioEventRequest event = new VisitorTeamPortfolioEventRequest();
         event.setEventType(VisitEventTypeDict.SCHEDULE_QUERIED.getCode());
@@ -275,7 +323,20 @@ public class TeamPortfolioVisitService {
             Long leadId,
             String idempotencyKey
     ) {
-        validatePortfolio(portfolio);
+        return recordContactLeadSubmitted(portfolio, visitorId, visitorKey, leadId, idempotencyKey, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public EventRecordResult recordContactLeadSubmitted(
+            PortfolioEntity portfolio,
+            Long visitorId,
+            String visitorKey,
+            Long leadId,
+            String idempotencyKey,
+            String templateType
+    ) {
+        validatePortfolio(portfolio, templateType);
         validateVisitor(visitorId, visitorKey);
         VisitorTeamPortfolioEventRequest event = new VisitorTeamPortfolioEventRequest();
         event.setEventType(VisitEventTypeDict.CONTACT_LEAD_SUBMITTED.getCode());
@@ -477,7 +538,17 @@ public class TeamPortfolioVisitService {
             throw new BusinessException(EVENT_INVALID_MESSAGE);
         }
         if (type == VisitEventTypeDict.WORK_VIEWED || type == VisitEventTypeDict.VIDEO_PLAYED) {
-            return validateTrustedWork(request, type);
+            WorkEntity work = validateTrustedWork(request, type);
+            if (PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType())) {
+                if (advancedSources == null) { throw new BusinessException(EVENT_INVALID_MESSAGE); }
+                advancedSources.requireWork(portfolio.getOwnerId(), work);
+            }
+            return work;
+        }
+        if (type == VisitEventTypeDict.MEMBER_PORTFOLIO_OPENED
+                && PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType())) {
+            if (advancedSources == null) { throw new BusinessException(EVENT_INVALID_MESSAGE); }
+            advancedSources.requireMemberPortfolio(portfolio.getOwnerId(), request.getMemberPortfolioId());
         }
         return null;
     }
@@ -609,11 +680,11 @@ public class TeamPortfolioVisitService {
     }
 
     /** 严格校验已发布标准团队作品集身份。 */
-    private void validatePortfolio(PortfolioEntity portfolio) {
+    private void validatePortfolio(PortfolioEntity portfolio, String templateType) {
         if (portfolio == null || portfolio.getId() == null || portfolio.getId() <= 0
                 || portfolio.getOwnerId() == null || portfolio.getOwnerId() <= 0
                 || !PortfolioOwnerTypeDict.TEAM.getCode().equals(portfolio.getOwnerType())
-                || !PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                || !templateType.equals(portfolio.getTemplateType())
                 || !TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(portfolio.getSchemaVersion())
                 || !PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())
                 || !PortfolioStatusDict.ACTIVE.getCode().equals(portfolio.getStatus())

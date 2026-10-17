@@ -134,6 +134,33 @@ test('普通文字行距从接口适配到真实组件，缺省保持旧样式�
   }
 })
 
+for (const directory of ['portfolios', 'team-portfolios']) {
+  test(`${directory} 文字属性观察器在远程字体上下文为 null 时安全渲染并在注册后恢复`, () => {
+    const file = path.join(__dirname, '..', 'pages', directory, 'components/text-section/text-section.js')
+    let definition
+    vm.runInNewContext(fs.readFileSync(file, 'utf8'), {
+      module: { exports: {} }, require: createRequire(file), Component(value) { definition = value }
+    }, { filename: file })
+    const config = { content: '一段介绍', fontId: 'ALLURA', fontWeight: 'BOLD', lineHeight: 1.8 }
+    const view = { properties: { [directory === 'portfolios' ? 'textSection' : 'config']: config,
+      fontContext: null, themeMode: 'light', repairMode: false },
+      data: structuredClone(definition.data), setData(patch) { Object.assign(this.data, patch) } }
+    Object.entries(definition.methods).forEach(([name, method]) => { view[name] = method.bind(view) })
+    definition.observers.fontContext.call(view)
+    assert.equal(view.data.fontFamilyStyle, 'font-family: sans-serif;')
+    assert.equal(view.data.lineHeightStyle, 'line-height: 1.8;font-family: sans-serif;')
+    view.properties.fontContext = {
+      versions: { ALLURA: { fontVersion: 'gf-809e4d8b8d7e-r1' } },
+      families: { 'ALLURA:gf-809e4d8b8d7e-r1:400': 'WF_allura_registered' }
+    }
+    definition.observers.fontContext.call(view)
+    assert.equal(view.data.fontFamilyStyle, 'font-family: "WF_allura_registered", sans-serif;')
+    assert.equal(view.data.lineHeightStyle, 'line-height: 1.8;font-family: "WF_allura_registered", sans-serif;')
+    assert.equal(config.content, '一段介绍')
+    assert.equal(config.fontId, 'ALLURA')
+  })
+}
+
 for (const context of contexts) {
   test(`${context.name}结构化文字行距经过接口适配后仍作用于各区块`, () => {
     const data = structuredData()

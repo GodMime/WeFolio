@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontSavedFlowAssertions;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
@@ -59,6 +62,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.time.LocalDate;
@@ -204,6 +208,23 @@ class VisitorTeamPortfolioServiceTest {
                 PortfolioStatusDict.ACTIVE.getCode(), 0L);
     }
 
+    /** 高级独立访客路径使用高级模板查询，同时保留同一普通团队schema和TEAM匿名作用域。 */
+    @Test
+    void advancedVisitorLookupAndScopeRemainSeparateFromStandardEntry() {
+        VisitorServiceContext context = visitorContext();
+        PortfolioEntity advanced = portfolio(); advanced.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        advanced.setAiPrompt("维护描述"); advanced.setAiContextJson("{\"version\":1,\"nextSourceNo\":1,\"sources\":[]}");
+        when(context.portfolioMapper.selectOne(any())).thenReturn(advanced);
+        when(context.teamMapper.selectById(TEAM_ID)).thenReturn(team(TeamStatusDict.ACTIVE.getCode()));
+        when(context.scheduleService.previewOptions(any(), any(TeamPortfolioConfigDto.class), eq("schedule-1"))).thenReturn(new JSONObject());
+        context.service.queryScheduleOptions("TPF-TASK8", "schedule-1", PortfolioTemplateTypeDict.ADVANCED.getCode());
+        var contextCaptor = ArgumentCaptor.forClass(TeamPortfolioComponentContext.class);
+        verify(context.scheduleService).previewOptions(contextCaptor.capture(), any(TeamPortfolioConfigDto.class), eq("schedule-1"));
+        assertThat(contextCaptor.getValue().allowAdvancedMemberPortfolios()).isTrue();
+        assertThatThrownBy(() -> context.service.queryScheduleOptions("TPF-TASK8", "schedule-1"))
+                .isInstanceOf(BusinessException.class).hasMessage("当前作品集暂未开放访问");
+    }
+
     /**
      * 个人分享、旧 schema、禁用、草稿、删除、缺失 ID/配置和停用团队统一固定拒绝。
      */
@@ -296,6 +317,9 @@ class VisitorTeamPortfolioServiceTest {
     @Test
     void openUsesSharedVisitorInfrastructureAndIndependentTeamVisitWithoutPoints() {
         VisitorServiceContext context = publishedContext();
+        var portfolio = portfolio();
+        PortfolioFontSavedFlowAssertions.withPublishedFont(portfolio);
+        when(context.portfolioMapper.selectOne(any())).thenReturn(portfolio);
         VisitorEntity visitor = visitor();
         VisitorService.VisitorSession session = new VisitorService.VisitorSession(visitor, true);
         VisitorTeamPortfolioOpenRequest request = new VisitorTeamPortfolioOpenRequest();
@@ -306,7 +330,7 @@ class VisitorTeamPortfolioServiceTest {
         TeamPortfolioRenderDto render = new TeamPortfolioRenderDto();
         when(context.visitorService.resolveForOpen(
                 eq("wx-code"), isNull(), eq("TEAM:41"), any())).thenReturn(session);
-        when(context.visitService.recordOpen(portfolio(), VISITOR_ID, VISITOR_KEY,
+        when(context.visitService.recordOpen(portfolio, VISITOR_ID, VISITOR_KEY,
                 "WECHAT_SHARE_CARD", "open-1")).thenReturn(record);
         when(context.tokenService.issueToken(VISITOR_ID, VISITOR_KEY))
                 .thenReturn(new VisitorAuthTokenService.VisitorLoginToken("Bearer", "login-token", 7200L));
@@ -320,6 +344,7 @@ class VisitorTeamPortfolioServiceTest {
         assertThat(response.getTeamId()).isEqualTo(TEAM_ID);
         assertThat(response.getVisitRecordId()).isEqualTo(record.getId());
         assertThat(response.getRenderData()).isSameAs(render);
+        PortfolioFontSavedFlowAssertions.assertPublishedVisitorFonts(render.getFonts());
         assertThat(response.getRenderData().getVisitRecordId()).isEqualTo(record.getId());
         assertThat(response.getToken()).isEqualTo("login-token");
         assertThat(response.getVisitorProfileToken()).isEqualTo("profile-token");
@@ -331,7 +356,7 @@ class VisitorTeamPortfolioServiceTest {
                 eq("wx-code"), isNull(), eq("TEAM:41"), any());
         order.verify(context.renderService).render(any(), any());
         order.verify(context.visitService).recordOpen(
-                portfolio(), VISITOR_ID, VISITOR_KEY, "WECHAT_SHARE_CARD", "open-1");
+                portfolio, VISITOR_ID, VISITOR_KEY, "WECHAT_SHARE_CARD", "open-1");
     }
 
     /**
@@ -690,7 +715,7 @@ class VisitorTeamPortfolioServiceTest {
         VisitRecordEntityMapper recordMapper = mock(VisitRecordEntityMapper.class);
         TeamScheduleQueryRecordEntityMapper scheduleRecordMapper = mock(TeamScheduleQueryRecordEntityMapper.class);
         TeamContactFormComponentService contactService = mock(TeamContactFormComponentService.class);
-        MineTeamPortfolioService service = new MineTeamPortfolioService(
+        MineTeamPortfolioService service = new MineTeamPortfolioService(mock(PortfolioAiReferenceService.class), mock(PortfolioFontService.class),
                 properties,
                 mock(PortfolioEntityMapper.class),
                 mock(com.jxc.wefolio.mapper.PortfolioHistoryEntityMapper.class),

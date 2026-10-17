@@ -1,3 +1,4 @@
+const { PORTFOLIO_TEXT_SELECTION_OPTIONS, applyPortfolioFontSelection, buildRemoteFontStyle } = require('../../utils/portfolio-component-platform')
 const { parsePortfolioTextLineHeightInput, stepPortfolioTextLineHeight,
   buildPortfolioTextLineHeightEditor } = require('../../utils/portfolio-component-platform')
 // 未设置行高时沿用当前分包既有展示样式，只在用户操作后写入倍数。
@@ -9,10 +10,7 @@ const {
   normalizeSpacingInput, countStructuredText, MIN_FONT_SIZE, MAX_FONT_SIZE,
   MAX_SPACING, MAX_SPACER_HEIGHT, SPACING_STEP
 } = require('../../utils/portfolio-text-sections')
-const DEFAULT_FONT_OPTIONS = [
-  { value: 'SYSTEM', label: '系统字体', fontClass: 'font-system', available: true },
-  { value: 'WECHAT_SANS_SS', label: '微信字体', fontClass: 'font-wechat-sans-ss', available: false }
-]
+const DEFAULT_FONT_OPTIONS = PORTFOLIO_TEXT_SELECTION_OPTIONS.map(item => ({ ...item, available: item.value === 'SYSTEM' }))
 const BLOCK_TYPES = [
   { value: 'EYEBROW', label: '眉题' }, { value: 'TITLE', label: '标题' },
   { value: 'PARAGRAPH', label: '正文' }, { value: 'LIST', label: '列表' },
@@ -30,6 +28,11 @@ const point = event => (event.changedTouches || event.touches || [])[0] || {}
 
 Component({
   properties: {
+    fontContext: { type: Object, value: {} },
+    moreFontsExpanded: { type: Boolean, value: false },
+    fontEditSessionId: { type: Number, value: 0 },
+    fontMessage: { type: String, value: '' },
+    remoteFontAvailable: { type: Boolean, value: false },
     visible: { type: Boolean, value: false }, config: { type: Object, value: {} },
     isNew: { type: Boolean, value: false }, backgroundOptions: { type: Array, value: [] },
     backgroundLoading: { type: Boolean, value: false }, backgroundError: { type: String, value: '' },
@@ -52,6 +55,20 @@ Component({
     spacingRows: [], spacingMax: MAX_SPACING, spacingStep: SPACING_STEP, listRows: []
   },
   observers: {
+    'fontContext, blockDraft'(context, draft) { this.setData({ blockFontStyle: buildRemoteFontStyle(draft && draft.block, context) }) },
+    'draft, blockDraft, detailClosing'(draft, blockDraft, detailClosing) {
+      if (!this.properties.visible) return
+      const config = clone(draft)
+      if (blockDraft && !detailClosing) {
+        const index = config.blocks.findIndex(block => block.blockKey === blockDraft.block.blockKey)
+        if (index < 0) config.blocks.push(clone(blockDraft.block))
+        else config.blocks[index] = clone(blockDraft.block)
+      }
+      this.triggerEvent('fontdraft', { componentType: 'STRUCTURED_TEXT_SECTION', config, sessionId: this.properties.fontEditSessionId })
+    },
+    remoteFontAvailable(value) {
+      this.setData({ fonts: (this.data.fonts || []).map(item => item.remote ? { ...item, available: value && ((this.properties.fontOptions || []).find(font => font.value === item.value) || {}).available === true } : item) })
+    },
     fontOptions(options) { this.setData({ fonts: clone(options || DEFAULT_FONT_OPTIONS) }) },
     backgroundResource(resource) { this.applyBackgroundResource(resource) },
     visible(visible) {
@@ -79,6 +96,7 @@ Component({
       if (!(resource.backgroundLoading || draft.backgroundLoading || draft.backgroundLoadError || draft.backgroundInvalid) || Number(draft.backgroundWorkId) !== Number(resource.backgroundWorkId) || (Number(draft.backgroundMemberUserId) || 0) !== (Number(resource.backgroundMemberUserId) || 0)) return
       this.setData({ draft: Object.assign({}, draft, resource) })
     },
+    handleExpandFonts() { this.triggerEvent('fontexpand') },
     noop() {},
     handleSheetTouchStart(event) { this.sheetTouchY = point(event).clientY },
     handleSheetTouchEnd(event) {
@@ -181,9 +199,12 @@ Component({
     handleBlockOption(event) {
       if (!this.data.blockDraft || this.data.detailClosing) return
       const { field, value } = event.currentTarget.dataset
-      if (field === 'fontFamily' && !this.data.fonts.some(font => font.value === value && font.available)) return
+      if (field === 'fontFamily' && !this.data.fonts.some(font => font.value === value && font.available)) { this.setData({ error: this.properties.fontMessage || '字体暂不可用，当前使用系统字体' }); return }
       const blockDraft = clone(this.data.blockDraft)
-      blockDraft.block[field] = value
+      if (field === 'fontFamily') {
+        Object.assign(blockDraft.block, applyPortfolioFontSelection(value))
+        this.triggerEvent('fontselect', { fontId: blockDraft.block.fontId, sessionId: this.properties.fontEditSessionId })
+      } else blockDraft.block[field] = value
       this.setData({ blockDraft, error: '' })
       this.refreshDetail()
     },

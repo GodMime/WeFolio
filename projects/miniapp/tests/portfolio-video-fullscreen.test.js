@@ -295,7 +295,7 @@ for (const pagePath of PAGES) {
     assert.doesNotMatch(wxml, /work-video-(?:mask|player|panel|viewport|close|backdrop)|video-page-hidden|videoPreviewFullscreen|videoPreviewUrl|handleVideoPreviewFullscreenChange|bindfullscreenchange/)
     assert.doesNotMatch(css, /work-video-(?:mask|player|panel|viewport|close|backdrop)|video-page-hidden/)
     assert.doesNotMatch(script, /videoPreviewFullscreen|videoPreviewUrl|videoPreviewClosePending|handleVideoPreviewFullscreenChange|createVideoContext|previewMedia|openNativeVideoPreview/)
-    assert.match(wxml, /background-video-paused="\{\{videoPreviewVisible\}\}"/)
+    assert.match(wxml, /background-video-paused="\{\{videoPreviewVisible \|\| fontOpening \|\| loading\}\}"/)
     if (pagePath.includes('team-portfolios')) {
       assert.match(wxml, /<team-single-work\b[^>]*bindactivate="handleSingleWorkActivate"/)
     } else {

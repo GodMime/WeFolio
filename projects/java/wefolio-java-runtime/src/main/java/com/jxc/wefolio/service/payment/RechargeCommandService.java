@@ -3,7 +3,6 @@ package com.jxc.wefolio.service.payment;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
-import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.dict.RechargeOrderStatusDict;
 import com.jxc.wefolio.dict.RechargePackageStatusDict;
 import com.jxc.wefolio.dict.UserStatusDict;
@@ -113,6 +112,9 @@ public class RechargeCommandService {
     /** 退款记账后补查余额，失败保留失效标记。 */
     private final WechatAuthoritativeBalanceSyncService balanceSyncService;
 
+    /** 为新版客户端直接取得本次支付设备的会话密钥。 */
+    private final RechargeWechatSessionService rechargeWechatSessionService;
+
     /**
      * 创建充值订单并取得小程序调起支付参数。
      *
@@ -128,17 +130,19 @@ public class RechargeCommandService {
             throw new BusinessException(RechargeMessage.PACKAGE_ID_REQUIRED_MESSAGE);
         }
         requireActiveUser(userId);
-        String openId = requireWechatOpenId(userId);
+        requireWechatOpenId(userId);
         RechargePackageEntity rechargePackage = requireActivePackage(
                 request.getPackageId(), LocalDateTime.now());
         PointAccountEntity account = pointService.ensureAccount(userId);
-        MaintainerWechatSession session = requireWechatSession(userId);
+        String sessionKey = request.getCode() == null
+                ? requireWechatSession(userId).sessionKey()
+                : rechargeWechatSessionService.refreshForPayment(userId, request.getCode());
         LocalDateTime expireAt = LocalDateTime.now(SHANGHAI_ZONE)
                 .plusMinutes(ORDER_EXPIRE_MINUTES);
         RechargeOrderEntity order = transactionService.createPendingOrder(
                 userId, account, rechargePackage, expireAt);
         String signData = buildSignData(order);
-        CreateRechargeOrderResponse response = buildCreateResponse(order, signData, session.sessionKey());
+        CreateRechargeOrderResponse response = buildCreateResponse(order, signData, sessionKey);
         log.info("微信虚拟支付业务完成 operation=创建充值订单 referenceNo={} userId={} "
                         + "localStatus={} amountFen={} points={}",
                 order.getMerchantOrderNo(), userId, order.getStatus(), order.getAmountFen(),
@@ -325,18 +329,11 @@ public class RechargeCommandService {
      * 查询维护者服务端保存的微信 openid。
      */
     private String requireWechatOpenId(Long userId) {
-        UserAuthEntity auth = userAuthEntityMapper.selectOne(
-                Wrappers.lambdaQuery(UserAuthEntity.class)
-                        .eq(UserAuthEntity::getUserId, userId)
-                        .eq(UserAuthEntity::getAuthType, AuthTypeDict.WECHAT_MINI_APP.getCode())
-                        .eq(UserAuthEntity::getStatus, UserStatusDict.ACTIVE.getCode())
-                        .isNotNull(UserAuthEntity::getOpenId)
-                        .last("LIMIT 1")
-        );
+        UserAuthEntity auth = WechatPaymentIdentity.findUnique(userAuthEntityMapper, userId);
         if (auth == null || auth.getOpenId() == null || auth.getOpenId().isBlank()) {
             throw new BusinessException(RechargeMessage.WECHAT_IDENTITY_MISSING_MESSAGE);
         }
-        return auth.getOpenId().strip();
+        return auth.getOpenId();
     }
 
     /**
@@ -398,7 +395,8 @@ public class RechargeCommandService {
     /** 获取当前有效维护者微信会话。 */
     private MaintainerWechatSession requireWechatSession(Long userId) {
         MaintainerWechatSession session = maintainerWechatSessionService.findAvailableSession(userId);
-        if (session == null) {
+        UserAuthEntity auth = WechatPaymentIdentity.findUnique(userAuthEntityMapper, userId);
+        if (!WechatPaymentIdentity.matchesSession(userId, auth, session)) {
             throw new BusinessException("微信会话已失效，请刷新后重试");
         }
         return session;

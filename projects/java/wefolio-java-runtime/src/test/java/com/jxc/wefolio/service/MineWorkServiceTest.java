@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service;
 
+import com.jxc.wefolio.service.teamportfolio.LocalPortfolioReferenceMutex;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -2964,6 +2965,28 @@ class MineWorkServiceTest {
         verify(cosService).delete("WFA3B1E7A2/work/animation/story-thumb.jpg");
     }
 
+    /** 视频持久帧与原作品共用事务后的清理入口，帧失败不阻止其它对象删除。 */
+    @Test
+    void deleteWorkShouldCleanPersistentFramesAlongsideVideo() {
+        WorkEntity work = ownedWork(18L);
+        work.setMediaType(MediaTypeDict.VIDEO.getCode());
+        work.setMediaObjectKey("WFA3B1E7A2/work/video/film.mp4");
+        work.setCoverObjectKey("WFA3B1E7A2/work/video/cover.jpg");
+        String frame = "WFA3B1E7A2/others/video-frames/18/source/policy/task/0001.jpg";
+        work.setVideoFramesJson("{\"frameCount\":1,\"frames\":[{\"objectKey\":\"" + frame + "\"}]}");
+        when(workEntityMapper.selectById(18L)).thenReturn(work);
+        when(portfolioReferenceEntityMapper.selectList(any())).thenReturn(List.of());
+        when(workEntityMapper.update(any(), any())).thenReturn(1);
+        doThrow(new RuntimeException("帧删除失败")).when(cosService).delete(frame);
+
+        service().deleteWork(18L);
+
+        verify(cosService).delete(work.getMediaObjectKey());
+        verify(cosService).delete(work.getCoverObjectKey());
+        verify(cosService).delete(frame);
+        verify(workEntityMapper).update(any(), any());
+    }
+
     @Test
     void deleteWorkShouldDeleteSharedMediaAndCoverKeyOnlyOnce() {
         WorkEntity work = new WorkEntity();
@@ -3119,7 +3142,7 @@ class MineWorkServiceTest {
                 contentLimitService,
                 mineWorkAuditService,
                 new WorkUploadTaskExpirationService(workUploadTaskEntityMapper),
-                workUpdateLock);
+                workUpdateLock, new LocalPortfolioReferenceMutex());
     }
 
     private MineWorkUploadCompleteRequest.CompleteItem completeItem(Long taskId) {

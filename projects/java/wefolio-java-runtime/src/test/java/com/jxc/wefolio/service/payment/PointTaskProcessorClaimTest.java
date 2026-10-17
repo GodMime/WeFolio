@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service.payment;
 
+import java.util.List;
+import com.jxc.wefolio.dict.UserStatusDict;
+import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.PointDebitTaskEntity;
 import com.jxc.wefolio.entity.PointGiftOrderEntity;
@@ -91,9 +94,13 @@ class PointTaskProcessorClaimTest {
         executeMutexAction();
         PointGiftOrderEntity order = giftOrder();
         UserAuthEntity auth = new UserAuthEntity();
+        auth.setId(51L);
+        auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
         auth.setOpenId("openid-17");
         when(giftTransactionService.tryClaim(17L, EXECUTION_LEASE_TOKEN)).thenReturn(order);
-        when(userAuthEntityMapper.selectOne(any())).thenReturn(auth);
+        when(userAuthEntityMapper.selectList(any())).thenReturn(List.of(auth));
         doThrow(new ExecutionLeaseLostException("租约失效"))
                 .when(giftTransactionService).renewLease(17L, EXECUTION_LEASE_TOKEN);
 
@@ -128,6 +135,10 @@ class PointTaskProcessorClaimTest {
         UserAuthEntity auth = new UserAuthEntity();
         auth.setId(51L);
         auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
+        auth.setId(51L);
+        auth.setUserId(7L);
         auth.setOpenId("openid-7");
         PointDebitTaskEntity prepared = debitTask();
         prepared.setRequestAmount(100L);
@@ -137,7 +148,7 @@ class PointTaskProcessorClaimTest {
         when(debitTransactionService.tryClaim(23L, EXECUTION_LEASE_TOKEN)).thenReturn(task);
         when(giftOrderMapper.selectOne(any())).thenReturn(null);
         when(sessionService.findAvailableSession(7L)).thenReturn(session);
-        when(userAuthEntityMapper.selectById(51L)).thenReturn(auth);
+        when(userAuthEntityMapper.selectList(any())).thenReturn(List.of(auth));
         when(virtualPaymentClient.queryUserBalance(any())).thenReturn(balance, paid);
         when(debitTransactionService.syncBalance(
                 23L, EXECUTION_LEASE_TOKEN, 500L, 200L)).thenReturn(account);
@@ -286,8 +297,12 @@ class PointTaskProcessorClaimTest {
         UserAuthEntity auth = new UserAuthEntity();
         auth.setId(51L);
         auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
+        auth.setId(51L);
+        auth.setUserId(7L);
         auth.setOpenId("openid-7");
-        when(userAuthEntityMapper.selectById(51L)).thenReturn(auth);
+        when(userAuthEntityMapper.selectList(any())).thenReturn(List.of(auth));
     }
 
     /** 准备重复赠送响应和不包含余额的原应答。 */
@@ -295,8 +310,12 @@ class PointTaskProcessorClaimTest {
         executeMutexAction();
         when(giftTransactionService.tryClaim(17L, EXECUTION_LEASE_TOKEN)).thenReturn(giftOrder());
         UserAuthEntity auth = new UserAuthEntity();
+        auth.setId(51L);
+        auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
         auth.setOpenId("openid-7");
-        when(userAuthEntityMapper.selectOne(any())).thenReturn(auth);
+        when(userAuthEntityMapper.selectList(any())).thenReturn(List.of(auth));
         when(virtualPaymentClient.presentCurrency(any())).thenReturn(duplicateResult());
     }
 
@@ -311,8 +330,12 @@ class PointTaskProcessorClaimTest {
         UserAuthEntity auth = new UserAuthEntity();
         auth.setId(51L);
         auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
+        auth.setId(51L);
+        auth.setUserId(7L);
         auth.setOpenId("openid-7");
-        when(userAuthEntityMapper.selectById(51L)).thenReturn(auth);
+        when(userAuthEntityMapper.selectList(any())).thenReturn(List.of(auth));
         PointAccountEntity account = new PointAccountEntity();
         account.setPendingDebit(100L);
         when(debitTransactionService.syncBalance(23L, EXECUTION_LEASE_TOKEN, 400L, 100L)).thenReturn(account);

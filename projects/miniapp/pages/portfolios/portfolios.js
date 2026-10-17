@@ -1,5 +1,7 @@
+const { confirmAdvancedPortfolioPublish } = require('./utils/advanced-editor-page')
+const { isAdvanced, advancedQuery, advancedEndpoint } = require('./utils/advanced-portfolios')
 const { buildPortfolioMiniappCodePath } = require('./utils/portfolio-miniapp-code')
-const { request } = require('../../utils/request')
+const { request } = require('../../utils/request.js')
 const { normalizeId } = require('../../utils/id')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { buildPublishPayload } = require('./utils/portfolios')
@@ -132,13 +134,22 @@ function buildSharePath(shareCode) {
   return `${VISITOR_PORTFOLIO_SHARE_PATH_PREFIX}${encodeURIComponent(defaultString(shareCode))}`
 }
 
-function buildTeamSharePath(shareCode) {
-  return `${TEAM_VISITOR_SHARE_PATH_PREFIX}${encodeURIComponent(defaultString(shareCode))}`
+function buildTeamSharePath(shareCode, templateType = '') {
+  const prefix = templateType === 'ADVANCED' ? '/pages/team-portfolios/advanced-visitor/team-visitor-portfolio?shareCode=' : TEAM_VISITOR_SHARE_PATH_PREFIX
+  return `${prefix}${encodeURIComponent(defaultString(shareCode))}`
 }
 
-function buildTimelineGuidePath(ownerType, portfolioId, shareCode) {
+function requestForPortfolio(item) {
+  return options => {
+    if (!isAdvanced(item)) return request(options)
+    const suffix = options.url.replace(/^\/api\/mine\/(?:portfolios|team-portfolios)\/[^/]+/, '')
+    return request({ ...options, url: advancedEndpoint(item.portfolioId, suffix) })
+  }
+}
+
+function buildTimelineGuidePath(ownerType, portfolioId, shareCode, templateType) {
   const sharePath = ownerType === OWNER_TYPE_TEAM
-    ? buildTeamSharePath(shareCode)
+    ? buildTeamSharePath(shareCode, templateType)
     : buildSharePath(shareCode)
   return `${sharePath}&shareGuide=timeline&sharePortfolioId=${encodeURIComponent(normalizeId(portfolioId))}`
 }
@@ -375,11 +386,27 @@ Page({
     }, OWNER_SWITCH_DURATION_MS)
   },
 
+  handleCreateAdvancedPersonal() {
+    wx.navigateTo({ url: '/pages/portfolios/advanced-ai/advanced-ai' })
+  },
+
+  handleCreateAdvancedTeam() {
+    this.setData({ advancedCreating: true })
+    const route = resolveTeamCreateRoute(this.data.maintainableTeams)
+    if (route.action === 'UNAVAILABLE') { this.setData({ noMaintainableTeam: true }); return }
+    if (route.action === 'SELECT') {
+      this.setData({ teamSelectSheetVisible: true, selectedCreateTeamId: null, teamSelectSheetListHeight: buildTeamSelectSheetListHeight(this.data.maintainableTeams) })
+      return
+    }
+    wx.navigateTo({ url: `/pages/team-portfolios/advanced-ai/advanced-ai?teamId=${route.teamId}` })
+  },
+
   handleCreateStandardPersonal() {
     wx.navigateTo({ url: EDIT_PAGE_URL })
   },
 
   handleCreateStandardTeam() {
+    this.setData({ advancedCreating: false })
     if (this.data.creatingTeamPortfolio) {
       return
     }
@@ -430,7 +457,7 @@ Page({
       return
     }
     this.handleCloseTeamSelectSheet()
-    wx.navigateTo({ url: `${TEAM_EDIT_URL}?teamId=${teamId}` })
+    wx.navigateTo({ url: this.data.advancedCreating ? `/pages/team-portfolios/advanced-ai/advanced-ai?teamId=${teamId}` : `${TEAM_EDIT_URL}?teamId=${teamId}` })
   },
 
   handleTeamPortfolioCardTap(event) {
@@ -443,7 +470,7 @@ Page({
       return
     }
     if (item.canMaintain) {
-      wx.navigateTo({ url: `${TEAM_EDIT_URL}?portfolioId=${item.portfolioId}` })
+      wx.navigateTo({ url: `${TEAM_EDIT_URL}?portfolioId=${item.portfolioId}${advancedQuery(item)}` })
     }
   },
 
@@ -457,7 +484,7 @@ Page({
       this.setData({ revealedTeamPortfolioId: null })
       return
     }
-    wx.navigateTo({ url: `${TEAM_PREVIEW_URL}?portfolioId=${item.portfolioId}&scope=${scope}` })
+    wx.navigateTo({ url: `${TEAM_PREVIEW_URL}?portfolioId=${item.portfolioId}&scope=${scope}${advancedQuery(item)}` })
   },
 
   findTeamPortfolioById(portfolioId) {
@@ -526,14 +553,14 @@ Page({
       this.setData({ revealedTeamPortfolioId: null })
       return
     }
-    const confirmed = await confirmPortfolioPublishDisclaimer()
+    const confirmed = isAdvanced(item) ? await confirmAdvancedPortfolioPublish(request) : await confirmPortfolioPublishDisclaimer()
     if (!confirmed) {
       return
     }
     this.setData({ publishingTeamPortfolioId: item.portfolioId })
     try {
       await publishTeamPortfolio(
-        request,
+        requestForPortfolio(item),
         item.portfolioId,
         item.draftRevision,
         makeIdempotencyKey(IDEMPOTENCY_PREFIX_TEAM_PUBLISH)
@@ -568,7 +595,7 @@ Page({
     }
     this.setData({ deletingTeamPortfolioId: item.portfolioId })
     try {
-      await deleteTeamPortfolio(request, item.portfolioId)
+      await deleteTeamPortfolio(requestForPortfolio(item), item.portfolioId)
       await this.bootstrapTeam()
     } catch (error) {
       if (handleTeamMaintainerAuthError(error) || showTeamPortfolioUnavailableToast(error)) {
@@ -656,7 +683,7 @@ Page({
         this.setData({ revealedPortfolioId: null })
         return
       }
-      wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${portfolioId}` })
+      wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${portfolioId}${advancedQuery(this.findPortfolioById(portfolioId))}` })
     }
   },
 
@@ -673,7 +700,7 @@ Page({
     if (actionType === ACTION_TYPE_PUBLISH) {
       return this.publishPortfolioFromList(portfolioId)
     }
-    wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${portfolioId}` })
+    wx.navigateTo({ url: `${EDIT_PAGE_URL}?portfolioId=${portfolioId}${advancedQuery(this.findPortfolioById(portfolioId))}` })
   },
 
   resolveShareTarget(target = this.data.shareTarget) {
@@ -750,7 +777,7 @@ Page({
       if (hadTarget) wx.showToast({ title: SHARE_UNAVAILABLE_MESSAGE, icon: 'none' })
       return
     }
-    const url = buildPortfolioMiniappCodePath(resolved.ownerType, resolved.portfolio.portfolioId)
+    const url = buildPortfolioMiniappCodePath(resolved.ownerType, resolved.portfolio.portfolioId, resolved.portfolio.templateType)
     this.setData({ shareSheetVisible: false, shareActionPending: true, shareTarget: null })
     wx.navigateTo({
       url,
@@ -775,7 +802,8 @@ Page({
     const url = buildTimelineGuidePath(
       resolved.ownerType,
       resolved.portfolio.portfolioId,
-      resolved.portfolio.shareCode
+      resolved.portfolio.shareCode,
+      resolved.portfolio.templateType
     )
     this.setData({
       shareSheetVisible: false,
@@ -802,7 +830,7 @@ Page({
       this.setData({ revealedPortfolioId: null })
       return
     }
-    wx.navigateTo({ url: `${PREVIEW_PAGE_URL}?portfolioId=${portfolioId}&scope=published` })
+    wx.navigateTo({ url: `${PREVIEW_PAGE_URL}?portfolioId=${portfolioId}&scope=published${advancedQuery(this.findPortfolioById(portfolioId))}` })
   },
 
   handleDraftPreviewTap(event) {
@@ -814,7 +842,7 @@ Page({
       this.setData({ revealedPortfolioId: null })
       return
     }
-    wx.navigateTo({ url: `${PREVIEW_PAGE_URL}?portfolioId=${portfolioId}` })
+    wx.navigateTo({ url: `${PREVIEW_PAGE_URL}?portfolioId=${portfolioId}${advancedQuery(this.findPortfolioById(portfolioId))}` })
   },
 
   publishPortfolioFromList(portfolioId) {
@@ -822,12 +850,12 @@ Page({
     if (!portfolio) {
       return Promise.resolve()
     }
-    return confirmPortfolioPublishDisclaimer().then((confirmed) => {
+    return (isAdvanced(portfolio) ? confirmAdvancedPortfolioPublish(request) : confirmPortfolioPublishDisclaimer()).then((confirmed) => {
       if (!confirmed) {
         return
       }
       return request({
-        url: `${PORTFOLIOS_API_URL}/${portfolioId}/publish`,
+        url: isAdvanced(portfolio) ? advancedEndpoint(portfolioId, '/publish') : `${PORTFOLIOS_API_URL}/${portfolioId}/publish`,
         method: 'POST',
         data: buildPublishPayload(portfolio.draftRevision || 0, makeIdempotencyKey(IDEMPOTENCY_PREFIX_PUBLISH))
       }).then(() => {
@@ -862,7 +890,7 @@ Page({
         this.setData({ deletingPortfolioId: portfolioId })
         try {
           await request({
-            url: `${PORTFOLIO_DELETE_API_PREFIX}/${portfolioId}`,
+            url: isAdvanced(portfolio) ? advancedEndpoint(portfolioId, '/delete') : `${PORTFOLIO_DELETE_API_PREFIX}/${portfolioId}`,
             method: 'POST'
           })
           this.setData({
@@ -918,13 +946,13 @@ Page({
     if (resolved.ownerType === OWNER_TYPE_TEAM) {
       shareConfig = {
         title: portfolio.title || portfolio.teamName,
-        path: buildTeamSharePath(portfolio.shareCode),
+        path: buildTeamSharePath(portfolio.shareCode, portfolio.templateType),
         imageUrl: portfolio.coverUrl || DEFAULT_COVER_URL
       }
       if (this.data.sharingTeamPortfolioId !== portfolio.portfolioId) {
         this.setData({ sharingTeamPortfolioId: portfolio.portfolioId })
         recordTeamPortfolioShare(
-          request,
+          requestForPortfolio(portfolio),
           portfolio.portfolioId,
           SHARE_CHANNEL_WECHAT_CARD,
           SHARE_SCENE_TEAM_PORTFOLIO_LIST
@@ -946,7 +974,7 @@ Page({
         imageUrl: portfolio.coverUrl
       }
       request({
-        url: `${PORTFOLIOS_API_URL}/${portfolio.portfolioId}/share-records`,
+        url: isAdvanced(portfolio) ? advancedEndpoint(portfolio.portfolioId, '/share-records') : `${PORTFOLIOS_API_URL}/${portfolio.portfolioId}/share-records`,
         method: 'POST',
         data: {
           shareChannel: SHARE_CHANNEL_WECHAT_CARD,

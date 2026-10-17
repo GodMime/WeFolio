@@ -1,6 +1,15 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.config.PortfolioFontProperties;
+import com.jxc.wefolio.dto.PortfolioClientCapabilities;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
@@ -71,9 +80,11 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -163,6 +174,7 @@ class MineTeamPortfolioServiceTest {
         publishedPortfolio.setPublishedConfigJson(JSON.toJSONString(config()));
         PortfolioEntity memberPortfolio = portfolio(12L);
         memberPortfolio.setId(14L);
+        memberPortfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
         PortfolioEntity disabledPortfolio = portfolio(15L);
         disabledPortfolio.setId(16L);
         disabledPortfolio.setStatus(PortfolioStatusDict.DISABLED.getCode());
@@ -182,6 +194,7 @@ class MineTeamPortfolioServiceTest {
             assertThat(item.isCanShare()).isTrue();
         });
         assertThat(result).filteredOn(item -> item.getTeamId().equals(12L)).singleElement().satisfies(item -> {
+            assertThat(item.getTemplateType()).isEqualTo(PortfolioTemplateTypeDict.ADVANCED.getCode());
             assertThat(item.getCurrentRole()).isEqualTo(TeamRoleDict.MEMBER.getCode());
             assertThat(item.isCanMaintain()).isFalse();
             assertThat(item.isCanShare()).isFalse();
@@ -194,9 +207,9 @@ class MineTeamPortfolioServiceTest {
         verify(context.portfolioMapper, times(1)).selectList(captor.capture());
         LambdaQueryWrapper<PortfolioEntity> wrapper = (LambdaQueryWrapper<PortfolioEntity>) captor.getValue();
         assertThat(wrapper.getSqlSegment()).contains(
-                "owner_type", "owner_id", "template_type", "schema_version", "status", "deleted");
+                "owner_type", "owner_id", "schema_version", "status", "deleted").doesNotContain("template_type");
         assertThat(wrapper.getParamNameValuePairs().values()).contains(
-                PortfolioOwnerTypeDict.TEAM.getCode(), PortfolioTemplateTypeDict.STANDARD.getCode(),
+                PortfolioOwnerTypeDict.TEAM.getCode(),
                 TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1,
                 PortfolioStatusDict.ACTIVE.getCode(), 0L, TEAM_ID, 12L, 15L);
     }
@@ -375,6 +388,77 @@ class MineTeamPortfolioServiceTest {
         verify(context.portfolioMapper, never()).updateById(any(PortfolioEntity.class));
     }
 
+    /** 团队高级保存使用当前维护权限并允许高级成员来源，元数据沿原团队历史格式保存。 */
+    @Test
+    void advancedSaveUsesDedicatedAccessAndAtomicMetadata() {
+        TestContext context = context(true);
+        PortfolioEntity portfolio = portfolio(TEAM_ID); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode()))
+                .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
+        doReturn(portfolio).when(context.portfolioMapper).lockById(PORTFOLIO_ID);
+        TeamPortfolioConfigDto config = config();
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class))).thenReturn(config);
+        when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
+        TeamPortfolioDraftSaveRequest request = new TeamPortfolioDraftSaveRequest(); request.setConfig(config);
+        request.setClientRevision(0); request.setIdempotencyKey("adv-team-save");
+        JSONObject aiContext = JSON.parseObject("{\"version\":1,\"nextSourceNo\":1,\"sources\":[]}");
+        AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(aiContext, true, "团队描述", true, JSON.toJSONString(request));
+        context.service.saveDraft(PORTFOLIO_ID, request, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(portfolio.getDraftRevision()).isEqualTo(1); assertThat(portfolio.getAiPrompt()).isEqualTo("团队描述");
+        ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(context.historyMapper).insert(history.capture());
+        JSONObject snapshot = JSON.parseObject(history.getValue().getSnapshotJson());
+        assertThat(snapshot.getJSONObject("aiContext")).isEqualTo(aiContext);
+        assertThat(snapshot.getInteger("resultDraftRevision")).isEqualTo(1);
+        assertThat(snapshot.getString("requestFingerprint")).hasSize(64);
+        verify(context.referenceService).rebuild(eq(PORTFOLIO_ID), eq(PortfolioConfigScopeDict.DRAFT.getCode()), eq(config),
+                eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1, null, true)));
+        verifyNoInteractions(context.pointService);
+    }
+
+    /** 团队附件使用团队 owner 锁，可信清单与最终高级草稿同批更新。 */
+    @Test
+    void advancedReferenceSaveUsesTeamOwnerAndAtomicMetadata() {
+        TestContext context = context(true);
+        PortfolioEntity portfolio = portfolio(TEAM_ID); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode()))
+                .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
+        doReturn(portfolio).when(context.portfolioMapper).lockById(PORTFOLIO_ID);
+        TeamPortfolioConfigDto config = config();
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class))).thenReturn(config);
+        when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
+        TeamPortfolioDraftSaveRequest request = new TeamPortfolioDraftSaveRequest(); request.setConfig(config);
+        request.setClientRevision(0); request.setIdempotencyKey("adv-team-save");
+        JSONObject aiContext = JSON.parseObject("{\"version\":1,\"nextSourceNo\":1,\"sources\":[]}");
+        var items = JsonNodeFactory.instance.arrayNode();
+        String resolved = "{\"version\":1,\"nextReferenceNo\":4,\"items\":[]}";
+        boolean[] held = {false};
+        when(context.aiReferences.withOwnerLock(eq("TEAM"), eq(TEAM_ID), any())).thenAnswer(invocation -> {
+            held[0] = true;
+            try { return invocation.<Supplier<?>>getArgument(2).get(); } finally { held[0] = false; }
+        });
+        when(context.aiReferences.resolveForSave(eq("TEAM"), eq(TEAM_ID), eq(items), isNull(), eq(4))).thenAnswer(invocation -> {
+            assertThat(held[0]).isTrue(); return resolved;
+        });
+        AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(aiContext, true, "团队描述", true,
+                JSON.toJSONString(request), items, true, 4);
+        context.service.saveDraft(PORTFOLIO_ID, request, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(portfolio.getAiReferenceAttachmentsJson()).isEqualTo(resolved);
+        assertThat(held[0]).isFalse();
+        assertThat(portfolio.getDraftRevision()).isEqualTo(1); assertThat(portfolio.getAiPrompt()).isEqualTo("团队描述");
+        ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(context.historyMapper).insert(history.capture());
+        JSONObject snapshot = JSON.parseObject(history.getValue().getSnapshotJson());
+        assertThat(snapshot.getJSONObject("aiContext")).isEqualTo(aiContext);
+        assertThat(snapshot.getInteger("resultDraftRevision")).isEqualTo(1);
+        assertThat(snapshot.getString("requestFingerprint")).hasSize(64);
+        verify(context.referenceService).rebuild(eq(PORTFOLIO_ID), eq(PortfolioConfigScopeDict.DRAFT.getCode()), eq(config),
+                eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1, null, true)));
+        verifyNoInteractions(context.pointService);
+    }
+
     @Test
     void saveDraftIncrementsRevisionAndWritesDraftReferencesAndHistory() {
         TestContext context = maintainableContext();
@@ -498,6 +582,9 @@ class MineTeamPortfolioServiceTest {
         doThrow(new AssertionError("幂等命中不得访问素材服务"))
                 .when(context.assetService).validateUploadedImageUrl(anyLong(), anyLong(), any());
 
+        var capabilities = new PortfolioClientCapabilities();
+        capabilities.setPortfolioRemoteFont(1);
+        request.setClientCapabilities(capabilities);
         var retry = context.service.saveDraft(PORTFOLIO_ID, request, USER_ID);
 
         assertThat(retry.getDraftRevision()).isEqualTo(3);
@@ -506,9 +593,125 @@ class MineTeamPortfolioServiceTest {
         assertThat(retry.getConfig()).isEqualTo(config());
         assertThat(portfolio.getDraftRevision()).isEqualTo(9);
         verify(context.historyMapper).selectList(any());
+        request.getConfig().setFonts(null);
+        assertThatThrownBy(() -> context.service.saveDraft(PORTFOLIO_ID, request, USER_ID))
+                .hasMessage(TeamPortfolioMessage.IDEMPOTENCY_CONFLICT_MESSAGE);
         verify(context.historyMapper, never()).insert(any(PortfolioHistoryEntity.class));
         verifyNoInteractions(context.portfolioMapper, context.validator,
                 context.assetService, context.referenceService);
+    }
+
+    /** 真实旧端字段经旧 DTO 投影后的黄金指纹，节点升级不能改写历史键。 */
+    @Test
+    void actualLegacyRequestsMatchOldDtoGoldenFingerprints() throws Exception {
+        var fixture = JSON.parseObject(Files.readString(Path.of(
+                "src/test/resources/portfolio-font-legacy-goldens.json"))).getJSONObject("requests").getJSONObject("team-portfolios");
+        for (String variant : List.of("untouched", "edited")) {
+            JSONObject golden = fixture.getJSONObject(variant);
+            TeamPortfolioDraftSaveRequest request = golden.getJSONObject("request").to(TeamPortfolioDraftSaveRequest.class);
+            TestContext context = context(true);
+            PortfolioEntity portfolio = portfolio(TEAM_ID);
+            portfolio.setDraftRevision(7);
+            when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
+                    .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
+            when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class)))
+                    .thenAnswer(invocation -> JSON.parseObject(JSON.toJSONString(request.getConfig()), TeamPortfolioConfigDto.class));
+            when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+            when(context.historyMapper.selectList(any())).thenReturn(List.of());
+            when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
+            context.service.saveDraft(PORTFOLIO_ID, request, USER_ID);
+            ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+            verify(context.historyMapper).insert(history.capture());
+            assertThat(JSON.parseObject(history.getValue().getSnapshotJson()).getString("requestFingerprint"))
+                    .as(variant).isEqualTo(golden.getString("hash"));
+            when(context.historyMapper.selectList(any())).thenReturn(List.of(history.getValue()));
+            portfolio.setDraftRevision(12);
+            assertThat(context.service.saveDraft(PORTFOLIO_ID, request, USER_ID).getDraftRevision()).isEqualTo(8);
+            var capabilities = new PortfolioClientCapabilities();
+            capabilities.setPortfolioRemoteFont(1);
+            request.setClientCapabilities(capabilities);
+            assertThatThrownBy(() -> context.service.saveDraft(PORTFOLIO_ID, request, USER_ID))
+                    .hasMessage(TeamPortfolioMessage.IDEMPOTENCY_CONFLICT_MESSAGE);
+            verify(context.portfolioMapper, times(1)).updateById(any(PortfolioEntity.class));
+            verify(context.historyMapper, times(1)).insert(any(PortfolioHistoryEntity.class));
+        }
+    }
+
+    /** 团队所有字体入口以团队码构造前缀，操作者个人码不得进入 prepare/cleanup。 */
+    @Test void fontPrefixesUseTeamOwnerAcrossPrepareSavePublishDelete() {
+        var fonts = mock(PortfolioFontService.class); var context = context(true, fonts);
+        var portfolio = portfolio(TEAM_ID); portfolio.setCurrentRevision(0);
+        String prefix = "TMTEAM02/others/fonts/" + PORTFOLIO_ID + "/";
+        String assets = "{\"assets\":[{\"status\":\"READY\",\"bucket\":\"test-bucket\",\"objectKey\":\"" + prefix + "old.woff\"}]}";
+        portfolio.setDraftFontAssetsJson(assets);
+        var access = access(portfolio, TeamRoleDict.OWNER.getCode()); access.team().setUniqueCode("TMTEAM02");
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID)).thenReturn(access);
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class))).thenAnswer(call -> config());
+        when(context.validator.validateForPublish(any(), any())).thenAnswer(call -> config());
+        when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        when(context.portfolioMapper.update(any(PortfolioEntity.class), any())).thenReturn(1);
+        when(context.historyMapper.selectList(any())).thenReturn(List.of());
+        when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
+        when(fonts.prepare(any(), any(), eq(prefix))).thenAnswer(call -> {
+            var factory = new PortfolioFontService(new PortfolioFontProperties(), null, null, null);
+            try { return factory.prepare(call.getArgument(0), call.getArgument(1), call.getArgument(2)); }
+            finally { factory.close(); }
+        });
+        when(fonts.accept(any(), any(), any())).thenReturn("{}");
+        when(fonts.publish(any(), any())).thenReturn("{}");
+        var request = draftRequest(config(), 0, "font-prefix-save");
+        context.service.prepareFonts(PORTFOLIO_ID, request, USER_ID);
+        context.service.saveDraft(PORTFOLIO_ID, request, USER_ID);
+        portfolio.setPublishedFontAssetsJson(assets);
+        var publish = new TeamPortfolioPublishRequest(); publish.setDraftRevision(portfolio.getDraftRevision()); publish.setIdempotencyKey("font-prefix-publish");
+        context.service.publish(PORTFOLIO_ID, publish, USER_ID);
+        portfolio.setDraftFontAssetsJson(assets);
+        context.service.deletePortfolio(PORTFOLIO_ID, USER_ID);
+        verify(fonts, times(2)).prepare(any(), any(), eq(prefix));
+        verify(fonts, times(3)).cleanup(eq(List.of("test-bucket|" + prefix + "old.woff")), eq(prefix));
+    }
+
+    /** 字体计划竞争沿用团队保存冲突，凭据消费不变量不应变成业务冲突。 */
+    @Test void fontPlanConflictMapsTeamSaveErrorAndLeavesWritesUntouched() {
+        var fonts = mock(PortfolioFontService.class);
+        TestContext context = context(true, fonts);
+        PortfolioEntity portfolio = portfolio(TEAM_ID);
+        portfolio.setDraftFontAssetsJson("{}");
+        // 空计划通过真实 prepare 生成凭据，不反射私有构造器或模拟最终类。
+        var preparation = new PortfolioFontService(new PortfolioFontProperties(), null, null, null);
+        var prepared = preparation.prepare(portfolio, PortfolioFontPlan.from(config()), "test/");
+        preparation.close();
+
+        TeamPortfolioAccessService.TeamPortfolioAccess access = access(portfolio, TeamRoleDict.OWNER.getCode());
+        access.team().setUniqueCode("TEAM_FONT_TEST");
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID)).thenReturn(access);
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class)))
+                .thenAnswer(invocation -> config());
+        when(context.historyMapper.selectList(any())).thenReturn(List.of());
+        when(fonts.prepare(any(), any(), eq("TEAM_FONT_TEST/others/fonts/" + PORTFOLIO_ID + "/"))).thenReturn(prepared);
+        when(fonts.accept(any(), any(), eq(prepared))).thenThrow(new PortfolioFontService.PlanConflict());
+        TeamPortfolioDraftSaveRequest request = draftRequest(config(), 0, "plan-conflict");
+        assertThatThrownBy(() -> context.service.saveDraft(PORTFOLIO_ID, request, USER_ID))
+                .hasMessage(TeamPortfolioMessage.DRAFT_REVISION_CHANGED_MESSAGE);
+        IllegalStateException consumed = new IllegalStateException("字体凭据已消费");
+        doThrow(consumed).when(fonts).accept(any(), any(), eq(prepared));
+        assertThatThrownBy(() -> context.service.saveDraft(PORTFOLIO_ID, request, USER_ID)).isSameAs(consumed);
+        verify(context.portfolioMapper, never()).updateById(any(PortfolioEntity.class));
+        verify(context.historyMapper, never()).insert(any(PortfolioHistoryEntity.class));
+        verify(fonts, never()).cleanup(any(), any());
+    }
+
+    /** 权限读取后作品集并发消失，维持原删除失败文案且不启动资源删除。 */
+    @Test void deletedBetweenAccessAndLockRetainsOriginalDeleteFailure() {
+        TestContext context = context(true);
+        PortfolioEntity portfolio = portfolio(TEAM_ID);
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
+                .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
+        when(context.portfolioMapper.lockById(PORTFOLIO_ID)).thenReturn(null);
+        assertThatThrownBy(() -> context.service.deletePortfolio(PORTFOLIO_ID, USER_ID))
+                .hasMessage(TeamPortfolioMessage.DELETE_FAILED_MESSAGE);
+        verify(context.referenceMapper, never()).delete(any());
+        verifyNoInteractions(context.assetService);
     }
 
     @Test
@@ -945,11 +1148,15 @@ class MineTeamPortfolioServiceTest {
     @Test
     void mutationMethodsRollbackForEveryException() throws NoSuchMethodException {
         assertRollbackFor("createStandard", long.class, TeamPortfolioCreateRequest.class, long.class);
-        assertRollbackFor("saveDraft", long.class, TeamPortfolioDraftSaveRequest.class, long.class);
+        assertThat(MineTeamPortfolioService.class.getDeclaredMethod("saveDraft", long.class,
+                TeamPortfolioDraftSaveRequest.class, long.class).getAnnotation(Transactional.class)).isNull();
+        assertThat(PortfolioPublishTransactionService.class.getDeclaredMethod("execute", Supplier.class)
+                .getAnnotation(Transactional.class).rollbackFor()).contains(Exception.class);
         assertThat(MineTeamPortfolioService.class
                 .getDeclaredMethod("publish", long.class, TeamPortfolioPublishRequest.class, long.class)
                 .getAnnotation(Transactional.class)).isNull();
-        assertRollbackFor("deletePortfolio", long.class, long.class);
+        assertThat(MineTeamPortfolioService.class.getDeclaredMethod("deletePortfolio", long.class, long.class)
+                .getAnnotation(Transactional.class)).isNull();
         assertRollbackFor("updateContactLeadFollowStatus", long.class, long.class,
                 String.class, String.class, long.class);
     }
@@ -1084,7 +1291,10 @@ class MineTeamPortfolioServiceTest {
         return context;
     }
 
-    private static TestContext context(boolean enabled) {
+    private static TestContext context(boolean enabled) { return context(enabled, mock(PortfolioFontService.class)); }
+
+    /** 构造带可控字体接入边界的团队用例。 */
+    private static TestContext context(boolean enabled, PortfolioFontService fonts) {
         TeamPortfolioProperties properties = new TeamPortfolioProperties();
         properties.setEnabled(enabled);
         PortfolioEntityMapper portfolioMapper = mock(PortfolioEntityMapper.class);
@@ -1094,6 +1304,8 @@ class MineTeamPortfolioServiceTest {
         TeamEntityMapper teamMapper = mock(TeamEntityMapper.class);
         TeamMemberEntityMapper memberMapper = mock(TeamMemberEntityMapper.class);
         TeamPortfolioAccessService access = mock(TeamPortfolioAccessService.class);
+        lenient().when(portfolioMapper.lockById(any())).thenAnswer(invocation ->
+                access.requireMaintainablePortfolio(invocation.getArgument(0), USER_ID).portfolio());
         TeamPortfolioConfigValidator validator = mock(TeamPortfolioConfigValidator.class);
         TeamPortfolioRenderService renderService = mock(TeamPortfolioRenderService.class);
         TeamPortfolioReferenceService referenceService = mock(TeamPortfolioReferenceService.class);
@@ -1109,12 +1321,13 @@ class MineTeamPortfolioServiceTest {
             Supplier<?> publishAction = invocation.getArgument(0);
             return publishAction.get();
         });
-        MineTeamPortfolioService service = new MineTeamPortfolioService(properties, portfolioMapper, historyMapper,
+        PortfolioAiReferenceService aiReferences = mock(PortfolioAiReferenceService.class);
+        MineTeamPortfolioService service = new MineTeamPortfolioService(aiReferences, fonts, properties, portfolioMapper, historyMapper,
                 referenceMapper, shareMapper, teamMapper, memberMapper, access, validator, renderService,
                 referenceService, assetService, scheduleService,
                 visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,
                 pointService, publishTransactionService, new LocalPortfolioReferenceMutex());
-        return new TestContext(service, portfolioMapper, historyMapper, referenceMapper, shareMapper, teamMapper,
+        return new TestContext(aiReferences, service, portfolioMapper, historyMapper, referenceMapper, shareMapper, teamMapper,
                 memberMapper, access, validator, renderService, referenceService, assetService, scheduleService,
                 visitRecordMapper, scheduleRecordMapper, contactService, contentLimitService,
                 pointService, publishTransactionService);
@@ -1320,6 +1533,7 @@ class MineTeamPortfolioServiceTest {
     }
 
     private record TestContext(
+            PortfolioAiReferenceService aiReferences,
             MineTeamPortfolioService service,
             PortfolioEntityMapper portfolioMapper,
             PortfolioHistoryEntityMapper historyMapper,

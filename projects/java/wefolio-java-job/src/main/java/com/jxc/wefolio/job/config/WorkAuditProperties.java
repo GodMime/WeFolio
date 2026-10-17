@@ -54,6 +54,9 @@ public class WorkAuditProperties {
     /** 单个视频最大截帧数量 */
     private int maxVideoSnapshotCount = 120;
 
+    /** 新视频是否启用审核截图持久化；兼容部署及真实门禁完成前默认关闭 */
+    private boolean videoPersistentFramesEnabled = false;
+
     /** 腾讯云远端调用超时时间，单位秒 */
     private int remoteCallTimeoutSeconds = 30;
 

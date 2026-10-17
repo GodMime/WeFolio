@@ -94,7 +94,8 @@
                     catchtap="handleDeletePortfolioTap"
                   >删除</button>
                 </view>
-                <view class="portfolio-item-card" data-id="{{item.portfolioId}}" bindtap="handlePortfolioCardTap">
+                <view class="portfolio-item-card {{item.templateType === 'ADVANCED' ? 'advanced' : ''}}" data-id="{{item.portfolioId}}" bindtap="handlePortfolioCardTap">
+                  <view wx:if="{{item.templateType === 'ADVANCED'}}" class="portfolio-type-badge">高级</view>
                   <view class="portfolio-cover">
                     <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
                   </view>
@@ -127,7 +128,7 @@
 
           <view class="create-actions">
             <button class="create-action standard" bindtap="handleCreateStandardPersonal">新建标准个人作品集</button>
-            <button class="create-action advanced" data-type="advanced-personal" bindtap="handleUnavailableTap">新建高级个人作品集</button>
+            <button class="create-action advanced" data-type="advanced-personal" bindtap="handleCreateAdvancedPersonal">新建高级个人作品集</button>
           </view>
         </view>
       </view>
@@ -192,7 +193,8 @@
                     catchtap="handleTeamDeleteTap"
                   >删除</button>
                 </view>
-                <view class="portfolio-item-card team-portfolio-card" data-item="{{item}}" bindtap="handleTeamPortfolioCardTap">
+                <view class="portfolio-item-card team-portfolio-card {{item.templateType === 'ADVANCED' ? 'advanced' : ''}}" data-item="{{item}}" bindtap="handleTeamPortfolioCardTap">
+                  <view wx:if="{{item.templateType === 'ADVANCED'}}" class="portfolio-type-badge">高级</view>
                   <view class="team-portfolio-affiliation">{{item.teamName}} · {{item.currentRole}}</view>
                   <view class="portfolio-cover">
                     <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
@@ -227,7 +229,7 @@
           </view>
           <view class="create-actions">
             <button class="create-action standard" bindtap="handleCreateStandardTeam" loading="{{creatingTeamPortfolio}}" disabled="{{!maintainableTeamsLoaded || noMaintainableTeam || creatingTeamPortfolio}}">新建标准团队作品集</button>
-            <button class="create-action advanced" data-type="advanced-team" bindtap="handleUnavailableTap">新建高级团队作品集</button>
+            <button class="create-action advanced" data-type="advanced-team" bindtap="handleCreateAdvancedTeam">新建高级团队作品集</button>
           </view>
         </view>
       </view>

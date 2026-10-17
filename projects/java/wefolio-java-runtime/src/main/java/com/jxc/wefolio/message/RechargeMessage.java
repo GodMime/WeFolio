@@ -5,6 +5,15 @@ package com.jxc.wefolio.message;
  */
 public interface RechargeMessage {
 
+    /** 支付设备微信身份与当前维护者不一致时拒绝使用该会话。 */
+    String PAYMENT_IDENTITY_MISMATCH_MESSAGE = "微信身份与当前维护者不一致，请重新登录";
+
+    /** 微信未返回可用于签名的有效会话。 */
+    String PAYMENT_SESSION_UNAVAILABLE_MESSAGE = "微信会话获取失败，请重新登录后重试";
+
+    /** 支付请求缺少可信来源地址。 */
+    String PAYMENT_CLIENT_IP_REQUIRED_MESSAGE = "无法确认客户端网络地址，请重新登录";
+
     /** 微信支付未启用提示。 */
     String PAYMENT_NOT_CONFIGURED_MESSAGE = "微信支付暂未配置，请稍后再试";
 

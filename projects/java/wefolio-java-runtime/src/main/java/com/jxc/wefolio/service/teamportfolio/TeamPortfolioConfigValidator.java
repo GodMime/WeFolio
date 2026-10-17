@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport;
 import com.jxc.wefolio.common.PortfolioBackgroundAudioSupport;
 
 import com.alibaba.fastjson2.JSON;
@@ -207,6 +208,8 @@ public class TeamPortfolioConfigValidator {
                 ));
             }
         }
+        // 持久配置再次规范化仍保留字体；客户端能力合并由保存入口随后执行。
+        PortfolioFontConfigSupport.merge(normalized, incomingConfig, incomingConfig, false);
         return normalized;
     }
 
@@ -542,7 +545,8 @@ public class TeamPortfolioConfigValidator {
      * 校验组件上下文。
      */
     private void validateContext(TeamPortfolioComponentContext context) {
-        if (context == null || context.teamId() <= 0 || context.portfolioId() <= 0 || context.revision() < 0) {
+        if (context == null || context.teamId() <= 0
+                || context.portfolioId() <= 0 && !context.hasReadOnlyCandidateIdentity() || context.revision() < 0) {
             throw new BusinessException(CONTEXT_INVALID_MESSAGE);
         }
     }

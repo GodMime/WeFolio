@@ -209,6 +209,6 @@ test('预览和访客页在作品视频弹层打开时暂停两种文字背景',
     const template = fs.readFileSync(path.join(__dirname, `../pages/${relative}.wxml`), 'utf8')
     const components = template.match(/<(?:portfolio|team)-(?:structured-)?text-section\b[^>]*>/g)
     assert.equal(components.length, 2)
-    for (const component of components) assert.match(component, /background-video-paused="\{\{videoPreviewVisible\}\}"/)
+    for (const component of components) assert.match(component, /background-video-paused="\{\{videoPreviewVisible \|\| fontOpening \|\| loading\}\}"/)
   }
 })

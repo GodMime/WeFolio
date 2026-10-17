@@ -3,8 +3,11 @@ package com.jxc.wefolio.entity;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+import lombok.ToString;
 
 
 /**
@@ -46,6 +49,29 @@ public class WorkEntity extends BaseEntity {
 
     /** 视频时长毫秒，图片为空 */
     private Integer durationMs;
+
+    /** 视频音频转写全文；NULL 表示尚未生成，空字符串表示已处理但没有文字，仅由专用仓储写入。 */
+    @ToString.Exclude
+    @TableField(select = false, updateStrategy = FieldStrategy.NEVER)
+    private String videoAudioText;
+
+    /** 原视频直接理解生成的版本化摘要；可空且无有效期，仅由专用仓储写入。 */
+    @ToString.Exclude
+    @TableField(select = false, updateStrategy = FieldStrategy.NEVER)
+    private String videoSummaryJson;
+
+    /** 视频完整持久帧清单，由 Job 显式写入；普通作品修改不得覆盖清单，不保存临时签名。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String videoFramesJson;
+
+    /** 版本化媒体摘要缓存，由 Job 显式写入；普通作品修改不得带回已读取的旧缓存。 */
+    @ToString.Exclude
+    @TableField(select = false, updateStrategy = FieldStrategy.NEVER)
+    private String aiMediaSummaryJson;
+
+    /** 媒体摘要缓存过期时间，由 Job 显式维护；缓存过期不删除作品帧。 */
+    @TableField(select = false, updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime aiMediaSummaryExpiresAt;
 
     /** 动图权威帧数，图片和视频为空 */
     private Integer frameCount;

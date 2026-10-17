@@ -18,7 +18,7 @@ const {
 const {
   LEGACY_PERSONAL_FONT_SIZE_RPX,
   buildPortfolioTextTypography
-} = require('../../../utils/portfolio-text-typography')
+} = require('../../../utils/portfolio-text-typography.js')
 
 const PROFILE_VISIBLE_FIELD_DEFAULTS = {
   avatar: true,
@@ -247,6 +247,7 @@ function normalizeTextSection(raw = {}) {
     content: trimText(raw.content),
     alignment: normalizedAlignment,
     alignmentClass: TEXT_SECTION_ALIGNMENT_CLASS_MAP[normalizedAlignment],
+    ...(Object.prototype.hasOwnProperty.call(raw, 'fontId') ? { fontId: raw.fontId } : {}),
     ...buildPortfolioTextTypography(
       raw,
       LEGACY_PERSONAL_FONT_SIZE_RPX
@@ -411,6 +412,7 @@ function normalizePortfolioRender(raw = {}) {
   const bottomNav = normalizeRenderBottomNav(raw.bottomNav, preview, underMaintenance)
   const activeMenuKey = bottomNav.enabled ? bottomNav.items[0].key : ''
   return {
+    fonts: raw.fonts || null,
     shareCode: trimText(raw.shareCode),
     portfolioId: toNumber(raw.portfolioId),
     title: trimText(raw.title) || share.title || '个人作品集',

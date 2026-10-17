@@ -66,6 +66,21 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class TeamMemberPortfolioListComponentTest {
 
+    /** 高级单列来源使用显式上下文策略，普通默认调用仍保持原模板限制。 */
+    @Test
+    void advancedContextAcceptsCurrentAdvancedPersonalSource() {
+        stubValidPair(1L, 101L);
+        PortfolioEntity advanced = personalPortfolio(101L, 1L); advanced.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        when(portfolioEntityMapper.selectList(any())).thenReturn(List.of(advanced));
+        JSONObject config = itemsConfig(item(1L, 101L));
+        TeamPortfolioComponentContext advancedContext = new TeamPortfolioComponentContext(TEAM_ID, TEAM_PORTFOLIO_ID, 1, null, true);
+        JSONObject normalized = validator().normalizeAndValidate(config, advancedContext);
+        assertThat(renderer().render(normalized, advancedContext).getJSONArray("items").getJSONObject(0).getLong("portfolioId")).isEqualTo(101L);
+        assertInvalid(() -> validator().normalizeAndValidate(config, context()), "成员作品集不存在或未发布");
+        advanced.setPublicationStatus(PortfolioPublicationStatusDict.OFFLINE.getCode());
+        assertInvalid(() -> renderer().render(normalized, advancedContext), "成员作品集不存在或未发布");
+    }
+
     /** 组件生产源码目录。 */
     private static final Path LIST_SOURCE = Path.of("service/teamportfolio/component/memberportfoliolist");
 

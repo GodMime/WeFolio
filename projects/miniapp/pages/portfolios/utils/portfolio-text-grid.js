@@ -1,3 +1,4 @@
+const { buildRemoteFontStyle } = require('../../../utils/portfolio-text-typography.js')
 // 两分包保留本地实现；一致性测试约束结构、编辑操作和 Skyline 布局结果。
 const { PORTFOLIO_TEXT_LINE_HEIGHT_ERROR, isValidPortfolioTextLineHeight, buildPortfolioTextLineHeightStyle } = require('../../../utils/portfolio-text-typography.js')
 const MAX_ROWS = 8
@@ -144,10 +145,11 @@ function resizeGrid(grid, rows, columns) {
     rowMinHeightsRpx: Array.from({ length: rows }, (_, i) => grid.rowMinHeightsRpx[i] || MIN_ROW_HEIGHT), cells: cells.sort(order) })
 }
 function createGridHistory(grid) {
-  let current = copy(grid), history = []
-  return { get: () => copy(current), size: () => history.length,
-    apply(next) { requireValid(next); history.push(current); history = history.slice(-UNDO_LIMIT); current = copy(next); return copy(current) },
-    undo() { if (history.length) current = history.pop(); return copy(current) }, clear() { history = [] } }
+  let current = copy(grid), history = [], sequence = 0, currentKey = 0
+  // 历史身份不写入配置；页面用它协调相同文字状态下不同的根版本快照。
+  return { get: () => copy(current), key: () => currentKey, size: () => history.length,
+    apply(next) { requireValid(next); history.push({ config: current, key: currentKey }); history = history.slice(-UNDO_LIMIT); current = copy(next); currentKey = ++sequence; return copy(current) },
+    undo() { if (history.length) { const previous = history.pop(); current = previous.config; currentKey = previous.key } return copy(current) }, clear() { history = [] } }
 }
 /** 留白由外层占位，内部测量节点始终保持真实内容宽度。 */
 function gridSpacingStyle(grid) {
@@ -195,7 +197,7 @@ function resolveTextGridBorderColor(grid, themeMode = 'light') {
   const color = borderColor(grid)
   return color === 'AUTO' ? (isDarkBackground(resolveTextGridBackground(grid, themeMode)) ? CELL_BORDER_DARK : CELL_BORDER_LIGHT) : color
 }
-function presentTextGrid(grid, layout, themeMode = 'light') {
+function presentTextGrid(grid, layout, themeMode = 'light', fontContext = {}) {
   const background = resolveTextGridBackground(grid, themeMode)
   const dark = isDarkBackground(background)
   const color = dark ? CELL_FOREGROUND_DARK : CELL_FOREGROUND_LIGHT
@@ -206,8 +208,8 @@ function presentTextGrid(grid, layout, themeMode = 'light') {
       style: `text-align:${block.alignment.toLowerCase()};padding-top:${block.marginTopRpx}rpx;padding-bottom:${block.marginBottomRpx}rpx;`,
       // 显式行高同时作用于行容器和各字号片段，避免继承后的固定像素值压住混合字号。
       lineStyle: isValidPortfolioTextLineHeight(block.lineHeight) ? `font-size:${Math.max(...block.runs.map(run => run.fontSizeRpx))}rpx;${buildPortfolioTextLineHeightStyle(block.lineHeight)}` : '',
-      runs: block.runs.map(run => ({ ...run, fontClass: run.fontFamily === 'WECHAT_SANS_SS' ? 'font-wechat-sans-ss' : 'font-system',
-        style: `font-size:${run.fontSizeRpx}rpx;font-weight:${run.fontWeight === 'BOLD' ? 700 : 400};color:${run.color === 'AUTO' ? color : run.color};${buildPortfolioTextLineHeightStyle(block.lineHeight)}` })) })) }))
+      runs: block.runs.map(run => ({ ...run, fontClass: !run.fontId && run.fontFamily === 'WECHAT_SANS_SS' ? 'font-wechat-sans-ss' : 'font-system',
+        style: buildRemoteFontStyle(run, fontContext) + `font-size:${run.fontSizeRpx}rpx;font-weight:${run.fontWeight === 'BOLD' ? 700 : 400};color:${run.color === 'AUTO' ? color : run.color};${buildPortfolioTextLineHeightStyle(block.lineHeight)}` })) })) }))
 }
 module.exports = { MAX_TEXT, MIN_FONT_SIZE, MAX_FONT_SIZE, DEFAULT_LINE_HEIGHT, createTextGrid, createCell, createBlock, createRun, normalizeTextGrid, validateTextGrid, countGridText,
   mergeCells, splitCell, resizeGrid, createGridHistory, layoutTextGrid, layoutsEqual, presentTextGrid, resolveTextGridBorderColor, hasText,

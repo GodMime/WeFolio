@@ -135,7 +135,7 @@ public class TeamMemberPortfolioListComponentRenderer {
         for (Pair item : items) {
             PortfolioEntity portfolio = portfolios.get(item.portfolioId());
             ShareMetadata share = metadata(portfolio);
-            if (!isAvailablePortfolio(portfolio, item.memberUserId()) || share == null) {
+            if (!isAvailablePortfolio(portfolio, item.memberUserId(), context.allowAdvancedMemberPortfolios()) || share == null) {
                 throw new BusinessException(UNAVAILABLE_PORTFOLIO_MESSAGE);
             }
             UserEntity user = users.get(item.memberUserId());
@@ -261,10 +261,11 @@ public class TeamMemberPortfolioListComponentRenderer {
     }
 
     /** 判断作品集是否可渲染。 */
-    private boolean isAvailablePortfolio(PortfolioEntity portfolio, long memberUserId) {
+    private boolean isAvailablePortfolio(PortfolioEntity portfolio, long memberUserId, boolean advancedAllowed) {
         return portfolio != null && portfolio.getOwnerId() != null && portfolio.getOwnerId() == memberUserId
                 && PortfolioOwnerTypeDict.USER.getCode().equals(portfolio.getOwnerType())
-                && PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                && (PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                    || advancedAllowed && PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType()))
                 && PortfolioStatusDict.ACTIVE.getCode().equals(portfolio.getStatus())
                 && STANDARD_PERSONAL_SCHEMA_VERSION.equals(portfolio.getSchemaVersion())
                 && PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())

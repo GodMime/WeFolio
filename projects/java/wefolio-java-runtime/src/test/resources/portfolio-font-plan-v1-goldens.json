@@ -1,0 +1,346 @@
+{
+  "planVersion": 1,
+  "cases": [
+    {
+      "name": "unicode",
+      "config": {
+        "components": [
+          {
+            "componentKey": "0",
+            "componentType": "TEXT_SECTION",
+            "config": {
+              "fontId": "ALLURA",
+              "content": "AB😀A",
+              "fontWeight": "REGULAR"
+            }
+          }
+        ],
+        "fonts": {
+          "ALLURA": {
+            "fontVersion": "v1"
+          }
+        }
+      },
+      "planHash": "4fdbf2c9d598ef7999d733cc76f9e436e508b9c242110c448efc8f553edc9d5c",
+      "groups": [
+        {
+          "fontWeight": 400,
+          "codepoints": [
+            65,
+            66,
+            128512
+          ],
+          "demandHash": "c0ffc2077e78519a793fc46aa69d51598fe33c84d5eb06f6c9a07d054a5a2bbe"
+        }
+      ]
+    },
+    {
+      "name": "synthetic",
+      "config": {
+        "components": [
+          {
+            "componentKey": "0",
+            "componentType": "TEXT_SECTION",
+            "config": {
+              "fontId": "ALLURA",
+              "content": "A",
+              "fontWeight": "REGULAR"
+            }
+          },
+          {
+            "componentKey": "1",
+            "componentType": "TEXT_SECTION",
+            "config": {
+              "fontId": "ALLURA",
+              "content": "中😀",
+              "fontWeight": "BOLD"
+            }
+          }
+        ],
+        "fonts": {
+          "ALLURA": {
+            "fontVersion": "gf-809e4d8b8d7e-r1"
+          }
+        }
+      },
+      "planHash": "bafdecb3f64b38da10cda89bef73b9bc439eef9485e50bcaeebf84ee67fb2f43",
+      "groups": [
+        {
+          "fontWeight": 400,
+          "codepoints": [
+            65,
+            20013,
+            128512
+          ],
+          "demandHash": "14f2e39f74de6ee59683fbce967f5f0b52a8d834aabf536fd84409f3a216a7e4"
+        }
+      ]
+    },
+    {
+      "name": "real-bold",
+      "config": {
+        "components": [
+          {
+            "componentKey": "0",
+            "componentType": "TEXT_SECTION",
+            "config": {
+              "fontId": "MANROPE",
+              "content": "A",
+              "fontWeight": "REGULAR"
+            }
+          },
+          {
+            "componentKey": "1",
+            "componentType": "TEXT_SECTION",
+            "config": {
+              "fontId": "MANROPE",
+              "content": "B",
+              "fontWeight": "BOLD"
+            }
+          }
+        ],
+        "fonts": {
+          "MANROPE": {
+            "fontVersion": "gf-809e4d8b8d7e-r1"
+          }
+        }
+      },
+      "planHash": "19e403873fc6db1a6c87f2a73ae79a5fed758658f87994891a3c53c42cb35060",
+      "groups": [
+        {
+          "fontWeight": 400,
+          "codepoints": [
+            65
+          ],
+          "demandHash": "70f737245c79d09315e30486a3ebd03f2eec0b2cc18e740a819fc086b62fd082"
+        },
+        {
+          "fontWeight": 700,
+          "codepoints": [
+            66
+          ],
+          "demandHash": "5d521ba925067dec349fa4eeb96a3cb943430b1d133786060a049629e8e26152"
+        }
+      ]
+    },
+    {
+      "name": "missing-version",
+      "config": {
+        "components": [
+          {
+            "componentKey": "0",
+            "componentType": "TEXT_SECTION",
+            "config": {
+              "fontId": "ALLURA",
+              "content": "A",
+              "fontWeight": "REGULAR"
+            }
+          }
+        ]
+      },
+      "planHash": "eb90e69885209478864bd918126fe9d581a19f7cf0838af7977d6571808749c8",
+      "groups": [
+        {
+          "fontWeight": 400,
+          "codepoints": [
+            65
+          ],
+          "demandHash": "f68c3efb50cf0e82b383c530a720b9e6ce4fad0ad097522bb0519a1e1fb8b668"
+        }
+      ]
+    },
+    {
+      "name": "empty-text",
+      "config": {
+        "components": [
+          {
+            "componentKey": "0",
+            "componentType": "TEXT_SECTION",
+            "config": {
+              "fontId": "ALLURA",
+              "content": "",
+              "fontWeight": "REGULAR"
+            }
+          }
+        ],
+        "fonts": {
+          "ALLURA": {
+            "fontVersion": "v1"
+          }
+        }
+      },
+      "planHash": "e088bee9dbeaa88598204442f95f2f009236a072175aa14c0a7a50f88effc70c",
+      "groups": [
+        {
+          "fontWeight": 400,
+          "codepoints": [],
+          "demandHash": "c686cdb9568cbd2eeac3376667553459937973af0ca2830235de532bd1782f83"
+        }
+      ]
+    },
+    {
+      "name": "three-kinds-multiple-menus",
+      "config": {
+        "components": [
+          {
+            "componentKey": "plain",
+            "componentType": "TEXT_SECTION",
+            "config": {
+              "fontId": "ALLURA",
+              "content": "A"
+            }
+          }
+        ],
+        "fonts": {
+          "ALLURA": {
+            "fontVersion": "v1"
+          }
+        },
+        "bottomNav": {
+          "enabled": true,
+          "items": [
+            {
+              "key": "nav_home",
+              "title": "首页"
+            },
+            {
+              "key": "nav_more",
+              "title": "更多",
+              "components": [
+                {
+                  "componentKey": "structured",
+                  "componentType": "STRUCTURED_TEXT_SECTION",
+                  "config": {
+                    "blocks": [
+                      {
+                        "blockKey": "title",
+                        "type": "TITLE",
+                        "fontId": "ALLURA",
+                        "content": "B"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "componentKey": "grid",
+                  "componentType": "TEXT_GRID",
+                  "config": {
+                    "cells": [
+                      {
+                        "blocks": [
+                          {
+                            "runs": [
+                              {
+                                "runKey": "unicode",
+                                "fontId": "ALLURA",
+                                "text": "😀A"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "planHash": "4fdbf2c9d598ef7999d733cc76f9e436e508b9c242110c448efc8f553edc9d5c",
+      "groups": [
+        {
+          "fontWeight": 400,
+          "codepoints": [
+            65,
+            66,
+            128512
+          ],
+          "demandHash": "c0ffc2077e78519a793fc46aa69d51598fe33c84d5eb06f6c9a07d054a5a2bbe"
+        }
+      ]
+    },
+    {
+      "name": "three-kinds-reordered-duplicates",
+      "config": {
+        "components": [
+          {
+            "componentKey": "plain",
+            "componentType": "TEXT_SECTION",
+            "config": {
+              "fontId": "ALLURA",
+              "content": "AAA"
+            }
+          }
+        ],
+        "fonts": {
+          "ALLURA": {
+            "fontVersion": "v1"
+          }
+        },
+        "bottomNav": {
+          "enabled": true,
+          "items": [
+            {
+              "key": "nav_home",
+              "title": "首页"
+            },
+            {
+              "key": "nav_more",
+              "title": "更多",
+              "components": [
+                {
+                  "componentKey": "grid",
+                  "componentType": "TEXT_GRID",
+                  "config": {
+                    "cells": [
+                      {
+                        "blocks": [
+                          {
+                            "runs": [
+                              {
+                                "runKey": "unicode",
+                                "fontId": "ALLURA",
+                                "text": "😀A"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                {
+                  "componentKey": "structured",
+                  "componentType": "STRUCTURED_TEXT_SECTION",
+                  "config": {
+                    "blocks": [
+                      {
+                        "blockKey": "title",
+                        "type": "TITLE",
+                        "fontId": "ALLURA",
+                        "content": "B"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "planHash": "4fdbf2c9d598ef7999d733cc76f9e436e508b9c242110c448efc8f553edc9d5c",
+      "groups": [
+        {
+          "fontWeight": 400,
+          "codepoints": [
+            65,
+            66,
+            128512
+          ],
+          "demandHash": "c0ffc2077e78519a793fc46aa69d51598fe33c84d5eb06f6c9a07d054a5a2bbe"
+        }
+      ]
+    }
+  ]
+}

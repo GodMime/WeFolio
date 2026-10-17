@@ -1,6 +1,9 @@
 package com.jxc.wefolio.config;
 
 import lombok.Data;
+
+import java.util.HashMap;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +17,9 @@ public class AuthTokenProperties {
 
     /** 默认访客登录令牌有效期：30 天 */
     private static final long DEFAULT_VISITOR_EXPIRES_IN_SECONDS = 30L * 24L * 60L * 60L;
+
+    /** 指定用户在截止秒及以前签发的维护者令牌失效；默认空配置不影响其他账户。 */
+    private Map<Long, Long> maintainerInvalidThroughEpochSeconds = new HashMap<>();
 
     /** 维护者登录令牌加密密钥 */
     private String secret;

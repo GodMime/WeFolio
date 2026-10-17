@@ -719,7 +719,7 @@ class TeamDisplayComponentsTest {
         assertFields(TeamProfileComponentConfig.TeamSnapshot.class, "teamId", "avatarUrl", "teamName", "intro");
         assertFields(TeamDividerComponentConfig.class, "color", "heightPx");
         assertFields(TeamTextSectionComponentConfig.class,
-                "content", "alignment", "fontFamily", "fontSizeRpx", "color", "lineHeight");
+                "content", "alignment", "fontFamily", "fontSizeRpx", "color", "lineHeight", "fontId");
     }
 
     /**

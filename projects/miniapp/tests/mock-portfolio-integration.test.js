@@ -399,13 +399,15 @@ test('工作台作品数与作品库和全部标签同源',()=>{
   assert.equal(mock.MOCK_WORK_LIBRARY.filterTags[0].count,mock.MOCK_WORK_LIBRARY.total)
 })
 
-test('音频配置关闭保留选择、移除清选择并与预览视频互斥',()=>{
+test('音频配置关闭保留选择、移除清选择并与预览视频互斥',async()=>{
   const rt=runtime();global.wx=rt.wxApi
   try {
     const edit=loadPage('portfolio-standard-edit');edit.onLoad()
     edit.handleAudioSetting(event({field:'enabled'},true))
     edit.handlePreview()
     const preview=loadPage('portfolio-standard-preview');preview.onLoad({});preview.onShow()
+    assert.equal(preview.data.audioPlaying,false)
+    for(let turn=0;turn<12;turn++)await Promise.resolve()
     assert.equal(preview.data.audioPlaying,true)
     const menu=preview.data.portfolio.bottomNav.items[1].key
     preview.handlePortfolioMenuChange({detail:{menuKey:menu}})
@@ -461,7 +463,7 @@ test('递归检查mock依赖与组件注册，无后端能力、跨分包或新�
     assert.doesNotMatch(source,/wx\.(?:request|uploadFile|login)\s*\(|utils\/(?:request|session|visitor-session)|\/api\/|wefolio_token/,file)
     if(file.endsWith('.js')) for(const match of source.matchAll(/require\(['"]([^'"]+)['"]\)/g)) {
       const resolved=path.resolve(path.dirname(file),match[1])
-      const allowed=resolved.includes('/pages/mock/')||resolved.includes('/components/mock/')||resolved===path.join(ROOT,'utils/portfolio-text-typography')
+      const allowed=resolved.includes('/pages/mock/')||resolved.includes('/components/mock/')||resolved===path.join(ROOT,'utils/portfolio-text-typography')||resolved===path.join(ROOT,'utils/navigation-bar-layout')
       assert.equal(allowed,true,`${file}: ${match[1]}`)
     }
     if(file.endsWith('.json')) for(const target of Object.values(JSON.parse(source).usingComponents||{})) {

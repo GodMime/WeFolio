@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
+import com.jxc.wefolio.service.portfoliofont.PortfolioFontManifests;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -65,6 +67,9 @@ public class VisitorTeamPortfolioService {
     private static final String POINT_BALANCE_NON_POSITIVE = "POINT_BALANCE_NON_POSITIVE";
 
     /** 查询单条作品集限制。 */
+    private static final String QUERY_LIMIT_ONE_FOR_UPDATE = "LIMIT 1 FOR UPDATE";
+
+    /** 普通只读查询的单条限制。 */
     private static final String QUERY_LIMIT_ONE = "LIMIT 1";
 
     /** 统一不可访问提示。 */
@@ -123,13 +128,22 @@ public class VisitorTeamPortfolioService {
             String shareCode,
             VisitorTeamPortfolioOpenRequest request
     ) {
+        return openPortfolio(shareCode, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public VisitorTeamPortfolioResponse openPortfolio(
+            String shareCode,
+            VisitorTeamPortfolioOpenRequest request,
+            String templateType
+    ) {
         PortfolioOpenPerformanceLogger.Trace trace = portfolioOpenPerformanceLogger.start(
                 PortfolioOpenPerformanceLogger.PortfolioType.TEAM);
         Throwable failure = null;
         try {
             PublishedPortfolio published = trace.measure(
                     PortfolioOpenPerformanceLogger.Phase.PORTFOLIO_LOOKUP,
-                    () -> requirePublishedTeamPortfolio(shareCode));
+                    () -> requirePublishedTeamPortfolio(shareCode, false, templateType));
             boolean nonPositive = trace.measure(
                     PortfolioOpenPerformanceLogger.Phase.POINT_GATE,
                     () -> pointBalanceGateService.isNonPositive(published.team().getOwnerUserId()));
@@ -155,6 +169,9 @@ public class VisitorTeamPortfolioService {
                     PortfolioOpenPerformanceLogger.Phase.RENDER,
                     () -> teamPortfolioRenderService.render(
                             published.portfolio().getPublishedConfigJson(), published.componentContext()));
+            render.setFonts(PortfolioFontManifests.project(PortfolioFontPlan.from(
+                    JSON.parseObject(published.portfolio().getPublishedConfigJson(), TeamPortfolioConfigDto.class)),
+                    published.portfolio().getPublishedFontAssetsJson()));
             VisitActivitySessionTransactionService.OpenResult tracked = request != null && request.getTracking() != null
                     ? trace.measure(PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
                         () -> visitActivitySessionApplicationService.open(published.portfolio(), PortfolioTypeDict.TEAM.getCode(),
@@ -163,10 +180,11 @@ public class VisitorTeamPortfolioService {
                     : null;
             VisitRecordEntity visitRecord = tracked != null ? tracked.record() : trace.measure(
                     PortfolioOpenPerformanceLogger.Phase.VISIT_WRITE,
-                    () -> teamPortfolioVisitService.recordOpen(
-                            published.portfolio(), visitor.getId(), visitor.getVisitorKey(),
-                            request == null ? null : request.getSourceType(),
-                            request == null ? null : request.getIdempotencyKey()));
+                    () -> PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)
+                            ? teamPortfolioVisitService.recordOpen(published.portfolio(), visitor.getId(), visitor.getVisitorKey(),
+                                request == null ? null : request.getSourceType(), request == null ? null : request.getIdempotencyKey())
+                            : teamPortfolioVisitService.recordOpen(published.portfolio(), visitor.getId(), visitor.getVisitorKey(),
+                                request == null ? null : request.getSourceType(), request == null ? null : request.getIdempotencyKey(), templateType));
             fillRenderContext(render, published, visitRecord);
             VisitorTeamPortfolioResponse response = buildOpenResponse(published, session, visitRecord, render);
             if (tracked != null) {
@@ -199,7 +217,12 @@ public class VisitorTeamPortfolioService {
 
     /** 校验正式团队访问资格后上报活动；团队拥有者自访与其他访客口径一致。 */
     public long recordActivity(String shareCode, Long sessionId, VisitActivityUpdateRequest request) {
-        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode);
+        return recordActivity(shareCode, sessionId, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public long recordActivity(String shareCode, Long sessionId, VisitActivityUpdateRequest request, String templateType) {
+        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode, false, templateType);
         if (pointBalanceGateService.isNonPositive(published.team().getOwnerUserId())) {
             throw new BusinessException(VisitActivityMessage.SESSION_UNAVAILABLE);
         }
@@ -214,7 +237,16 @@ public class VisitorTeamPortfolioService {
             String shareCode,
             VisitorAvatarUploadTicketRequest request
     ) {
-        PortfolioEntity portfolio = requirePublishedTeamPortfolio(shareCode).portfolio();
+        return createVisitorAvatarUploadTicket(shareCode, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public VisitorAvatarUploadTicketResponse createVisitorAvatarUploadTicket(
+            String shareCode,
+            VisitorAvatarUploadTicketRequest request,
+            String templateType
+    ) {
+        PortfolioEntity portfolio = requirePublishedTeamPortfolio(shareCode, false, templateType).portfolio();
         return visitorService.createAvatarUploadTicket(portfolio.getId(), request);
     }
 
@@ -223,7 +255,13 @@ public class VisitorTeamPortfolioService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void updateVisitorProfile(String shareCode, VisitorProfileUpdateRequest request) {
-        PortfolioEntity portfolio = requirePublishedTeamPortfolio(shareCode).portfolio();
+        updateVisitorProfile(shareCode, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void updateVisitorProfile(String shareCode, VisitorProfileUpdateRequest request, String templateType) {
+        PortfolioEntity portfolio = requirePublishedTeamPortfolio(shareCode, false, templateType).portfolio();
         visitorService.saveProfile(portfolio.getId(), request);
     }
 
@@ -232,22 +270,39 @@ public class VisitorTeamPortfolioService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void recordEvent(String shareCode, VisitorTeamPortfolioEventRequest request) {
-        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode);
+        recordEvent(shareCode, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void recordEvent(String shareCode, VisitorTeamPortfolioEventRequest request, String templateType) {
+        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode, false, templateType);
         if (request != null && VisitEventTypeDict.CONTACT_FORM_EXPOSED.getCode()
                 .equals(request.getEventType())) {
-            teamContactFormComponentService.validatePublishedComponent(
-                    published.portfolio(), request.getComponentKey());
+            if (PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)) {
+                teamContactFormComponentService.validatePublishedComponent(published.portfolio(), request.getComponentKey());
+            } else {
+                teamContactFormComponentService.validatePublishedComponent(published.portfolio(), request.getComponentKey(), templateType);
+            }
         }
         VisitorContext visitor = requireVisitorContext();
-        teamPortfolioVisitService.recordEvent(
-                published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(), request);
+        if (PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)) {
+            teamPortfolioVisitService.recordEvent(published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(), request);
+        } else {
+            teamPortfolioVisitService.recordEvent(published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(), request, templateType);
+        }
     }
 
     /**
      * 查询已发布团队档期组件选项，不创建访问、事件或查档快照。
      */
     public JSONObject queryScheduleOptions(String shareCode, String componentKey) {
-        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode);
+        return queryScheduleOptions(shareCode, componentKey, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    public JSONObject queryScheduleOptions(String shareCode, String componentKey, String templateType) {
+        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode, false, templateType);
         return teamScheduleQueryComponentService.previewOptions(
                 published.componentContext(), published.config(), componentKey);
     }
@@ -260,19 +315,31 @@ public class VisitorTeamPortfolioService {
             String shareCode,
             TeamPortfolioScheduleQueryRequest request
     ) {
-        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode);
+        return submitScheduleQuery(shareCode, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public TeamPortfolioScheduleQueryResponse submitScheduleQuery(
+            String shareCode,
+            TeamPortfolioScheduleQueryRequest request,
+            String templateType
+    ) {
+        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode, false, templateType);
         VisitorContext visitor = requireVisitorContext();
         TeamPortfolioVisitService.EventRecordResult eventResult =
-                teamPortfolioVisitService.recordScheduleQuery(
-                        published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(), request);
+                PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)
+                        ? teamPortfolioVisitService.recordScheduleQuery(published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(), request)
+                        : teamPortfolioVisitService.recordScheduleQuery(published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(), request, templateType);
         TeamScheduleQueryComponentService.PublishedQueryRecordContext recordContext = eventResult.recorded()
                 ? TeamScheduleQueryComponentService.PublishedQueryRecordContext.recordable(
                         eventResult.visitRecord().getId(),
                         eventResult.visitRecord().getSourceType(),
                         eventResult.occurredAt())
                 : TeamScheduleQueryComponentService.PublishedQueryRecordContext.skipped();
-        return teamScheduleQueryComponentService.queryPublished(
-                published.portfolio(), published.config(), request, visitor, recordContext);
+        return PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)
+                ? teamScheduleQueryComponentService.queryPublished(published.portfolio(), published.config(), request, visitor, recordContext)
+                : teamScheduleQueryComponentService.queryPublished(published.portfolio(), published.config(), request, visitor, recordContext, templateType);
     }
 
     /**
@@ -283,13 +350,31 @@ public class VisitorTeamPortfolioService {
             String shareCode,
             TeamContactLeadSubmitRequest request
     ) {
-        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode);
+        return submitContactLead(shareCode, request, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 高级独立入口按显式模板复用相同业务算法。 */
+    @Transactional(rollbackFor = Exception.class)
+    public TeamContactFormComponentService.SubmitResult submitContactLead(
+            String shareCode,
+            TeamContactLeadSubmitRequest request,
+            String templateType
+    ) {
+        PublishedPortfolio published = requirePublishedTeamPortfolio(shareCode, true, templateType);
         VisitorContext visitor = requireVisitorContext();
         TeamContactFormComponentService.SubmitResult result =
-                teamContactFormComponentService.submit(published.portfolio().getShareCode(), request, visitor);
-        teamPortfolioVisitService.recordContactLeadSubmitted(
-                published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(),
-                result.leadId(), request == null ? null : request.getIdempotencyKey());
+                PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)
+                        ? teamContactFormComponentService.submit(published.portfolio().getShareCode(), request, visitor)
+                        : teamContactFormComponentService.submit(published.portfolio().getShareCode(), request, visitor, templateType);
+        if (result.created()) {
+            if (PortfolioTemplateTypeDict.STANDARD.getCode().equals(templateType)) {
+                teamPortfolioVisitService.recordContactLeadSubmitted(published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(),
+                        result.leadId(), request == null ? null : request.getIdempotencyKey());
+            } else {
+                teamPortfolioVisitService.recordContactLeadSubmitted(published.portfolio(), visitor.getVisitorId(), visitor.getVisitorKey(),
+                        result.leadId(), request == null ? null : request.getIdempotencyKey(), templateType);
+            }
+        }
         return result;
     }
 
@@ -297,6 +382,16 @@ public class VisitorTeamPortfolioService {
      * 在读取配置前通过 SQL 与 Java 双重校验发布身份和有效团队。
      */
     PublishedPortfolio requirePublishedTeamPortfolio(String shareCode) {
+        return requirePublishedTeamPortfolio(shareCode, false);
+    }
+
+    /** 留资入口在任何业务快照读取前先锁住作品集。 */
+    private PublishedPortfolio requirePublishedTeamPortfolio(String shareCode, boolean lock) {
+        return requirePublishedTeamPortfolio(shareCode, lock, PortfolioTemplateTypeDict.STANDARD.getCode());
+    }
+
+    /** 独立高级访客入口按显式模板读取，不放宽旧分享路径。 */
+    private PublishedPortfolio requirePublishedTeamPortfolio(String shareCode, boolean lock, String templateType) {
         if (!teamPortfolioProperties.isEnabled()) {
             throw new BusinessException(TeamPortfolioMessage.FEATURE_DISABLED);
         }
@@ -305,15 +400,15 @@ public class VisitorTeamPortfolioService {
                 Wrappers.lambdaQuery(PortfolioEntity.class)
                         .eq(PortfolioEntity::getShareCode, normalizedShareCode)
                         .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.TEAM.getCode())
-                        .eq(PortfolioEntity::getTemplateType, PortfolioTemplateTypeDict.STANDARD.getCode())
+                        .eq(PortfolioEntity::getTemplateType, templateType)
                         .eq(PortfolioEntity::getSchemaVersion,
                                 TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1)
                         .eq(PortfolioEntity::getPublicationStatus,
                                 PortfolioPublicationStatusDict.PUBLISHED.getCode())
                         .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
                         .eq(PortfolioEntity::getDeleted, 0L)
-                        .last(QUERY_LIMIT_ONE));
-        if (!isPublishedTeamPortfolio(portfolio, normalizedShareCode)) {
+                        .last(lock ? QUERY_LIMIT_ONE_FOR_UPDATE : QUERY_LIMIT_ONE));
+        if (!isPublishedTeamPortfolio(portfolio, normalizedShareCode, templateType)) {
             throw new BusinessException(PORTFOLIO_UNAVAILABLE_MESSAGE);
         }
         TeamEntity team = teamEntityMapper.selectById(portfolio.getOwnerId());
@@ -327,17 +422,18 @@ public class VisitorTeamPortfolioService {
                 team,
                 config,
                 new TeamPortfolioComponentContext(
-                        portfolio.getOwnerId(), portfolio.getId(), portfolio.getPublishedRevision()));
+                        portfolio.getOwnerId(), portfolio.getId(), portfolio.getPublishedRevision(), null,
+                        PortfolioTemplateTypeDict.ADVANCED.getCode().equals(templateType)));
     }
 
     /** Java 层复验全部团队作品集身份字段。 */
-    private boolean isPublishedTeamPortfolio(PortfolioEntity portfolio, String shareCode) {
+    private boolean isPublishedTeamPortfolio(PortfolioEntity portfolio, String shareCode, String templateType) {
         return portfolio != null
                 && portfolio.getId() != null && portfolio.getId() > 0
                 && portfolio.getOwnerId() != null && portfolio.getOwnerId() > 0
                 && Objects.equals(portfolio.getShareCode(), shareCode)
                 && PortfolioOwnerTypeDict.TEAM.getCode().equals(portfolio.getOwnerType())
-                && PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                && templateType.equals(portfolio.getTemplateType())
                 && TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(portfolio.getSchemaVersion())
                 && PortfolioPublicationStatusDict.PUBLISHED.getCode().equals(portfolio.getPublicationStatus())
                 && PortfolioStatusDict.ACTIVE.getCode().equals(portfolio.getStatus())

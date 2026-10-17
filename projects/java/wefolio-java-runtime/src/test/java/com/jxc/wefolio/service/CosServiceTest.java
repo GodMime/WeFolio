@@ -37,10 +37,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.nio.file.Path;
+import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Base64;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
@@ -82,6 +85,51 @@ class CosServiceTest {
     void cosServiceShouldNotExposeRemoteUrlUpload() {
         assertThat(CosService.class.getDeclaredMethods())
                 .noneMatch(method -> "uploadFromUrl".equals(method.getName()));
+    }
+
+    /** 参考附件的私有 ACL 与禁止覆盖必须进入签名 policy，不能只改表单字段。 */
+    @Test
+    void referenceTicketShouldSignPrivateAndImmutableConditions() {
+        when(cosProperties.getSecretId()).thenReturn("test-id");
+        when(cosProperties.getSecretKey()).thenReturn("test-key");
+        CosService.PostUploadTicket ticket=cosService.createPrivatePostUploadTicket(
+                "WFTEST/protfolio/ai-reference/0123456789abcdef0123456789abcdef.png","image/png",4_000_000,
+                LocalDateTime.now(SHANGHAI_ZONE).plusMinutes(15),SHANGHAI_ZONE);
+        String policy=new String(Base64.getDecoder().decode(ticket.formData().get("policy")),java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(ticket.formData()).containsEntry("x-cos-acl","private").containsEntry("x-cos-forbid-overwrite","true");
+        assertThat(policy).contains("\"x-cos-acl\":\"private\"","\"x-cos-forbid-overwrite\":\"true\"").doesNotContain("public-read");
+    }
+
+    /** 私有对象只生成当前桶的 GET 临时地址，不更改 ACL 或输出签名凭证。 */
+    @Test
+    void signedGetShouldUseCurrentBucketAndBoundExpiration(CapturedOutput output) throws Exception {
+        COSClient client = mock(COSClient.class);
+        when(transferManager.getCOSClient()).thenReturn(client);
+        String key = "WFOWNER/others/video-frames/18/frame.jpg";
+        String url = "https://cos.test/frame.jpg?signature=private-test-signature";
+        when(client.generatePresignedUrl(eq("test-bucket"), eq(key), any(Date.class)))
+                .thenReturn(URI.create(url).toURL());
+        Instant before = Instant.now();
+
+        assertThat(cosService.signedGet(key, Duration.ofMinutes(15))).isEqualTo(url);
+
+        ArgumentCaptor<Date> expiresAt = ArgumentCaptor.forClass(Date.class);
+        verify(client).generatePresignedUrl(eq("test-bucket"), eq(key), expiresAt.capture());
+        assertThat(expiresAt.getValue().toInstant()).isBetween(before.plusSeconds(899), Instant.now().plusSeconds(901));
+        verifyNoMoreInteractions(client);
+        assertThat(output.getAll()).doesNotContain("private-test-signature");
+    }
+
+    /** 临时地址不能接受空对象键、零或超过一小时的有效期。 */
+    @Test
+    void signedGetShouldRejectInvalidArgumentsBeforeCallingCos() {
+        assertThatThrownBy(() -> cosService.signedGet(" ", Duration.ofMinutes(15)))
+                .isInstanceOf(IllegalArgumentException.class);
+        for (Duration ttl : new Duration[]{null, Duration.ZERO, Duration.ofSeconds(-1), Duration.ofMinutes(61)}) {
+            assertThatThrownBy(() -> cosService.signedGet("frame.jpg", ttl))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        verifyNoInteractions(transferManager);
     }
 
     // ── upload ──────────────────────────────────────────────
@@ -559,7 +607,7 @@ class CosServiceTest {
     // ── storage init ───────────────────────────────────────
 
     @Test
-    void initUserStorageShouldIncludeAnimationFolderWithoutDependingOnFolderCount() {
+    void initUserStorageShouldPreserveExactFolderSet() {
         COSClient cosClient = mock(COSClient.class);
         when(transferManager.getCOSClient()).thenReturn(cosClient);
 
@@ -569,7 +617,9 @@ class CosServiceTest {
         verify(cosClient, atLeastOnce()).putObject(captor.capture());
         assertThat(captor.getAllValues())
                 .extracting(PutObjectRequest::getKey)
-                .contains("WFA3B1E7A2/work/animation/", "WFA3B1E7A2/work/audio/");
+                .containsExactlyInAnyOrder("WFA3B1E7A2/", "WFA3B1E7A2/work/", "WFA3B1E7A2/work/image/",
+                        "WFA3B1E7A2/work/video/", "WFA3B1E7A2/work/animation/", "WFA3B1E7A2/work/audio/",
+                        "WFA3B1E7A2/protfolio/", "WFA3B1E7A2/others/", "WFA3B1E7A2/others/fonts/");
         assertThat(captor.getAllValues()).allSatisfy(request -> {
             assertThat(request.getMetadata().getContentLength()).isZero();
             assertThat(request.getMetadata().getContentType())
@@ -585,11 +635,11 @@ class CosServiceTest {
         cosService.initTeamStorage("TM2048");
 
         ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
-        verify(cosClient, times(3)).putObject(captor.capture());
+        verify(cosClient, times(4)).putObject(captor.capture());
         List<String> keys = captor.getAllValues().stream()
                 .map(PutObjectRequest::getKey)
                 .toList();
-        assertThat(keys).containsExactly("TM2048/", "TM2048/others/", "TM2048/protfolio/");
+        assertThat(keys).containsExactly("TM2048/", "TM2048/others/", "TM2048/protfolio/", "TM2048/others/fonts/");
         assertThat(keys).noneMatch(key -> key.contains("/work/"));
         assertThat(captor.getAllValues())
                 .allSatisfy(request -> assertThat(request.getMetadata().getContentType())

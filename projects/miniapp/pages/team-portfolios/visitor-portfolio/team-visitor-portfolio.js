@@ -1,3 +1,5 @@
+const { portfolioOpeningPageMethods } = require('../utils/portfolio-opening')
+const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { portfolioAudioPageMethods } = require('../utils/portfolio-audio-player')
 const { openVideoPlayer } = require('../utils/portfolio-video-player')
 const VIDEO_PLAYER_ROUTE = '/pages/team-portfolios/video-player/video-player'
@@ -19,7 +21,7 @@ const WORK_DETAIL_ROUTE = '/pages/team-portfolios/work-detail/team-portfolio-wor
 const MEDIA_TYPE_IMAGE = 'IMAGE'
 const MEDIA_TYPE_VIDEO = 'VIDEO'
 const PERSONAL_VISITOR_URL = '/pages' + '/portfolios/visitor-portfolio/visitor-portfolio'
-const PERSONAL_VISITOR_TEAM_SOURCE_QUERY = 'fromTeamPortfolio=1'
+const PERSONAL_VISITOR_TEAM_SOURCE_QUERY = 'fromTeamPortfolio=1&sourceType=TEAM_PORTFOLIO'
 const TIMELINE_SHARE_GUIDE_VALUE = 'timeline'
 const SHARE_MENU_ITEMS = Object.freeze(['shareAppMessage', 'shareTimeline'])
 const SHARE_CHANNEL_WECHAT_TIMELINE = 'WECHAT_TIMELINE'
@@ -34,9 +36,11 @@ function hasPreviousPage() { const pages = typeof getCurrentPages === 'function'
 
 Page({
   ...portfolioAudioPageMethods,
+  ...portfolioOpeningPageMethods,
   data: {
     backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76, shareCode: '', sourceType: 'WECHAT_SHARE_CARD', loading: false, errorMessage: '', render: {}, portfolio: normalizeTeamVisitorPortfolio(), componentBuckets: buckets([]), activeSingleWorkVideoKey: '', videoPreviewVisible: false, visitorKey: '', visitRecordId: 0, visitorProfileToken: '', visitorProfileAuthVisible: false, visitorProfileForm: { nickname: '', avatarPath: '' }, visitorProfileSaving: false, empty: true, underMaintenance: false, showNavigationBack: false, timelineGuideRequested: false, timelineGuideVisible: false, timelineSharePortfolioId: 0, timelineShareRecordEnabled: false, scheduleResults: {}, contactForms: {}, contactSubmitting: {}, contactModalVisible: {}, pendingOpenKey: '', pendingContactKeys: {}, themeMode: 'light', backgroundColor: '#FFFFFF', navigationColor: '#212529', brandLogoUrl: LIGHT_LOGO_URL, portfolioScrollTop: 0, teamPortfolioMenuSwitching: false, teamPortfolioMenuTransitionClass: '' },
   onLoad(options = {}) {
+    this.remoteFontPage = installRemoteFontPage(this, { editor: false, team: true })
     this.visitPageUnloaded = false
     this.positionBackgroundAudio()
     this.visitPageVisible = true
@@ -75,7 +79,6 @@ Page({
     const render = preferredMenuKey
       ? switchTeamPortfolioMenu(normalizedRender, preferredMenuKey)
       : normalizedRender
-    this.syncBackgroundAudio(render.backgroundAudio, true)
     const displayable = !render.underMaintenance && render.components.length > 0
     const activeComponents = Array.isArray(render.activeComponents) ? render.activeComponents : []
     const themeMode = render.themeMode === 'dark' ? 'dark' : 'light'
@@ -97,7 +100,7 @@ Page({
       timelineShareRecordEnabled: Boolean(this.data.timelineSharePortfolioId && displayable)
     }, () => {
       if (this.browserContext) {
-        this.browserContext.setDisplayable(!render.underMaintenance)
+        this.browserContext.setDisplayable(!render.underMaintenance && !this.data.fontOpening && !this.data.loading)
         if (this.visitPageVisible) this.browserContext.show(this)
       }
     })
@@ -179,11 +182,19 @@ Page({
       })
   },
 
-  onShow() { this.visitPageVisible = true; if (this.browserContext) this.browserContext.show(this); this.clearVideoPreview(); this.showBackgroundAudio() },
+  onShow() {
+    this.visitPageVisible = true
+    if (this.browserContext) this.browserContext.show(this)
+    this.clearVideoPreview()
+    this.showBackgroundAudio()
+    if (this.remoteFontPage) this.remoteFontPage.show()
+  },
   onHide() {
+    if (this.remoteFontPage) this.remoteFontPage.hide()
     this.visitPageVisible = false; if (this.browserContext) this.browserContext.hide(this)
     this.hideBackgroundAudio(); this.stopSingleWorkVideos() },
   onUnload() {
+    if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.videoPlayerDisposed = true
     this.visitPageUnloaded = true
     this.visitPageVisible = false; if (this.browserContext) this.browserContext.dispose()

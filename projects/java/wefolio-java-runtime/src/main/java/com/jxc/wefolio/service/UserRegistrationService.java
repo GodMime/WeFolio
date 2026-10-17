@@ -17,6 +17,8 @@ import com.jxc.wefolio.mapper.UserEntityMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import com.jxc.wefolio.message.MiniappAuthMessage;
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.service.point.GiftCommand;
 
@@ -87,7 +89,7 @@ public class UserRegistrationService {
      * @param unionidHash unionid 摘要，可为空
      * @return 已创建的用户实体
      */
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public UserEntity createWechatMaintainerUser(
             String uniqueCode,
             MaintainerWechatLoginRequest request,
@@ -97,6 +99,9 @@ public class UserRegistrationService {
             String openId,
             String unionidHash
     ) {
+        if (openId == null || openId.isBlank()) {
+            throw new BusinessException(MiniappAuthMessage.WECHAT_ACCOUNT_INVALID_MESSAGE);
+        }
         LocalDateTime now = LocalDateTime.now();
         UserEntity user = new UserEntity();
         user.setUniqueCode(uniqueCode);

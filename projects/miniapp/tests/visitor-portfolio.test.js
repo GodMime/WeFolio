@@ -1497,7 +1497,7 @@ test('visitor page preserves WeChat source by default and accepts controlled per
   assert.match(visitorSessionSource, /const SOURCE_TYPE_WECHAT_SHARE_CARD = 'WECHAT_SHARE_CARD'/)
   assert.match(visitorSessionSource, /const SOURCE_TYPE_PERSONAL_PORTFOLIO = 'PERSONAL_PORTFOLIO'/)
   assert.equal((pageSource.match(/sourceType: this\.visitorSourceType/g) || []).length, 3)
-  assert.match(pageSource, /options\.sourceType === SOURCE_TYPE_PERSONAL_PORTFOLIO/)
+  assert.match(pageSource, /SOURCE_TYPE_PERSONAL_PORTFOLIO, SOURCE_TYPE_TEAM_PORTFOLIO/)
   assert.equal((pageSource.match(/sourceType: 'WECHAT_SHARE_CARD'/g) || []).length, 0)
 })
 
@@ -1593,6 +1593,7 @@ test('personal visitor shows timeline guide only after displayable content loads
     assert.equal(page.data.timelineGuideRequested, false)
     assert.equal(page.data.timelineGuideVisible, false)
   } finally {
+    page.onUnload()
     delete global.wx
   }
 })
@@ -1799,6 +1800,7 @@ test('visitor page opens portfolio with wx login code and stores backend visitor
   try {
     await page.onLoad({ shareCode: 'PF001' })
   } finally {
+    page.onUnload()
     delete global.wx
   }
 
@@ -1848,6 +1850,7 @@ test('visitor page opens timeline single-page mode anonymously without wx login'
   try {
     await page.onLoad({ shareCode: 'PF001' })
   } finally {
+    page.onUnload()
     delete global.wx
   }
 
@@ -1894,6 +1897,7 @@ test('visitor page ignores visitor token storage failure while opening portfolio
   try {
     await page.onLoad({ shareCode: 'PF001' })
   } finally {
+    page.onUnload()
     delete global.wx
   }
 
@@ -2043,6 +2047,7 @@ test('visitor page shows profile authorization panel when profile is missing', a
   try {
     await page.onLoad({ shareCode: 'PF001' })
   } finally {
+    page.onUnload()
     delete global.wx
   }
 
@@ -2972,3 +2977,26 @@ test('personal visitor decodes scene once, records QR_CODE, and preserves explic
     assert.equal(page.visitorSourceType, expectedSource)
   }
 })
+
+for (const [options, expected] of [
+  [{ sourceType: 'TEAM_PORTFOLIO' }, 'TEAM_PORTFOLIO'],
+  [{ fromTeamPortfolio: '1' }, 'TEAM_PORTFOLIO'],
+  [{ sourceType: 'invalid', fromTeamPortfolio: '1' }, 'TEAM_PORTFOLIO'],
+  [{ sourceType: 'PERSONAL_PORTFOLIO', fromTeamPortfolio: '1' }, 'PERSONAL_PORTFOLIO'],
+  [{ sourceType: 'invalid' }, 'WECHAT_SHARE_CARD']
+]) {
+  test(`personal open request carries resolved source ${JSON.stringify(options)}`, async () => {
+    const calls = []
+    const page = loadVisitorPage(async (request) => {
+      calls.push(request)
+      return { visitorKey: 'source-visitor', token: 'test-token', expiresInSeconds: 60,
+        renderData: { shareCode: 'PF001', title: '测试', components: [] } }
+    })
+    global.wx = { login({ success }) { success({ code: 'test-code' }) }, setStorageSync() {}, showToast() {} }
+    try {
+      await page.onLoad(Object.assign({ shareCode: 'PF001' }, options))
+      assert.equal(calls[0].url, '/api/visitor/portfolios/PF001/open')
+      assert.equal(calls[0].data.sourceType, expected)
+    } finally { page.onUnload(); delete global.wx }
+  })
+}

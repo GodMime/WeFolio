@@ -57,7 +57,7 @@ public class TeamPortfolioAccessService {
      */
     public TeamPortfolioAccess requireVisiblePortfolio(long portfolioId, long userId) {
         requireFeatureEnabled();
-        return requireVisiblePortfolioInternal(portfolioId, userId);
+        return requireVisiblePortfolioInternal(portfolioId, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
     }
 
     /**
@@ -69,7 +69,22 @@ public class TeamPortfolioAccessService {
      */
     public TeamPortfolioAccess requireMaintainablePortfolio(long portfolioId, long userId) {
         requireFeatureEnabled();
-        TeamPortfolioAccess access = requireVisiblePortfolioInternal(portfolioId, userId);
+        TeamPortfolioAccess access = requireVisiblePortfolioInternal(portfolioId, userId, PortfolioTemplateTypeDict.STANDARD.getCode());
+        if (!access.canMaintain()) {
+            throw new BusinessException(TeamPortfolioMessage.NO_MAINTAIN_PERMISSION);
+        }
+        return access;
+    }
+
+    /** 按独立高级入口选择的模板校验成员可见权限，不改变标准入口默认守卫。 */
+    public TeamPortfolioAccess requireVisiblePortfolio(long portfolioId, long userId, String templateType) {
+        requireFeatureEnabled();
+        return requireVisiblePortfolioInternal(portfolioId, userId, templateType);
+    }
+
+    /** 按独立高级入口选择的模板校验维护权限。 */
+    public TeamPortfolioAccess requireMaintainablePortfolio(long portfolioId, long userId, String templateType) {
+        TeamPortfolioAccess access = requireVisiblePortfolio(portfolioId, userId, templateType);
         if (!access.canMaintain()) {
             throw new BusinessException(TeamPortfolioMessage.NO_MAINTAIN_PERMISSION);
         }
@@ -101,9 +116,9 @@ public class TeamPortfolioAccessService {
      * @param userId 当前用户 ID
      * @return 已校验的团队作品集访问上下文
      */
-    private TeamPortfolioAccess requireVisiblePortfolioInternal(long portfolioId, long userId) {
+    private TeamPortfolioAccess requireVisiblePortfolioInternal(long portfolioId, long userId, String templateType) {
         PortfolioEntity portfolio = portfolioEntityMapper.selectById(portfolioId);
-        if (!isActiveStandardTeamPortfolio(portfolio)) {
+        if (!isActiveTeamPortfolio(portfolio, templateType)) {
             throw new BusinessException(TeamPortfolioMessage.PORTFOLIO_NOT_FOUND);
         }
         TeamEntity team = requireActiveTeam(portfolio.getOwnerId(), TeamPortfolioMessage.PORTFOLIO_NOT_FOUND);
@@ -127,10 +142,10 @@ public class TeamPortfolioAccessService {
      * @param portfolio 作品集实体
      * @return 是否满足身份约束
      */
-    private boolean isActiveStandardTeamPortfolio(PortfolioEntity portfolio) {
+    private boolean isActiveTeamPortfolio(PortfolioEntity portfolio, String templateType) {
         return portfolio != null
                 && PortfolioOwnerTypeDict.TEAM.getCode().equals(portfolio.getOwnerType())
-                && PortfolioTemplateTypeDict.STANDARD.getCode().equals(portfolio.getTemplateType())
+                && templateType.equals(portfolio.getTemplateType())
                 && PortfolioStatusDict.ACTIVE.getCode().equals(portfolio.getStatus())
                 && TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1.equals(portfolio.getSchemaVersion());
     }

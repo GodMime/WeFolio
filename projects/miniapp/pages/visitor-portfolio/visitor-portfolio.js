@@ -6,7 +6,7 @@
 
 // 新访客页真实实现位于 portfolio 分包；修改目标路由时必须同步更新兼容测试。
 const TARGET_PAGE = '/pages/portfolios/visitor-portfolio/visitor-portfolio'
-const FORWARDED_KEYS = ['shareCode', 'scene']
+const FORWARDED_KEYS = ['shareCode', 'scene', 'sourceType', 'fromTeamPortfolio']
 
 function buildForwardQuery(options = {}) {
   return FORWARDED_KEYS

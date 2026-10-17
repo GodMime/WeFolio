@@ -30,6 +30,8 @@ public class PortfolioMiniappCodeResourceService {
     private static final String USER_PAGE = "pages/portfolios/visitor-portfolio/visitor-portfolio";
     /** 团队访客页。 */
     private static final String TEAM_PAGE = "pages/team-portfolios/visitor-portfolio/team-visitor-portfolio";
+    /** 高级团队独立访客页。 */
+    private static final String ADVANCED_TEAM_PAGE = "pages/team-portfolios/advanced-visitor/team-visitor-portfolio";
     /** 元数据保留七天，过期不改变分享码有效性。 */
     private static final Duration CACHE_TTL = Duration.ofDays(7);
     /** 限流窗口。 */
@@ -75,9 +77,14 @@ public class PortfolioMiniappCodeResourceService {
 
     /** 返回绘制资源；上层在调用前后校验当前权限和发布状态。 */
     public PortfolioMiniappCodeResponse generate(PortfolioMiniappCodeSnapshot snapshot, Long actorUserId) {
+        return generate(snapshot, actorUserId, false);
+    }
+
+    /** 高级独立入口明确选择团队访客页，缓存摘要包含实际page。 */
+    public PortfolioMiniappCodeResponse generate(PortfolioMiniappCodeSnapshot snapshot, Long actorUserId, boolean advanced) {
         validate(snapshot, actorUserId);
         MiniappCodeObjectStore.AvatarResource avatar = store.avatarResource(snapshot);
-        String page = PortfolioOwnerTypeDict.TEAM.getCode().equals(snapshot.ownerType()) ? TEAM_PAGE : USER_PAGE;
+        String page = PortfolioOwnerTypeDict.TEAM.getCode().equals(snapshot.ownerType()) ? advanced ? ADVANCED_TEAM_PAGE : TEAM_PAGE : USER_PAGE;
         String rawHash = hash(json(List.of(wechat.getAppId(), properties.getEnvVersion(), properties.isCheckPath(),
                 page, snapshot.shareCode(), WechatMiniappCodeClient.CODE_SIZE, false, false, 0, 0, 0,
                 snapshot.ownerType(), snapshot.ownerId(), snapshot.uniqueCode(), snapshot.portfolioId())));

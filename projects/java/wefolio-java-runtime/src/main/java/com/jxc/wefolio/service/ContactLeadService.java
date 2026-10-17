@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.jxc.wefolio.common.ContactLeadContent;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.jxc.wefolio.common.auth.VisitorContext;
 import com.jxc.wefolio.common.auth.VisitorContextHolder;
@@ -32,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
 /**
@@ -40,6 +42,9 @@ import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class ContactLeadService {
+
+    /** 同作品集提交串行化，并读取最新已提交状态。 */
+    private static final String QUERY_ONE_FOR_UPDATE = "LIMIT 1 FOR UPDATE";
 
     /** 默认隐私说明版本 */
     private static final String DEFAULT_CONSENT_VERSION = "v1";
@@ -121,7 +126,7 @@ public class ContactLeadService {
                 Wrappers.lambdaQuery(PortfolioEntity.class)
                         .eq(PortfolioEntity::getShareCode, shareCode)
                         .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
-                        .last("LIMIT 1")
+                        .last(QUERY_ONE_FOR_UPDATE)
         );
         if (portfolio == null
                 || !PortfolioOwnerTypeDict.USER.getCode().equals(portfolio.getOwnerType())
@@ -163,6 +168,10 @@ public class ContactLeadService {
         if (existingLead != null) {
             return buildSubmitResponse(existingLead);
         }
+        ContactLeadEntity duplicate = findDuplicateContent(portfolio, normalized);
+        if (duplicate != null) {
+            return buildSubmitResponse(duplicate);
+        }
         if (!visitorContext.isTimelineAnonymous()) {
             enforceSubmissionLimit(portfolio, visitRecord);
         }
@@ -192,9 +201,26 @@ public class ContactLeadService {
      */
     private ContactLeadSubmitResponse submitInternal(PortfolioEntity portfolio, ContactLeadSubmitRequest request) {
         NormalizedContactLeadRequest normalized = normalizeRequest(request, false);
+        ContactLeadEntity existing = findExistingLead(portfolio, normalized.idempotencyKey());
+        if (existing == null) {
+            existing = findDuplicateContent(portfolio, normalized);
+        }
+        if (existing != null) {
+            return buildSubmitResponse(existing);
+        }
         ContactLeadPersistenceResult result = persistLead(
                 portfolio, normalized, normalizeSourceType(request.getSourceType()));
         return buildSubmitResponse(result.lead());
+    }
+
+    /** 在限次、事件与计费之前复用最早的相同内容记录。 */
+    private ContactLeadEntity findDuplicateContent(PortfolioEntity portfolio, NormalizedContactLeadRequest request) {
+        ContactLeadContent content = new ContactLeadContent(request.contactName(), request.phone(),
+                request.wechat(), request.desiredSchedule(), request.needs());
+        return contactLeadEntityMapper.findContentCandidatesForUpdate(portfolio.getId(), portfolio.getOwnerType(),
+                portfolio.getOwnerId(), content.contactName(), content.desiredSchedule(), content.needs()).stream()
+                .filter(lead -> content.matches(lead, lead.getPhoneCiphertext(), lead.getWechatCiphertext()))
+                .findFirst().orElse(null);
     }
 
     /**
@@ -210,7 +236,7 @@ public class ContactLeadService {
             NormalizedContactLeadRequest request,
             String sourceType
     ) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
         ContactLeadEntity lead = new ContactLeadEntity();
         lead.setPortfolioId(portfolio.getId());
         lead.setPortfolioTitleSnapshot(resolvePortfolioTitleSnapshot(portfolio));
@@ -281,7 +307,7 @@ public class ContactLeadService {
                         .eq(PortfolioEntity::getShareCode, shareCode)
                         .eq(PortfolioEntity::getOwnerType, PortfolioOwnerTypeDict.USER.getCode())
                         .eq(PortfolioEntity::getPublicationStatus, PortfolioPublicationStatusDict.PUBLISHED.getCode())
-                        .last("LIMIT 1")
+                        .last(QUERY_ONE_FOR_UPDATE)
         );
         if (portfolio == null
                 || !PortfolioOwnerTypeDict.USER.getCode().equals(portfolio.getOwnerType())
@@ -422,7 +448,7 @@ public class ContactLeadService {
                         .eq(ContactLeadEntity::getOwnerType, portfolio.getOwnerType())
                         .eq(ContactLeadEntity::getOwnerId, portfolio.getOwnerId())
                         .eq(ContactLeadEntity::getIdempotencyKey, idempotencyKey)
-                        .last("LIMIT 1")
+                        .last(QUERY_ONE_FOR_UPDATE)
         );
     }
 

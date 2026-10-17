@@ -33,6 +33,7 @@ import com.jxc.wefolio.entity.VisitorEntity;
 import com.jxc.wefolio.mapper.VisitActivitySessionEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioVisitService;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedTeamSourceAccessService;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -335,7 +336,8 @@ public class VisitActivitySessionConcurrencyIntegrationTest {
     @TestConfiguration
     @EnableTransactionManagement(proxyTargetClass = true)
     @MapperScan("com.jxc.wefolio.mapper")
-    @Import({VisitActivitySessionTransactionService.class,PortfolioVisitService.class,TeamPortfolioVisitService.class})
+    @Import({VisitActivitySessionTransactionService.class,PortfolioVisitService.class,TeamPortfolioVisitService.class,
+            AdvancedTeamSourceAccessService.class})
     public static class Config {
         /** 独立H2默认数据源；MySQL仅接受显式专用库环境变量，不读取runtime .env。 */
         @Bean

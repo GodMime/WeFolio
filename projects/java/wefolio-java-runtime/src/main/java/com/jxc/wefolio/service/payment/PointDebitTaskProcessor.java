@@ -71,8 +71,8 @@ public class PointDebitTaskProcessor {
                     PointDebitTaskStatusDict.WAITING_SESSION.getCode());
             return;
         }
-        UserAuthEntity auth = userAuthEntityMapper.selectById(session.authId());
-        if (auth == null || !task.getUserId().equals(auth.getUserId()) || blank(auth.getOpenId())) {
+        UserAuthEntity auth = WechatPaymentIdentity.findUnique(userAuthEntityMapper, task.getUserId());
+        if (!WechatPaymentIdentity.matchesSession(task.getUserId(), auth, session)) {
             transactionService.markFailure(task.getId(), executionLeaseToken,
                     failure(WechatVirtualPaymentErrorType.PERMANENT, "维护者微信身份不存在"));
             log.info("微信虚拟支付业务完成 operation=处理扣币任务 referenceNo={} userId={} "

@@ -109,7 +109,7 @@ class TeamPortfolioFoundationTest {
     @Test
     void dtosShouldExposeOnlyTeamPortfolioFields() {
         assertFields(TeamPortfolioConfigDto.class,
-                "schemaVersion", "editorSchemaRevision", "share", "style", "backgroundAudio", "components", "bottomNav");
+                "schemaVersion", "editorSchemaRevision", "share", "style", "backgroundAudio", "components", "bottomNav", "fonts", "fontsProvided");
         assertFieldType(TeamPortfolioConfigDto.class, "backgroundAudio", BackgroundAudioConfigDto.class);
         assertFields(BackgroundAudioConfigDto.class, "enabled", "workId", "displayStyle");
         assertFieldType(TeamPortfolioConfigDto.class, "schemaVersion", String.class);
@@ -147,7 +147,7 @@ class TeamPortfolioFoundationTest {
         assertFieldType(TeamPortfolioConfigDto.ComponentEnvelope.class, "config", JSONObject.class);
 
         assertFields(TeamPortfolioRenderDto.class, "shareCode", "portfolioId", "teamId", "teamName", "title",
-                "share", "preview", "underMaintenance", "visitRecordId", "style", "backgroundAudio", "components", "bottomNav");
+                "share", "preview", "underMaintenance", "visitRecordId", "style", "backgroundAudio", "components", "bottomNav", "fonts");
         assertFieldType(TeamPortfolioRenderDto.class, "backgroundAudio", BackgroundAudioRenderDto.class);
         assertFieldType(TeamPortfolioRenderDto.class, "shareCode", String.class);
         assertFieldType(TeamPortfolioRenderDto.class, "portfolioId", Long.class);
@@ -186,10 +186,11 @@ class TeamPortfolioFoundationTest {
         assertFieldType(TeamPortfolioRenderDto.Component.class, "data", JSONObject.class);
         assertThat(new TeamPortfolioRenderDto().getComponents()).isEmpty();
 
-        assertFields(TeamPortfolioSummaryResponse.class, "portfolioId", "shareCode", "title", "coverUrl", "teamId",
+        assertFields(TeamPortfolioSummaryResponse.class, "templateType", "portfolioId", "shareCode", "title", "coverUrl", "teamId",
                 "teamName", "currentRole", "canMaintain", "canShare", "publicationStatus", "draftRevision",
                 "publishedRevision", "updatedAt");
         assertFieldType(TeamPortfolioSummaryResponse.class, "portfolioId", Long.class);
+        assertFieldType(TeamPortfolioSummaryResponse.class, "templateType", String.class);
         assertFieldType(TeamPortfolioSummaryResponse.class, "shareCode", String.class);
         assertFieldType(TeamPortfolioSummaryResponse.class, "title", String.class);
         assertFieldType(TeamPortfolioSummaryResponse.class, "coverUrl", String.class);
@@ -218,13 +219,14 @@ class TeamPortfolioFoundationTest {
         assertThat(context.teamId()).isEqualTo(1L);
         assertThat(context.portfolioId()).isEqualTo(2L);
         assertThat(context.revision()).isEqualTo(3);
+        assertThat(context.allowAdvancedMemberPortfolios()).isFalse();
         assertThat(TeamPortfolioComponentContext.class.isRecord()).isTrue();
         assertThat(TeamPortfolioComponentContext.class.getRecordComponents())
                 .extracting(RecordComponent::getName)
-                .containsExactly("teamId", "portfolioId", "revision", "textBackgroundWorks");
+                .containsExactly("teamId", "portfolioId", "revision", "textBackgroundWorks", "allowAdvancedMemberPortfolios", "unsavedAdvancedCandidate");
         assertThat(TeamPortfolioComponentContext.class.getRecordComponents())
                 .extracting(RecordComponent::getType)
-                .containsExactly(long.class, long.class, int.class, Map.class);
+                .containsExactly(long.class, long.class, int.class, Map.class, boolean.class, boolean.class);
         assertThat(TeamPortfolioMessage.class.isInterface()).isTrue();
         assertThat(TeamPortfolioMessage.FEATURE_DISABLED).isEqualTo("团队作品集功能暂未开放");
         assertThat(TeamPortfolioMessage.NO_ACCESS).isEqualTo("团队不存在或无访问权限");

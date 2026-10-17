@@ -81,8 +81,22 @@ work-audit:
   video-snapshot-interval-seconds: 60
   # 单个视频最多截帧数量，防止超长视频产生过多审核帧。
   max-video-snapshot-count: 120
+  # 完成兼容部署与真实链路验证后才开启；旧 Interval 任务始终沿原冻结参数执行。
+  video-persistent-frames-enabled: ${WORK_AUDIT_VIDEO_PERSISTENT_FRAMES_ENABLED:${WEFOLIO_AI_MEDIA_ENABLED:false}}
   # 腾讯云远端接口调用超时时间，单位秒。
   remote-call-timeout-seconds: 30
+
+video-frame:
+  # 共用持久帧服务逐张以内存处理；独立 COS 客户端不隐藏重试。
+  remote-timeout-seconds: ${VIDEO_FRAME_REMOTE_TIMEOUT_SECONDS:5}
+  max-download-bytes: ${VIDEO_FRAME_MAX_DOWNLOAD_BYTES:10485760}
+  max-pixels: ${VIDEO_FRAME_MAX_PIXELS:40000000}
+  # 仅一次性历史补帧使用；默认查询当前桶唯一可用媒体队列，可显式指定真实队列 ID。
+  ci-queue-id: ${VIDEO_FRAME_CI_QUEUE_ID:auto}
+  backfill-max-frames: ${VIDEO_FRAME_BACKFILL_MAX_FRAMES:2400}
+  backfill-item-seconds: ${VIDEO_FRAME_BACKFILL_ITEM_SECONDS:180}
+  backfill-batch-size: ${VIDEO_FRAME_BACKFILL_BATCH_SIZE:20}
+  backfill-poll-seconds: ${VIDEO_FRAME_BACKFILL_POLL_SECONDS:3}
 
 admin:
   point:
@@ -146,3 +160,77 @@ virtual-payment-dispatch:
   worker-count: ${VIRTUAL_PAYMENT_DISPATCH_WORKER_COUNT:4}
   # 单次 runtime 请求连接和读取超时，不在同一轮自动重试。
   request-timeout: ${VIRTUAL_PAYMENT_DISPATCH_REQUEST_TIMEOUT:30s}
+
+video-audio:
+  # 先完成数据库迁移并安装 FFmpeg，再开启；仅复用现有 TokenHub 密钥。
+  enabled: ${WEFOLIO_VIDEO_AUDIO_ENABLED:false}
+  api-key: ${TOKENHUB_API_KEY:}
+  ffmpeg-path: ${WEFOLIO_VIDEO_AUDIO_FFMPEG_PATH:/usr/bin/ffmpeg}
+  ffprobe-path: ${WEFOLIO_VIDEO_AUDIO_FFPROBE_PATH:/usr/bin/ffprobe}
+  total-timeout-seconds: ${WEFOLIO_VIDEO_AUDIO_TOTAL_TIMEOUT_SECONDS:180}
+  download-timeout-seconds: 60
+  probe-timeout-seconds: 10
+  extract-timeout-seconds: 30
+  http-timeout-seconds: 120
+  # 此限制属于单实例；同一作品另由 MySQL 会话锁跨实例互斥。
+  concurrency: ${WEFOLIO_VIDEO_AUDIO_CONCURRENCY:1}
+  max-duration-seconds: 600
+  max-video-bytes: 104857600
+  max-wav-bytes: 26214400
+  max-base64-bytes: 41943040
+  max-temp-bytes: 167772160
+  max-response-bytes: 2097152
+  max-text-code-points: 65536
+  max-text-bytes: 262144
+  # 每轮审核扫描或一次历史显式执行的独立 ASR 预算，不占 maxFrames。
+  max-requests-per-run: ${WEFOLIO_VIDEO_AUDIO_MAX_REQUESTS_PER_RUN:100}
+  max-audio-seconds-per-run: ${WEFOLIO_VIDEO_AUDIO_MAX_SECONDS_PER_RUN:3600}
+
+video-summary:
+  # 先执行 Runtime 的新摘要列迁移再开启，原视频摘要与作品集生成开关独立。
+  enabled: ${WEFOLIO_VIDEO_SUMMARY_ENABLED:false}
+  api-key: ${TOKENHUB_API_KEY:}
+  total-timeout-seconds: ${WEFOLIO_VIDEO_SUMMARY_TOTAL_TIMEOUT_SECONDS:180}
+  connect-timeout-seconds: 10
+  max-response-bytes: 1048576
+  # 时长是应用准入上限，不承诺所有十分钟视频均符合模型上下文限制。
+  max-duration-seconds: ${WEFOLIO_VIDEO_SUMMARY_MAX_DURATION_SECONDS:600}
+  # 默认按十进制 100 MB；仅对已验证范围可配置至 100 MiB 硬上限。
+  max-video-bytes: ${WEFOLIO_VIDEO_SUMMARY_MAX_VIDEO_BYTES:100000000}
+  concurrency: ${WEFOLIO_VIDEO_SUMMARY_CONCURRENCY:1}
+  max-requests-per-run: ${WEFOLIO_VIDEO_SUMMARY_MAX_REQUESTS_PER_RUN:100}
+  max-cost-fen-per-run: ${WEFOLIO_VIDEO_SUMMARY_MAX_COST_FEN_PER_RUN:500}
+  # 包含模型思考用量，轻度思考时也为最终正文留足空间；不与 reasoning_tokens 重复相加。
+  max-output-tokens: 16384
+
+portfolio-ai:
+  # 与 Runtime 共用全局开关，默认关闭；启动读取，重启生效。
+  enabled: ${WEFOLIO_AI_ENABLED:false}
+  media-enabled: ${WEFOLIO_AI_MEDIA_ENABLED:false}
+  reference-enabled: ${WEFOLIO_AI_REFERENCE_ENABLED:false}
+  # 命名锁使用独立小池，不占用业务事务连接。
+  reference-lock-pool-size: ${WEFOLIO_AI_REFERENCE_LOCK_POOL_SIZE:2}
+  reference-max-active-tasks: ${WEFOLIO_AI_REFERENCE_MAX_ACTIVE_TASKS:10}
+  media-task-budget-cents: ${WEFOLIO_AI_MEDIA_TASK_BUDGET_CENTS:300}
+  media-daily-budget-cents: ${WEFOLIO_AI_MEDIA_DAILY_BUDGET_CENTS:2000}
+  media-max-calls: ${WEFOLIO_AI_MEDIA_MAX_CALLS:100}
+  media-cache-days: 7
+  # 服务端固定腾讯云 TokenHub 官方兼容端点及 GLM 模型。
+  base-url: ${WEFOLIO_AI_BASE_URL:https://tokenhub.tencentmaas.com/v1}
+  model: ${WEFOLIO_AI_MODEL:glm-5.3-flash}
+  # 仅 Job 读取服务端凭据，日志与任务 JSON 均不含密钥。
+  api-key: ${TOKENHUB_API_KEY:}
+  user-hmac-secret: ${WEFOLIO_AI_USER_HMAC_SECRET:}
+  # 单实例并发有界，未领取任务始终留在数据库队列。
+  worker-count: ${WEFOLIO_AI_WORKER_COUNT:2}
+  batch-size: ${WEFOLIO_AI_BATCH_SIZE:100}
+  # 与 Runtime 共用任务总期限，包含排队及所有重试。
+  total-timeout-seconds: ${WEFOLIO_AI_TOTAL_TIMEOUT_SECONDS:1200}
+  # 单次调用与中断恢复窗口配套调整，避免慢响应在正常执行中被提前重领。
+  call-timeout-seconds: ${WEFOLIO_AI_CALL_TIMEOUT_SECONDS:300}
+  connect-timeout-seconds: 5
+  recovery-seconds: ${WEFOLIO_AI_RECOVERY_SECONDS:360}
+  max-attempts: 3
+  # 解压响应读取中限制预算，终态到期按小时小批物理清理。
+  max-response-bytes: 2097152
+  retention-days: ${WEFOLIO_AI_RETENTION_DAYS:30}

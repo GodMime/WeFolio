@@ -913,13 +913,14 @@ function buildMockQrContactConfig(componentConfig = {}, components = []) {
   })
 }
 
-function buildMockTextSectionConfig(componentConfig = {}) {
+function buildMockTextSectionConfig(componentConfig = {}, fontContext = {}) {
   const alignment = ['LEFT', 'CENTER', 'RIGHT'].includes(componentConfig.alignment)
     ? componentConfig.alignment
     : MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION.alignment
   const typography = buildPortfolioTextTypography(
     componentConfig,
-    MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION.fontSizeRpx
+    MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION.fontSizeRpx,
+    fontContext
   )
   return Object.assign({}, MOCK_COMPONENT_DEFAULT_CONFIGS.TEXT_SECTION, componentConfig, typography, {
     title: trimText(componentConfig.title),
@@ -1039,7 +1040,7 @@ function listMockPortfolioComponents(config = {}) {
   return allComponents
 }
 
-function buildMockRenderComponents(sourceComponents = [], allSourceComponents = sourceComponents, themeMode = 'light') {
+function buildMockRenderComponents(sourceComponents = [], allSourceComponents = sourceComponents, themeMode = 'light', fontContext = {}) {
   return sourceComponents
     .filter((component) => component.enabled !== false)
     .map(normalizeComponentConfig)
@@ -1130,8 +1131,8 @@ function buildMockRenderComponents(sourceComponents = [], allSourceComponents = 
           componentType: component.componentType,
           name: component.name,
           sortOrder: component.sortOrder,
-          textSection: buildMockTextSectionConfig(componentConfig),
-          viewModel: require('./mock-portfolio-text').buildMockTextViewModel(componentConfig,MOCK_WORK_LIBRARY.works,{themeMode})
+          textSection: buildMockTextSectionConfig(componentConfig,fontContext),
+          viewModel: require('./mock-portfolio-text').buildMockTextViewModel(componentConfig,MOCK_WORK_LIBRARY.works,{themeMode,fontContext})
         }
       }
       if (component.componentType === COMPONENT_TYPES.DIVIDER) {
@@ -1146,9 +1147,9 @@ function buildMockRenderComponents(sourceComponents = [], allSourceComponents = 
       const base = { componentKey: component.componentKey, componentType: component.componentType, name: component.name, sortOrder: component.sortOrder, config: clone(componentConfig) }
       if (component.componentType === 'CONTACT_FORM') return Object.assign(base,{contactForm: clone(componentConfig)})
       if (component.componentType === 'VIDEO_CAROUSEL') return Object.assign(base,{works:findWorksByIds(componentConfig.workIds).filter(work=>work.mediaType === 'VIDEO')})
-      if (component.componentType === 'STRUCTURED_TEXT_SECTION') return Object.assign(base,{viewModel:require('./mock-portfolio-text').buildMockTextViewModel(componentConfig,MOCK_WORK_LIBRARY.works,{structured:true,themeMode})})
+      if (component.componentType === 'STRUCTURED_TEXT_SECTION') return Object.assign(base,{viewModel:require('./mock-portfolio-text').buildMockTextViewModel(componentConfig,MOCK_WORK_LIBRARY.works,{structured:true,themeMode,fontContext})})
       if (component.componentType === 'TEXT_GRID') {
-        try { return Object.assign(base,{viewModel:require('./mock-portfolio-text-grid').buildMockGridViewModel(componentConfig,themeMode)}) }
+        try { return Object.assign(base,{viewModel:require('./mock-portfolio-text-grid').buildMockGridViewModel(componentConfig,themeMode,undefined,{},fontContext)}) }
         catch(error) { return Object.assign(base,{unsupported:true,errorMessage:'文字网格配置暂不可用，请重新编辑'}) }
       }
       if (component.componentType === 'CONTACT_INFO') return base
@@ -1157,13 +1158,13 @@ function buildMockRenderComponents(sourceComponents = [], allSourceComponents = 
     })
 }
 
-function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
+function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG, fontContext = {}) {
   const sourceConfig = normalizeMockPortfolioConfig(config)
   const sourceComponents = Array.isArray(sourceConfig.components) ? sourceConfig.components : []
   const allSourceComponents = listMockPortfolioComponents(sourceConfig)
   const backgroundColor = sourceConfig.style.backgroundColor
   const themeMode = getMockThemeMode(backgroundColor)
-  const components = buildMockRenderComponents(sourceComponents, allSourceComponents,themeMode)
+  const components = buildMockRenderComponents(sourceComponents, allSourceComponents,themeMode,fontContext)
   const bottomNav = sourceConfig.bottomNav.enabled
     ? {
         enabled: true,
@@ -1173,7 +1174,7 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG) {
             title: item.title
           }
           if (index > 0) {
-            renderedItem.components = buildMockRenderComponents(item.components || [], allSourceComponents,themeMode)
+            renderedItem.components = buildMockRenderComponents(item.components || [], allSourceComponents,themeMode,fontContext)
           }
           return renderedItem
         })

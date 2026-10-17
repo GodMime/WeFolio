@@ -1,0 +1,516 @@
+{
+  "sourceCommit": "971336c90e1421453047df57dd6db330047f26df",
+  "sourceSha256": {
+    "projects/miniapp/pages/portfolios/utils/portfolios.js": "df2749fc3af96210c34c435d730fe3adb753e08e5670ff0345c58748e74c2d71",
+    "projects/miniapp/pages/portfolios/utils/portfolio-color.js": "573b74296d13e66eb8ce919aab50ded032c2d12e09486ee66f2a408b4c74e3f5",
+    "projects/miniapp/pages/portfolios/utils/portfolio-background-audio.js": "27320b1d5a257c588995528d74d49afb52f2ed7215407e44c6d0468cae17201f",
+    "projects/miniapp/pages/portfolios/utils/portfolio-text-color.js": "de0b78e93ac8dce8ca8cdc4d948abf9a60b1a343e2d0e6f5e271a546ce306a77",
+    "projects/miniapp/utils/portfolio-text-typography.js": "d3a857a070defbdcd301802afbd504beba3f5c76e378b2787bb94c66ff527873",
+    "projects/miniapp/pages/portfolios/utils/portfolio-text-grid.js": "5d0df8d43c9778f2a1154b2b74602eb35ebc844f75ac50a90cb16bceb6e12bc3",
+    "projects/miniapp/pages/portfolios/standard-edit/portfolio-standard-edit.js": "f9a199350ae7e3a79655b8e1011cea5fc13f45fb78af38d6379921ee34c7a2e4",
+    "projects/miniapp/pages/portfolios/utils/portfolio-contact-info.js": "9f7184778211cca9c56a847b0fce47d494049180af0035a9b4408dfc6d23ea34",
+    "projects/miniapp/pages/portfolios/utils/portfolio-audio-player.js": "92dbdccbec5110906ff4590343bb7e55198da245ba886995ff9cdb103cdd7d89",
+    "projects/miniapp/utils/request.js": "8533bd3948c76fad3fca30c2cced1b4d6de2252651d9ac381f3e66bee622e311",
+    "projects/miniapp/utils/session.js": "07bf656b60c600f130b06a4437a1dedd39566aada41d90f00e78a0acdff1f273",
+    "projects/miniapp/utils/noop.js": "67ec67d96671280d14077a0bd4616071cd757a09759d666d1edb8ca06af9b613",
+    "projects/miniapp/utils/upload-file.js": "74bd296c7068a3e8f7419dd6300de5664187ae30d1aecd2f8d4844c2381ae859",
+    "projects/miniapp/utils/profile.js": "1647dad822938d2aa54e43dbe4c0f61cbd791a8435b00cbc1bc92fbb8b9945ad",
+    "projects/miniapp/pages/portfolios/utils/works.js": "104b2084b954300a85f76f3888dd9870da55c61ef1a41d5cae6ebf5081b1dc90",
+    "projects/miniapp/utils/id.js": "bc5dfdbe154770c6fa6732419d23a44318b9d21def5c9b8498fa9c4a97a3e12f",
+    "projects/miniapp/pages/portfolios/utils/work-media.js": "71a70565711d1a22d66bcb0e2d04a15665874af621fa9a48e0b413bbcebf47b3",
+    "projects/miniapp/pages/portfolios/utils/video-carousel.js": "2d17fd4c77c23f05f8041e37a6fa47d7a5930cec802b96e6c34c6d4c61a35689",
+    "projects/miniapp/pages/portfolios/utils/display-group-layout.js": "14b7f65565a9a6bd41478d27a5411f901d547b58d7a8f300de805f208443377e",
+    "projects/miniapp/pages/portfolios/utils/portfolio-work-media.js": "8a0f7ba5ecf428b1438a3bf35f8afb617150b34944f52bbc623842461178042e",
+    "projects/miniapp/pages/portfolios/utils/portfolio-publish-disclaimer.js": "12b641506c4eecc4a2bc7995828aecdac71abb472733d702414b32db49402c43",
+    "projects/miniapp/pages/portfolios/utils/portfolio-assets.js": "c9f53f7317ddd093b679caae6a338de6bd3b839112bc25eea045e7d7354b2b36",
+    "projects/miniapp/pages/portfolios/utils/portfolio-text-sections.js": "1586f3380848d9adc9210f583e2e4323e72e7b6a2bd69b193c249a468dc68318",
+    "projects/miniapp/utils/portfolio-font-loader.js": "72148fe6a73eca7c53bbd4f283d68c1ef422cb7516b7f967eb7db89839109757",
+    "projects/miniapp/pages/team-portfolios/utils/team-portfolios.js": "2cc34adaa559e36ea06789f11bedc4488affebe1f8dc48254d7b1b0b5b079893",
+    "projects/miniapp/pages/team-portfolios/utils/portfolio-text-grid.js": "5d0df8d43c9778f2a1154b2b74602eb35ebc844f75ac50a90cb16bceb6e12bc3",
+    "projects/miniapp/pages/team-portfolios/utils/portfolio-contact-info.js": "9f7184778211cca9c56a847b0fce47d494049180af0035a9b4408dfc6d23ea34",
+    "projects/miniapp/pages/team-portfolios/utils/portfolio-background-audio.js": "27320b1d5a257c588995528d74d49afb52f2ed7215407e44c6d0468cae17201f",
+    "projects/miniapp/pages/team-portfolios/utils/portfolio-text-color.js": "af592831db964b75ca0587037d9a3b581ab2d880ff59853ce03b9a05860ea21c",
+    "projects/miniapp/pages/team-portfolios/utils/team-portfolio-list.js": "d4edf2c48b663efa3c025a3b92b825f244af0ab3936602a46afc76b4ef2c05e2",
+    "projects/miniapp/pages/team-portfolios/utils/portfolio-text-sections.js": "1586f3380848d9adc9210f583e2e4323e72e7b6a2bd69b193c249a468dc68318",
+    "projects/miniapp/pages/team-portfolios/standard-edit/team-portfolio-standard-edit.js": "7f1cfc3fdfeb4580a394d1e33cfef6713e5e8d87d885d4b8f7710036ba593651",
+    "projects/miniapp/pages/team-portfolios/utils/portfolio-audio-player.js": "92dbdccbec5110906ff4590343bb7e55198da245ba886995ff9cdb103cdd7d89",
+    "projects/miniapp/utils/profile-assets.js": "6299b3612c9c596cc983fd41b5a4c4394bb8aafdd9305dded9cecfdd71896c8c",
+    "projects/miniapp/pages/team-portfolios/utils/team-portfolio-assets.js": "6b219949fe094fbd373d7ed2e908825bf6886bf049c1943bd8e9cc383af4dff5",
+    "projects/miniapp/pages/team-portfolios/utils/team-portfolio-color.js": "885db0c5bf0397700ca3daa37ff674e7673a3988730cbc30c6f4c834f7689f36",
+    "projects/miniapp/pages/team-portfolios/utils/portfolio-publish-disclaimer.js": "12b641506c4eecc4a2bc7995828aecdac71abb472733d702414b32db49402c43",
+    "projects/miniapp/pages/team-portfolios/utils/video-carousel.js": "2d17fd4c77c23f05f8041e37a6fa47d7a5930cec802b96e6c34c6d4c61a35689"
+  },
+  "requests": {
+    "portfolios": {
+      "untouched": {
+        "config": {
+          "schemaVersion": "standard-personal-v1",
+          "editorSchemaRevision": 14,
+          "share": {
+            "title": "",
+            "coverUrl": "",
+            "avatarUrl": ""
+          },
+          "style": {
+            "backgroundColor": "#FFFFFF",
+            "componentSpacingRpx": 32
+          },
+          "backgroundAudio": {
+            "enabled": false,
+            "workId": null,
+            "displayStyle": "DISC"
+          },
+          "components": [
+            {
+              "componentKey": "plain",
+              "componentType": "TEXT_SECTION",
+              "name": "文字说明",
+              "sortOrder": 1000,
+              "enabled": true,
+              "config": {
+                "content": "旧端保存",
+                "fontFamily": "SYSTEM",
+                "fontId": "ALLURA",
+                "color": "AUTO",
+                "alignment": "LEFT",
+                "fontSizeRpx": 26
+              }
+            },
+            {
+              "componentKey": "structured",
+              "componentType": "STRUCTURED_TEXT_SECTION",
+              "name": "结构化文字说明",
+              "sortOrder": 2000,
+              "enabled": true,
+              "config": {
+                "blocks": [
+                  {
+                    "blockKey": "title",
+                    "type": "TITLE",
+                    "content": "旧端标题",
+                    "fontId": "ALLURA"
+                  }
+                ]
+              }
+            },
+            {
+              "componentKey": "grid",
+              "componentType": "TEXT_GRID",
+              "name": "文字网格",
+              "sortOrder": 3000,
+              "enabled": true,
+              "config": {
+                "rows": 1,
+                "columns": 1,
+                "columnWeights": [
+                  1
+                ],
+                "rowMinHeightsRpx": [
+                  180
+                ],
+                "gapRpx": 16,
+                "cellPaddingRpx": 24,
+                "cellRadiusRpx": 24,
+                "cellBorder": false,
+                "cellBackground": "AUTO",
+                "cellBorderWidthRpx": 1,
+                "cellBorderColor": "#D7DADD",
+                "horizontalMarginRpx": 0,
+                "verticalMarginRpx": 0,
+                "cells": [
+                  {
+                    "cellKey": "cell_muc1o9nh_9sn6yh6",
+                    "row": 0,
+                    "column": 0,
+                    "rowSpan": 1,
+                    "columnSpan": 1,
+                    "verticalAlignment": "CENTER",
+                    "blocks": [
+                      {
+                        "blockKey": "block_muc1o9nh_4p9boel",
+                        "alignment": "CENTER",
+                        "marginTopRpx": 0,
+                        "marginBottomRpx": 12,
+                        "runs": [
+                          {
+                            "runKey": "run_muc1o9nh_opbv47w",
+                            "text": "旧端网格",
+                            "fontFamily": "SYSTEM",
+                            "fontSizeRpx": 28,
+                            "fontWeight": "NORMAL",
+                            "color": "AUTO",
+                            "fontId": "ALLURA"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "bottomNav": {
+            "enabled": false
+          }
+        },
+        "clientRevision": 7,
+        "idempotencyKey": "legacy-font-contract"
+      },
+      "edited": {
+        "config": {
+          "schemaVersion": "standard-personal-v1",
+          "editorSchemaRevision": 14,
+          "share": {
+            "title": "",
+            "coverUrl": "",
+            "avatarUrl": ""
+          },
+          "style": {
+            "backgroundColor": "#FFFFFF",
+            "componentSpacingRpx": 32
+          },
+          "backgroundAudio": {
+            "enabled": false,
+            "workId": null,
+            "displayStyle": "DISC"
+          },
+          "components": [
+            {
+              "componentKey": "plain",
+              "componentType": "TEXT_SECTION",
+              "name": "文字说明",
+              "sortOrder": 1000,
+              "enabled": true,
+              "config": {
+                "backgroundEnabled": false,
+                "backgroundTreatment": "GRADIENT",
+                "verticalAlignment": "CENTER",
+                "backgroundLoading": false,
+                "backgroundLoadError": "",
+                "content": "旧端保存",
+                "color": "AUTO",
+                "alignment": "LEFT",
+                "fontFamily": "SYSTEM",
+                "fontSizeRpx": 26
+              }
+            },
+            {
+              "componentKey": "structured",
+              "componentType": "STRUCTURED_TEXT_SECTION",
+              "name": "结构化文字说明",
+              "sortOrder": 2000,
+              "enabled": true,
+              "config": {
+                "backgroundEnabled": false,
+                "backgroundTreatment": "GRADIENT",
+                "blocks": [
+                  {
+                    "blockKey": "title",
+                    "type": "TITLE",
+                    "marginTopRpx": 24,
+                    "marginBottomRpx": 16,
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 44,
+                    "fontWeight": "BOLD",
+                    "color": "AUTO",
+                    "alignment": "LEFT",
+                    "content": "旧端标题"
+                  }
+                ]
+              }
+            },
+            {
+              "componentKey": "grid",
+              "componentType": "TEXT_GRID",
+              "name": "文字网格",
+              "sortOrder": 3000,
+              "enabled": true,
+              "config": {
+                "rows": 1,
+                "columns": 1,
+                "columnWeights": [
+                  1
+                ],
+                "rowMinHeightsRpx": [
+                  180
+                ],
+                "gapRpx": 16,
+                "cellPaddingRpx": 24,
+                "cellRadiusRpx": 24,
+                "cellBorder": false,
+                "cellBackground": "AUTO",
+                "cellBorderWidthRpx": 1,
+                "cellBorderColor": "#D7DADD",
+                "horizontalMarginRpx": 0,
+                "verticalMarginRpx": 0,
+                "cells": [
+                  {
+                    "cellKey": "cell_muc1o9nh_9sn6yh6",
+                    "row": 0,
+                    "column": 0,
+                    "rowSpan": 1,
+                    "columnSpan": 1,
+                    "verticalAlignment": "CENTER",
+                    "blocks": [
+                      {
+                        "blockKey": "block_muc1o9nh_4p9boel",
+                        "alignment": "CENTER",
+                        "marginTopRpx": 0,
+                        "marginBottomRpx": 12,
+                        "runs": [
+                          {
+                            "runKey": "run_muc1o9nh_opbv47w",
+                            "text": "旧端网格",
+                            "fontFamily": "SYSTEM",
+                            "fontSizeRpx": 28,
+                            "fontWeight": "NORMAL",
+                            "color": "AUTO",
+                            "fontId": "ALLURA"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "bottomNav": {
+            "enabled": false
+          }
+        },
+        "clientRevision": 7,
+        "idempotencyKey": "legacy-font-edited-contract"
+      }
+    },
+    "team-portfolios": {
+      "untouched": {
+        "config": {
+          "schemaVersion": "standard-team-v1",
+          "editorSchemaRevision": 10,
+          "share": {
+            "title": "",
+            "description": "",
+            "coverUrl": ""
+          },
+          "style": {
+            "backgroundColor": "#FFFFFF"
+          },
+          "components": [
+            {
+              "componentKey": "plain",
+              "componentType": "TEXT_SECTION",
+              "sortOrder": 1000,
+              "enabled": true,
+              "config": {
+                "content": "旧端保存",
+                "fontFamily": "SYSTEM",
+                "fontId": "ALLURA"
+              }
+            },
+            {
+              "componentKey": "structured",
+              "componentType": "STRUCTURED_TEXT_SECTION",
+              "sortOrder": 2000,
+              "enabled": true,
+              "config": {
+                "blocks": [
+                  {
+                    "blockKey": "title",
+                    "type": "TITLE",
+                    "content": "旧端标题",
+                    "fontId": "ALLURA"
+                  }
+                ]
+              }
+            },
+            {
+              "componentKey": "grid",
+              "componentType": "TEXT_GRID",
+              "sortOrder": 3000,
+              "enabled": true,
+              "config": {
+                "rows": 1,
+                "columns": 1,
+                "columnWeights": [
+                  1
+                ],
+                "rowMinHeightsRpx": [
+                  180
+                ],
+                "gapRpx": 16,
+                "cellPaddingRpx": 24,
+                "cellRadiusRpx": 24,
+                "cellBorder": false,
+                "cellBackground": "AUTO",
+                "cells": [
+                  {
+                    "cellKey": "cell_muc1o9tk_a7qtb99",
+                    "row": 0,
+                    "column": 0,
+                    "rowSpan": 1,
+                    "columnSpan": 1,
+                    "verticalAlignment": "CENTER",
+                    "blocks": [
+                      {
+                        "blockKey": "block_muc1o9tk_z47vgf6",
+                        "alignment": "CENTER",
+                        "marginTopRpx": 0,
+                        "marginBottomRpx": 12,
+                        "runs": [
+                          {
+                            "runKey": "run_muc1o9tk_im3nqxp",
+                            "text": "旧端网格",
+                            "fontFamily": "SYSTEM",
+                            "fontSizeRpx": 28,
+                            "fontWeight": "NORMAL",
+                            "color": "AUTO",
+                            "fontId": "ALLURA"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "cellBorderWidthRpx": 1,
+                "cellBorderColor": "#D7DADD",
+                "horizontalMarginRpx": 0,
+                "verticalMarginRpx": 0
+              }
+            }
+          ],
+          "backgroundAudio": {
+            "enabled": false,
+            "workId": null,
+            "displayStyle": "DISC"
+          },
+          "bottomNav": {
+            "enabled": false
+          }
+        },
+        "clientRevision": 7,
+        "idempotencyKey": "legacy-font-contract"
+      },
+      "edited": {
+        "config": {
+          "schemaVersion": "standard-team-v1",
+          "editorSchemaRevision": 10,
+          "share": {
+            "title": "",
+            "description": "",
+            "coverUrl": ""
+          },
+          "style": {
+            "backgroundColor": "#FFFFFF"
+          },
+          "components": [
+            {
+              "componentKey": "plain",
+              "componentType": "TEXT_SECTION",
+              "sortOrder": 1000,
+              "enabled": true,
+              "config": {
+                "content": "旧端保存",
+                "color": "AUTO",
+                "alignment": "LEFT",
+                "fontFamily": "SYSTEM",
+                "fontSizeRpx": 32,
+                "backgroundEnabled": false,
+                "backgroundTreatment": "GRADIENT",
+                "verticalAlignment": "CENTER"
+              }
+            },
+            {
+              "componentKey": "structured",
+              "componentType": "STRUCTURED_TEXT_SECTION",
+              "sortOrder": 2000,
+              "enabled": true,
+              "config": {
+                "backgroundEnabled": false,
+                "backgroundTreatment": "GRADIENT",
+                "blocks": [
+                  {
+                    "blockKey": "title",
+                    "type": "TITLE",
+                    "marginTopRpx": 24,
+                    "marginBottomRpx": 16,
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 44,
+                    "fontWeight": "BOLD",
+                    "color": "AUTO",
+                    "alignment": "LEFT",
+                    "content": "旧端标题"
+                  }
+                ]
+              }
+            },
+            {
+              "componentKey": "grid",
+              "componentType": "TEXT_GRID",
+              "sortOrder": 3000,
+              "enabled": true,
+              "config": {
+                "rows": 1,
+                "columns": 1,
+                "columnWeights": [
+                  1
+                ],
+                "rowMinHeightsRpx": [
+                  180
+                ],
+                "gapRpx": 16,
+                "cellPaddingRpx": 24,
+                "cellRadiusRpx": 24,
+                "cellBorder": false,
+                "cellBackground": "AUTO",
+                "cells": [
+                  {
+                    "cellKey": "cell_muc1o9tk_a7qtb99",
+                    "row": 0,
+                    "column": 0,
+                    "rowSpan": 1,
+                    "columnSpan": 1,
+                    "verticalAlignment": "CENTER",
+                    "blocks": [
+                      {
+                        "blockKey": "block_muc1o9tk_z47vgf6",
+                        "alignment": "CENTER",
+                        "marginTopRpx": 0,
+                        "marginBottomRpx": 12,
+                        "runs": [
+                          {
+                            "runKey": "run_muc1o9tk_im3nqxp",
+                            "text": "旧端网格",
+                            "fontFamily": "SYSTEM",
+                            "fontSizeRpx": 28,
+                            "fontWeight": "NORMAL",
+                            "color": "AUTO",
+                            "fontId": "ALLURA"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "cellBorderWidthRpx": 1,
+                "cellBorderColor": "#D7DADD",
+                "horizontalMarginRpx": 0,
+                "verticalMarginRpx": 0
+              }
+            }
+          ],
+          "backgroundAudio": {
+            "enabled": false,
+            "workId": null,
+            "displayStyle": "DISC"
+          },
+          "bottomNav": {
+            "enabled": false
+          }
+        },
+        "clientRevision": 7,
+        "idempotencyKey": "legacy-font-edited-contract"
+      }
+    }
+  }
+}

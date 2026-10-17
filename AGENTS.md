@@ -137,6 +137,7 @@ service/       业务服务
 │   └── video/                 ← 视频类作品（.mp4/.mov 等）
 ├── protfolio/                 ← 作品集素材（封面/背景/布局快照）
 └── others/                    ← 头像、微信二维码、其它杂项
+    └── fonts/                 ← 按作品集 ID 隔离的字体子集
 ```
 
 **上传路径约定：**
@@ -144,12 +145,15 @@ service/       业务服务
 - 视频作品 → `{uniqueCode}/work/video/{uuid}.{ext}`
 - 头像 → `{uniqueCode}/others/{uuid}.{ext}`
 - 作品集素材 → `{uniqueCode}/protfolio/{uuid}.{ext}`
+- 作品集字体 → `{ownerUniqueCode}/others/fonts/{portfolioId}/{uuid}.woff`；个人使用用户唯一码，团队使用团队唯一码，不使用当前操作者的个人目录。
 
 **实现细节：**
 - 文件夹通过 0 字节空对象（Content-Type: application/x-directory）模拟
 - 注册时 `MiniappAuthService` → `CosService.initUserStorage(uniqueCode)` 一次性创建全部文件夹
 - 初始化失败会阻断注册，`MiniappAuthService` 会抛出业务异常并终止注册流程
 - `CosService.upload(file, folderPrefix)` 用于上传到指定目录
+- 新用户 `initUserStorage` 和新团队 `initTeamStorage` 均创建 `others/fonts/` 的 0 字节目录占位对象；作品集 ID 子目录随首次上传产生，字体目录初始化沿用各自原失败语义。
+- 历史目录复用 `UserStorageFolderRepairService`：用户保留 `work/animation/`、`work/audio/` 并补 `others/fonts/`；同一执行内按独立团队 ID 游标分页，仅补团队 `others/fonts/`，不创建团队 work 目录。只补空目录，不生成或删除字体，也不新增字体 Job。
 
 ## 数据库约定
 
@@ -167,6 +171,8 @@ Flyway 规则：
 - 所有 SQL 变更都必须走 `projects/java/wefolio-java-runtime/` 工程的 Flyway SQL 脚本，包括建表、改表、索引、约束、初始化数据和数据修正 SQL。
 - 已提交或已执行的 migration 绝对不要修改。
 - 数据库变更必须新增 `V{version}__{description}.sql`。
+- 全量 DDL 位于 [`projects/java/wefolio-java-runtime/full-schema.sql`](projects/java/wefolio-java-runtime/full-schema.sql)，仅供数据结构分析，不执行、不参与 Flyway 迁移。
+- 每次数据库结构变更（包括 job 所需变更）必须在同一任务中新增增量 migration，并同步修改 `full-schema.sql` 中对应的完整 `CREATE TABLE` 定义，使表、字段、索引、约束、注释和表选项与迁移后的结构一致；完成前必须核对两者。纯数据迁移不改变结构时，无需改动全量 DDL。
 - **禁止在 migration 中写入"重置/清理"类破坏性数据操作**（如 `DELETE` 全表、`UPDATE` 清零余额/流水）；数据重置与清理只能在对应环境手工执行并留痕，不得以 Flyway migration 形式进入迁移链。
 
 ## 小程序约定
@@ -188,7 +194,7 @@ Flyway 规则：
 ## Mock 体验版约定
 
 - mock 体验版必须完全独立于正式维护者端页面和组件；除登录页的“体验”入口和跳转外，不要改动既有正式页面或正式组件来承载 mock 行为。
-- mock 页面统一放在 `projects/miniapp/pages/mock/`，mock 专用组件统一放在 `projects/miniapp/components/mock/`，mock 数据、作品集 JSON 和本地草稿逻辑统一放在 `projects/miniapp/utils/mock-experience.js` 或同级 mock 专用文件。
+- mock 页面统一放在 `projects/miniapp/pages/mock/`，mock 专用组件统一放在 `projects/miniapp/components/mock/`，mock 数据、作品集 JSON 和本地草稿逻辑统一放在 `projects/miniapp/pages/mock/utils/mock-experience.js` 或同级 mock 专用文件。
 - mock 页面禁止引入 `projects/miniapp/utils/request.js`、`projects/miniapp/utils/session.js`、上传工具或访客会话工具；禁止调用 `wx.request`、`wx.uploadFile`、`/api/`、维护者 token/session 或任何后端接口。
 - mock 的档期、作品、素材库、作品集、编辑、预览、“我的”等数据只使用本地 mock 数据或本地草稿态；新增、保存草稿、发布、档位操作等需要后端身份的动作统一提示 `请去“我的”页面注册登录`。
 - mock 页面可以复用不需要改动的展示组件和样式；如果复用会导致修改正式页面或正式组件，则新建 mock 专用组件。

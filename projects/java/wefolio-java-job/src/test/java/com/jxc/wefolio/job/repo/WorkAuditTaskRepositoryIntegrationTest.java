@@ -43,11 +43,74 @@ class WorkAuditTaskRepositoryIntegrationTest {
         assertThat(repository.claimVideoQuery(101L, "query-owner", NOW.plusMinutes(10), NOW.plusMinutes(15), 120)).isTrue();
     }
 
+    /** 第 120 次查询在新租约内不能被另一领取者回收，原 PASS 结果仍能写入。 */
+    @Test
+    void finalQueryMustRemainOwnedUntilItsFreshLeaseExpires() {
+        LocalDateTime claimNow = LocalDateTime.now();
+        LocalDateTime cutoff = claimNow.minusSeconds(400);
+        insertWork(99L, "AUDITING", 1, 0L);
+        insertVideoTask(999L, 99L, "SUBMITTED", 1, 119, cutoff.minusSeconds(1), 1);
+        assertThat(repository.findQueryableVideoTasks(1, 120, cutoff)).hasSize(1);
+        assertThat(repository.claimVideoQuery(999L, "current-query", claimNow, claimNow.plusSeconds(300), 120)).isTrue();
+        assertThat(repository.claimExhaustedExpiredVideoQuery(999L, "other-instance", claimNow.plusSeconds(1),
+                claimNow.plusSeconds(301), 120)).isFalse();
+        assertThat(repository.markVideoSuccess(999L, "current-query", AuditResultDict.PASS,
+                "Success", 0, "Normal", 0, "{}")).isTrue();
+        assertThat(taskValue(999L, "audit_result", String.class)).isEqualTo(AuditResultDict.PASS.getCode());
+    }
+
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 13, 12, 0);
 
     private JdbcTemplate jdbcTemplate;
     private SqlSession sqlSession;
     private WorkAuditTaskRepository repository;
+
+    /** 新平均任务不能落入旧重提/查询恢复条件，只能失败回收。 */
+    @Test
+    void interruptedAverageMustNeverEnterLegacyRecovery() {
+        insertWork(91L, "AUDITING", 1, 0L);
+        jdbcTemplate.update("UPDATE wf_work SET media_object_key = 'video/test.mp4' WHERE id = 91");
+        insertVideoTask(901L, 91L, "SUBMITTING", 1, 0, NOW.minusMinutes(1), 1);
+        jdbcTemplate.update("UPDATE wf_work_audit_task SET snapshot_mode = 'AVERAGE' WHERE id = 901");
+        assertThat(repository.findRetryableExpiredVideoSubmitTasks(20, 3, NOW)).isEmpty();
+        assertThat(repository.findExhaustedExpiredVideoSubmitTasks(20, 3, NOW)).isEmpty();
+        assertThat(repository.claimExpiredVideoSubmit(901L, "old-retry", NOW, NOW.plusMinutes(5), 3)).isFalse();
+        assertThat(repository.findInterruptedPersistentVideoTasks(20, NOW))
+                .extracting(WorkAuditTaskEntity::getId).containsExactly(901L);
+        jdbcTemplate.update("UPDATE wf_work_audit_task SET task_status = 'QUERYING' WHERE id = 901");
+        assertThat(repository.findQueryableVideoTasks(20, 120, NOW)).isEmpty();
+        assertThat(repository.countQueryableVideoTasks(120, NOW)).isZero();
+        assertThat(repository.claimVideoQuery(901L, "old-query", NOW, NOW.plusMinutes(5), 120)).isFalse();
+        assertThat(repository.claimInterruptedPersistentVideo(901L, "terminal", NOW, NOW.plusMinutes(5))).isTrue();
+        assertThat(taskValue(901L, "attempt_count", Integer.class)).isEqualTo(1);
+        assertThat(taskValue(901L, "query_count", Integer.class)).isZero();
+    }
+
+    /** 最终写回必须持有未过期 token 且源/轮次未变化。 */
+    @Test
+    void persistentTerminalWriteMustGuardLeaseRoundAndSource() {
+        LocalDateTime now = LocalDateTime.now();
+        insertWork(92L, "AUDITING", 1, 0L);
+        jdbcTemplate.update("UPDATE wf_work SET media_object_key = 'video/test.mp4' WHERE id = 92");
+        insertVideoTask(902L, 92L, "QUERYING", 1, 1, now.plusMinutes(5), 1);
+        jdbcTemplate.update("UPDATE wf_work_audit_task SET snapshot_mode = 'AVERAGE', locked_by = 'owner' WHERE id = 902");
+        WorkAuditTaskEntity task = new WorkAuditTaskEntity(); task.setId(902L); task.setLockedBy("owner");
+        task.setCiJobId("ci-job");
+        task.setLockedBy("wrong");
+        assertThat(repository.finishPersistentVideo(task, null, "FRAME_UPLOAD: failed", "{}")).isFalse();
+        task.setLockedBy("owner");
+        jdbcTemplate.update("UPDATE wf_work SET media_object_key = 'new-video.mp4' WHERE id = 92");
+        assertThat(repository.finishPersistentVideo(task, null, "FRAME_UPLOAD: failed", "{}")).isFalse();
+        jdbcTemplate.update("UPDATE wf_work SET media_object_key = 'video/test.mp4', audit_round = 2 WHERE id = 92");
+        assertThat(repository.finishPersistentVideo(task, null, "FRAME_UPLOAD: failed", "{}")).isFalse();
+        jdbcTemplate.update("UPDATE wf_work SET audit_round = 1 WHERE id = 92");
+        jdbcTemplate.update("UPDATE wf_work_audit_task SET locked_until = ? WHERE id = 902", now.minusMinutes(1));
+        assertThat(repository.finishPersistentVideo(task, null, "FRAME_UPLOAD: failed", "{}")).isFalse();
+        jdbcTemplate.update("UPDATE wf_work_audit_task SET locked_until = ? WHERE id = 902", now.plusMinutes(5));
+        assertThat(repository.finishPersistentVideo(task, null, "FRAME_UPLOAD: failed", "{}")).isTrue();
+        assertThat(taskValue(902L, "task_status", String.class)).isEqualTo("FAILED");
+        assertThat(taskValue(902L, "ci_job_id", String.class)).isEqualTo("ci-job");
+    }
 
     @BeforeEach
     void setUp() {
@@ -273,6 +336,8 @@ class WorkAuditTaskRepositoryIntegrationTest {
                   audit_status VARCHAR(32) NOT NULL,
                   audit_round INT NOT NULL,
                   manual_audit_no VARCHAR(34),
+                  media_object_key VARCHAR(512),
+                  media_sha256 VARCHAR(64),
                   deleted BIGINT NOT NULL
                 )
                 """);
@@ -295,6 +360,10 @@ class WorkAuditTaskRepositoryIntegrationTest {
                   ci_score INT,
                   snapshot_interval_seconds INT,
                   snapshot_count INT,
+                  snapshot_mode VARCHAR(32) DEFAULT 'INTERVAL',
+                  snapshot_duration_ms INT,
+                  snapshot_policy_version VARCHAR(64),
+                  snapshot_source_version VARCHAR(64),
                   sampled_frame_numbers VARCHAR(1000),
                   attempt_count INT NOT NULL,
                   query_count INT NOT NULL,

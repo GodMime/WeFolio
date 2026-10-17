@@ -622,6 +622,7 @@ test_rolling_deploy_uses_the_required_success_sequence() {
     local status expected_events
     TEST_EVENTS=""
 
+    check_health_once() { return 0; }
     build_artifact() { record_event "build"; return 0; }
     preflight() { record_event "preflight"; return 0; }
     switch_nginx_mode() { record_event "nginx:$1"; return 0; }
@@ -651,6 +652,7 @@ test_old_node_failure_stays_on_new_only() {
     local status expected_events
     TEST_EVENTS=""
 
+    check_health_once() { return 0; }
     build_artifact() { record_event "build"; return 0; }
     preflight() { record_event "preflight"; return 0; }
     switch_nginx_mode() { record_event "nginx:$1"; return 0; }
@@ -674,6 +676,7 @@ test_new_node_failure_stays_on_old_only() {
     TEST_EVENTS=""
     deploy_count=0
 
+    check_health_once() { return 0; }
     build_artifact() { record_event "build"; return 0; }
     preflight() { record_event "preflight"; return 0; }
     switch_nginx_mode() { record_event "nginx:$1"; return 0; }
@@ -705,6 +708,7 @@ deploy:new"
 test_rolling_deploy_reports_major_step_durations_with_server_ips() {
     local output status
 
+    check_health_once() { return 0; }
     build_artifact() { return 0; }
     preflight() { return 0; }
     switch_nginx_mode() { return 0; }
@@ -763,7 +767,89 @@ test_main_enters_the_rolling_deploy_state_machine() {
     fi
 }
 
-test_source_does_not_execute_deployment
+# 最后双节点复核失败必须保持单节点路由，不能恢复轮询。
+test_final_health_failure_stops_round_robin() {
+    local events status
+    events="$(
+        source "$DEPLOY_SCRIPT" >/dev/null
+        set +e
+        build_artifact() { return 0; }
+        preflight() { return 0; }
+        deploy_node() { return 0; }
+        switch_nginx_mode() { echo "nginx:$1"; }
+        check_health_once() { return 1; }
+        rolling_deploy
+    )"
+    status=$?
+    assert_equals "1" "$status" "最终节点不健康必须阻止恢复轮询"
+    assert_not_contains "$events" 'nginx:round_robin' "不健康节点不得加入轮询"
+}
+
+# 实际健康读取必须解析远端返回的响应，不使用 grep 的任意嵌套 UP。
+test_health_json_validation_rejects_nested_up() {
+    local status
+    (
+        source "$DEPLOY_SCRIPT" >/dev/null
+        set +e
+        ssh_exec() { printf '%s' '{"data":{"status":"DOWN","nested":{"status":"UP"}}}'; }
+        check_health_once "http://localhost/health" >/dev/null 2>&1
+    )
+    status=$?
+    assert_equals "1" "$status" "不能把任意嵌套 UP 当作整站健康"
+}
+
+# 旧版健康响应和附带异常字体诊断的响应，都只按服务级状态判断。
+test_health_check_is_independent_of_font_configuration() {
+    local response_body status
+    for response_body in '{"data":{"status":"UP"}}' \
+        '{"data":{"status":"UP","portfolioFonts":{"enabled":false,"ready":false,"buildId":"different","reasonCodes":["BUILD_MISMATCH"]}}}'; do
+        (
+            source "$DEPLOY_SCRIPT" >/dev/null
+            set +e
+            ssh_exec() { printf '%s' "$response_body"; }
+            check_health_once "http://localhost/health"
+        )
+        status=$?
+        assert_equals "0" "$status" "服务健康时不依赖字体阶段、就绪或构建参数"
+    done
+}
+
+# 空响应、无效 JSON、异常结构和传输失败均不得恢复流量。
+test_health_check_rejects_invalid_response_and_transport_failure() {
+    local response_body status
+    for response_body in '' 'not-json' 'null' '[]' '{}' '{"data":null}' '{"data":[]}' \
+        '{"status":"UP"}' '{"data":{"status":"DOWN"}}'; do
+        (
+            source "$DEPLOY_SCRIPT" >/dev/null
+            set +e
+            ssh_exec() { printf '%s' "$response_body"; }
+            check_health_once "http://localhost/health" >/dev/null 2>&1
+        )
+        status=$?
+        assert_equals "1" "$status" "无效响应必须阻止发布"
+    done
+    (
+        source "$DEPLOY_SCRIPT" >/dev/null
+        set +e
+        ssh_exec() { printf '%s' '{"data":{"status":"UP"}}'; return 7; }
+        check_health_once "http://localhost/health" >/dev/null 2>&1
+    )
+    assert_equals "1" "$?" "传输失败不得使用残留健康正文"
+}
+
+# 只有函数执行且没有新增断言失败才发出机器可核验标记。
+run_test() {
+    local name="$1" before="$TEST_FAILURES" status
+    "$name"
+    status=$?
+    if [[ "$status" -eq 0 && "$TEST_FAILURES" -eq "$before" ]]; then
+        echo "DEPLOY_TEST_PASSED $name"
+    else
+        TEST_FAILURES=$((TEST_FAILURES + 1))
+    fi
+}
+
+run_test test_source_does_not_execute_deployment
 
 TEST_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wefolio-deploy-test.XXXXXX")"
 trap 'rm -rf "${TEST_TMP_DIR}"' EXIT
@@ -771,31 +857,36 @@ trap 'rm -rf "${TEST_TMP_DIR}"' EXIT
 source "${DEPLOY_SCRIPT}"
 set +e
 
-test_timed_step_reports_success_duration_with_server_ip
-test_timed_step_reports_failure_duration_and_preserves_status
-test_round_robin_renderer_only_changes_runtime_upstream
-test_single_node_modes_only_drain_the_deploying_node
-test_renderer_rejects_incomplete_runtime_upstream
-test_switch_nginx_mode_uploads_the_rendered_candidate
-test_nginx_validation_failure_restores_previous_config
-test_nginx_reload_failure_restores_previous_config
-test_remote_install_keeps_exactly_one_previous_jar_backup
-test_remote_checksum_failure_preserves_formal_jar_without_backup
-test_health_polling_starts_after_three_seconds
-test_health_polling_stops_at_thirty_second_deadline
-test_deploy_node_installs_restarts_once_and_then_checks_health
-test_deploy_node_health_failure_does_not_restart_or_restore_again
-test_deploy_node_checksum_failure_never_restarts_service
-test_deploy_node_reports_timed_substeps_with_server_ip
-test_build_artifact_packages_once_and_records_sha256
-test_preflight_validates_nginx_and_both_nodes_before_switching
-test_preflight_fails_when_either_node_is_unhealthy
-test_rolling_deploy_uses_the_required_success_sequence
-test_old_node_failure_stays_on_new_only
-test_new_node_failure_stays_on_old_only
-test_rolling_deploy_reports_major_step_durations_with_server_ips
-test_main_enters_the_rolling_deploy_state_machine
-test_main_reports_total_duration_when_rolling_deploy_fails
+run_test test_timed_step_reports_success_duration_with_server_ip
+run_test test_timed_step_reports_failure_duration_and_preserves_status
+run_test test_round_robin_renderer_only_changes_runtime_upstream
+run_test test_single_node_modes_only_drain_the_deploying_node
+run_test test_renderer_rejects_incomplete_runtime_upstream
+run_test test_switch_nginx_mode_uploads_the_rendered_candidate
+run_test test_nginx_validation_failure_restores_previous_config
+run_test test_nginx_reload_failure_restores_previous_config
+run_test test_remote_install_keeps_exactly_one_previous_jar_backup
+run_test test_remote_checksum_failure_preserves_formal_jar_without_backup
+run_test test_health_polling_starts_after_three_seconds
+run_test test_health_polling_stops_at_thirty_second_deadline
+run_test test_deploy_node_installs_restarts_once_and_then_checks_health
+run_test test_deploy_node_health_failure_does_not_restart_or_restore_again
+run_test test_deploy_node_checksum_failure_never_restarts_service
+run_test test_deploy_node_reports_timed_substeps_with_server_ip
+run_test test_build_artifact_packages_once_and_records_sha256
+run_test test_preflight_validates_nginx_and_both_nodes_before_switching
+run_test test_preflight_fails_when_either_node_is_unhealthy
+run_test test_rolling_deploy_uses_the_required_success_sequence
+run_test test_old_node_failure_stays_on_new_only
+run_test test_new_node_failure_stays_on_old_only
+run_test test_rolling_deploy_reports_major_step_durations_with_server_ips
+run_test test_main_enters_the_rolling_deploy_state_machine
+run_test test_main_reports_total_duration_when_rolling_deploy_fails
+run_test test_final_health_failure_stops_round_robin
+run_test test_health_json_validation_rejects_nested_up
+
+run_test test_health_check_is_independent_of_font_configuration
+run_test test_health_check_rejects_invalid_response_and_transport_failure
 
 if [[ "${TEST_FAILURES}" -ne 0 ]]; then
     echo "共 ${TEST_FAILURES} 个测试失败" >&2

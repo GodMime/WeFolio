@@ -4,6 +4,7 @@ import com.jxc.wefolio.dict.PortfolioProfileLayoutDict;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
+import com.jxc.wefolio.dto.PortfolioFontManifestDto;
 import lombok.EqualsAndHashCode;
 
 import java.util.ArrayList;
@@ -16,6 +17,10 @@ import java.util.Map;
  */
 @Data
 public class PortfolioRenderDto {
+
+    /** 当前配置快照的字体资源，保留原 renderData 空值语义。 */
+    private PortfolioFontManifestDto fonts;
+
 
     /** 分享编码 */
     private String shareCode;
@@ -409,6 +414,9 @@ public class PortfolioRenderDto {
 
         /** 字体：SYSTEM / WECHAT_SANS_SS */
         private String fontFamily;
+
+        /** 正文远程字体选择，仅作用于内容。 */
+        private String fontId;
 
         /** 正文字号，单位 rpx，取值为 10 至 96 的整数 */
         private Integer fontSizeRpx;

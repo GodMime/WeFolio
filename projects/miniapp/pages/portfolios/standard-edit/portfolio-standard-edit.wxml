@@ -1,7 +1,7 @@
 <wxs module="componentRows" src="./component-rows.wxs"></wxs>
 
 <view class="page-shell portfolio-edit-page">
-  <navigation-bar title="标准个人作品集" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
+  <navigation-bar title="{{advancedEditing ? '高级个人作品集' : '标准个人作品集'}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view
     class="edit-scroll"
@@ -11,6 +11,23 @@
     scroll-into-view="{{validationComponentAnchor}}"
   >
     <view class="edit-content pe-page-content">
+      <view wx:if="{{advancedEditing}}" class="panel advanced-tools pe-page-card">
+        <view class="advanced-ai-glyph" aria-hidden="true">✧</view>
+        <view class="advanced-ai-copy">
+          <view class="advanced-ai-title">想调整哪里，说出来</view>
+          <view class="advanced-ai-description">AI 修改与手动编辑，随时切换</view>
+        </view>
+        <button class="advanced-ai-button" data-mode="MODIFY_PAGE" bindtap="handleAdvancedAi">AI 修改</button>
+      </view>
+      <view wx:if="{{advancedEditing && aiReferenceAttachments.length}}" class="advanced-undo-notice">
+        <view class="advanced-reference-copy"><view class="advanced-reference-summary">参考附件 {{aiReferenceAttachments.length}} 个 · 随草稿保存</view><block wx:for="{{aiReferenceAttachments}}" wx:key="localKey"><view wx:if="{{item.saveDeadlineText}}">{{item.referenceNo}} · {{item.saveDeadlineText}}</view></block></view>
+        <button class="advanced-text-button" data-mode="MODIFY_PAGE" bindtap="handleAdvancedAi">管理附件</button>
+      </view>
+      <view wx:if="{{advancedEditing && advancedCanUndo}}" class="advanced-undo-notice">
+        <view>AI 修改已采用，尚未保存</view>
+        <button class="advanced-text-button" bindtap="handleAdvancedUndo">撤销</button>
+      </view>
+
       <view class="panel share-panel pe-page-card">
         <view class="panel-heading pe-page-card-heading">
           <view class="heading-copy">
@@ -218,6 +235,28 @@
             <button class="editor-component-empty-action" bindtap="handleOpenComponentSheet">添加组件</button>
           </view>
         </view>
+      </view>
+      <view wx:if="{{advancedEditing}}" class="advanced-source-card panel pe-page-card">
+        <view class="advanced-source-heading">
+          <view class="advanced-source-title">已选内容 <text>{{aiContext.sources.length || 0}}</text></view>
+          <button class="advanced-text-button" data-mode="MANAGE_SOURCES" bindtap="handleAdvancedAi">管理内容</button>
+        </view>
+        <scroll-view wx:if="{{advancedSourceItems.length}}" class="advanced-source-scroll" scroll-x>
+          <view class="advanced-source-strip">
+            <view wx:for="{{advancedSourceItems}}" wx:key="sourceNo" class="advanced-source-chip {{item.available === false ? 'advanced-source-unavailable' : ''}}">
+              <view class="advanced-source-thumb">
+                <image wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill"></image>
+                <view wx:else class="advanced-source-placeholder">{{item.kind === 'MEMBER_PORTFOLIO' ? '作品集' : '作品'}}</view>
+                <view class="advanced-source-no">{{item.sourceNo}}</view>
+                <view wx:if="{{item.kind === 'MEMBER_PORTFOLIO'}}" class="advanced-source-type">集</view>
+              </view>
+              <view class="advanced-source-label">{{item.sourceNo}} 号{{item.kind === 'MEMBER_PORTFOLIO' ? ' · 作品集' : ''}}</view>
+              <view wx:if="{{item.available === false}}" class="advanced-source-unavailable-note">不可用</view>
+            </view>
+          </view>
+        </scroll-view>
+        <view wx:else class="advanced-source-empty">还没有选择内容</view>
+        <view class="advanced-source-note">用素材序号向 AI 指明作品，序号不随排列改变。</view>
       </view>
     </view>
   </scroll-view>
@@ -1142,27 +1181,30 @@
           </view>
 
           <view class="form-row">
-            <view class="field-heading">
-              <view class="field-label">字体</view>
+            <view class="font-selector-heading">
+              <view class="font-selector-title">字体</view>
+              <button class="font-selector-more" wx:if="{{!moreFontsExpanded}}" bindtap="handleExpandFonts">更多字体</button>
             </view>
+            <view class="font-selector-message" wx:if="{{fontMessage}}">{{fontMessage}}</view>
             <view class="text-section-font-list">
               <view
                 wx:for="{{textSectionFontOptions}}"
+                wx:if="{{!item.remote || moreFontsExpanded || textSectionForm.fontId === item.value}}"
                 wx:key="value"
-                class="text-section-font-option pe-sheet-choice {{textSectionForm.fontFamily === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
+                class="text-section-font-option pe-sheet-choice {{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
                 data-value="{{item.value}}"
                 catchtap="handleTextSectionFontTap"
                 aria-role="radio"
-                aria-checked="{{textSectionForm.fontFamily === item.value}}"
+                aria-checked="{{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value}}"
                 aria-disabled="{{!item.available}}"
-                aria-label="{{item.label}}，映期 Folio 字体预览 123"
+                aria-label="{{item.label}} {{item.languageLabel}} {{item.sample}}"
               >
                 <view class="text-section-font-copy">
                   <view class="text-section-font-label">{{item.label}}</view>
-                  <view class="text-section-font-sample {{item.fontClass}}">映期 Folio 字体预览 123</view>
-                  <view wx:if="{{!item.available}}" class="text-section-font-hint">当前设备不可用</view>
+                  <view wx:if="{{item.languageLabel}}">{{item.languageLabel}}</view><image wx:if="{{item.previewImageUrl}}" class="font-preview-image" src="{{item.previewImageUrl}}" mode="widthFix" /><view wx:else class="text-section-font-sample {{item.fontClass}}">{{item.sample}}</view>
+                  <view wx:if="{{!item.available}}" class="text-section-font-hint">{{item.remote ? (fontMessage || '展开更多字体后可选择') : '当前设备不可用'}}</view>
                   <view
-                    wx:if="{{textSectionForm.fontFamily === item.value && !item.available}}"
+                    wx:if="{{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value && !item.available}}"
                     class="text-section-font-hint current"
                   >当前设备以系统字体预览</view>
                 </view>
@@ -1233,9 +1275,9 @@
     </view>
   </view>
 
-  <text-grid-editor background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'TEXT_GRID'}}" config="{{newComponentConfig}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
+  <text-grid-editor font-options="{{textSectionFontOptions}}" font-context="{{fontContext}}" remote-font-available="{{remoteFontAvailable}}" more-fonts-expanded="{{moreFontsExpanded}}" font-edit-session-id="{{fontEditSessionId}}" font-message="{{fontMessage}}" bindfontexpand="handleExpandFonts" bindfontselect="handleRemoteFontSelect" bindfontdraft="handleRemoteFontDraft" background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'TEXT_GRID'}}" config="{{newComponentConfig}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
   <contact-info-editor background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'CONTACT_INFO'}}" config="{{newComponentConfig}}" is-new="{{!newComponentKey}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
-  <structured-text-editor visible="{{structuredTextSheetVisible}}" config="{{structuredTextConfig}}" is-new="{{structuredTextIsNew}}" background-options="{{textBackgroundOptions}}" background-loading="{{textBackgroundLoading}}" background-error="{{textBackgroundError}}" background-has-more="{{textBackgroundHasMore}}" background-selection="{{textBackgroundSelection}}" bindconfirm="handleConfirmStructuredText" bindcancel="handleCancelStructuredText" bindbackgroundrequest="handleTextBackgroundRequest" bindbackgroundchange="handleStructuredTextBackgroundChange" />
+  <structured-text-editor font-context="{{fontContext}}" font-options="{{textSectionFontOptions}}" remote-font-available="{{remoteFontAvailable}}" more-fonts-expanded="{{moreFontsExpanded}}" font-edit-session-id="{{fontEditSessionId}}" font-message="{{fontMessage}}" bindfontexpand="handleExpandFonts" bindfontselect="handleRemoteFontSelect" bindfontdraft="handleRemoteFontDraft" visible="{{structuredTextSheetVisible}}" config="{{structuredTextConfig}}" is-new="{{structuredTextIsNew}}" background-options="{{textBackgroundOptions}}" background-loading="{{textBackgroundLoading}}" background-error="{{textBackgroundError}}" background-has-more="{{textBackgroundHasMore}}" background-selection="{{textBackgroundSelection}}" bindconfirm="handleConfirmStructuredText" bindcancel="handleCancelStructuredText" bindbackgroundrequest="handleTextBackgroundRequest" bindbackgroundchange="handleStructuredTextBackgroundChange" />
 
   <view class="divider-sheet-mask pe-sheet-mask {{dividerSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseDividerSheet">
     <view class="divider-sheet-panel pe-sheet-panel pe-sheet-size-compact {{dividerSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
@@ -1322,3 +1364,5 @@
     <button wx:if="{{showPublishAction}}" class="action-button publish-button pe-page-action-primary" bindtap="handlePublish">发布</button>
   </view>
 </view>
+
+<view wx:if="{{hasRemoteFonts}}" class="font-controls"><button bindtap="handlePrepareFonts" disabled="{{fontPreparing}}">刷新字体</button><button bindtap="handleRepairFontVersions">修复字体版本</button><text wx:if="{{fontMessage}}">{{fontMessage}}</text></view>

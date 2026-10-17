@@ -1,5 +1,8 @@
 package com.jxc.wefolio.service.payment;
 
+import java.util.List;
+import com.jxc.wefolio.dict.UserStatusDict;
+import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.entity.PointAccountEntity;
 import com.jxc.wefolio.entity.UserAuthEntity;
@@ -106,8 +109,12 @@ class WechatAuthoritativeBalanceSyncServiceTest {
         when(sessions.findAvailableSession(7L))
                 .thenReturn(new MaintainerWechatSession(7L, 11L, "session", 1L, "127.0.0.1"));
         UserAuthEntity auth = new UserAuthEntity();
+        auth.setId(11L);
+        auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
         auth.setOpenId("openid");
-        when(auths.selectOne(any())).thenReturn(auth);
+        when(auths.selectList(any())).thenReturn(List.of(auth));
         when(client.queryUserBalance(any())).thenReturn(new WechatVirtualPaymentResult(
                 0, null, WechatVirtualPaymentErrorType.SUCCESS, 0L, 0L, 0L, null, 0L, 0L, 200));
         when(transactions.syncAuthoritativeBalance(10L, 0L, 0L)).thenReturn(account());

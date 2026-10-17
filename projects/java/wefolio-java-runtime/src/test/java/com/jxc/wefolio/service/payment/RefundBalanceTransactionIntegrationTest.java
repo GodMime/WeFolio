@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.payment;
 
+import java.util.List;
+import com.jxc.wefolio.dict.AuthTypeDict;
 import com.jxc.wefolio.config.WechatVirtualPaymentProperties;
 import com.jxc.wefolio.dict.PointSceneCodeDict;
 import com.jxc.wefolio.dict.UserStatusDict;
@@ -74,8 +76,12 @@ class RefundBalanceTransactionIntegrationTest {
         user.setStatus(UserStatusDict.ACTIVE.getCode());
         when(users.selectById(7L)).thenReturn(user);
         UserAuthEntity auth = new UserAuthEntity();
+        auth.setId(2L);
+        auth.setUserId(7L);
+        auth.setAuthType(AuthTypeDict.WECHAT_MINI_APP.getCode());
+        auth.setStatus(UserStatusDict.ACTIVE.getCode());
         auth.setOpenId("openid-test");
-        when(auths.selectOne(any())).thenReturn(auth);
+        when(auths.selectList(any())).thenReturn(List.of(auth));
         when(sessions.findAvailableSession(7L))
                 .thenReturn(new MaintainerWechatSession(7L, 2L, "session-test", 1L, "127.0.0.1"));
     }

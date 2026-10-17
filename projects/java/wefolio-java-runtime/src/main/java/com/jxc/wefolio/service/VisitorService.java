@@ -158,7 +158,7 @@ public class VisitorService {
             }
             return exchangedSession;
         });
-        String openid = session.getOpenid().strip();
+        String openid = session.getOpenid();
         String unionid = normalizeNullable(session.getUnionid());
         VisitorIdentityPersistenceService.VisitorIdentity identity = measure(
                 trace,

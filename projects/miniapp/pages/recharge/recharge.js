@@ -1,8 +1,7 @@
 const { request } = require('../../utils/request')
 const {
   handleMaintainerAuthRequired,
-  hasLocalToken,
-  refreshMaintainerWechatSession
+  hasLocalToken
 } = require('../../utils/session')
 const {
   applyRechargeBalance,
@@ -19,6 +18,9 @@ const POINT_RULES_PAGE_URL = '/pages/points-rules/points-rules'
 const LOGIN_PAGE_URL = '/pages/login/login'
 const RECHARGE_STATUS_REFUNDED = 'REFUNDED'
 const RECHARGE_REFUNDED_MESSAGE = '已退款'
+const PAYMENT_SIGNATURE_INVALID_CODE = -15005
+const PAYMENT_SESSION_EXPIRED_CODE = -15007
+const MAX_PAYMENT_ATTEMPTS = 2
 
 function emptyRechargeData() {
   return normalizeRechargePage({})
@@ -33,7 +35,8 @@ function requestWechatVirtualPayment(paymentOptions) {
   })
 }
 
-function refreshWechatSessionNow() {
+// 每次建单都使用当前设备的新 code，后端在同一请求内校验身份并生成签名。
+function requestPaymentLoginCode() {
   return new Promise((resolve, reject) => {
     wx.login({
       success(result) {
@@ -41,7 +44,7 @@ function refreshWechatSessionNow() {
           reject(new Error('微信登录未返回有效 code'))
           return
         }
-        Promise.resolve(refreshMaintainerWechatSession(result.code)).then(resolve, reject)
+        resolve(result.code)
       },
       fail: reject
     })
@@ -49,7 +52,29 @@ function refreshWechatSessionNow() {
 }
 
 function isVirtualPaymentSessionInvalid(error) {
-  return Number(error && (error.errCode || error.err_code)) === -15007
+  const code = Number(error && (error.errCode != null ? error.errCode : error.err_code))
+  return code === PAYMENT_SIGNATURE_INVALID_CODE || code === PAYMENT_SESSION_EXPIRED_CODE
+}
+
+// 仅微信明确拒绝用户态签名或会话时换新单重试；整个过程保持页面支付锁。
+async function createOrderAndPay(packageId) {
+  for (let attempt = 0; attempt < MAX_PAYMENT_ATTEMPTS; attempt += 1) {
+    const code = await requestPaymentLoginCode()
+    const order = await request({
+      url: CREATE_ORDER_URL,
+      method: 'POST',
+      data: { packageId, code }
+    })
+    try {
+      await requestWechatVirtualPayment(buildRequestVirtualPaymentOptions(order))
+      return order
+    } catch (error) {
+      if (isPaymentCancelled(error) || !isVirtualPaymentSessionInvalid(error)
+          || attempt === MAX_PAYMENT_ATTEMPTS - 1) {
+        throw error
+      }
+    }
+  }
 }
 
 Page({
@@ -116,7 +141,7 @@ Page({
     })
   },
 
-  async handlePay(options = {}) {
+  async handlePay() {
     if (this.data.paying || this.data.syncing) {
       return
     }
@@ -129,12 +154,7 @@ Page({
     this.setData({ paying: true })
     let paymentCompleted = false
     try {
-      const order = await request({
-        url: CREATE_ORDER_URL,
-        method: 'POST',
-        data: { packageId }
-      })
-      await requestWechatVirtualPayment(buildRequestVirtualPaymentOptions(order))
+      const order = await createOrderAndPay(packageId)
       paymentCompleted = true
       this.setData({ paying: false, syncing: true })
 
@@ -175,11 +195,6 @@ Page({
       if (!paymentCompleted && isPaymentCancelled(error)) {
         wx.showToast({ title: '已取消支付', icon: 'none' })
         return
-      }
-      if (!paymentCompleted && !options.sessionRetried && isVirtualPaymentSessionInvalid(error)) {
-        await refreshWechatSessionNow()
-        this.setData({ paying: false, syncing: false })
-        return await this.handlePay({ sessionRetried: true })
       }
       wx.showToast({
         title: error && error.message ? error.message : '支付调起失败，请稍后重试',

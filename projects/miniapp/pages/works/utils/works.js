@@ -180,16 +180,18 @@ function formatDuration(milliseconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-function formatFileSize(bytes) {
+function formatFileSize(bytes, mediaType) {
   const value = toNumber(bytes)
   if (value <= 0) {
     return ''
   }
-  if (value >= 1024 * 1024) {
-    return `${(value / 1024 / 1024).toFixed(1)}MB`
+  // 视频与十进制上传上限一致，其他媒体沿用已有显示单位。
+  const unitBase = mediaType === 'VIDEO' ? 1000 : 1024
+  if (value >= unitBase * unitBase) {
+    return `${(value / unitBase / unitBase).toFixed(1)}MB`
   }
-  if (value >= 1024) {
-    return `${Math.round(value / 1024)}KB`
+  if (value >= unitBase) {
+    return `${Math.round(value / unitBase)}KB`
   }
   return `${value}B`
 }
@@ -232,7 +234,7 @@ function normalizeWork(raw = {}) {
     hasCover: Boolean(coverUrl),
     mimeType: trimText(raw.mimeType),
     fileSize: toNumber(raw.fileSize),
-    fileSizeText: formatFileSize(raw.fileSize),
+    fileSizeText: formatFileSize(raw.fileSize, mediaType),
     durationMs: toNumber(raw.durationMs),
     durationText: mediaType === 'VIDEO' || mediaType === 'AUDIO' ? formatDuration(raw.durationMs) : '',
     frameCount: Math.max(0, Math.floor(toNumber(raw.frameCount))),

@@ -1348,6 +1348,65 @@ test('team preview rejects schedule query locally without a request', async () =
   }
 })
 
+for (const scope of ['draft', 'published']) {
+  test(`高级团队已保存${scope}预览只读查档走高级入口`, async () => {
+    const requests = []
+    const resolved = []
+    const scheduleResult = { portfolioType: 'TEAM', queriedDate: '2026-10-10', status: 'TEAM_AVAILABLE', members: [] }
+    const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async options => {
+      requests.push(options)
+      return scheduleResult
+    })
+    page.setData({ advancedEditing: true, portfolioId: 7, scope })
+    page.selectComponent = () => ({ resolveQuery(value) { resolved.push(value) } })
+    try {
+      await page.handleScheduleQuery({ detail: { componentKey: 'schedule-1', queriedDate: '2026-10-10', idempotencyKey: 'preview-1' } })
+      assert.deepEqual(requests, [{ url: `/api/mine/advanced-portfolios/7/schedule-query-preview?scope=${scope}`,
+        method: 'POST', data: { componentKey: 'schedule-1', queriedDate: '2026-10-10', idempotencyKey: 'preview-1' } }])
+      assert.deepEqual(resolved, [{ detail: scheduleResult }])
+      assert.deepEqual(page.data.scheduleResults['schedule-1'], scheduleResult)
+    } finally { page.cleanup() }
+  })
+}
+
+test('高级团队候选查档只提示先采用并保存，不发送任何请求', async () => {
+  const requests = [], rejected = [], toasts = []
+  const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async options => { requests.push(options) },
+    { showToast(options) { toasts.push(options) } })
+  page.setData({ advancedEditing: true, candidatePreview: true, portfolioId: 7 })
+  page.selectComponent = () => ({ rejectQuery(value) { rejected.push(value) } })
+  try {
+    await page.handleScheduleQuery({ detail: { componentKey: 'schedule-1' } })
+    assert.deepEqual(requests, [])
+    assert.deepEqual(rejected, [{ detail: { message: '采用并保存后可预览档期', clearPendingIdempotencyKey: true } }])
+    assert.deepEqual(toasts, [{ title: '采用并保存后可预览档期', icon: 'none' }])
+  } finally { page.cleanup() }
+})
+
+test('高级团队只读查档网络失败保留重试键，切菜单后忽略迟到结果', async () => {
+  const rejected = [], resolved = []
+  let resolveQuery
+  let attempt = 0
+  const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async () => {
+    attempt += 1
+    if (attempt === 1) throw new Error('timeout')
+    return new Promise(resolve => { resolveQuery = resolve })
+  })
+  page.setData({ advancedEditing: true, portfolioId: 7, scope: 'draft' })
+  page.selectComponent = () => ({ rejectQuery(value) { rejected.push(value) }, resolveQuery(value) { resolved.push(value) } })
+  const event = { detail: { componentKey: 'schedule-1', queriedDate: '2026-10-10', idempotencyKey: 'retry-preview-1' } }
+  try {
+    await page.handleScheduleQuery(event)
+    assert.equal(rejected[0].detail.clearPendingIdempotencyKey, false)
+    const pending = page.handleScheduleQuery(event)
+    page.teamPortfolioMenuTransitionRevision = 1
+    resolveQuery({ status: 'TEAM_AVAILABLE', members: [] })
+    await pending
+    assert.deepEqual(resolved, [])
+    assert.deepEqual(page.data.scheduleResults, {})
+  } finally { page.cleanup() }
+})
+
 test('team preview video carousel opens a dedicated video page without events and handles failures', async () => {
   const toasts = [], previews = [], requests = []
   const page = loadPage('standard-preview/team-portfolio-standard-preview.js', async (options) => { requests.push(options); return {} }, {
@@ -2424,7 +2483,134 @@ test('team visitor opens a member portfolio with the team source flag', () => {
       detail: { portfolioId: 7, shareCode: 'PF 001' }
     })
     assert.deepEqual(navigations, [{
-      url: '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001&fromTeamPortfolio=1'
+      url: '/pages/portfolios/visitor-portfolio/visitor-portfolio?shareCode=PF%20001&fromTeamPortfolio=1&sourceType=TEAM_PORTFOLIO'
     }])
+  } finally { page.cleanup() }
+})
+
+for (const stage of ['create', 'upload', 'save', 'publish']) {
+  test(`team editor preserves edits made during ${stage} and stays on page`, async () => {
+    let release
+    const waiting = new Promise((resolve) => { release = resolve })
+    let entered
+    const reached = new Promise((resolve) => { entered = resolve })
+    const navigations = []
+    const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+      if (options.url.includes('/portfolios/standard')) {
+        if (stage === 'create') { entered(); await waiting }
+        return { portfolioId: 41, draftRevision: 1, config: options.data.config }
+      }
+      if (options.url.endsWith('/draft')) {
+        if (stage === 'save') { entered(); await waiting }
+        return { draftRevision: 2, config: options.data.config }
+      }
+      if (options.url.endsWith('/publish')) {
+        if (stage === 'publish') { entered(); await waiting }
+        return { publishedRevision: 1, publicationStatus: 'PUBLISHED' }
+      }
+      throw new Error(`unexpected ${options.url}`)
+    }, { redirectTo(options) { navigations.push(options) }, navigateBack(options) { navigations.push(options) } })
+    page.setData({ teamId: 3, canMaintain: true, portfolioId: stage === 'create' ? 0 : 41,
+      config: validTeamEditorConfig() })
+    if (stage === 'upload') page.uploadLocalShareCover = async (id, config) => { entered(); await waiting; return config }
+    try {
+      const pending = stage === 'publish' ? page.handlePublishTap() : page.handleSaveTap()
+      await reached
+      page.updateConfig(Object.assign({}, page.data.config, { share: Object.assign({}, page.data.config.share, { title: '等待期间的新标题' }) }))
+      release()
+      await pending
+      assert.equal(page.data.config.share.title, '等待期间的新标题')
+      assert.deepEqual(navigations, [])
+      assert.equal(page.data.draftRevision, 2)
+      if (stage === 'publish') assert.equal(page.data.publishedRevision, 1)
+    } finally { release(); page.cleanup() }
+  })
+}
+
+test('team draft uncertain retry keeps its original snapshot and key after new edits', async () => {
+  const requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    requests.push(clone(options.data))
+    if (requests.length === 1) throw new Error('timeout')
+    return { draftRevision: 2, config: options.data.config }
+  })
+  page.setData({ teamId: 3, canMaintain: true, portfolioId: 41, config: validTeamEditorConfig() })
+  try {
+    await page.saveDraft()
+    page.updateConfig(Object.assign({}, page.data.config, { share: { title: '新编辑' } }))
+    page.clearPending()
+    const result = await page.saveDraft()
+    assert.deepEqual(requests[1], requests[0])
+    assert.equal(result.editorChanged, true)
+    assert.equal(page.data.config.share.title, '新编辑')
+  } finally { page.cleanup() }
+})
+
+for (const change of ['delete', 'reorder', 'replace']) {
+  test(`team asset completion preserves secondary menu ${change}`, async () => {
+    let release
+    const waiting = new Promise((resolve) => { release = resolve })
+    let entered
+    const reached = new Promise((resolve) => { entered = resolve })
+    const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => ({
+      draftRevision: 2, config: options.data.config
+    }))
+    const qr = (key, order) => ({ componentKey: key, componentType: 'QR_CONTACT', sortOrder: order,
+      enabled: true, config: { qrUrlSource: 'CUSTOM', qrUrl: `wxfile://${key}.jpg` } })
+    page.setData({ teamId: 3, portfolioId: 41, canMaintain: true })
+    page.updateConfig(validTeamEditorConfig({ bottomNav: { enabled: true, items: [
+      { key: 'home', title: '首页' },
+      { key: 'contact', title: '联系', components: [qr('first', 1000), qr('second', 2000)] }
+    ] } }))
+    page.uploadLocalQrContacts = async (id, config) => {
+      entered()
+      await waiting
+      const uploaded = clone(config)
+      uploaded.bottomNav.items[1].components.forEach((item) => { item.config.qrUrl = `https://cdn.example/${item.componentKey}.jpg` })
+      return uploaded
+    }
+    try {
+      const pending = page.saveDraft()
+      await reached
+      const current = clone(page.data.config)
+      const items = current.bottomNav.items[1].components
+      if (change === 'delete') items.splice(0, 1)
+      if (change === 'reorder') { items.reverse(); items.forEach((item, index) => { item.sortOrder = (index + 1) * 1000 }) }
+      if (change === 'replace') items[0].config.qrUrl = 'wxfile://replacement.jpg'
+      page.updateConfig(current)
+      release()
+      const result = await pending
+      const saved = page.data.config.bottomNav.items[1].components
+      assert.equal(result.editorChanged, true)
+      if (change === 'delete') assert.deepEqual(saved.map((item) => item.componentKey), ['second'])
+      if (change === 'reorder') assert.deepEqual(saved.map((item) => item.componentKey), ['second', 'first'])
+      if (change === 'replace') assert.equal(saved[0].config.qrUrl, 'wxfile://replacement.jpg')
+      assert.equal(saved.find((item) => item.componentKey === 'second').config.qrUrl, 'https://cdn.example/second.jpg')
+    } finally { release(); page.cleanup() }
+  })
+}
+
+test('team uncertain publish retries the original revision and key without overwriting edits', async () => {
+  const publications = []
+  let drafts = 0
+  const navigations = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {
+    if (options.url.endsWith('/draft')) { drafts++; return { draftRevision: 2, config: options.data.config } }
+    publications.push(clone(options.data))
+    if (publications.length === 1) throw new Error('timeout')
+    return { publishedRevision: 1, publicationStatus: 'PUBLISHED' }
+  }, { redirectTo(value) { navigations.push(value) }, navigateBack(value) { navigations.push(value) } })
+  page.setData({ teamId: 3, portfolioId: 41, canMaintain: true })
+  page.updateConfig(validTeamEditorConfig())
+  try {
+    await page.handlePublishTap()
+    page.updateConfig(Object.assign({}, page.data.config, { share: { title: '发布后继续编辑' } }))
+    page.clearPending()
+    await page.handlePublishTap()
+    assert.equal(drafts, 1)
+    assert.equal(publications.length, 2)
+    assert.deepEqual(publications[1], publications[0])
+    assert.equal(page.data.config.share.title, '发布后继续编辑')
+    assert.deepEqual(navigations, [])
   } finally { page.cleanup() }
 })

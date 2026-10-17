@@ -66,7 +66,7 @@ const vm = require('node:vm')
 const path = require('node:path')
 function editor(name, config) {
   let definition
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname,`../components/mock/${name}/${name}.js`),'utf8'),{Component:value=>{definition=value}})
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,`../components/mock/${name}/${name}.js`),'utf8'),{Component:value=>{definition=value}, require: require('node:module').createRequire(path.join(__dirname,`../components/mock/${name}/${name}.js`))})
   const events=[]
   const instance={data:{...definition.data,config},setData(value){Object.assign(this.data,value)},triggerEvent(name,detail){events.push({name,detail})},...definition.methods}
   definition.observers.config.call(instance,config)
@@ -212,8 +212,11 @@ test('背景失败只移除媒体节点，保留文字并显示真实重试按�
 
 test('中文文字编辑选项保留原配置枚举和选择顺序', () => {
   const structured=editor('structured-text-editor',{blocks:[{...text.createMockStructuredBlock('TITLE','title'),content:'标题'}]})
-  assert.deepEqual(Array.from(structured.instance.data.fontLabels),['系统默认','微信字体'])
+  assert.deepEqual(Array.from(structured.instance.data.fontLabels),require('../utils/portfolio-text-typography').PORTFOLIO_TEXT_SELECTION_OPTIONS.map(font => font.languageLabel ? `${font.label}（${font.languageLabel}）` : font.label))
   assert.equal(structured.instance.data.optionLabels.BOLD,'粗体')
+  structured.instance.handleChoice({currentTarget:{dataset:{index:0,field:'fontFamily'}},detail:{value:1}})
+  assert.equal(structured.events.length,0)
+  structured.instance.setData({fontAvailability:{SYSTEM:true,WECHAT_SANS_SS:true}})
   structured.instance.handleChoice({currentTarget:{dataset:{index:0,field:'fontFamily'}},detail:{value:1}})
   assert.equal(structured.events.at(-1).detail.config.blocks[0].fontFamily,'WECHAT_SANS_SS')
   const gridEditor=editor('text-grid-editor',grid.createMockTextGrid())
@@ -232,7 +235,7 @@ test('合并后清除已消失的选择键，后续合并只包含仍存在的�
   instance.handleSelect({currentTarget:{dataset:{key:source.cells[1].cellKey}}})
   const merged=grid.mergeMockGridCells(source,instance.data.selectedKeys)
   let definition
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../components/mock/text-grid-editor/text-grid-editor.js'),'utf8'),{Component:value=>{definition=value}})
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../components/mock/text-grid-editor/text-grid-editor.js'),'utf8'),{Component:value=>{definition=value}, require: require('node:module').createRequire(path.join(__dirname,'../components/mock/text-grid-editor/text-grid-editor.js'))})
   definition.observers.config.call(instance,merged)
   assert.deepEqual(Array.from(instance.data.selectedKeys),[source.cells[0].cellKey])
   assert.equal(instance.data.selectedMap[source.cells[1].cellKey],undefined)

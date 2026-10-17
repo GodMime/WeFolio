@@ -41,10 +41,67 @@ public class WorkAuditClaimTransactionService {
      */
     @Transactional(rollbackFor = Exception.class)
     public WorkAuditTaskEntity claimAndCreateSubmittingTask(Long workId, WorkAuditTaskEntity task) {
-        if (!workRepository.claimPendingWork(workId)) {
+        boolean claimed = TencentCiVideoAuditRequest.AVERAGE.equals(task.getSnapshotMode())
+                ? workRepository.claimPendingWorkForSource(task) : workRepository.claimPendingWork(workId);
+        if (!claimed) {
             return null;
         }
         return taskRepository.insertTask(task);
+    }
+
+    /** 冻结 HEAD 源身份与请求参数，只允许当前提交领取者写一次。 */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean freezePersistentVideoSource(WorkAuditTaskEntity task, String sourceVersion, String requestPayload) {
+        return taskRepository.freezePersistentVideoSource(task, sourceVersion, requestPayload);
+    }
+
+    /** 新策略正常等待保持同一个腾讯云任务，不重新付费提交。 */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markPersistentVideoWaiting(WorkAuditTaskEntity task, TencentCiAuditResult result,
+                                              boolean submitted) {
+        return taskRepository.markPersistentVideoWaiting(task, result, submitted);
+    }
+
+    /** 截图完整持久化后才在同一事务发布清单、作品审核结果和任务成功。 */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean completePersistentVideo(WorkAuditTaskEntity task, TencentCiAuditResult result,
+                                           WorkAuditStatusDict auditStatus, String auditRejectReason,
+                                           String manifestJson) {
+        return completePersistentVideoWithFrames(task, result, auditStatus, auditRejectReason, manifestJson).committed();
+    }
+
+    /** 事务锁定旧清单并发布新清单，返回提交后才能清理的旧对象引用。 */
+    @Transactional(rollbackFor = Exception.class)
+    public PersistentVideoCompletion completePersistentVideoWithFrames(WorkAuditTaskEntity task,
+            TencentCiAuditResult result, WorkAuditStatusDict auditStatus, String auditRejectReason,
+            String manifestJson) {
+        if (!taskRepository.finishPersistentVideo(task, result, null, result.rawPayload())) {
+            return new PersistentVideoCompletion(false, null);
+        }
+        String previousManifest = manifestJson == null ? null : workRepository.lockVideoManifest(task.getWorkId());
+        WorkAuditReasonCodeDict reasonCode = riskTypeResolver.resolve(result.auditResult(), result.ciLabel(), false);
+        List<String> reasonCodes = riskCollectionResolver.resolve(result.auditResult(), result.ciLabel(), result.risks())
+                .stream().map(WorkAuditReasonCodeDict::getCode).toList();
+        if (!workRepository.updatePersistentVideoForRound(task, auditStatus,
+                reasonCode == null ? null : reasonCode.getCode(),
+                reasonCodes.isEmpty() ? null : JSON.toJSONString(reasonCodes), auditRejectReason, manifestJson)) {
+            throw new WorkAuditStaleClaimException();
+        }
+        return new PersistentVideoCompletion(true, previousManifest);
+    }
+
+    /** 本轮实际失败立即结束；若作品写回失效，抛异常回滚任务写回。 */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean failPersistentVideo(WorkAuditTaskEntity task, String errorMessage, String diagnosticPayload) {
+        if (!taskRepository.finishPersistentVideo(task, null, errorMessage, diagnosticPayload)) {
+            return false;
+        }
+        String serviceError = WorkAuditReasonCodeDict.AUDIT_SERVICE_ERROR.getCode();
+        if (!workRepository.updatePersistentVideoForRound(task, WorkAuditStatusDict.FAILED,
+                serviceError, JSON.toJSONString(List.of(serviceError)), errorMessage, null)) {
+            throw new WorkAuditStaleClaimException();
+        }
+        return true;
     }
 
     /**

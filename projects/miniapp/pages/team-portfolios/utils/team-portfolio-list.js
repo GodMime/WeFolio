@@ -23,6 +23,7 @@ function nonNegativeInteger(value) {
 function normalizeTeamPortfolioSummary(item = {}) {
   return {
     portfolioId: normalizeId(item.portfolioId),
+    ...(item.templateType ? { templateType: text(item.templateType) } : {}),
     shareCode: text(item.shareCode),
     title: text(item.title),
     coverUrl: text(item.coverUrl),
@@ -77,7 +78,7 @@ function teamPortfolioEndpoint(portfolioId, suffix = '') {
 function createStandardTeamPortfolio(requestFn = request, teamId, config) {
   const id = normalizeId(teamId)
   if (!id) return Promise.reject(new Error('请选择可维护团队'))
-  return requestFn({ url: `/api/mine/teams/${id}/portfolios/standard`, method: 'POST', data: { config: config || null } })
+  return requestFn({ url: `/api/mine/teams/${id}/portfolios/standard`, method: 'POST', data: { config: config || null, clientCapabilities: { portfolioRemoteFont: 1 } } })
 }
 
 function deleteTeamPortfolio(requestFn = request, portfolioId) {

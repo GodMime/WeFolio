@@ -2,7 +2,7 @@ const {
   VISITOR_TOKEN_EXPIRES_AT_STORAGE_KEY,
   VISITOR_TOKEN_STORAGE_KEY,
   request
-} = require('../../../utils/request')
+} = require('../../../utils/request.js')
 const { visitActivityLifecycle } = require('../../../utils/visit-activity-lifecycle')
 
 const VISITOR_PORTFOLIO_API_PREFIX = '/api/visitor/portfolios'

@@ -37,6 +37,7 @@ class TeamPortfolioDependencyBoundaryTest {
             "com.jxc.wefolio.common.PortfolioBackgroundAudioSupport",
             "com.jxc.wefolio.service.PortfolioContactInfoConfigSupport",
             "com.jxc.wefolio.service.PortfolioTextGridConfigNormalizer",
+            "com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport",
             "com.jxc.wefolio.service.PortfolioBackgroundAudioService",
             "com.jxc.wefolio.constant.TeamPortfolioConstants",
             "com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict",

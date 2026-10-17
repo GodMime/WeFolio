@@ -1,12 +1,15 @@
 package com.jxc.wefolio.job.repo;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.jxc.wefolio.job.dict.MediaTypeDict;
 import com.jxc.wefolio.job.dict.WorkAuditStatusDict;
 import com.jxc.wefolio.job.dict.WorkAuditTaskStatusDict;
 import com.jxc.wefolio.job.entity.WorkAuditTaskEntity;
 import com.jxc.wefolio.job.mapper.WorkAuditTaskMapper;
+import com.jxc.wefolio.job.service.TencentCiAuditResult;
+import com.jxc.wefolio.job.service.TencentCiVideoAuditRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -41,6 +44,9 @@ public class WorkAuditTaskRepository {
     /** 逻辑删除赋值 SQL */
     private static final String LOGIC_DELETE_SQL = "deleted = id";
 
+    /** 旧物理源失效，只记录任务诊断，不覆盖作品。 */
+    private static final String SOURCE_CHANGED_MESSAGE = "SOURCE_CHANGED: 源视频对象已变化，已丢弃旧审核结果";
+
     /** 任务仍对应当前有效审核作品的相关子查询 */
     private static final String ACTIVE_AUDITING_WORK_EXISTS_SQL = """
             EXISTS (
@@ -51,6 +57,11 @@ public class WorkAuditTaskRepository {
                 AND work.audit_status = {0}
                 AND work.manual_audit_no IS NULL
                 AND work.deleted = {1}
+                AND (wf_work_audit_task.snapshot_mode IS NULL
+                  OR wf_work_audit_task.snapshot_mode <> 'AVERAGE'
+                  OR (work.media_object_key = wf_work_audit_task.media_object_key
+                    AND (work.media_sha256 = wf_work_audit_task.media_sha256
+                      OR (work.media_sha256 IS NULL AND wf_work_audit_task.media_sha256 IS NULL))))
             )
             """;
 
@@ -71,6 +82,122 @@ public class WorkAuditTaskRepository {
     public WorkAuditTaskEntity insertTask(WorkAuditTaskEntity task) {
         taskMapper.insert(task);
         return task;
+    }
+
+    /** 新策略执行中断直接回收失败，不受旧提交重试次数限制。 */
+    public List<WorkAuditTaskEntity> findInterruptedPersistentVideoTasks(int limit, LocalDateTime now) {
+        return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.AVERAGE)
+                .in(WorkAuditTaskEntity::getTaskStatus, FINISHABLE_TASK_STATUSES)
+                .lt(WorkAuditTaskEntity::getLockedUntil, now)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL, WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED)
+                .orderByAsc(WorkAuditTaskEntity::getId)
+                .last(LIMIT_SQL_PREFIX + normalizedLimit(limit)));
+    }
+
+    /** 中断回收仅领取本轮终态写回权，不递增次数或执行远端请求。 */
+    public boolean claimInterruptedPersistentVideo(Long taskId, String token, LocalDateTime now,
+                                                   LocalDateTime leaseUntil) {
+        return taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getLockedBy, token)
+                .set(WorkAuditTaskEntity::getLockedUntil, leaseUntil)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, taskId)
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.AVERAGE)
+                .in(WorkAuditTaskEntity::getTaskStatus, FINISHABLE_TASK_STATUSES)
+                .lt(WorkAuditTaskEntity::getLockedUntil, now)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL, WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED)) == 1;
+    }
+
+    /** HEAD 获取成功后冻结源身份；冻结前故障仍能按原任务直接失败。 */
+    public boolean freezePersistentVideoSource(WorkAuditTaskEntity task, String sourceVersion, String payload) {
+        return taskMapper.update(null, persistentOwnedUpdate(task)
+                .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .isNull(WorkAuditTaskEntity::getSnapshotSourceVersion)
+                .set(WorkAuditTaskEntity::getSnapshotSourceVersion, sourceVersion)
+                .set(WorkAuditTaskEntity::getRequestPayload, payload)) == 1;
+    }
+
+    /** 新策略提交/正常轮询结果只释放原租约，不改变作品审核状态。 */
+    public boolean markPersistentVideoWaiting(WorkAuditTaskEntity task, TencentCiAuditResult result,
+                                              boolean submitted) {
+        LambdaUpdateWrapper<WorkAuditTaskEntity> update = persistentOwnedUpdate(task)
+                .eq(WorkAuditTaskEntity::getTaskStatus, submitted
+                        ? WorkAuditTaskStatusDict.SUBMITTING.getCode() : WorkAuditTaskStatusDict.QUERYING.getCode())
+                .set(WorkAuditTaskEntity::getTaskStatus, submitted
+                        ? WorkAuditTaskStatusDict.SUBMITTED.getCode() : WorkAuditTaskStatusDict.RUNNING.getCode())
+                .set(WorkAuditTaskEntity::getCiState, result.ciState())
+                .set(WorkAuditTaskEntity::getResponsePayload, result.rawPayload())
+                .set(WorkAuditTaskEntity::getLockedBy, null)
+                .set(WorkAuditTaskEntity::getLockedUntil, null);
+        if (submitted) {
+            update.set(WorkAuditTaskEntity::getCiJobId, result.ciJobId())
+                    .set(WorkAuditTaskEntity::getSubmittedAt, LocalDateTime.now());
+        }
+        return taskMapper.update(null, update) == 1;
+    }
+
+    /** 任务与作品结果由调用方在同一短事务提交，当前租约和源字段必须仍有效。 */
+    public boolean finishPersistentVideo(WorkAuditTaskEntity task, TencentCiAuditResult result,
+                                         String errorMessage, String responsePayload) {
+        boolean failed = result == null;
+        LambdaUpdateWrapper<WorkAuditTaskEntity> update = persistentOwnedUpdate(task)
+                .in(WorkAuditTaskEntity::getTaskStatus, FINISHABLE_TASK_STATUSES)
+                .set(WorkAuditTaskEntity::getTaskStatus, failed
+                        ? WorkAuditTaskStatusDict.FAILED.getCode() : WorkAuditTaskStatusDict.SUCCESS.getCode())
+                .set(WorkAuditTaskEntity::getAuditResult, failed ? AuditResultDict.UNKNOWN.getCode()
+                        : result.auditResult().getCode())
+                .set(WorkAuditTaskEntity::getLastErrorMessage, errorMessage)
+                .set(WorkAuditTaskEntity::getResponsePayload, responsePayload)
+                .set(task.getCiJobId() != null, WorkAuditTaskEntity::getCiJobId, task.getCiJobId())
+                .set(WorkAuditTaskEntity::getFinishedAt, LocalDateTime.now())
+                .set(WorkAuditTaskEntity::getLockedBy, null)
+                .set(WorkAuditTaskEntity::getLockedUntil, null);
+        if (result != null) {
+            update.set(WorkAuditTaskEntity::getCiState, result.ciState())
+                    .set(WorkAuditTaskEntity::getCiResult, result.ciResult())
+                    .set(WorkAuditTaskEntity::getCiLabel, result.ciLabel())
+                    .set(WorkAuditTaskEntity::getCiScore, result.ciScore());
+        }
+        return taskMapper.update(null, update) == 1;
+    }
+
+    /** COS 同键源改变时只终结旧任务；作品状态属于新源，不能写回。 */
+    public boolean discardChangedPersistentVideo(WorkAuditTaskEntity task) {
+        LocalDateTime now = LocalDateTime.now();
+        return taskMapper.update(null, Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.FAILED.getCode())
+                .set(WorkAuditTaskEntity::getLastErrorMessage, SOURCE_CHANGED_MESSAGE)
+                .set(WorkAuditTaskEntity::getFinishedAt, now)
+                .set(WorkAuditTaskEntity::getLockedBy, null)
+                .set(WorkAuditTaskEntity::getLockedUntil, null)
+                .set(WorkAuditTaskEntity::getUpdatedAt, now)
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, task.getId())
+                .eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.AVERAGE)
+                .in(WorkAuditTaskEntity::getTaskStatus, FINISHABLE_TASK_STATUSES)
+                .eq(WorkAuditTaskEntity::getLockedBy, task.getLockedBy())
+                .gt(WorkAuditTaskEntity::getLockedUntil, now)
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)) == 1;
+    }
+
+    /** 新策略所有写回必须在原租约内且仍对应原视频与审核轮次。 */
+    private LambdaUpdateWrapper<WorkAuditTaskEntity> persistentOwnedUpdate(WorkAuditTaskEntity task) {
+        return Wrappers.<WorkAuditTaskEntity>lambdaUpdate()
+                .set(WorkAuditTaskEntity::getUpdatedAt, LocalDateTime.now())
+                .setSql(VERSION_INCREMENT_SQL)
+                .eq(WorkAuditTaskEntity::getId, task.getId())
+                .eq(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode())
+                .eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.AVERAGE)
+                .eq(WorkAuditTaskEntity::getLockedBy, task.getLockedBy())
+                .gt(WorkAuditTaskEntity::getLockedUntil, LocalDateTime.now())
+                .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
+                .apply(ACTIVE_AUDITING_WORK_EXISTS_SQL, WorkAuditStatusDict.AUDITING.getCode(), NOT_DELETED);
     }
 
     /**
@@ -97,6 +224,8 @@ public class WorkAuditTaskRepository {
                         .or(expired -> expired
                                 .eq(WorkAuditTaskEntity::getTaskStatus,
                                         WorkAuditTaskStatusDict.QUERYING.getCode())
+                                .and(mode -> mode.isNull(WorkAuditTaskEntity::getSnapshotMode)
+                                        .or().eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.INTERVAL))
                                 .lt(WorkAuditTaskEntity::getLockedUntil, now)))
                 .lt(WorkAuditTaskEntity::getQueryCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
@@ -129,6 +258,8 @@ public class WorkAuditTaskRepository {
                         .or(expired -> expired
                                 .eq(WorkAuditTaskEntity::getTaskStatus,
                                         WorkAuditTaskStatusDict.QUERYING.getCode())
+                                .and(mode -> mode.isNull(WorkAuditTaskEntity::getSnapshotMode)
+                                        .or().eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.INTERVAL))
                                 .lt(WorkAuditTaskEntity::getLockedUntil, now)))
                 .lt(WorkAuditTaskEntity::getQueryCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
@@ -149,6 +280,8 @@ public class WorkAuditTaskRepository {
         return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
                 .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .and(mode -> mode.isNull(WorkAuditTaskEntity::getSnapshotMode)
+                        .or().eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.INTERVAL))
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
@@ -171,6 +304,8 @@ public class WorkAuditTaskRepository {
         return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
                 .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .and(mode -> mode.isNull(WorkAuditTaskEntity::getSnapshotMode)
+                        .or().eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.INTERVAL))
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
@@ -193,6 +328,8 @@ public class WorkAuditTaskRepository {
         return taskMapper.selectList(Wrappers.<WorkAuditTaskEntity>lambdaQuery()
                 .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.QUERYING.getCode())
+                .and(mode -> mode.isNull(WorkAuditTaskEntity::getSnapshotMode)
+                        .or().eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.INTERVAL))
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getQueryCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
@@ -364,7 +501,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param lockOwner 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 锁过期时间
      * @param maxAttempts 最大查询次数
      * @return 是否 claim 成功
@@ -393,6 +530,8 @@ public class WorkAuditTaskRepository {
                         .or(expired -> expired
                                 .eq(WorkAuditTaskEntity::getTaskStatus,
                                         WorkAuditTaskStatusDict.QUERYING.getCode())
+                                .and(mode -> mode.isNull(WorkAuditTaskEntity::getSnapshotMode)
+                                        .or().eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.INTERVAL))
                                 .lt(WorkAuditTaskEntity::getLockedUntil, now)))
                 .lt(WorkAuditTaskEntity::getQueryCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
@@ -406,7 +545,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大提交尝试次数
      * @return 是否领取成功
@@ -424,6 +563,8 @@ public class WorkAuditTaskRepository {
                 .eq(WorkAuditTaskEntity::getId, taskId)
                 .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .and(mode -> mode.isNull(WorkAuditTaskEntity::getSnapshotMode)
+                        .or().eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.INTERVAL))
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .lt(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
@@ -437,7 +578,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大提交尝试次数
      * @return 是否领取成功
@@ -452,6 +593,8 @@ public class WorkAuditTaskRepository {
                 .eq(WorkAuditTaskEntity::getId, taskId)
                 .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.SUBMITTING.getCode())
+                .and(mode -> mode.isNull(WorkAuditTaskEntity::getSnapshotMode)
+                        .or().eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.INTERVAL))
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getAttemptCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
@@ -465,7 +608,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大查询次数
      * @return 是否领取成功
@@ -480,6 +623,8 @@ public class WorkAuditTaskRepository {
                 .eq(WorkAuditTaskEntity::getId, taskId)
                 .in(WorkAuditTaskEntity::getMediaType, MediaTypeDict.VIDEO.getCode(), MediaTypeDict.AUDIO.getCode())
                 .eq(WorkAuditTaskEntity::getTaskStatus, WorkAuditTaskStatusDict.QUERYING.getCode())
+                .and(mode -> mode.isNull(WorkAuditTaskEntity::getSnapshotMode)
+                        .or().eq(WorkAuditTaskEntity::getSnapshotMode, TencentCiVideoAuditRequest.INTERVAL))
                 .lt(WorkAuditTaskEntity::getLockedUntil, now)
                 .ge(WorkAuditTaskEntity::getQueryCount, maxAttempts)
                 .eq(WorkAuditTaskEntity::getDeleted, NOT_DELETED)
@@ -493,7 +638,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大尝试次数
      * @return 是否领取成功
@@ -524,7 +669,7 @@ public class WorkAuditTaskRepository {
      *
      * @param taskId 任务 ID
      * @param claimToken 本次领取 token
-     * @param now 本轮统一时间
+     * @param now 本次领取前新获取的时间，不使用批次扫描水位
      * @param lockedUntil 新租约截止时间
      * @param maxAttempts 最大尝试次数
      * @return 是否领取成功

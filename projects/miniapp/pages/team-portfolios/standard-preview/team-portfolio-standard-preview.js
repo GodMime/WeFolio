@@ -1,3 +1,6 @@
+const { advancedEditorPageMethods, advancedEndpoint, editorRequest } = require('../utils/advanced-editor-page')
+const { portfolioOpeningPageMethods } = require('../utils/portfolio-opening')
+const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { openWorkDetail } = require('../utils/portfolio-work-detail')
 const { openVideoPlayer } = require('../utils/portfolio-video-player')
 const VIDEO_PLAYER_ROUTE = '/pages/team-portfolios/video-player/video-player'
@@ -13,8 +16,10 @@ const {
   switchTeamPortfolioMenu
 } = require('../utils/team-visitor-portfolio.js')
 const {
+  captureTeamPortfolioMenuInteraction,
   clearTeamPortfolioMenuComponentState,
   clearTeamPortfolioMenuTransitionTimers,
+  isTeamPortfolioMenuInteractionCurrent,
   startTeamPortfolioMenuTransition
 } = require('../utils/team-portfolio-menu-transition.js')
 
@@ -36,6 +41,8 @@ const PERSONAL_PREVIEW_URL = '/pages' + '/portfolios/standard-preview/portfolio-
 const LIGHT_LOGO_URL = '/assets/system/folio-logo-stack-bold-small-50kb.png'
 const DARK_LOGO_URL = '/assets/system/folio-logo-stack-bold-dark-50kb.png'
 const PREVIEW_QUERY_UNSUPPORTED_MESSAGE = '预览模式不提交档期查询'
+const CANDIDATE_QUERY_UNSUPPORTED_MESSAGE = '采用并保存后可预览档期'
+const ADVANCED_PREVIEW_QUERY_FAILED_MESSAGE = '档期预览查询失败，请重试'
 
 function buckets(items) {
   const value = {
@@ -50,7 +57,10 @@ function buckets(items) {
 }
 
 Page({
+  ...advancedEditorPageMethods,
+  advancedRequest(options) { return editorRequest(this, options, request) },
   ...portfolioAudioPageMethods,
+  ...portfolioOpeningPageMethods,
   data: {
     backgroundAudioPlaying: false, backgroundAudioResource: {}, backgroundAudioTop: 76,
     portfolioId: 0,
@@ -75,7 +85,14 @@ Page({
     contactModalVisible: {}
   },
   onLoad(options = {}) {
+    this.remoteFontPage = installRemoteFontPage(this, { editor: false, team: true })
     this.positionBackgroundAudio()
+    this.setData({ advancedEditing: options.templateType === 'ADVANCED', candidatePreview: options.candidate === '1' })
+    if (this.data.candidatePreview) {
+      const channel = this.getOpenerEventChannel && this.getOpenerEventChannel()
+      if (channel && channel.on) channel.on('candidatePreview', payload => { this.applyPortfolio(normalizeTeamVisitorPortfolio(payload)); this.setData({ loading: false, errorMessage: '' }) })
+      return
+    }
     const portfolioId = Number(options.portfolioId)
     const scope = options.scope === 'published' ? 'published' : 'draft'
     if (!portfolioId) {
@@ -90,7 +107,7 @@ Page({
     this.setData({ loading: true, errorMessage: '' })
     try {
       const detail = await previewTeamPortfolio(
-        request,
+        options => this.advancedRequest(options),
         this.data.portfolioId,
         this.data.scope === 'published'
       )
@@ -108,7 +125,6 @@ Page({
     }
   },
   applyPortfolio(portfolio) {
-    this.syncBackgroundAudio(portfolio.backgroundAudio, true)
     const activeComponents = Array.isArray(portfolio.activeComponents)
       ? portfolio.activeComponents
       : []
@@ -223,10 +239,16 @@ Page({
   },
 
   handleVideoCarouselPlay(event) { return this.openVideoPreview(event && event.detail && event.detail.work) },
-  onShow() { this.clearVideoPreview(); this.showBackgroundAudio() },
+  onShow() {
+    this.clearVideoPreview()
+    this.showBackgroundAudio()
+    if (this.remoteFontPage) this.remoteFontPage.show()
+  },
   onHide() {
+    if (this.remoteFontPage) this.remoteFontPage.hide()
     this.hideBackgroundAudio(); this.stopSingleWorkVideos() },
   onUnload() {
+    if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.videoPlayerDisposed = true
     this.destroyBackgroundAudio()
     this.stopSingleWorkVideos()
@@ -234,27 +256,53 @@ Page({
   },
   handleQrPreview() {},
   handleMemberPortfolio(event) {
+    if (this.data.candidatePreview) { wx.showToast({ title: '采用并保存后可预览成员作品集', icon: 'none' }); return }
     const memberPortfolioId = Number(event.detail && event.detail.portfolioId)
     if (memberPortfolioId) {
       wx.navigateTo({
         url: `${PERSONAL_PREVIEW_URL}?portfolioId=${memberPortfolioId}` +
-          `&teamPortfolioId=${this.data.portfolioId}&teamScope=${this.data.scope}`
+          `&teamPortfolioId=${this.data.portfolioId}&teamScope=${this.data.scope}${this.data.advancedEditing ? '&templateType=ADVANCED' : ''}`
       })
     }
   },
   handleScheduleQuery(event) {
     const detail = event.detail || {}
     const child = this.selectComponent(`#schedule-${detail.componentKey}`)
+    if (this.data.advancedEditing && !this.data.candidatePreview && this.data.portfolioId) {
+      return this.queryAdvancedPreviewSchedule(detail, child)
+    }
+    const message = this.data.candidatePreview ? CANDIDATE_QUERY_UNSUPPORTED_MESSAGE : PREVIEW_QUERY_UNSUPPORTED_MESSAGE
     if (child && child.rejectQuery) {
       child.rejectQuery({
         detail: {
-          message: PREVIEW_QUERY_UNSUPPORTED_MESSAGE,
+          message,
           clearPendingIdempotencyKey: true
         }
       })
     }
-    wx.showToast({ title: PREVIEW_QUERY_UNSUPPORTED_MESSAGE, icon: 'none' })
+    wx.showToast({ title: message, icon: 'none' })
     return false
+  },
+  /** 已保存高级配置只读查档；候选和普通预览保持各自提交边界。 */
+  async queryAdvancedPreviewSchedule(detail, child) {
+    const menuInteraction = captureTeamPortfolioMenuInteraction(this)
+    try {
+      const result = await this.advancedRequest({
+        url: `${advancedEndpoint(this.data.portfolioId, '/schedule-query-preview')}?scope=${encodeURIComponent(this.data.scope)}`,
+        method: 'POST', data: { componentKey: detail.componentKey, queriedDate: detail.queriedDate, idempotencyKey: detail.idempotencyKey }
+      })
+      if (!isTeamPortfolioMenuInteractionCurrent(this, menuInteraction)) return false
+      this.setData({ scheduleResults: { ...this.data.scheduleResults, [detail.componentKey]: result } })
+      if (child && child.resolveQuery) child.resolveQuery({ detail: result })
+      return true
+    } catch (error) {
+      if (!isTeamPortfolioMenuInteractionCurrent(this, menuInteraction)) return false
+      if (child && child.rejectQuery) child.rejectQuery({ detail: { message: error.message || ADVANCED_PREVIEW_QUERY_FAILED_MESSAGE,
+        clearPendingIdempotencyKey: Number(error.statusCode) >= 400 && Number(error.statusCode) < 500 } })
+      if (handleTeamMaintainerAuthError(error) || showTeamPortfolioUnavailableToast(error)) return false
+      wx.showToast({ title: error.message || ADVANCED_PREVIEW_QUERY_FAILED_MESSAGE, icon: 'none' })
+      return false
+    }
   },
   handleContactInput(event) {
     const componentKey = event.currentTarget.dataset.key

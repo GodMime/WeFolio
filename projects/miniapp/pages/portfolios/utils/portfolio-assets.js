@@ -1,4 +1,4 @@
-const { request } = require('../../../utils/request')
+const { request } = require('../../../utils/request.js')
 const { isRemoteUrl } = require('../../../utils/upload-file')
 
 const PORTFOLIO_IMAGE_ASSET_MAX_SIZE_BYTES = 300 * 1024

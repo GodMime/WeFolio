@@ -1,0 +1,324 @@
+{
+  "schemaVersion": "standard-personal-v1",
+  "editorSchemaRevision": 14,
+  "share": {
+    "title": "",
+    "coverUrl": "",
+    "avatarUrl": ""
+  },
+  "style": {
+    "backgroundColor": "#FFFFFF",
+    "componentSpacingRpx": 32
+  },
+  "backgroundAudio": {
+    "enabled": false,
+    "workId": null,
+    "displayStyle": "DISC"
+  },
+  "components": [
+    {
+      "componentKey": "c_1791506445716_1fdd0c",
+      "componentType": "CONTACT_INFO",
+      "name": "联系信息",
+      "sortOrder": 1000,
+      "enabled": true,
+      "config": {
+        "contactPhone": "",
+        "contactWechat": "",
+        "contactBorder": false,
+        "contactBorderColor": "AUTO",
+        "contactBorderWidthRpx": 1,
+        "horizontalMarginRpx": 0,
+        "verticalMarginRpx": 0
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_3b4b63",
+      "componentType": "DIVIDER",
+      "name": "分割线",
+      "sortOrder": 2000,
+      "enabled": true,
+      "config": {
+        "color": "GRAY",
+        "heightPx": 16
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_49f9a5",
+      "componentType": "SINGLE_WORK",
+      "name": "单个作品",
+      "sortOrder": 3000,
+      "enabled": true,
+      "config": {
+        "workId": 0,
+        "openMode": "INLINE",
+        "detailOptions": {
+          "showTitle": true,
+          "showDescription": true
+        },
+        "showTitle": true,
+        "showDescription": false
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_4a6522",
+      "componentType": "HYPERLINK",
+      "name": "超链接",
+      "sortOrder": 4000,
+      "enabled": true,
+      "config": {
+        "workId": 0,
+        "actionType": "",
+        "showClickIcon": false,
+        "iconPosition": "OVERLAY"
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_5c767f",
+      "componentType": "WORK_LIST",
+      "name": "单列作品列表",
+      "sortOrder": 5000,
+      "enabled": true,
+      "config": {
+        "groups": [],
+        "showTitle": true,
+        "showDescription": false
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_5f6498",
+      "componentType": "VIDEO_CAROUSEL",
+      "name": "视频轮播",
+      "sortOrder": 6000,
+      "enabled": true,
+      "config": {
+        "title": "视频作品",
+        "workIds": [],
+        "showComponentTitle": true,
+        "showTitle": true,
+        "showSwipeHint": true,
+        "displayStyle": "STACKED",
+        "showDescription": false
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_60e64d",
+      "componentType": "SCHEDULE_QUERY",
+      "name": "档期查询",
+      "sortOrder": 7000,
+      "enabled": true,
+      "config": {
+        "displayMode": "MODAL_CALENDAR"
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_861fea",
+      "componentType": "WORK_GRID",
+      "name": "双列作品列表",
+      "sortOrder": 8000,
+      "enabled": true,
+      "config": {
+        "groups": [],
+        "showTitle": true,
+        "showDescription": false
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_8f24b3",
+      "componentType": "QR_CONTACT",
+      "name": "二维码联系",
+      "sortOrder": 9000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "c_1791506445716_b621dd",
+      "componentType": "CAROUSEL",
+      "name": "轮播图",
+      "sortOrder": 10000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "c_1791506445716_cf360b",
+      "componentType": "TEXT_SECTION",
+      "name": "文字说明",
+      "sortOrder": 11000,
+      "enabled": true,
+      "config": {
+        "color": "AUTO",
+        "content": "",
+        "alignment": "LEFT",
+        "fontFamily": "SYSTEM",
+        "fontSizeRpx": 26
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_d0bdca",
+      "componentType": "CONTACT_FORM",
+      "name": "预留联系信息",
+      "sortOrder": 12000,
+      "enabled": true,
+      "config": {
+        "displayMode": "MODAL_FORM",
+        "fields": [
+          "contactName",
+          "phone",
+          "wechat",
+          "needs"
+        ]
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_ed6188",
+      "componentType": "PROFILE",
+      "name": "个人资料",
+      "sortOrder": 13000,
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "componentKey": "c_1791506445716_f326d7",
+      "componentType": "TEXT_GRID",
+      "name": "文字网格",
+      "sortOrder": 14000,
+      "enabled": true,
+      "config": {
+        "rows": 2,
+        "columns": 2,
+        "columnWeights": [
+          1,
+          1
+        ],
+        "rowMinHeightsRpx": [
+          180,
+          180
+        ],
+        "gapRpx": 16,
+        "cellPaddingRpx": 24,
+        "cellRadiusRpx": 24,
+        "cellBorder": false,
+        "cellBackground": "AUTO",
+        "cellBorderWidthRpx": 1,
+        "cellBorderColor": "#D7DADD",
+        "cells": [
+          {
+            "cellKey": "cell_0",
+            "row": 0,
+            "column": 0,
+            "rowSpan": 1,
+            "columnSpan": 1,
+            "verticalAlignment": "CENTER",
+            "blocks": [
+              {
+                "blockKey": "block_0",
+                "alignment": "CENTER",
+                "marginTopRpx": 0,
+                "marginBottomRpx": 12,
+                "runs": [
+                  {
+                    "runKey": "run_0",
+                    "text": "",
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 28,
+                    "fontWeight": "NORMAL",
+                    "color": "AUTO"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "cellKey": "cell_1",
+            "row": 0,
+            "column": 1,
+            "rowSpan": 1,
+            "columnSpan": 1,
+            "verticalAlignment": "CENTER",
+            "blocks": [
+              {
+                "blockKey": "block_1",
+                "alignment": "CENTER",
+                "marginTopRpx": 0,
+                "marginBottomRpx": 12,
+                "runs": [
+                  {
+                    "runKey": "run_1",
+                    "text": "",
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 28,
+                    "fontWeight": "NORMAL",
+                    "color": "AUTO"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "cellKey": "cell_2",
+            "row": 1,
+            "column": 0,
+            "rowSpan": 1,
+            "columnSpan": 1,
+            "verticalAlignment": "CENTER",
+            "blocks": [
+              {
+                "blockKey": "block_2",
+                "alignment": "CENTER",
+                "marginTopRpx": 0,
+                "marginBottomRpx": 12,
+                "runs": [
+                  {
+                    "runKey": "run_2",
+                    "text": "",
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 28,
+                    "fontWeight": "NORMAL",
+                    "color": "AUTO"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "cellKey": "cell_3",
+            "row": 1,
+            "column": 1,
+            "rowSpan": 1,
+            "columnSpan": 1,
+            "verticalAlignment": "CENTER",
+            "blocks": [
+              {
+                "blockKey": "block_3",
+                "alignment": "CENTER",
+                "marginTopRpx": 0,
+                "marginBottomRpx": 12,
+                "runs": [
+                  {
+                    "runKey": "run_3",
+                    "text": "",
+                    "fontFamily": "SYSTEM",
+                    "fontSizeRpx": 28,
+                    "fontWeight": "NORMAL",
+                    "color": "AUTO"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "componentKey": "c_1791506445716_ff2713",
+      "componentType": "STRUCTURED_TEXT_SECTION",
+      "name": "结构化文字说明",
+      "sortOrder": 15000,
+      "enabled": true,
+      "config": {}
+    }
+  ],
+  "bottomNav": {
+    "enabled": false
+  }
+}
