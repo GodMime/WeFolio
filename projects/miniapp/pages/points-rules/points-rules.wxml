@@ -36,6 +36,13 @@
                 </view>
                 <view class="cost-chip {{item.groupTone}}">{{rule.costText}}</view>
               </view>
+              <view wx:if="{{item.groupCode === 'MAINTENANCE'}}" class="cost-line">
+                <view class="cost-copy">
+                  <view class="cost-title">高级作品集token消耗</view>
+                  <view class="cost-desc">每次成功计费</view>
+                </view>
+                <view class="cost-chip maintenance">限时免费</view>
+              </view>
             </view>
           </view>
           <view wx:if="{{pointData.acquisitionRules.length}}" class="cost-group gift-group">
