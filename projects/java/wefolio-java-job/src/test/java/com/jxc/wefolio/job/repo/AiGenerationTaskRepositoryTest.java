@@ -3,6 +3,8 @@ package com.jxc.wefolio.job.repo;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -41,11 +43,67 @@ class AiGenerationTaskRepositoryTest {
                 CREATE TABLE wf_ai_generation_task(id BIGINT PRIMARY KEY AUTO_INCREMENT,owner_type VARCHAR(32),owner_id BIGINT,
                 portfolio_id BIGINT,requested_by BIGINT,idempotency_key VARCHAR(64),request_json CLOB,result_json CLOB,status VARCHAR(32),
                 attempt_count INT,next_run_at TIMESTAMP(3),started_at TIMESTAMP(3),completed_at TIMESTAMP(3),error_code VARCHAR(64),
-                error_message VARCHAR(500),created_at TIMESTAMP(3),updated_at TIMESTAMP(3),deleted BIGINT DEFAULT 0,version INT DEFAULT 0,
+                error_message CLOB,created_at TIMESTAMP(3),updated_at TIMESTAMP(3),deleted BIGINT DEFAULT 0,version INT DEFAULT 0,
                 reference_attachments_json CLOB,media_budget_json CLOB,media_budget_unknown_count INT DEFAULT 0)
                 """);
         jdbc.execute("CREATE TABLE wf_user(id BIGINT PRIMARY KEY,status VARCHAR(32),deleted BIGINT)");
         jdbc.update("INSERT INTO wf_user VALUES(1,'ACTIVE',0)");
+    }
+
+    /** 重试、终态和成功均保留同字段历史，长摘要不再受原五百字符限制。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"FAILED", "SUCCEEDED", "MEDIA_SUCCEEDED"})
+    void failuresAppendAtomicallyAndSurviveFinalTransition(String outcome) {
+        var now = businessNow();
+        var task = pending(now.minusSeconds(20));
+        String first = "网络失败😀".repeat(70);
+        String second = "结构校验失败".repeat(70);
+        assertThat(repository.claim(task, now, 3, 1200)).isTrue();
+        assertThat(repository.retry(task, "REMOTE_ERROR", first, now, 1200)).isTrue();
+        assertThat(repository.retry(task, "REMOTE_ERROR", first, now, 1200)).isFalse();
+        task = repository.findPending(now.plusSeconds(6), 10).getFirst();
+        assertThat(repository.claim(task, now.plusSeconds(6), 3, 1200)).isTrue();
+        assertThat(repository.retryMedia(task, "INVALID_OUTPUT", second, now.plusSeconds(6), 1200, 360)).isTrue();
+        assertThat(repository.retryMedia(task, "INVALID_OUTPUT", second, now.plusSeconds(6), 1200, 360)).isFalse();
+        task = repository.findPending(now.plusSeconds(17), 10).getFirst();
+        assertThat(repository.claim(task, now.plusSeconds(17), 3, 1200)).isTrue();
+        String history = "[attempt=1 code=REMOTE_ERROR] " + first + "\n[attempt=2 code=INVALID_OUTPUT] " + second;
+        if ("FAILED".equals(outcome)) {
+            assertThat(repository.fail(task, "TIMEOUT", "生成超时", now.plusSeconds(17))).isTrue();
+            assertThat(repository.fail(task, "TIMEOUT", "生成超时", now.plusSeconds(17))).isFalse();
+            history += "\n[attempt=3 code=TIMEOUT] 生成超时";
+        } else if ("MEDIA_SUCCEEDED".equals(outcome)) {
+            assertThat(repository.succeedMedia(task, "{}", now.plusSeconds(17), 1200, 360)).isTrue();
+        } else {
+            assertThat(repository.succeed(task, "{}", now.plusSeconds(17), 1200)).isTrue();
+        }
+        assertThat(jdbc.queryForObject("SELECT error_message FROM wf_ai_generation_task WHERE id=?", String.class, task.getId()))
+                .isEqualTo(history);
+        assertThat(jdbc.queryForObject("SELECT error_code FROM wf_ai_generation_task WHERE id=?", String.class, task.getId()))
+                .isEqualTo("FAILED".equals(outcome) ? "TIMEOUT" : null);
+        assertThat(repository.deleteExpired(now.plusDays(31), 10)).isEqualTo(1);
+    }
+
+    /** 中断恢复保留旧版本的单条摘要，空摘要追加时没有多余分隔符。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void interruptionAppendsToLegacySummary(boolean media) {
+        var now = businessNow();
+        var task = pending(now.minusSeconds(200));
+        assertThat(repository.claim(task, now.minusSeconds(100), 3, 1200)).isTrue();
+        String previous = media ? "旧版失败摘要" : "";
+        jdbc.update("UPDATE wf_ai_generation_task SET error_message=? WHERE id=?", previous, task.getId());
+        if (media) {
+            assertThat(repository.failInterruptedMedia(task, now, 90, 1200)).isTrue();
+            assertThat(repository.failInterruptedMedia(task, now, 90, 1200)).isFalse();
+        } else {
+            assertThat(repository.recover(task, now, 1200)).isTrue();
+            assertThat(repository.recover(task, now, 1200)).isFalse();
+        }
+        String expected = (previous.isEmpty() ? "" : previous + "\n") + "[attempt=1 code=EXECUTION_INTERRUPTED] "
+                + (media ? "媒体执行中断，现有内容已保留，请重新发起" : "执行中断，等待重试");
+        assertThat(jdbc.queryForObject("SELECT error_message FROM wf_ai_generation_task WHERE id=?", String.class, task.getId()))
+                .isEqualTo(expected);
     }
 
     /** 普通 SQL 领取跳过排在前面的附件，不依赖先查小批再内存过滤。 */

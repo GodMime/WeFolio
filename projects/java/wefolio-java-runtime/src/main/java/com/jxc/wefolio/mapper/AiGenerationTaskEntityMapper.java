@@ -27,7 +27,8 @@ public interface AiGenerationTaskEntityMapper extends BaseMapper<AiGenerationTas
 
     /** 查询和提交时收口本人的过期活动任务；固定超时提示与 Job 共用，条件更新仍隔离旧 worker。 */
     @Update("UPDATE wf_ai_generation_task SET status='FAILED', error_code='TIMEOUT', "
-            + "error_message='" + PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE + "', "
+            + "error_message=CONCAT_WS(CHAR(10), NULLIF(error_message, ''), CONCAT('[attempt=', attempt_count, ' code=TIMEOUT] "
+            + PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE + "')), "
             + "completed_at=#{now}, updated_at=#{now}, version=version+1 "
             + "WHERE requested_by=#{userId} AND deleted=0 AND status IN ('PENDING','RUNNING') "
             + "AND created_at <= #{deadline}")

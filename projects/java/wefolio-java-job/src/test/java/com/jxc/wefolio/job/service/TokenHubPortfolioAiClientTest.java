@@ -607,6 +607,17 @@ class TokenHubPortfolioAiClientTest {
         assertThat(client.payload(task, request()).toString()).doesNotContain("notes 应为字符串数组");
     }
 
+    /** 同字段历史只将最新错误交给模型纠正，兼容旧单条反馈并保留最新摘要中的换行。 */
+    @Test void retryFeedbackUsesLatestAppendedFailureOnly() {
+        var task = task(); task.setErrorCode("INVALID_OUTPUT");
+        task.setErrorMessage("历史网络错误\n[attempt=1 code=INVALID_OUTPUT] 旧结构错误\n"
+                + "[attempt=2 code=INVALID_OUTPUT] 最新字段错误\n补充修正提示");
+        ObjectNode payload = new TokenHubPortfolioAiClient(properties()).payload(task, request());
+        ObjectNode user = StrictAiJson.parseObject(payload.path("messages").get(1).path("content").asText(), 100000, 20);
+        assertThat(user.path("retry").path("error_message").asText()).isEqualTo("最新字段错误\n补充修正提示");
+        assertThat(payload.toString()).doesNotContain("历史网络错误", "旧结构错误");
+    }
+
     /** 真实校验产生的组件、字段和修正提示原样进入下一轮用户消息，不附被拒正文。 */
     @Test
     void bindingValidationFeedbackReachesNextModelRequest() {

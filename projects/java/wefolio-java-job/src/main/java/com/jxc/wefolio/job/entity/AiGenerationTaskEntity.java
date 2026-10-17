@@ -49,6 +49,6 @@ public class AiGenerationTaskEntity extends BaseEntity {
     private LocalDateTime completedAt;
     /** 最近一次失败的固定错误码。 */
     private String errorCode;
-    /** 代码生成的安全错误摘要，不含模型原文。 */
+    /** 按执行次数追加的安全失败摘要，不含模型原文，成功后保留至任务到期。 */
     private String errorMessage;
 }

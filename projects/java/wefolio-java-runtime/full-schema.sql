@@ -52,7 +52,7 @@ CREATE TABLE `wf_ai_generation_task` (
   `started_at` DATETIME(3) NULL COMMENT '最近一次领取时间，用于执行超时恢复',
   `completed_at` DATETIME(3) NULL COMMENT '任务进入终态的时间',
   `error_code` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL COMMENT '最近一次失败错误码',
-  `error_message` VARCHAR(500) NULL COMMENT '最近一次失败的安全摘要，可用于下次纠正',
+  `error_message` TEXT NULL COMMENT '按执行次数追加的安全失败摘要，不含模型原文或凭据',
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',

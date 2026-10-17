@@ -2,6 +2,7 @@ package com.jxc.wefolio.job.repo;
 
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.dict.AiTaskStatusDict;
+import com.jxc.wefolio.job.service.PortfolioAiFailureHistory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -18,6 +19,12 @@ import java.util.Set;
 @RequiredArgsConstructor
 @Slf4j
 public class AiGenerationTaskRepository {
+    /** 追加表达式与状态 CAS 在同一条 SQL 中执行，避免并发丢历史或重复记录。 */
+    private static final String APPEND_ERROR_SQL = "CONCAT_WS(CHAR(10), NULLIF(error_message, ''), ?)";
+    /** 中断恢复错误码和摘要与既有业务提示保持一致。 */
+    private static final String INTERRUPTED_CODE = "EXECUTION_INTERRUPTED";
+    private static final String RECOVERY_MESSAGE = "执行中断，等待重试";
+    private static final String MEDIA_INTERRUPTED_MESSAGE = "媒体执行中断，现有内容已保留，请重新发起";
     /** 数据库操作入口。 */
     private final JdbcTemplate jdbc;
     /** 在同一次写入中使用数据库当前时间校验总期限，锁等待也不能延长期限。 */
@@ -66,11 +73,11 @@ public class AiGenerationTaskRepository {
     public boolean failInterruptedMedia(AiGenerationTaskEntity task, LocalDateTime now, int recovery, int timeout) {
         return jdbc.update("""
                 UPDATE wf_ai_generation_task SET status='FAILED',result_json=NULL,error_code='EXECUTION_INTERRUPTED',
-                error_message='媒体执行中断，现有内容已保留，请重新发起',completed_at=?,updated_at=?,version=version+1
+                error_message=%s,completed_at=?,updated_at=?,version=version+1
                 WHERE id=? AND status='RUNNING' AND version=? AND deleted=0
                 AND updated_at<=TIMESTAMPADD(SECOND, ?, %s)
-                """.formatted(PortfolioAiDatabaseTime.NOW_SQL) + LIVE_DEADLINE,
-                now, now, task.getId(), task.getVersion(), -recovery, timeout) == 1;
+                """.formatted(APPEND_ERROR_SQL, PortfolioAiDatabaseTime.NOW_SQL) + LIVE_DEADLINE,
+                PortfolioAiFailureHistory.entry(task.getAttemptCount(), INTERRUPTED_CODE, MEDIA_INTERRUPTED_MESSAGE), now, now, task.getId(), task.getVersion(), -recovery, timeout) == 1;
     }
 
     /** 读取可领取队列；最终领取仍以 version 防并发。 */
@@ -108,7 +115,7 @@ public class AiGenerationTaskRepository {
     public boolean succeed(AiGenerationTaskEntity task, String result, LocalDateTime now, int timeout) {
         return jdbc.update("""
                 UPDATE wf_ai_generation_task SET status='SUCCEEDED',result_json=?,completed_at=?,updated_at=?,
-                error_code=NULL,error_message=NULL,version=version+1 WHERE id=? AND status='RUNNING'
+                error_code=NULL,version=version+1 WHERE id=? AND status='RUNNING'
                 AND version=? AND deleted=0
                 """ + LIVE_DEADLINE, result, now, now, task.getId(), task.getVersion(), timeout) == 1;
     }
@@ -117,7 +124,7 @@ public class AiGenerationTaskRepository {
     public boolean succeedMedia(AiGenerationTaskEntity task, String result, LocalDateTime now, int timeout, int recovery) {
         return jdbc.update("""
                 UPDATE wf_ai_generation_task SET status='SUCCEEDED',result_json=?,completed_at=?,updated_at=?,
-                error_code=NULL,error_message=NULL,version=version+1 WHERE id=? AND status='RUNNING'
+                error_code=NULL,version=version+1 WHERE id=? AND status='RUNNING'
                 AND version=? AND deleted=0
                 """ + LIVE_DEADLINE + LIVE_MEDIA_LEASE, result, now, now, task.getId(), task.getVersion(), timeout, -recovery) == 1;
     }
@@ -125,27 +132,27 @@ public class AiGenerationTaskRepository {
     /** 在有效执行代次和总期限内按统一预算回到排队状态。 */
     public boolean retry(AiGenerationTaskEntity task, String code, String message, LocalDateTime now, int timeout) {
         return jdbc.update("""
-                UPDATE wf_ai_generation_task SET status='PENDING',result_json=NULL,error_code=?,error_message=?,
+                UPDATE wf_ai_generation_task SET status='PENDING',result_json=NULL,error_code=?,error_message=%s,
                 next_run_at=?,updated_at=?,version=version+1 WHERE id=? AND status='RUNNING' AND version=? AND deleted=0
-                """ + LIVE_DEADLINE, code, message, now.plusSeconds(task.getAttemptCount() == 1 ? 5 : 10), now,
+                """.formatted(APPEND_ERROR_SQL) + LIVE_DEADLINE, code, PortfolioAiFailureHistory.entry(task.getAttemptCount(), code, message), now.plusSeconds(task.getAttemptCount() == 1 ? 5 : 10), now,
                 task.getId(), task.getVersion(), timeout) == 1;
     }
 
     /** 仅正常持权媒体的可重试调用错误可回队列，已过租约或进程中断不能触发新的付费代次。 */
     public boolean retryMedia(AiGenerationTaskEntity task, String code, String message, LocalDateTime now, int timeout, int recovery) {
         return jdbc.update("""
-                UPDATE wf_ai_generation_task SET status='PENDING',result_json=NULL,error_code=?,error_message=?,
+                UPDATE wf_ai_generation_task SET status='PENDING',result_json=NULL,error_code=?,error_message=%s,
                 next_run_at=?,updated_at=?,version=version+1 WHERE id=? AND status='RUNNING' AND version=? AND deleted=0
-                """ + LIVE_DEADLINE + LIVE_MEDIA_LEASE, code, message, now.plusSeconds(task.getAttemptCount() == 1 ? 5 : 10), now,
+                """.formatted(APPEND_ERROR_SQL) + LIVE_DEADLINE + LIVE_MEDIA_LEASE, code, PortfolioAiFailureHistory.entry(task.getAttemptCount(), code, message), now.plusSeconds(task.getAttemptCount() == 1 ? 5 : 10), now,
                 task.getId(), task.getVersion(), timeout, -recovery) == 1;
     }
 
     /** 按读出的状态和版本终态化，恢复、总超时及执行失败共用同一条件。 */
     public boolean fail(AiGenerationTaskEntity task, String code, String message, LocalDateTime now) {
         boolean applied = jdbc.update("""
-                UPDATE wf_ai_generation_task SET status='FAILED',result_json=NULL,error_code=?,error_message=?,
+                UPDATE wf_ai_generation_task SET status='FAILED',result_json=NULL,error_code=?,error_message=%s,
                 completed_at=?,updated_at=?,version=version+1 WHERE id=? AND status=? AND version=? AND deleted=0
-                """, code, message, now, now, task.getId(), task.getStatus(), task.getVersion()) == 1;
+                """.formatted(APPEND_ERROR_SQL), code, PortfolioAiFailureHistory.entry(task.getAttemptCount(), code, message), now, now, task.getId(), task.getStatus(), task.getVersion()) == 1;
         log.warn("高级 AI 失败终态 taskId={}, attempt={}, errorCode={}, applied={}, completedAt={}",
                 task.getId(), task.getAttemptCount(), code, applied, now);
         return applied;
@@ -155,8 +162,8 @@ public class AiGenerationTaskRepository {
     public boolean recover(AiGenerationTaskEntity task, LocalDateTime now, int timeout) {
         return jdbc.update("""
                 UPDATE wf_ai_generation_task SET status='PENDING',next_run_at=?,updated_at=?,error_code='EXECUTION_INTERRUPTED',
-                error_message='执行中断，等待重试',version=version+1 WHERE id=? AND status='RUNNING' AND version=? AND deleted=0
-                """ + LIVE_DEADLINE, now.plusSeconds(task.getAttemptCount() == 1 ? 5 : 10), now,
+                error_message=%s,version=version+1 WHERE id=? AND status='RUNNING' AND version=? AND deleted=0
+                """.formatted(APPEND_ERROR_SQL) + LIVE_DEADLINE, now.plusSeconds(task.getAttemptCount() == 1 ? 5 : 10), now, PortfolioAiFailureHistory.entry(task.getAttemptCount(), INTERRUPTED_CODE, RECOVERY_MESSAGE),
                 task.getId(), task.getVersion(), timeout) == 1;
     }
 

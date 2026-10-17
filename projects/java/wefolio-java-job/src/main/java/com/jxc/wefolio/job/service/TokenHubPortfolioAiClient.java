@@ -164,7 +164,7 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
         }
         if ("INVALID_OUTPUT".equals(task.getErrorCode())) {
             system += "\n" + resource("retry.txt");
-            user.putObject("retry").put("error_code", task.getErrorCode()).put("error_message", task.getErrorMessage());
+            user.putObject("retry").put("error_code", task.getErrorCode()).put("error_message", PortfolioAiFailureHistory.latestMessage(task.getErrorMessage()));
         }
         var messages = body.putArray("messages");
         messages.addObject().put("role", "system").put("content", system);

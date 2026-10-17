@@ -67,7 +67,7 @@ public class AiGenerationTaskEntity extends BaseEntity {
     /** 可恢复错误码，使用英文大写下划线 */
     private String errorCode;
 
-    /** 脱敏错误摘要 */
+    /** 按执行次数追加的安全失败摘要，成功后保留至任务到期。 */
     private String errorMessage;
 
     /** 最近一次领取时间，用于执行中断恢复。 */

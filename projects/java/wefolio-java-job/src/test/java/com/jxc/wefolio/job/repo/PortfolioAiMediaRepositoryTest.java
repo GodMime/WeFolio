@@ -64,7 +64,7 @@ class PortfolioAiMediaRepositoryTest {
                 CREATE TABLE wf_ai_generation_task(id BIGINT PRIMARY KEY,requested_by BIGINT,status VARCHAR(32),version INT,
                 deleted BIGINT,created_at TIMESTAMP,attempt_count INT DEFAULT 1,media_budget_json CLOB,
                 media_budget_unknown_count INT DEFAULT 0,updated_at TIMESTAMP,result_json CLOB,request_json CLOB DEFAULT '{}',
-                completed_at TIMESTAMP,error_code VARCHAR(64),error_message VARCHAR(500))
+                completed_at TIMESTAMP,error_code VARCHAR(64),error_message CLOB)
                 """);
         jdbc.execute("""
                 CREATE TABLE wf_work(id BIGINT PRIMARY KEY,media_object_key VARCHAR(512),media_sha256 VARCHAR(64),

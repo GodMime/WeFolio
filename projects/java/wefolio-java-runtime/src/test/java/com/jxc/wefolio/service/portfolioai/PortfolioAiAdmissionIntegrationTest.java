@@ -111,6 +111,21 @@ class PortfolioAiAdmissionIntegrationTest {
                 .isEqualTo(AiTaskStatusDict.PENDING.getCode());
     }
 
+    /** Runtime 超时收口在原字段追加，不覆盖 Job 历次失败，也不通过查询接口泄露历史。 */
+    @Test void queryTimeoutAppendsOnceToLongFailureHistory() {
+        var task = runningTask(1201);
+        String history = "[attempt=1 code=REMOTE_ERROR] " + "安全摘要😀".repeat(120);
+        jdbc.update("UPDATE wf_ai_generation_task SET error_message=? WHERE id=?", history, task.getId());
+        var first = application.query(task.getId());
+        var second = application.query(task.getId());
+        String expected = history + "\n[attempt=" + task.getAttemptCount() + " code=TIMEOUT] "
+                + PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE;
+        assertThat(taskMapper.selectById(task.getId()).getErrorMessage()).isEqualTo(expected);
+        assertThat(first).isEqualTo(second);
+        assertThat(first.get(PortfolioAiConstants.KEY_ERROR_MESSAGE)).isEqualTo(PortfolioAiTaskMessage.TASK_FAILED_MESSAGE);
+        assertThat(first.toString()).doesNotContain(history);
+    }
+
     /** 使用真实提交事务创建记录，只调整已执行时间及代次以构造期限场景。 */
     private AiGenerationTaskEntity runningTask(int ageSeconds) {
         AiGenerationTaskEntity task = service.submit(101L, "long-running-task", frozen(101L));
@@ -229,7 +244,7 @@ class PortfolioAiAdmissionIntegrationTest {
                       requested_by BIGINT,idempotency_key VARCHAR(64),request_json CLOB,reference_attachments_json CLOB,result_json CLOB,status VARCHAR(32),
                       media_budget_json CLOB,media_budget_unknown_count INT NOT NULL DEFAULT 0,
                       attempt_count INT,next_run_at TIMESTAMP,started_at TIMESTAMP,completed_at TIMESTAMP,
-                      error_code VARCHAR(64),error_message VARCHAR(500),created_at TIMESTAMP,updated_at TIMESTAMP,
+                      error_code VARCHAR(64),error_message CLOB,created_at TIMESTAMP,updated_at TIMESTAMP,
                       deleted BIGINT DEFAULT 0,version INT DEFAULT 0,UNIQUE(requested_by,idempotency_key,deleted))
                     """);
             return source;
