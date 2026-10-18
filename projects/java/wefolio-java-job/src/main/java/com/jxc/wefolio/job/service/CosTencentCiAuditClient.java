@@ -5,6 +5,7 @@ import com.jxc.wefolio.job.config.CosProperties;
 import com.jxc.wefolio.job.config.VideoFrameConfig;
 import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.qcloud.cos.COSClient;
+import com.qcloud.cos.exception.CosServiceException;
 import com.qcloud.cos.model.ciModel.auditing.AudtingCommonInfo;
 import com.qcloud.cos.model.ciModel.auditing.AuditingJobsDetail;
 import com.qcloud.cos.model.ciModel.auditing.AudioAuditingRequest;
@@ -77,6 +78,12 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
 
     /** 新策略日志里的临时媒体地址占位。 */
     private static final String REDACTED_MEDIA_URL = "REDACTED_MEDIA_URL";
+
+    /** 视频审核提交操作标识。 */
+    private static final String VIDEO_SUBMIT_OPERATION = "SUBMIT";
+
+    /** 视频审核查询操作标识。 */
+    private static final String VIDEO_QUERY_OPERATION = "QUERY";
 
     private final COSClient cosClient;
 
@@ -179,7 +186,15 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
         logTencentPayload("腾讯云视频审核提交原始入参", request);
         log.info("腾讯云视频审核提交请求: bucketName={}, objectKey={}, mode={}, snapshotIntervalSeconds={}, snapshotCount={}",
                 cosProperties.getBucketName(), objectKey, frozen.mode(), frozen.intervalSeconds(), frozen.count());
-        VideoAuditingResponse response = (average ? persistentVideoClient : cosClient).createVideoAuditingJob(request);
+        VideoAuditingResponse response;
+        try {
+            // JSON 日志会调用 SDK 懒加载 getter 重建空 Mask，必须在日志之后清除，避免输出地域校验失败。
+            request.getConf().setMask(null);
+            response = (average ? persistentVideoClient : cosClient).createVideoAuditingJob(request);
+        } catch (CosServiceException exception) {
+            logVideoFailure(VIDEO_SUBMIT_OPERATION, objectKey, exception);
+            throw exception;
+        }
         AuditingJobsDetail detail = response.getJobsDetail();
         log.info("腾讯云视频审核提交响应: objectKey={}, jobId={}, state={}",
                 objectKey, detail == null ? null : detail.getJobId(), detail == null ? null : detail.getState());
@@ -204,7 +219,13 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
 
         logTencentPayload("腾讯云视频审核查询原始入参", videoQueryRequestPayload(ciJobId));
         log.info("腾讯云视频审核查询请求: bucketName={}, ciJobId={}", cosProperties.getBucketName(), ciJobId);
-        VideoAuditingResponse response = (persistentFrames ? persistentVideoClient : cosClient).describeAuditingJob(request);
+        VideoAuditingResponse response;
+        try {
+            response = (persistentFrames ? persistentVideoClient : cosClient).describeAuditingJob(request);
+        } catch (CosServiceException exception) {
+            logVideoFailure(VIDEO_QUERY_OPERATION, ciJobId, exception);
+            throw exception;
+        }
         AuditingJobsDetail detail = response.getJobsDetail();
         log.info("腾讯云视频审核查询响应: ciJobId={}, state={}, result={}, label={}",
                 ciJobId, detail == null ? null : detail.getState(),
@@ -214,6 +235,13 @@ public class CosTencentCiAuditClient implements TencentCiAuditClient {
         TencentCiAuditResult result = toVideoResult(response);
         logAuditSummary("腾讯云视频审核查询简洁结果", ciJobId, result);
         return result;
+    }
+
+    /** 在供应商边界记录原始错误字段，上层仍按原异常处理审核状态。 */
+    private void logVideoFailure(String operation, String target, CosServiceException exception) {
+        log.warn("腾讯云视频审核调用失败: operation={}, target={}, httpStatus={}, errorCode={}, requestId={}, errorMessage={}",
+                operation, target, exception.getStatusCode(), exception.getErrorCode(),
+                exception.getRequestId(), exception.getErrorMessage());
     }
 
     private TencentCiAuditResult toVideoResult(VideoAuditingResponse response) {

@@ -1,8 +1,13 @@
 package com.jxc.wefolio.job.service;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.job.config.CosProperties;
 import com.jxc.wefolio.job.dict.AuditResultDict;
 import com.qcloud.cos.COSClient;
+import com.qcloud.cos.exception.CosServiceException;
 import com.qcloud.cos.model.ciModel.auditing.AuditingJobsDetail;
 import com.qcloud.cos.model.ciModel.auditing.AudioAuditingRequest;
 import com.qcloud.cos.model.ciModel.auditing.AudioAuditingResponse;
@@ -17,11 +22,14 @@ import com.qcloud.cos.model.ciModel.xml.CIAuditingXmlFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -163,6 +171,9 @@ class CosTencentCiAuditClientTest {
         assertThat(request.getConf().getSnapshot().getMode()).isEqualTo("Interval");
         assertThat(request.getConf().getSnapshot().getTimeInterval()).isEqualTo("60");
         assertThat(request.getConf().getSnapshot().getCount()).isEqualTo("5");
+        String xml = new String(CIAuditingXmlFactory.convertToXmlByteArray(request),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(xml).doesNotContain("<Mask>", "<CosOutput>", "<LiveOutput>");
         assertThat(result.ciJobId()).isEqualTo("video-job-id");
         assertThat(result.ciState()).isEqualTo("Submitted");
         assertThat(result.terminal()).isFalse();
@@ -193,8 +204,55 @@ class CosTencentCiAuditClientTest {
         String xml = new String(CIAuditingXmlFactory.convertToXmlByteArray(request),
                 java.nio.charset.StandardCharsets.UTF_8);
         assertThat(xml).contains("<Mode>Average</Mode>", "<Count>18</Count>", "<CallbackType>1</CallbackType>")
-                .doesNotContain("<TimeInterval>");
+                .doesNotContain("<TimeInterval>", "<Mask>", "<CosOutput>", "<LiveOutput>");
         org.mockito.Mockito.verifyNoInteractions(legacy);
+    }
+
+    /** 提交和查询保留原异常，并按原样记录供应商错误字段。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"SUBMIT_AVERAGE", "SUBMIT_INTERVAL", "QUERY_AVERAGE", "QUERY_INTERVAL"})
+    void videoFailureShouldLogRawProviderDiagnosticsAndRethrow(String operation) {
+        COSClient cos = mock(COSClient.class);
+        CosProperties properties = testCosProperties();
+        CosServiceException failure = new CosServiceException("模拟腾讯云参数错误");
+        failure.setStatusCode(400);
+        failure.setErrorCode("InvalidArgument");
+        failure.setRequestId("request-123");
+        failure.setErrorMessage("Conf.Mask.CosOutput.Region is invalid; "
+                + "https://example.com/video?q-signature=test-signature");
+        when(cos.createVideoAuditingJob(org.mockito.ArgumentMatchers.any(VideoAuditingRequest.class)))
+                .thenThrow(failure);
+        when(cos.describeAuditingJob(org.mockito.ArgumentMatchers.any(VideoAuditingRequest.class)))
+                .thenThrow(failure);
+        CosTencentCiAuditClient client = new CosTencentCiAuditClient(cos, properties);
+        Logger logger = (Logger) LoggerFactory.getLogger(CosTencentCiAuditClient.class);
+        ListAppender<ILoggingEvent> events = new ListAppender<>();
+        events.start();
+        logger.addAppender(events);
+        try {
+            assertThatThrownBy(() -> {
+                switch (operation) {
+                    case "SUBMIT_AVERAGE" -> client.submitVideo(OBJECT_KEY, TencentCiVideoAuditRequest.average(9));
+                    case "SUBMIT_INTERVAL" -> client.submitVideo(OBJECT_KEY, 60, 5);
+                    case "QUERY_AVERAGE" -> client.queryVideo("video-job-id", true);
+                    case "QUERY_INTERVAL" -> client.queryVideo("video-job-id");
+                    default -> throw new IllegalArgumentException("未知测试场景");
+                }
+            }).isSameAs(failure);
+            List<ILoggingEvent> warnings = events.list.stream()
+                    .filter(event -> event.getLevel() == Level.WARN).toList();
+            assertThat(warnings).hasSize(1);
+            ILoggingEvent warning = warnings.getFirst();
+            assertThat(warning.getFormattedMessage())
+                    .contains("httpStatus=400", "errorCode=InvalidArgument", "requestId=request-123",
+                            "errorMessage=" + failure.getErrorMessage(),
+                            "operation=" + (operation.startsWith("SUBMIT") ? "SUBMIT" : "QUERY"),
+                            operation.startsWith("SUBMIT") ? OBJECT_KEY : "video-job-id");
+            assertThat(warning.getThrowableProxy()).isNull();
+        } finally {
+            logger.detachAppender(events);
+            events.stop();
+        }
     }
 
     /** 查询时保留真实毫秒时间，非法值保留为 null，由完整帧校验明确失败。 */
