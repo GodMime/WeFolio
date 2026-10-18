@@ -16,6 +16,7 @@
     "team-contact-form": "../components/contact-form/contact-form",
     "team-qr-contact": "../components/qr-contact/qr-contact",
     "text-grid-editor": "../components/text-grid-editor/text-grid-editor",
-    "contact-info-editor": "../components/contact-info-editor/contact-info-editor"
+    "contact-info-editor": "../components/contact-info-editor/contact-info-editor",
+    "advanced-ai-notice": "../components/advanced-ai-notice/advanced-ai-notice"
   }
 }

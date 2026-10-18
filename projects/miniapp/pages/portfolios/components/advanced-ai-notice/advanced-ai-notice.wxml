@@ -1,0 +1,23 @@
+<view class="notice-trigger" catchtap="handleOpen" aria-role="button" aria-label="部分内容由AI生成，查看说明">
+  <text class="notice-heading">想调整哪里，说出来</text>
+  <view class="notice-caption">
+    <text class="notice-label">部分内容由AI生成</text>
+    <view class="notice-info" aria-hidden="true"><text class="notice-info-letter">i</text></view>
+  </view>
+</view>
+
+<root-portal wx:if="{{visible}}">
+  <view class="notice-mask" catchtap="handleClose" catchtouchmove="noop">
+    <view class="notice-sheet" catchtap="noop" aria-role="dialog" aria-label="AI生成内容说明">
+      <view class="notice-handle"></view>
+      <view class="notice-sheet-heading">
+        <text class="notice-sheet-title">AI生成内容说明</text>
+        <view class="notice-close" catchtap="handleClose" aria-role="button" aria-label="关闭说明"><text>×</text></view>
+      </view>
+      <text class="notice-paragraph">部分文案与排版由 AI 生成或辅助完成，可能存在不准确或不完整的情况。</text>
+      <text class="notice-paragraph">保存或发布前，请核对文字、素材与展示效果。</text>
+      <view class="notice-material-note"><text>上传的图片、视频，不因 AI 排版而被认定为 AI 生成。</text></view>
+      <view class="notice-confirm" catchtap="handleClose" aria-role="button" aria-label="我知道了"><text>我知道了</text></view>
+    </view>
+  </view>
+</root-portal>

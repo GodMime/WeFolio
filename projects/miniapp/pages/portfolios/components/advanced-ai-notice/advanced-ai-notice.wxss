@@ -1,0 +1,144 @@
+/* 两行文字使用同一左边界，不使用原生按钮的默认内边距。 */
+.notice-trigger {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 80rpx;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.notice-heading {
+  display: block;
+  color: #39473b;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 38rpx;
+}
+
+.notice-caption {
+  display: flex;
+  align-items: center;
+  margin-top: 6rpx;
+  padding: 0;
+  color: #63765c;
+}
+
+.notice-label {
+  display: block;
+  font-size: 22rpx;
+  line-height: 34rpx;
+}
+
+.notice-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24rpx;
+  height: 24rpx;
+  margin-left: 8rpx;
+  border: 1rpx solid #6d805f;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.notice-info-letter {
+  display: block;
+  font-size: 18rpx;
+  line-height: 22rpx;
+}
+
+/* 通过根节点弹层覆盖编辑页，触摸事件留在组件内，不改动父页面滚动状态。 */
+.notice-mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(24, 32, 27, 0.4);
+}
+
+.notice-sheet {
+  width: 100%;
+  padding: 18rpx 36rpx calc(24rpx + env(safe-area-inset-bottom));
+  border-radius: 38rpx 38rpx 0 0;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.notice-handle {
+  width: 56rpx;
+  height: 6rpx;
+  margin: 0 auto 22rpx;
+  border-radius: 6rpx;
+  background: #e5e7eb;
+}
+
+.notice-sheet-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.notice-sheet-title {
+  display: block;
+  color: #212529;
+  font-size: 34rpx;
+  font-weight: 650;
+  line-height: 48rpx;
+}
+
+.notice-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 72rpx;
+  height: 72rpx;
+  margin: -12rpx -12rpx -12rpx 0;
+  color: #7c858e;
+  font-size: 40rpx;
+  line-height: 48rpx;
+}
+
+.notice-paragraph {
+  display: block;
+  margin-bottom: 20rpx;
+  color: #697365;
+  font-size: 26rpx;
+  line-height: 44rpx;
+}
+
+.notice-material-note {
+  margin: 0 0 30rpx;
+  padding: 20rpx 22rpx;
+  border-radius: 14rpx;
+  background: #f6f7f3;
+  color: #737d70;
+  font-size: 24rpx;
+  line-height: 40rpx;
+}
+
+.notice-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80rpx;
+  padding: 20rpx;
+  border-radius: 44rpx;
+  background: #212529;
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 40rpx;
+  box-sizing: border-box;
+}

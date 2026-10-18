@@ -13,10 +13,7 @@
     <view class="edit-content pe-page-content">
       <view wx:if="{{advancedEditing}}" class="panel advanced-tools pe-page-card">
         <view class="advanced-ai-glyph" aria-hidden="true">✧</view>
-        <view class="advanced-ai-copy">
-          <view class="advanced-ai-title">想调整哪里，说出来</view>
-          <view class="advanced-ai-description">AI 修改与手动编辑，随时切换</view>
-        </view>
+        <advanced-ai-notice class="advanced-ai-copy"></advanced-ai-notice>
         <button class="advanced-ai-button" data-mode="MODIFY_PAGE" bindtap="handleAdvancedAi">AI 修改</button>
       </view>
       <view wx:if="{{advancedEditing && aiReferenceAttachments.length}}" class="advanced-undo-notice">
