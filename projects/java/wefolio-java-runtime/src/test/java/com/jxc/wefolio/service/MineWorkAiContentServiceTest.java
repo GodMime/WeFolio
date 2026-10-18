@@ -23,21 +23,19 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Duration;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-/** 视频 AI 只读查询测试，覆盖归属、独立空态、严格源合同及私有帧地址。 */
+/** 视频 AI 只读查询测试，覆盖归属、独立空态、严格源合同及免签 CDN 帧地址。 */
 @ExtendWith(MockitoExtension.class)
 class MineWorkAiContentServiceTest {
 
@@ -47,12 +45,14 @@ class MineWorkAiContentServiceTest {
     private static final String SOURCE_ETAG = "source-etag";
     /** 本地测试源对象大小。 */
     private static final long SOURCE_BYTES = 1024L;
-    /** 帧对象属于当前用户和当前作品的私有目录。 */
+    /** 帧对象属于当前用户和当前作品的目录。 */
     private static final String FRAME_PREFIX = "WFOWNER/others/video-frames/18/";
+    /** 当前环境配置的 CDN 公开访问前缀。 */
+    private static final String CDN_BASE_URL = "https://cdn.test/";
     /** 作品读取器模拟。 */
     @Mock
     private WorkEntityMapper works;
-    /** COS 元数据和签名模拟。 */
+    /** COS 元数据和 CDN 地址模拟。 */
     @Mock
     private CosService cos;
     /** 查询入口，未使用的业务依赖不参与本用例。 */
@@ -71,7 +71,7 @@ class MineWorkAiContentServiceTest {
         AuthContextHolder.clear();
     }
 
-    /** 本人不存在、已删除和他人作品均不能读取显式 AI 快照或签名。 */
+    /** 本人不存在、已删除和他人作品均不能读取显式 AI 快照或生成帧地址。 */
     @Test
     void mustAuthorizeBeforeReadingAiFields() {
         assertThatThrownBy(() -> service.getWorkAiContent(18L))
@@ -153,7 +153,7 @@ class MineWorkAiContentServiceTest {
         assertThat(response.getAudioText()).isNull();
         work.setVideoSummaryJson(summary("", "仪式开始").toString());
         assertThat(service.getWorkAiContent(18L).getSummary().observations()).containsExactly("仪式开始");
-        verify(cos, never()).signedGet(anyString(), any());
+        verify(cos, never()).publicUrl(anyString());
     }
 
     /** 严格解析损坏、旧源、只有局限或重复字段摘要，不影响合法音频文字。 */
@@ -179,7 +179,7 @@ class MineWorkAiContentServiceTest {
         }
     }
 
-    /** 源 ETag 变更使旧摘要和旧帧均失效，不签名旧结果。 */
+    /** 源 ETag 变更使旧摘要和旧帧均失效，不生成旧结果地址。 */
     @Test
     void changedSourceInvalidatesPersistedContent() {
         WorkEntity work = readableWork();
@@ -188,19 +188,19 @@ class MineWorkAiContentServiceTest {
         when(cos.headObjectVersion(SOURCE_KEY)).thenReturn(new CosService.VersionedObjectHead("video/mp4", SOURCE_BYTES, "changed", 0));
         MineWorkAiContentResponse response = service.getWorkAiContent(18L);
         assertThat(response.isHasContent()).isFalse();
-        verify(cos, never()).signedGet(anyString(), any());
+        verify(cos, never()).publicUrl(anyString());
     }
 
-    /** 全量帧按时间排序，只为合法本作品对象签短期地址，不使用 JSON 中的外部 URL。 */
+    /** 全量帧按时间排序，返回本作品免签 CDN 地址，不使用清单中的外部 URL，也不改写对象。 */
     @Test
-    void signsValidPrivateFramesAfterSortingAndIgnoresStoredUrls() {
+    void returnsCdnFramesAfterSortingWithoutSigningOrMutatingObjects() {
         WorkEntity work = readableWork();
         stubHead();
         ObjectNode manifest = manifest();
         ((ObjectNode) manifest.path(PortfolioAiMediaContract.KEY_FRAMES).get(0)).put("url", "https://untrusted.test/image.jpg");
         work.setVideoFramesJson(manifest.toString());
-        when(cos.signedGet(anyString(), eq(Duration.ofMinutes(15))))
-                .thenAnswer(invocation -> "https://cos.test/" + invocation.getArgument(0) + "?signature=test");
+        when(cos.publicUrl(anyString()))
+                .thenAnswer(invocation -> CDN_BASE_URL + invocation.getArgument(0));
         MineWorkAiContentResponse response = service.getWorkAiContent(18L);
         assertThat(response.isHasContent()).isTrue();
         assertThat(response.getFrames()).hasSize(8);
@@ -208,11 +208,19 @@ class MineWorkAiContentServiceTest {
                 .containsExactly(0L, 1000L, 2000L, 3000L, 4000L, 5000L, 6000L, 7000L);
         assertThat(response.getFrames().getFirst().width()).isEqualTo(960);
         assertThat(response.getFrames().getFirst().height()).isEqualTo(540);
-        assertThat(response.getFrames().getFirst().url()).startsWith("https://cos.test/" + FRAME_PREFIX);
-        assertThat(response.getFrames()).noneMatch(frame -> frame.url().contains("untrusted"));
+        assertThat(response.getFrames()).allSatisfy(frame -> assertThat(frame.url())
+                .startsWith(CDN_BASE_URL + FRAME_PREFIX).doesNotContain("?", "untrusted"));
+        assertThat(work.getVideoFramesJson()).isEqualTo(manifest.toString());
+        verify(cos).headObjectVersion(SOURCE_KEY);
+        manifest.path(PortfolioAiMediaContract.KEY_FRAMES).forEach(frame ->
+                verify(cos).publicUrl(frame.path(PortfolioAiMediaContract.KEY_OBJECT_KEY).asText()));
+        verifyNoMoreInteractions(cos);
+        verify(works).selectById(18L);
+        verify(works).selectPortfolioAiMediaSnapshot(18L);
+        verifyNoMoreInteractions(works);
     }
 
-    /** 跨用户、跨作品、目录穿越和编码路径均不能生成任何签名。 */
+    /** 跨用户、跨作品、目录穿越和编码路径均不能生成任何帧地址。 */
     @ParameterizedTest
     @ValueSource(strings = {"OTHER/others/video-frames/18/frame.jpg", "WFOWNER/others/video-frames/19/frame.jpg",
             "WFOWNER/others/video-frames/18/../secret.jpg", "WFOWNER/others/video-frames/18/%2e%2e/secret.jpg",
@@ -224,12 +232,12 @@ class MineWorkAiContentServiceTest {
         ((ObjectNode) manifest.path(PortfolioAiMediaContract.KEY_FRAMES).get(7)).put(PortfolioAiMediaContract.KEY_OBJECT_KEY, key);
         work.setVideoFramesJson(manifest.toString());
         assertThat(service.getWorkAiContent(18L).getFrames()).isEmpty();
-        verify(cos, never()).signedGet(anyString(), any());
+        verify(cos, never()).publicUrl(anyString());
     }
 
     /** 非法帧数量、尺寸、时间与重复帧均按整个清单不可用处理。 */
     @Test
-    void rejectsInvalidFrameManifestBeforeAnySignature() {
+    void rejectsInvalidFrameManifestBeforeBuildingUrls() {
         WorkEntity work = readableWork();
         stubHead();
         for (String field : new String[]{PortfolioAiMediaContract.KEY_WIDTH, PortfolioAiMediaContract.KEY_HEIGHT,
@@ -249,7 +257,7 @@ class MineWorkAiContentServiceTest {
         assertThat(service.getWorkAiContent(18L).isHasContent()).isFalse();
         work.setVideoFramesJson("{broken");
         assertThat(service.getWorkAiContent(18L).getFrames()).isEmpty();
-        verify(cos, never()).signedGet(anyString(), any());
+        verify(cos, never()).publicUrl(anyString());
     }
 
     /** 读存储失败交给页面手动重试，不伪装成三类全空。 */
@@ -259,7 +267,7 @@ class MineWorkAiContentServiceTest {
         work.setVideoFramesJson(manifest().toString());
         when(cos.headObjectVersion(SOURCE_KEY)).thenThrow(new IllegalStateException("temporary"));
         assertThatThrownBy(() -> service.getWorkAiContent(18L)).isInstanceOf(IllegalStateException.class);
-        verify(cos, never()).signedGet(anyString(), any());
+        verify(cos, never()).publicUrl(anyString());
     }
 
     /** 构造本人未删除视频作品。 */

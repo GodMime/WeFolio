@@ -691,6 +691,18 @@ Runtime 删除 `PortfolioAiReferenceMediaProbe` 与 `PortfolioAiReferenceStorage
 
 变更前 HEVC JAR 备份在两节点 `/root/java/reference-client-metadata-20261016/runtime.before.jar`，版本信息修正前的中间制品另存于 `/root/java/reference-client-metadata-version-20261016/runtime.before.jar`，各目录保留对应清单。回滚应使用前者，并与前端确认请求合同协调，避免将新客户端请求发往不支持 `mediaInfo` 的旧后端。证据：`/tmp/wefolio-reference-client-media-strict-focused.log`、`/tmp/wefolio-reference-client-media-strict-full.log`、`/tmp/wefolio-reference-mediainfo-full-tests.log`、`/tmp/wefolio-reference-client-metadata-artifact.json`、`/tmp/wefolio-reference-client-metadata-smoke-{old,new}.json`、`/tmp/wefolio-reference-client-metadata-release-{old,new}.json`、`/tmp/wefolio-reference-client-metadata-startup-{old,new}.json`。
 
+### 4.32 关键帧 CDN 读取 Runtime 发布（2026-10-18）
+
+按用户“先发布 runtime”授权，从当前已验证工作区执行标准 `deploy.sh`，两台 Runtime 滚动发布完成，退出码 0，耗时 98.739 秒。版本字段为 HEAD `129f273`，包含未提交的关键帧 CDN 修正，实际制品以构建时间与 SHA-256 识别。本次未发布 Job 或小程序、未提交 Git、未新增数据库迁移或更改微信后台合法域名。
+
+- 关键帧查询复用 `CosService.publicUrl` 返回免签 CDN 地址，保留作品归属、源身份与帧路径校验；响应字段和原封面上传保存合同不变。当前 Runtime 还包含此前已提交的不可用账号转让校验和团队 AI 提示词说明修正。
+- 构建时间 `2026-10-18 13:38:55`（上海），JAR SHA-256 `b18070f981dd82fa861666a2f6214086783e48cb5f11be8b1aa74fe94ecf9838`。旧/新节点 PID 为 `16473` / `31501`，启动时间 `13:39:37` / `13:40:14`；两个远端包与本地摘要一致，服务均 active/running、健康 UP，正式 HTTPS 健康与版本入口核验通过。
+- Nginx active、语法检查通过，Runtime upstream 已恢复两节点轮询，无 down/backup 标记。两台 Runtime 本次 PID 启动后的 journal ERROR/FATAL 计数均为 0，字体 enabled/ready 均为 true。
+- 两节点旧包均保留在 `/root/java/wefolio-java-runtime.jar.backup`，SHA-256 `f678f1bb98b927cc54ea623c415827bf13627d86529dd04f541140bb9a028b49`，与发布前一致。需要回退时按节点摘流、恢复此包、重启、健康检查后恢复轮询；不涉及数据库回退。
+- 发布前 Runtime 全量 2,906 项、0 失败/错误、35 跳过；小程序全量 2,828 项通过。发布后在已登录微信开发者工具重新打开此前失败的作品，选择同一 01:00 关键帧并点击“使用此帧”，成功回到“待保存 · 01:00”状态；随后取消验证草稿，没有点击完成、上传封面或保存真实作品。此结果验证真实图片下载及本地草稿，不等同于手机真机或最终封面上传保存验收。
+
+证据：`/private/tmp/wefolio-keyframe-cdn-runtime-deploy-20261018.log`、`/private/tmp/wefolio-keyframe-cdn-runtime-postdeploy-20261018.json`（`verified=true`）；界面证据仅保留本地 `design/video-keyframe-cover-cdn-verified.png`。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |

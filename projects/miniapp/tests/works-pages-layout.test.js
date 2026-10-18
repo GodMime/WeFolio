@@ -12,6 +12,21 @@ function read(relativePath) {
   return fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8')
 }
 
+test('关键帧选择器保留父表单、完整大图与三列滚动缩略图，入口按可用帧条件出现', () => {
+  const wxml = read('pages/works/works.wxml')
+  const wxss = read('pages/works/works.wxss')
+  assert.match(wxml, /wx:if="\{\{videoKeyframeAvailable\}\}"[^>]*bindtap="handleOpenKeyframeCover"[^>]*>从关键帧选择/)
+  assert.match(wxml, /wx:if="\{\{videoKeyframeAvailable\}\}"[^>]*bindtap="handleOpenKeyframeCover"[^>]*>选作封面/)
+  assert.match(wxml, /class="video-edit-body \{\{videoKeyframePickerVisible \? 'is-hidden' : ''\}\}"/)
+  assert.match(wxml, /class="keyframe-cover-preview-image"[^>]*mode="aspectFit"/)
+  assert.match(wxml, /aria-role="radio"[^>]*aria-checked=/)
+  assert.match(wxml, /class="keyframe-cover-scroll" scroll-y[^>]*bindscroll="handleKeyframeScroll"/)
+  assert.match(wxml, /bindtap="handleApplyKeyframeCover"[^>]*disabled="\{\{!videoKeyframeCandidate \|\| videoKeyframePreviewStatus !== 'ready'/)
+  assert.match(readRule(wxss, '.keyframe-cover-cell'), /width:\s*calc\(33\.333333% - 8rpx\)/)
+  assert.match(readRule(wxss, '.keyframe-cover-scroll'), /min-height:\s*0/)
+  assert.doesNotMatch(readRule(wxss, '.keyframe-cover-grid'), /display:\s*grid/)
+})
+
 function readRule(content, selector) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const match = content.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`))
@@ -236,12 +251,12 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(worksWxml, /bindinput="handleImageEditInput"/)
   assert.match(worksWxml, /catchtap="handleConfirmImageEdit"/)
   assert.match(worksWxml, /class="work-edit-mask video-edit-mask \{\{videoEditSheetVisible \? 'visible' : ''\}\}"[\s\S]*class="work-edit-panel video-edit-panel"/)
-  assert.match(worksWxml, /<scroll-view class="work-edit-scroll video-edit-scroll" scroll-y>[\s\S]*<view class="work-edit-content">/)
+  assert.match(worksWxml, /<scroll-view class="work-edit-scroll video-edit-scroll" scroll-y[^>]*>[\s\S]*<view class="work-edit-content">/)
   assert.match(worksWxml, /class="field-heading"[\s\S]*作品标题[\s\S]*\{\{videoEditFieldCounters\.title\}\}/)
   assert.match(worksWxml, /class="field-heading"[\s\S]*作品说明[\s\S]*\{\{videoEditFieldCounters\.description\}\}/)
   assert.match(worksWxml, /class="cover-export-button"[\s\S]*bindtap="handleStartVideoCoverEdit"[\s\S]*选帧修改封面/)
   assert.match(worksWxml, /class="cover-upload-button"[\s\S]*bindtap="handleChooseVideoCoverUpload"[\s\S]*上传封面/)
-  assert.match(worksWxml, /wx:if="\{\{videoEditForm\.coverEditMode === ''\}\}"[\s\S]*选帧修改封面[\s\S]*上传封面/)
+  assert.match(worksWxml, /class="cover-standby"[\s\S]*选帧修改封面[\s\S]*上传封面/)
   assert.match(worksWxml, /wx:if="\{\{videoEditForm\.coverEditMode === 'frame'\}\}"[\s\S]*class="cover-edit-toolbar"[\s\S]*bindtap="handleExportVideoCover"[\s\S]*使用当前帧[\s\S]*id="workCoverVideo"[\s\S]*src="\{\{videoEditForm\.tempFilePath\}\}"/)
   assert.match(worksWxml, /wx:if="\{\{videoEditForm\.coverEditMode === 'local'\}\}"[\s\S]*class="local-cover-preview"[\s\S]*src="\{\{videoEditForm\.localCoverPath\}\}"[\s\S]*bindtap="handleChooseVideoCoverUpload"[\s\S]*重新选择/)
   assert.match(worksWxml, /class="cover-edit-toolbar"[\s\S]*\{\{videoFrameTimeText\}\} \/ \{\{videoEditForm\.durationText\}\}/)

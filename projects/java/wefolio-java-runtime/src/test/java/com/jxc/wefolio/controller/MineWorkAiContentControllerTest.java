@@ -22,6 +22,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** AI 内容查询 HTTP 合同，只验证委派、维护者认证标记和只读响应。 */
 class MineWorkAiContentControllerTest {
 
+    /** 无需签名的关键帧 CDN 地址。 */
+    private static final String FRAME_CDN_URL = "https://cdn.test/frame.jpg";
+
     /** 已有响应包装和完整展示字段应原样返回，控制器不解析业务内容。 */
     @Test
     void getDelegatesToServiceAndPreservesResponseEnvelope() throws Exception {
@@ -32,7 +35,7 @@ class MineWorkAiContentControllerTest {
         response.setHasContent(true);
         response.setSummary(new MineWorkAiContentResponse.Summary("现场摘要", List.of("观察"), List.of("局限")));
         response.setAudioText("现场音频文字");
-        response.setFrames(List.of(new MineWorkAiContentResponse.Frame(1000, 960, 540, "https://cos.test/frame?signature=test")));
+        response.setFrames(List.of(new MineWorkAiContentResponse.Frame(1000, 960, 540, FRAME_CDN_URL)));
         when(service.getWorkAiContent(18L)).thenReturn(response);
 
         mvc.perform(get("/api/mine/works/18/ai-content"))
@@ -47,7 +50,7 @@ class MineWorkAiContentControllerTest {
                 .andExpect(jsonPath("$.data.frames[0].timestampMs").value(1000))
                 .andExpect(jsonPath("$.data.frames[0].width").value(960))
                 .andExpect(jsonPath("$.data.frames[0].height").value(540))
-                .andExpect(jsonPath("$.data.frames[0].url").value("https://cos.test/frame?signature=test"));
+                .andExpect(jsonPath("$.data.frames[0].url").value(FRAME_CDN_URL));
 
         verify(service).getWorkAiContent(18L);
         assertThat(MineWorkController.class.getAnnotation(MaintainerAccess.class)).isNotNull();

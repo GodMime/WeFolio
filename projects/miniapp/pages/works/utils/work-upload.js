@@ -227,6 +227,7 @@ async function prepareThumbFile(filePath, options = {}) {
   }
   for (const attempt of THUMB_COMPRESS_ATTEMPTS) {
     const tempFilePath = await compressImageFile(filePath, attempt, options)
+    if (options.onTempFile && tempFilePath !== filePath) options.onTempFile(tempFilePath)
     const fileSize = getLocalFileSize(tempFilePath, options.wxApi)
     if (fileSize > 0 && fileSize <= THUMB_MAX_BYTES) {
       return {

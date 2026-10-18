@@ -556,6 +556,7 @@
   <view class="work-edit-mask video-edit-mask {{videoEditSheetVisible ? 'visible' : ''}}" catchtap="handleCloseVideoEditor">
     <view class="work-edit-panel video-edit-panel" catchtap="handleEditPanelTap">
       <view class="work-edit-grabber"></view>
+      <view class="video-edit-body {{videoKeyframePickerVisible ? 'is-hidden' : ''}}">
       <view class="work-edit-heading">
         <view class="work-edit-title">编辑视频作品</view>
         <view class="work-edit-type">视频</view>
@@ -564,11 +565,22 @@
         </view>
       </view>
 
-      <scroll-view class="work-edit-scroll video-edit-scroll" scroll-y>
+      <scroll-view class="work-edit-scroll video-edit-scroll" scroll-y scroll-top="{{videoEditScrollTop}}" bindscroll="handleVideoEditScroll">
         <view class="work-edit-content">
+          <view class="cover-heading">
+            <view class="field-label">作品封面</view>
+            <button wx:if="{{videoKeyframeAvailable}}" class="keyframe-cover-entry" bindtap="handleOpenKeyframeCover" disabled="{{videoEditSaving}}">从关键帧选择</button>
+          </view>
           <view class="work-preview">
             <image wx:if="{{videoEditForm.previewPath}}" class="work-preview-media" src="{{videoEditForm.previewPath}}" mode="aspectFill"></image>
             <view wx:else class="work-preview-empty">视频</view>
+          </view>
+          <view wx:if="{{videoEditForm.coverDraftSource}}" class="keyframe-cover-draft">
+            <view>
+              <view class="keyframe-cover-draft-title">待保存<text wx:if="{{videoEditForm.coverDraftTimeText}}"> · {{videoEditForm.coverDraftTimeText}}</text></view>
+              <view class="keyframe-cover-note">点击完成后更新封面</view>
+            </view>
+            <button class="keyframe-cover-entry" bindtap="handleUndoVideoCover" disabled="{{videoEditSaving}}">撤销更换</button>
           </view>
 
           <!-- AI 内容只读展示，与下方作品编辑表单独立。 -->
@@ -626,9 +638,10 @@
                     <text>视频关键帧</text>
                     <text class="video-ai-frame-count">{{videoAiContent.frames.length}} 张 · 点击查看</text>
                   </view>
+                  <button wx:if="{{videoKeyframeAvailable}}" class="keyframe-cover-entry" bindtap="handleOpenKeyframeCover" disabled="{{videoEditSaving}}">选作封面</button>
                   <view class="video-ai-frames">
-                    <view wx:for="{{videoAiContent.frames}}" wx:key="url" class="video-ai-frame" data-index="{{index}}" bindtap="handlePreviewVideoAiFrame" aria-role="button" aria-label="查看 {{item.timeText}} 的关键帧">
-                      <image wx:if="{{!item.loadFailed}}" class="video-ai-frame-image" src="{{item.url}}" mode="aspectFill" data-index="{{index}}" data-url="{{item.url}}" binderror="handleVideoAiFrameError"></image>
+                    <view wx:for="{{videoAiContent.frames}}" wx:key="key" class="video-ai-frame" data-index="{{index}}" bindtap="handlePreviewVideoAiFrame" aria-role="button" aria-label="查看 {{item.timeText}} 的关键帧">
+                      <image wx:if="{{!item.loadFailed}}" class="video-ai-frame-image" src="{{item.url}}" mode="aspectFill" data-index="{{index}}" data-url="{{item.url}}" data-key="{{item.key}}" binderror="handleVideoAiFrameError"></image>
                       <view wx:else class="video-ai-frame-failed">图片加载失败</view>
                       <text class="video-ai-frame-time">{{item.timeText}}</text>
                     </view>
@@ -653,6 +666,7 @@
             <input
               class="text-field"
               value="{{videoEditForm.title}}"
+              disabled="{{videoEditSaving}}"
               maxlength="30"
               placeholder="填写作品标题"
               placeholder-class="search-placeholder"
@@ -669,6 +683,7 @@
             <textarea
               class="textarea-field"
               value="{{videoEditForm.description}}"
+              disabled="{{videoEditSaving}}"
               placeholder="填写作品说明"
               placeholder-class="search-placeholder"
               maxlength="1000"
@@ -707,7 +722,7 @@
               <view class="field-label">视频封面</view>
               <view wx:if="{{videoEditForm.coverEditMode === 'frame'}}" class="cover-time">{{videoFrameTimeText}} / {{videoEditForm.durationText}}</view>
             </view>
-            <view wx:if="{{videoEditForm.coverEditMode === ''}}" class="cover-standby">
+            <view class="cover-standby">
               <button
                 class="cover-export-button"
                 bindtap="handleStartVideoCoverEdit"
@@ -722,6 +737,7 @@
             </view>
             <block wx:if="{{videoEditForm.coverEditMode === 'frame'}}">
               <view class="cover-edit-toolbar">
+                <button class="keyframe-cover-entry" bindtap="handleCancelVideoCoverEdit" disabled="{{videoEditSaving}}">返回</button>
                 <view class="cover-edit-time">{{videoFrameTimeText}} / {{videoEditForm.durationText}}</view>
                 <button
                   class="cover-use-frame-button"
@@ -747,6 +763,7 @@
                 max="{{videoEditForm.durationMs}}"
                 step="100"
                 value="{{videoFrameTimeMs}}"
+                disabled="{{videoEditSaving}}"
                 bindchanging="handleVideoCoverSliderChanging"
                 bindchange="handleVideoCoverSliderChange"
               ></slider>
@@ -764,9 +781,6 @@
                   disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}"
                 >重新选择</button>
               </view>
-              <view wx:if="{{videoEditSaving && videoCoverUploadProgress > 0}}" class="local-cover-progress">
-                <view class="local-cover-progress-fill" style="width: {{videoCoverUploadProgress}}%;"></view>
-              </view>
             </view>
           </view>
 
@@ -774,9 +788,80 @@
         </view>
       </scroll-view>
 
+      <view wx:if="{{videoCoverSaveStage}}">
+        <view class="keyframe-cover-save-status">
+          <text>{{videoCoverSaveStage === 'uploading' ? '上传封面中…' : '保存中…'}}</text>
+          <text wx:if="{{videoCoverSaveStage === 'uploading'}}">{{videoCoverUploadProgress}}%</text>
+        </view>
+        <view wx:if="{{videoCoverSaveStage === 'uploading'}}" class="local-cover-progress">
+          <view class="local-cover-progress-fill" style="width: {{videoCoverUploadProgress}}%;"></view>
+        </view>
+      </view>
       <view class="work-edit-actions">
         <button class="work-edit-cancel" catchtap="handleCloseVideoEditor" disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}">取消</button>
-        <button class="work-edit-confirm" loading="{{videoEditSaving}}" catchtap="handleConfirmVideoEdit" disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}">完成</button>
+        <button class="work-edit-confirm" loading="{{videoEditSaving}}" catchtap="handleConfirmVideoEdit" disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}">{{videoCoverSaveStage === 'uploading' ? '上传中…' : (videoEditSaving ? '保存中…' : '完成')}}</button>
+      </view>
+      </view>
+
+      <view wx:if="{{videoKeyframePickerVisible}}" class="keyframe-cover-picker">
+        <view class="work-edit-heading">
+          <button class="keyframe-cover-back" bindtap="handleCloseKeyframeCover" aria-label="返回编辑">‹</button>
+          <view class="work-edit-title">选择封面</view>
+          <text class="video-ai-frame-count">共 {{videoAiContent.frames.length}} 张</text>
+        </view>
+        <view class="keyframe-cover-preview" bindtap="handlePreviewKeyframeCover" aria-role="button" aria-label="查看完整画面">
+          <block wx:if="{{videoKeyframeCandidate}}">
+            <block wx:for="{{[videoKeyframePreviewToken]}}" wx:key="*this">
+              <image wx:if="{{videoKeyframePreviewStatus !== 'failed'}}" class="keyframe-cover-preview-image" src="{{videoKeyframeCandidate.url}}" mode="aspectFit" data-token="{{item}}" bindload="handleKeyframePreviewLoad" binderror="handleKeyframePreviewError"></image>
+            </block>
+            <view wx:if="{{videoKeyframePreviewStatus === 'loading'}}" class="keyframe-cover-preview-message">图片加载中…</view>
+            <view wx:elif="{{videoKeyframePreviewStatus === 'failed'}}" class="keyframe-cover-preview-message">
+              <text>图片加载失败</text>
+              <button class="video-ai-retry" catchtap="handleRetryKeyframePreview">重试</button>
+            </view>
+            <text wx:elif="{{videoKeyframePreviewStatus === 'ready'}}" class="keyframe-cover-selected-time">已选择 · {{videoKeyframeCandidate.timeText}}</text>
+          </block>
+          <view wx:else class="keyframe-cover-preview-message">选择下方关键帧，预览完整画面</view>
+        </view>
+        <scroll-view class="keyframe-cover-scroll" scroll-y scroll-top="{{videoKeyframeScrollTop}}" bindscroll="handleKeyframeScroll">
+          <view wx:if="{{videoAiQueryLoading}}" class="keyframe-cover-empty">关键帧加载中…</view>
+          <view wx:elif="{{videoAiErrorText}}" class="keyframe-cover-empty">
+            <text>{{videoAiErrorText}}</text>
+            <button class="video-ai-retry" bindtap="handleRetryVideoAi">重试</button>
+          </view>
+          <block wx:else>
+            <view wx:if="{{!videoAiContent.frames.length}}" class="keyframe-cover-empty">
+              <text>暂无关键帧</text>
+              <button class="video-ai-retry" bindtap="handleCloseKeyframeCover">返回编辑</button>
+            </view>
+            <view wx:elif="{{!videoKeyframeAvailable}}" class="keyframe-cover-empty">
+              <text>关键帧图片加载失败</text>
+              <button class="video-ai-retry" bindtap="handleRetryVideoAi">重新加载</button>
+              <button class="video-ai-retry" bindtap="handleCloseKeyframeCover">返回编辑</button>
+            </view>
+            <view wx:else class="keyframe-cover-grid">
+              <view wx:for="{{videoAiContent.frames}}" wx:key="key" class="keyframe-cover-cell {{videoKeyframeCandidate.key === item.key ? 'is-selected' : ''}}" data-key="{{item.key}}" bindtap="handleSelectKeyframeCover" aria-role="radio" aria-checked="{{videoKeyframeCandidate.key === item.key}}" aria-disabled="{{item.loadFailed || videoKeyframePreparing}}" aria-label="选择 {{item.timeText}} 的关键帧">
+                <image wx:if="{{!item.loadFailed}}" class="keyframe-cover-thumb" src="{{item.url}}" mode="aspectFill" data-index="{{index}}" data-key="{{item.key}}" data-url="{{item.url}}" binderror="handleVideoAiFrameError"></image>
+                <view wx:else class="keyframe-cover-failed">图片加载失败</view>
+                <text class="video-ai-frame-time">{{item.timeText}}</text>
+                <text wx:if="{{videoKeyframeCandidate.key === item.key}}" class="keyframe-cover-check">✓</text>
+              </view>
+            </view>
+            <view wx:if="{{videoAiFrameError && videoKeyframeAvailable}}" class="video-ai-query-error">
+              <text>部分图片加载失败</text>
+              <button class="video-ai-retry" bindtap="handleRetryVideoAi" disabled="{{videoKeyframePreparing}}">重新加载</button>
+            </view>
+          </block>
+        </scroll-view>
+        <view wx:if="{{videoKeyframeErrorText}}" class="video-ai-query-error">
+          <text>{{videoKeyframeErrorText}}</text>
+          <button wx:if="{{videoKeyframeNeedsReload}}" class="video-ai-retry" bindtap="handleRetryVideoAi">重新加载</button>
+        </view>
+        <view class="keyframe-cover-note">先应用到编辑页，点击完成后保存</view>
+        <view class="work-edit-actions">
+          <button class="work-edit-cancel" bindtap="handleCloseKeyframeCover">取消</button>
+          <button class="work-edit-confirm" bindtap="handleApplyKeyframeCover" loading="{{videoKeyframePreparing}}" disabled="{{!videoKeyframeCandidate || videoKeyframePreviewStatus !== 'ready' || videoKeyframePreparing || videoKeyframeNeedsReload}}">{{videoKeyframePreparing ? '准备中…' : '使用此帧'}}</button>
+        </view>
       </view>
     </view>
   </view>

@@ -29,6 +29,7 @@ const {
 } = require('./utils/animation-cover')
 const { calculateFileSha256: calculateLocalFileSha256 } = require('./utils/sha256')
 const { VIDEO_AI_LOADING_MS, VIDEO_AI_TABS, normalizeVideoAiContent } = require('./utils/work-video-ai')
+const { createCoverFiles, downloadKeyframeCover, readCoverImage, hasUsableKeyframes } = require('./utils/work-keyframe-cover')
 const {
   DEFAULT_WORK_TAG_COLOR,
   DEFAULT_AUDIO_COVER_URL,
@@ -74,7 +75,6 @@ const SORT_DRAG_SCALE = 1.015
 const COVER_EDIT_MODE_FRAME = 'frame'
 const COVER_EDIT_MODE_LOCAL = 'local'
 const DEFAULT_COVER_MIME_TYPE = 'image/jpeg'
-const DEFAULT_COVER_FILE_NAME = 'cover.jpg'
 const LOCAL_COVER_CLIENT_SUFFIX = '-local-cover'
 const IMAGE_THUMBNAIL_CLIENT_SUFFIX = '-thumbnail'
 const WORK_THUMBNAIL_CROP_CANVAS_ID = 'workThumbnailCropCanvas'
@@ -107,38 +107,11 @@ function getEditFileName(work = {}) {
   return work.mediaType === 'VIDEO' ? `work-${work.id || Date.now()}.mp4` : `work-${work.id || Date.now()}.jpg`
 }
 
-function fileNameFromPath(filePath) {
-  const value = String(filePath || '').trim()
-  const segments = value.split('/')
-  return segments[segments.length - 1] || DEFAULT_COVER_FILE_NAME
-}
-
-function mimeTypeFromFileName(fileName) {
-  const value = String(fileName || '').toLowerCase()
-  if (value.endsWith('.png')) {
-    return 'image/png'
-  }
-  if (value.endsWith('.webp')) {
-    return 'image/webp'
-  }
-  if (value.endsWith('.gif')) {
-    return 'image/gif'
-  }
-  return DEFAULT_COVER_MIME_TYPE
-}
-
 function normalizeChosenCoverFile(response = {}) {
   const files = Array.isArray(response.tempFiles) ? response.tempFiles : []
   const file = files[0] || {}
-  const filePath = String(file.tempFilePath || file.path || '').trim()
-  const fileName = String(file.name || fileNameFromPath(filePath)).trim() || DEFAULT_COVER_FILE_NAME
   return {
-    filePath,
-    fileName,
-    mimeType: String(file.mimeType || file.type || mimeTypeFromFileName(fileName)).trim() || DEFAULT_COVER_MIME_TYPE,
-    fileSize: Math.max(0, Number(file.size || 0)),
-    width: Math.max(0, Math.round(Number(file.width || 0))),
-    height: Math.max(0, Math.round(Number(file.height || 0)))
+    filePath: String(file.tempFilePath || file.path || '').trim()
   }
 }
 
@@ -199,17 +172,15 @@ function buildVideoEditForm(work = {}) {
     localVideoPath: '',
     coverEditorReady: false,
     coverEditMode: '',
+    coverDraftMode: '',
+    coverDraftSource: '',
+    coverDraftTimeText: '',
+    coverDraftFrameKey: '',
     durationMs,
     durationText: work.durationText || formatFrameTime(durationMs),
     coverFrameTimeMs: 0,
     coverFrameSelected: false,
     localCoverPath: '',
-    localCoverFileName: '',
-    localCoverMimeType: DEFAULT_COVER_MIME_TYPE,
-    localCoverSize: 0,
-    localCoverWidth: 0,
-    localCoverHeight: 0,
-    localCoverSha256: '',
     localCoverIdempotencyKey: ''
   })
 }
@@ -488,6 +459,17 @@ Page({
     videoAiTab: 'summary',
     videoAiErrorText: '',
     videoAiFrameError: false,
+    videoKeyframeAvailable: false,
+    videoKeyframePickerVisible: false,
+    videoKeyframeCandidate: null,
+    videoKeyframePreviewStatus: 'idle',
+    videoKeyframePreviewToken: 0,
+    videoKeyframePreparing: false,
+    videoKeyframeErrorText: '',
+    videoKeyframeNeedsReload: false,
+    videoKeyframeScrollTop: 0,
+    videoEditScrollTop: 0,
+    videoCoverSaveStage: '',
     animationEditSheetVisible: false,
     animationEditForm: null,
     animationEditFieldCounters: buildWorkFieldCounters({}),
@@ -1215,6 +1197,7 @@ Page({
       tagOptions: buildWorkEditTagOptions(this.data.list.tags, work.tags, work.referenceCount),
       tagEditNotice: work.referenceCount > 0 ? WORK_TAG_REFERENCED_NOTICE : ''
     })
+    this.videoCoverSession = { active: true, files: createCoverFiles(wx), choiceSeq: 0 }
     this.setData({
       imageEditSheetVisible: false,
       imageEditForm: null,
@@ -1397,6 +1380,10 @@ Page({
     if (this.data.videoEditSaving || this.data.videoDownloading || this.data.videoFrameExporting) {
       return
     }
+    if (this.data.videoKeyframePickerVisible) {
+      this.handleCloseKeyframeCover()
+      return
+    }
     this.resetVideoAi()
     this.setData({
       videoEditSheetVisible: false,
@@ -1408,6 +1395,14 @@ Page({
   },
 
   resetVideoAi() {
+    this.cancelKeyframePreparation()
+    if (this.videoCoverSession) {
+      this.videoCoverSession.active = false
+      this.videoCoverSession.files.dispose()
+    }
+    this.videoCoverSession = null
+    this.videoEditScrollPosition = 0
+    this.videoKeyframeScrollPosition = 0
     this.videoAiRequestSeq = (this.videoAiRequestSeq || 0) + 1
     this.cancelVideoAiLoading()
     this.setData({
@@ -1417,7 +1412,17 @@ Page({
       videoAiQueryLoading: false,
       videoAiTab: 'summary',
       videoAiErrorText: '',
-      videoAiFrameError: false
+      videoAiFrameError: false,
+      videoKeyframeAvailable: false,
+      videoKeyframePickerVisible: false,
+      videoKeyframeCandidate: null,
+      videoKeyframePreviewStatus: 'idle',
+      videoKeyframePreparing: false,
+      videoKeyframeErrorText: '',
+      videoKeyframeNeedsReload: false,
+      videoKeyframeScrollTop: 0,
+      videoEditScrollTop: 0,
+      videoCoverSaveStage: ''
     })
   },
 
@@ -1428,21 +1433,32 @@ Page({
 
   async loadVideoAiContent() {
     const form = this.data.videoEditForm
-    if (!this.data.videoEditSheetVisible || !form || !form.id || this.data.videoAiQueryLoading) return
+    if (!this.data.videoEditSheetVisible || !form || !form.id || this.data.videoAiQueryLoading || this.data.videoEditSaving) return
     const requestSeq = (this.videoAiRequestSeq || 0) + 1
     this.videoAiRequestSeq = requestSeq
-    this.setData({ videoAiQueryLoading: true, videoAiErrorText: '' })
+    this.cancelKeyframePreparation()
+    this.videoKeyframeScrollPosition = 0
+    this.setData({
+      videoAiQueryLoading: true, videoAiErrorText: '', videoKeyframeAvailable: false,
+      videoKeyframeCandidate: null, videoKeyframePreviewStatus: 'idle',
+      videoKeyframeErrorText: '', videoKeyframeNeedsReload: false, videoKeyframeScrollTop: 0
+    })
     const isCurrent = () => requestSeq === this.videoAiRequestSeq
       && this.data.videoEditSheetVisible && this.data.videoEditForm && this.data.videoEditForm.id === form.id
     try {
       const response = await request({ url: `${WORKS_API_PREFIX}/${form.id}${WORK_AI_CONTENT_API_SUFFIX}`, method: 'GET' })
       if (!isCurrent()) return
       const content = normalizeVideoAiContent(response || {})
+      // 返回列表没有稳定帧 ID；列表版本隔离刷新前的选择和图片回调。
+      content.frames = content.frames
+        .sort((left, right) => (Number(left.timestampMs) || 0) - (Number(right.timestampMs) || 0))
+        .map((frame, index) => ({ ...frame, key: `${requestSeq}-${index}` }))
       if (!content.hasContent) this.cancelVideoAiLoading()
       this.setData({
         videoAiContent: content,
         videoAiQueryLoading: false,
         videoAiFrameError: false,
+        videoKeyframeAvailable: hasUsableKeyframes(content),
         ...(!content.hasContent ? { videoAiExpanded: false, videoAiLoading: false } : {})
       })
     } catch (error) {
@@ -1489,8 +1505,161 @@ Page({
     const { index, url } = event.currentTarget.dataset
     const frame = this.data.videoAiContent.frames[index]
     // 已重试或切换作品时，旧图片的错误事件不能污染当前展示。
-    if (!this.data.videoEditSheetVisible || !frame || frame.url !== url) return
-    this.setData({ [`videoAiContent.frames[${index}].loadFailed`]: true, videoAiFrameError: true })
+    const key = event.currentTarget.dataset.key
+    if (!this.data.videoEditSheetVisible || !frame || frame.url !== url || (key && frame.key !== key)) return
+    const frames = this.data.videoAiContent.frames.map((item, itemIndex) => itemIndex === Number(index) ? { ...item, loadFailed: true } : item)
+    const candidateFailed = this.data.videoKeyframeCandidate && this.data.videoKeyframeCandidate.key === frame.key
+    if (candidateFailed) this.cancelKeyframePreparation()
+    this.setData({
+      'videoAiContent.frames': frames, videoAiFrameError: true,
+      videoKeyframeAvailable: hasUsableKeyframes({ frames }, this.data.videoAiQueryLoading, this.data.videoAiErrorText),
+      ...(candidateFailed ? { videoKeyframePreviewStatus: 'failed' } : {})
+    })
+  },
+
+  cancelKeyframePreparation() {
+    if (this.keyframeDownload) this.keyframeDownload.cancel()
+    this.keyframeDownload = null
+    this.setData({ videoKeyframePreparing: false })
+  },
+
+  handleVideoEditScroll(event) {
+    if (this.data.videoKeyframePickerVisible) return
+    this.videoEditScrollPosition = event.detail.scrollTop
+  },
+
+  handleKeyframeScroll(event) {
+    if (!this.data.videoKeyframePickerVisible) return
+    this.videoKeyframeScrollPosition = event.detail.scrollTop
+  },
+
+  handleOpenKeyframeCover() {
+    if (!this.data.videoKeyframeAvailable || this.data.videoEditSaving || this.data.videoDownloading || this.data.videoFrameExporting) return
+    const form = this.data.videoEditForm
+    if (!form) return
+    this.videoCoverSession.choiceSeq += 1
+    if (wx.createVideoContext) wx.createVideoContext('workCoverVideo', this).pause()
+    this.cancelKeyframePreparation()
+    const candidate = this.data.videoAiContent.frames.find(frame => frame.key === form.coverDraftFrameKey && !frame.loadFailed) || null
+    this.setData({
+      videoKeyframePickerVisible: true, videoKeyframeCandidate: candidate,
+      videoKeyframePreviewStatus: candidate ? 'loading' : 'idle',
+      videoKeyframePreviewToken: this.data.videoKeyframePreviewToken + 1,
+      videoKeyframeErrorText: '', videoKeyframeNeedsReload: false,
+      videoKeyframeScrollTop: this.videoKeyframeScrollPosition || 0,
+      videoEditScrollTop: this.videoEditScrollPosition || 0
+    })
+  },
+
+  handleCloseKeyframeCover() {
+    this.cancelKeyframePreparation()
+    this.setData({
+      videoKeyframePickerVisible: false, videoKeyframeCandidate: null,
+      videoKeyframePreviewStatus: 'idle', videoKeyframeErrorText: '',
+      videoEditScrollTop: this.videoEditScrollPosition || 0
+    })
+  },
+
+  handleSelectKeyframeCover(event) {
+    if (!this.data.videoKeyframePickerVisible || this.data.videoKeyframePreparing || this.data.videoAiQueryLoading || this.data.videoAiErrorText) return
+    const candidate = this.data.videoAiContent.frames.find(frame => frame.key === event.currentTarget.dataset.key && !frame.loadFailed)
+    if (!candidate) return
+    this.setData({
+      videoKeyframeCandidate: candidate, videoKeyframePreviewStatus: 'loading',
+      videoKeyframePreviewToken: this.data.videoKeyframePreviewToken + 1,
+      videoKeyframeErrorText: '', videoKeyframeNeedsReload: false
+    })
+  },
+
+  handleKeyframePreviewLoad(event) {
+    if (!this.data.videoKeyframePickerVisible || !this.data.videoKeyframeCandidate || Number(event.currentTarget.dataset.token) !== this.data.videoKeyframePreviewToken) return
+    this.setData({ videoKeyframePreviewStatus: 'ready' })
+  },
+
+  handleKeyframePreviewError(event) {
+    if (!this.data.videoKeyframePickerVisible || !this.data.videoKeyframeCandidate || Number(event.currentTarget.dataset.token) !== this.data.videoKeyframePreviewToken) return
+    this.cancelKeyframePreparation()
+    this.setData({ videoKeyframePreviewStatus: 'failed' })
+  },
+
+  handleRetryKeyframePreview() {
+    if (this.data.videoKeyframePreparing) return
+    const candidate = this.data.videoKeyframeCandidate
+    if (!candidate) return
+    const frame = this.data.videoAiContent.frames.find(item => item.key === candidate.key)
+    if (!frame || frame.loadFailed) { this.loadVideoAiContent(); return }
+    this.setData({ videoKeyframePreviewStatus: 'loading', videoKeyframePreviewToken: this.data.videoKeyframePreviewToken + 1 })
+  },
+
+  handlePreviewKeyframeCover() {
+    const candidate = this.data.videoKeyframeCandidate
+    if (candidate && this.data.videoKeyframePreviewStatus === 'ready') wx.previewImage({ current: candidate.url, urls: [candidate.url] })
+  },
+
+  async handleApplyKeyframeCover() {
+    const candidate = this.data.videoKeyframeCandidate
+    const session = this.videoCoverSession
+    if (!session || !session.active || !this.data.videoKeyframePickerVisible || !candidate || this.data.videoKeyframePreviewStatus !== 'ready' || this.data.videoKeyframePreparing || this.data.videoKeyframeNeedsReload) return
+    if (!this.data.videoAiContent.frames.some(frame => frame.key === candidate.key && !frame.loadFailed)) return
+    this.setData({ videoKeyframePreparing: true, videoKeyframeErrorText: '' })
+    const job = downloadKeyframeCover(candidate.url, { wxApi: wx, files: session.files })
+    this.keyframeDownload = job
+    try {
+      const coverFile = await job.promise
+      if (!session.active || this.keyframeDownload !== job) { session.files.release(coverFile.filePath); return }
+      this.applyLocalVideoCover(coverFile, 'keyframe', candidate)
+      this.keyframeDownload = null
+      this.handleCloseKeyframeCover()
+    } catch (error) {
+      if (!session.active || this.keyframeDownload !== job) return
+      this.keyframeDownload = null
+      this.setData({ videoKeyframePreparing: false, videoKeyframeErrorText: error.message, videoKeyframeNeedsReload: Boolean(error.linkExpired) })
+    }
+  },
+
+  applyLocalVideoCover(coverFile, source, frame = {}) {
+    const session = this.videoCoverSession
+    const form = this.data.videoEditForm
+    if (!session || !session.active || !form) return
+    session.choiceSeq += 1
+    session.preparedUpload = null
+    this.setData({
+      'videoEditForm.coverEditMode': source === 'keyframe' ? '' : COVER_EDIT_MODE_LOCAL,
+      'videoEditForm.coverDraftMode': COVER_EDIT_MODE_LOCAL,
+      'videoEditForm.coverDraftSource': source,
+      'videoEditForm.coverDraftTimeText': frame.timeText || '',
+      'videoEditForm.coverDraftFrameKey': frame.key || '',
+      'videoEditForm.coverEditorReady': false,
+      'videoEditForm.coverFrameSelected': false,
+      'videoEditForm.previewPath': coverFile.filePath,
+      'videoEditForm.localCoverPath': coverFile.filePath,
+      'videoEditForm.localCoverIdempotencyKey': `cover-ticket-${form.clientId}-${Date.now()}-${session.choiceSeq}`,
+      videoCoverUploadProgress: 0, videoEditErrorText: ''
+    })
+    session.files.releaseExcept([coverFile.filePath])
+  },
+
+  handleUndoVideoCover() {
+    const form = this.data.videoEditForm
+    if (!form || this.data.videoEditSaving) return
+    this.cancelKeyframePreparation()
+    this.videoCoverSession.choiceSeq += 1
+    this.videoCoverSession.preparedUpload = null
+    this.setData({
+      'videoEditForm.previewPath': form.coverPath || form.mediaUrl,
+      'videoEditForm.coverDraftMode': '', 'videoEditForm.coverDraftSource': '',
+      'videoEditForm.coverDraftTimeText': '', 'videoEditForm.coverDraftFrameKey': '',
+      'videoEditForm.coverEditMode': '', 'videoEditForm.coverFrameSelected': false,
+      'videoEditForm.localCoverPath': '',
+      'videoEditForm.localCoverIdempotencyKey': '', videoEditErrorText: '', videoCoverUploadProgress: 0
+    })
+    this.videoCoverSession.files.releaseExcept()
+  },
+
+  handleCancelVideoCoverEdit() {
+    const form = this.data.videoEditForm
+    if (!form || this.data.videoEditSaving) return
+    this.setData({ 'videoEditForm.coverEditMode': form.coverDraftSource === 'local' ? COVER_EDIT_MODE_LOCAL : '', 'videoEditForm.coverEditorReady': false })
   },
 
   handlePreviewVideoAiFrame(event) {
@@ -1533,6 +1702,7 @@ Page({
   },
 
   handleVideoEditTagToggle(event) {
+    if (this.data.videoEditSaving) return
     this.toggleEditTagOption('videoEditForm', event)
   },
 
@@ -1776,7 +1946,7 @@ Page({
 
   handleVideoEditInput(event) {
     const field = event.currentTarget.dataset.field
-    if (!field || !this.data.videoEditForm) {
+    if (!field || !this.data.videoEditForm || this.data.videoEditSaving) {
       return
     }
     const value = event.detail.value || ''
@@ -1983,7 +2153,6 @@ Page({
     this.setData({
       'videoEditForm.durationMs': durationMs,
       'videoEditForm.durationText': formatFrameTime(durationMs),
-      'videoEditForm.coverFrameTimeMs': frameTimeMs,
       'videoEditForm.width': width,
       'videoEditForm.height': height,
       videoFrameTimeMs: frameTimeMs,
@@ -1998,7 +2167,6 @@ Page({
     const currentTime = event.detail && event.detail.currentTime
     const frameTimeMs = clampNumber(Math.round(Number(currentTime || 0) * 1000), 0, this.data.videoEditForm.durationMs || 0)
     this.setData({
-      'videoEditForm.coverFrameTimeMs': frameTimeMs,
       videoFrameTimeMs: frameTimeMs,
       videoFrameTimeText: formatFrameTime(frameTimeMs)
     })
@@ -2018,7 +2186,6 @@ Page({
     }
     const frameTimeMs = clampNumber(value, 0, this.data.videoEditForm.durationMs || 0)
     this.setData({
-      'videoEditForm.coverFrameTimeMs': frameTimeMs,
       videoFrameTimeMs: frameTimeMs,
       videoFrameTimeText: formatFrameTime(frameTimeMs)
     })
@@ -2044,8 +2211,11 @@ Page({
     if (!videoEditForm || this.data.videoEditSaving || this.data.videoFrameExporting || this.data.videoDownloading) {
       return
     }
+    const session = this.videoCoverSession
+    const choiceSeq = ++session.choiceSeq
     try {
       const response = await this.chooseCoverImage(createChooseCoverImageOptions())
+      if (!session.active || session.choiceSeq !== choiceSeq || this.data.videoEditSaving) return
       const coverFile = normalizeChosenCoverFile(response)
       if (!coverFile.filePath) {
         wx.showToast({
@@ -2054,22 +2224,9 @@ Page({
         })
         return
       }
-      this.setData({
-        'videoEditForm.coverEditMode': COVER_EDIT_MODE_LOCAL,
-        'videoEditForm.coverEditorReady': false,
-        'videoEditForm.coverFrameSelected': false,
-        'videoEditForm.localCoverPath': coverFile.filePath,
-        'videoEditForm.localCoverFileName': coverFile.fileName,
-        'videoEditForm.localCoverMimeType': coverFile.mimeType,
-        'videoEditForm.localCoverSize': coverFile.fileSize,
-        'videoEditForm.localCoverWidth': coverFile.width,
-        'videoEditForm.localCoverHeight': coverFile.height,
-        'videoEditForm.localCoverSha256': '',
-        'videoEditForm.localCoverIdempotencyKey': `cover-ticket-${videoEditForm.clientId}-${Date.now()}`,
-        videoCoverUploadProgress: 0,
-        videoEditErrorText: ''
-      })
+      this.applyLocalVideoCover(coverFile, 'local')
     } catch (error) {
+      if (!session.active || session.choiceSeq !== choiceSeq) return
       if (error && /cancel/.test(error.errMsg || error.message || '')) {
         return
       }
@@ -2082,15 +2239,25 @@ Page({
 
   async handleExportVideoCover() {
     const videoEditForm = this.data.videoEditForm
-    if (!videoEditForm || !videoEditForm.isVideo || videoEditForm.coverEditMode === COVER_EDIT_MODE_LOCAL) {
+    if (!videoEditForm || !videoEditForm.isVideo || videoEditForm.coverEditMode !== COVER_EDIT_MODE_FRAME || this.data.videoEditSaving) {
       return
     }
     this.setData({
       'videoEditForm.coverEditMode': COVER_EDIT_MODE_FRAME,
+      'videoEditForm.coverDraftMode': COVER_EDIT_MODE_FRAME,
+      'videoEditForm.coverDraftSource': 'frame',
+      'videoEditForm.coverDraftTimeText': this.data.videoFrameTimeText,
+      'videoEditForm.coverDraftFrameKey': '',
+      'videoEditForm.previewPath': videoEditForm.coverPath || videoEditForm.mediaUrl,
+      'videoEditForm.localCoverPath': '',
+      'videoEditForm.localCoverIdempotencyKey': '',
       'videoEditForm.coverFrameSelected': true,
       'videoEditForm.coverFrameTimeMs': this.data.videoFrameTimeMs,
       videoEditErrorText: ''
     })
+    this.videoCoverSession.choiceSeq += 1
+    this.videoCoverSession.preparedUpload = null
+    this.videoCoverSession.files.releaseExcept()
     wx.showToast({
       title: '已选择当前帧',
       icon: 'success'
@@ -2099,71 +2266,82 @@ Page({
 
   async handleStartVideoCoverEdit() {
     const videoEditForm = this.data.videoEditForm
-    if (!videoEditForm || !videoEditForm.isVideo || this.data.videoDownloading) {
+    if (!videoEditForm || !videoEditForm.isVideo || this.data.videoDownloading || this.data.videoEditSaving) {
       return
     }
+    this.videoCoverSession.choiceSeq += 1
     this.setData({
       'videoEditForm.coverEditMode': COVER_EDIT_MODE_FRAME,
       'videoEditForm.coverEditorReady': true,
       'videoEditForm.tempFilePath': videoEditForm.tempFilePath || videoEditForm.mediaUrl || '',
-      'videoEditForm.localCoverPath': '',
-      'videoEditForm.localCoverFileName': '',
-      'videoEditForm.localCoverSha256': '',
-      'videoEditForm.localCoverIdempotencyKey': '',
       videoCoverUploadProgress: 0,
       videoEditErrorText: ''
     })
   },
 
   async uploadVideoCoverOnConfirm(videoEditForm) {
-    if (!videoEditForm.localCoverPath) {
-      throw new Error('封面文件缺失')
-    }
+    const session = this.videoCoverSession
+    const assertCurrent = () => { if (!session.active) throw new Error('编辑已结束') }
+    await readCoverImage(videoEditForm.localCoverPath, wx)
+    assertCurrent()
     this.setData({
       videoCoverUploadProgress: 1,
+      videoCoverSaveStage: 'uploading',
       videoEditErrorText: ''
     })
-    const preparedCover = await prepareLocalCoverUploadFile(videoEditForm.localCoverPath)
-    const coverSha256 = await calculateLocalFileSha256(preparedCover.filePath)
-    const compressed = preparedCover.filePath !== videoEditForm.localCoverPath
-    const coverFileName = compressed
-      ? buildThumbFileName(videoEditForm.originalFileName || videoEditForm.fileName)
-      : (videoEditForm.localCoverFileName || DEFAULT_COVER_FILE_NAME)
-    const coverMimeType = compressed
-      ? DEFAULT_COVER_MIME_TYPE
-      : (videoEditForm.localCoverMimeType || DEFAULT_COVER_MIME_TYPE)
+    // 同一草稿重试复用压缩字节及幂等键，封面信息始终读取实际上传文件。
+    if (!session.preparedUpload) {
+      const preparedCover = await prepareLocalCoverUploadFile(videoEditForm.localCoverPath, {
+        wxApi: wx, onTempFile: filePath => session.files.track(filePath)
+      })
+      assertCurrent()
+      const image = await readCoverImage(preparedCover.filePath, wx)
+      const sha256 = await calculateLocalFileSha256(preparedCover.filePath, { wxApi: wx })
+      assertCurrent()
+      session.preparedUpload = { ...image, sha256 }
+      session.files.releaseExcept([videoEditForm.localCoverPath, preparedCover.filePath])
+    }
+    const preparedCover = session.preparedUpload
+    await readCoverImage(preparedCover.filePath, wx)
+    assertCurrent()
     const ticket = await request({
       url: `${WORKS_API_PREFIX}/${videoEditForm.id}/cover-upload-ticket`,
       method: 'POST',
       data: {
         clientId: `${videoEditForm.clientId}${LOCAL_COVER_CLIENT_SUFFIX}`,
-        fileName: coverFileName,
-        mimeType: coverMimeType,
+        fileName: preparedCover.fileName,
+        mimeType: preparedCover.mimeType,
         fileSize: preparedCover.fileSize,
-        sha256: coverSha256,
-        width: videoEditForm.localCoverWidth,
-        height: videoEditForm.localCoverHeight,
+        sha256: preparedCover.sha256,
+        width: preparedCover.width,
+        height: preparedCover.height,
         idempotencyKey: videoEditForm.localCoverIdempotencyKey
       }
     })
+    assertCurrent()
+    if (!ticket || !ticket.taskId) throw new Error('封面上传失败，请重试')
     const uploadFile = {
-      id: `${videoEditForm.clientId}${LOCAL_COVER_CLIENT_SUFFIX}`,
+      id: videoEditForm.localCoverIdempotencyKey,
       mediaType: 'IMAGE',
       tempFilePath: preparedCover.filePath
     }
-    await uploadToCos(uploadFile, ticket, {
-      onTask: (target, task) => {
-        this.uploadTasks[target.id] = task
-      },
-      onProgress: (target, progress) => {
-        this.setData({
-          videoCoverUploadProgress: progress.progress || 0
-        })
-      }
-    })
-    delete this.uploadTasks[uploadFile.id]
+    this.uploadTasks = this.uploadTasks || {}
+    try {
+      await uploadToCos(uploadFile, ticket, {
+        wxApi: wx,
+        onTask: (target, task) => {
+          this.uploadTasks[target.id] = task
+        },
+        onProgress: (target, progress) => {
+          if (!session.active) return
+          this.setData({ videoCoverUploadProgress: Math.max(0, Math.min(100, progress.progress || 0)) })
+        }
+      })
+    } finally {
+      delete this.uploadTasks[uploadFile.id]
+    }
+    assertCurrent()
     this.setData({
-      'videoEditForm.localCoverSha256': coverSha256,
       videoCoverUploadProgress: 100
     })
     return ticket
@@ -2171,7 +2349,7 @@ Page({
 
   async handleConfirmVideoEdit() {
     const videoEditForm = this.data.videoEditForm
-    if (!videoEditForm || this.data.videoEditSaving || this.data.videoFrameExporting || this.data.videoDownloading) {
+    if (!videoEditForm || this.data.videoKeyframePickerVisible || this.data.videoEditSaving || this.data.videoFrameExporting || this.data.videoDownloading) {
       return
     }
     const validation = validateWorkForm(videoEditForm)
@@ -2179,15 +2357,19 @@ Page({
       this.setData({ videoEditErrorText: validation.message })
       return
     }
+    const session = this.videoCoverSession
     this.setData({
       videoEditSaving: true,
+      videoCoverSaveStage: videoEditForm.coverDraftMode === COVER_EDIT_MODE_LOCAL ? 'uploading' : 'saving',
       videoEditErrorText: ''
     })
     try {
-      const coverTicket = videoEditForm.coverEditMode === COVER_EDIT_MODE_LOCAL && videoEditForm.localCoverPath
+      const coverTicket = videoEditForm.coverDraftMode === COVER_EDIT_MODE_LOCAL
         ? await this.uploadVideoCoverOnConfirm(videoEditForm)
         : null
-      const shouldUpdateCoverFrame = videoEditForm.coverEditMode !== COVER_EDIT_MODE_LOCAL && videoEditForm.coverFrameSelected
+      if (!session.active) return
+      this.setData({ videoCoverSaveStage: 'saving' })
+      const shouldUpdateCoverFrame = videoEditForm.coverDraftMode === COVER_EDIT_MODE_FRAME && videoEditForm.coverFrameSelected
       const payload = buildWorkUpdatePayload({
         title: videoEditForm.title,
         description: videoEditForm.description,
@@ -2206,6 +2388,7 @@ Page({
         method: 'PUT',
         data: payload
       })
+      if (!session.active) return
       this.patchWorkInList(videoEditForm, response && response.work ? response.work : payload)
       wx.showToast({
         title: '作品已更新',
@@ -2223,13 +2406,15 @@ Page({
       await this.loadWorks(true)
       this.patchWorkInList(videoEditForm, response && response.work ? response.work : payload)
     } catch (error) {
+      if (!session.active) return
       if (error && error.authRequired) {
-        this.setData({ videoEditSaving: false })
+        this.setData({ videoEditSaving: false, videoCoverSaveStage: '' })
         handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({
         videoEditSaving: false,
+        videoCoverSaveStage: '',
         videoCoverUploadProgress: 0,
         videoEditErrorText: error && error.message ? error.message : '作品保存失败'
       })

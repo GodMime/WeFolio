@@ -1768,13 +1768,12 @@ test('works page starts remote video frame selection without downloading the vid
       })
     }
   })
-  page.data.videoEditForm = {
+  page.openVideoEditSheet({
     id: 18,
-    isVideo: true,
-    mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
-    tempFilePath: '',
-    localVideoPath: ''
-  }
+    mediaType: 'VIDEO',
+    mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4'
+  })
+  page.data.videoEditForm.tempFilePath = ''
 
   await page.handleStartVideoCoverEdit()
 
@@ -1787,7 +1786,7 @@ test('works page starts remote video frame selection without downloading the vid
 test('works page marks current frame time for backend snapshot without local decoding', async () => {
   const fakeRequest = () => Promise.resolve({})
   const page = loadPage('pages/works/works.js', fakeRequest)
-  page.data.videoEditForm = {
+  page.openVideoEditSheet({
     id: 18,
     clientId: 'edit-work-18',
     isVideo: true,
@@ -1798,7 +1797,8 @@ test('works page marks current frame time for backend snapshot without local dec
     localVideoPath: 'wxfile://tmp/film.mp4',
     durationMs: 5000,
     coverFrameTimeMs: 1800
-  }
+  })
+  await page.handleStartVideoCoverEdit()
   page.data.videoFrameTimeMs = 1800
 
   await page.handleExportVideoCover()
@@ -1823,7 +1823,7 @@ test('works page saves selected video cover frame time directly', async () => {
     })
   }
   const page = loadPage('pages/works/works.js', fakeRequest)
-  page.data.videoEditForm = {
+  page.openVideoEditSheet({
     id: 18,
     clientId: 'edit-work-18',
     isVideo: true,
@@ -1835,9 +1835,15 @@ test('works page saves selected video cover frame time directly', async () => {
     mediaUrl: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
     coverFrameSelected: true,
     coverFrameTimeMs: 5200,
+    durationMs: 8000,
     width: 1080,
     height: 1920
-  }
+  })
+  await flushPromises()
+  requests.length = 0
+  await page.handleStartVideoCoverEdit()
+  page.updateVideoCoverFrameTime(5200, false)
+  await page.handleExportVideoCover()
 
   await page.handleConfirmVideoEdit()
 

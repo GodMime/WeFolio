@@ -1,4 +1,4 @@
 // 每次发布前由前端维护；查看版本和问题反馈统一读取此处。
-const FRONTEND_VERSION = '1.5.2'
+const FRONTEND_VERSION = '1.5.3'
 
 module.exports = Object.freeze({ FRONTEND_VERSION })

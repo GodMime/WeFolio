@@ -64,7 +64,6 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -87,9 +86,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class MineWorkService {
-
-    /** 只读关键帧链接有效期；过期后由用户重新查询。 */
-    private static final Duration AI_FRAME_URL_TTL = Duration.ofMinutes(15);
 
     /** 与既有帧消费者相同的文档边界。 */
     private static final int AI_FRAME_MANIFEST_MAX_BYTES = 128 * 1024;
@@ -629,7 +625,7 @@ public class MineWorkService {
         return result;
     }
 
-    /** 帧清单沿用既有数量、源身份、尺寸与路径合同；全部校验通过后才签名，忽略任何存储 URL。 */
+    /** 帧清单沿用既有数量、源身份、尺寸与路径合同；全部校验通过后生成免签 CDN 地址，忽略任何存储 URL。 */
     private List<MineWorkAiContentResponse.Frame> aiContentFrames(WorkEntity work, String identity) {
         if (!hasText(work.getVideoFramesJson())) { return List.of(); }
         ObjectNode manifest;
@@ -675,7 +671,7 @@ public class MineWorkService {
                 frame.path(PortfolioAiMediaContract.KEY_TIME_MS).asLong(),
                 frame.path(PortfolioAiMediaContract.KEY_WIDTH).asInt(),
                 frame.path(PortfolioAiMediaContract.KEY_HEIGHT).asInt(),
-                cosService.signedGet(frame.path(PortfolioAiMediaContract.KEY_OBJECT_KEY).asText(), AI_FRAME_URL_TTL)))
+                cosService.publicUrl(frame.path(PortfolioAiMediaContract.KEY_OBJECT_KEY).asText())))
                 .toList();
     }
 

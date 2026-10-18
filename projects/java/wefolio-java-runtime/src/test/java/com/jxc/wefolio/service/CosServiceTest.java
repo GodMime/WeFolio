@@ -87,6 +87,16 @@ class CosServiceTest {
                 .noneMatch(method -> "uploadFromUrl".equals(method.getName()));
     }
 
+    /** 公开读取沿用配置的 CDN 域名，不签名或调用 COS，也不改变对象权限。 */
+    @Test
+    void publicUrlUsesConfiguredCdnWithoutCallingCos() {
+        when(cosProperties.getPublicBaseUrl()).thenReturn("https://cdn.test/");
+
+        assertThat(cosService.publicUrl("/WFOWNER/others/video-frames/18/frame.jpg"))
+                .isEqualTo("https://cdn.test/WFOWNER/others/video-frames/18/frame.jpg");
+        verifyNoInteractions(transferManager);
+    }
+
     /** 参考附件的私有 ACL 与禁止覆盖必须进入签名 policy，不能只改表单字段。 */
     @Test
     void referenceTicketShouldSignPrivateAndImmutableConditions() {
