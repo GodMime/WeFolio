@@ -746,6 +746,24 @@
   font-size: 23rpx;
 }
 
+/* 数量要求直接放在样式名称下，选择前即可看见。 */
+.video-carousel-style-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4rpx;
+  text-align: left;
+  line-height: 1.35;
+}
+
+.video-carousel-style-hint {
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 22rpx;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
 .video-carousel-title-setting,
 .video-carousel-switch-setting {
   width: 100%;
@@ -918,10 +936,45 @@
   background: var(--pe-color-text-primary, #212529);
 }
 
-.video-carousel-editor-panel .component-work-actions {
+/* 数量提示位于作品滚动区外，收起设置或滚动作品后仍保留。 */
+.video-carousel-selection-hint {
+  display: flex;
+  flex: none;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
   margin-top: 16rpx;
   padding-top: 16rpx;
   border-top: 1rpx solid var(--pe-color-border, #E9ECEF);
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 24rpx;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.video-carousel-selection-hint.is-insufficient {
+  color: var(--pe-color-warning, #8A4B09);
+}
+
+.video-carousel-selection-hint-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24rpx;
+  height: 24rpx;
+  border: 1rpx solid currentColor;
+  border-radius: 50%;
+  font-size: 20rpx;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.video-carousel-editor-panel .component-work-actions {
+  margin-top: 12rpx;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .component-work-actions button[disabled] {

@@ -433,6 +433,52 @@
   display: none;
 }
 
+.video-carousel-style-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  min-width: 0;
+  text-align: left;
+}
+
+.video-carousel-style-requirement {
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 22rpx;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.video-carousel-selection-hint {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  min-height: 54rpx;
+  margin-top: 12rpx;
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.video-carousel-selection-hint-insufficient {
+  color: var(--pe-color-warning, #8A4B09);
+}
+
+.video-carousel-selection-hint-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24rpx;
+  height: 24rpx;
+  border: 1rpx solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+  font-size: 20rpx;
+  line-height: 1;
+}
+
 .video-carousel-editor-panel .component-work-heading {
   gap: 16rpx;
   margin-bottom: 12rpx;

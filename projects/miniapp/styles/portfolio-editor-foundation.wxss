@@ -9,6 +9,7 @@
   --pe-color-border-strong: #DEE2E6;
   --pe-color-mask: rgba(17, 24, 39, 0.42);
   --pe-color-danger: #B55656;
+  --pe-color-warning: #8A4B09;
   --pe-color-danger-surface: #FFF1F1;
   --pe-color-danger-shadow: rgba(181, 86, 86, 0.12);
   --pe-color-primary-disabled: #CED4DA;

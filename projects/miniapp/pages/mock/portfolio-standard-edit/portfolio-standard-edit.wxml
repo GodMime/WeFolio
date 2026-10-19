@@ -298,7 +298,7 @@
         <view class="profile-form-list-content mock-component-edit-content">
       <view wx:if="{{selectedComponentType === 'VIDEO_CAROUSEL'}}" class="video-carousel-editor-settings">
         <view class="display-style-options">
-          <view class="display-style-choice {{complexConfig.displayStyle !== 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-field="displayStyle" data-value="STACKED" bindtap="handleConfigChoice" aria-role="radio" aria-checked="{{complexConfig.displayStyle !== 'PORTRAIT_CARDS'}}"><view class="style-thumbnail stacked"><view></view><view></view><view></view></view><text>堆叠轮播</text></view>
+          <view class="display-style-choice {{complexConfig.displayStyle !== 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-field="displayStyle" data-value="STACKED" bindtap="handleConfigChoice" aria-role="radio" aria-checked="{{complexConfig.displayStyle !== 'PORTRAIT_CARDS'}}"><view class="style-thumbnail stacked"><view></view><view></view><view></view></view><view class="video-carousel-style-copy"><text>堆叠轮播</text><text class="video-carousel-style-requirement">至少 3 个视频</text></view></view>
           <view class="display-style-choice {{complexConfig.displayStyle === 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-field="displayStyle" data-value="PORTRAIT_CARDS" bindtap="handleConfigChoice" aria-role="radio" aria-checked="{{complexConfig.displayStyle === 'PORTRAIT_CARDS'}}"><view class="style-thumbnail portrait"><view></view><view></view></view><text>竖向横滑</text></view>
         </view>
         <view class="video-carousel-title-setting">
@@ -599,7 +599,7 @@
           </block>
 
           <block wx:elif="{{selectedComponentType === 'VIDEO_CAROUSEL'}}">
-            <view class="section-desc">选择 3–8 个视频，按选择顺序展示。</view>
+            <view class="section-desc">按选择顺序展示。</view>
             <view wx:for="{{workOptions}}" wx:key="id" class="component-work-option pe-sheet-choice {{item.selected ? 'pe-sheet-choice-selected' : ''}}" data-id="{{item.id}}" bindtap="handleWorkToggle" aria-role="checkbox" aria-checked="{{item.selected}}">
               <view class="component-work-thumb"><image wx:if="{{item.coverUrl}}" src="{{item.coverUrl}}" mode="aspectFill"/><view wx:else class="component-work-no-cover">暂无视频封面</view></view>
               <view class="component-work-copy">{{item.title}}</view><view class="component-work-check carousel-order">{{item.selectionOrder || ''}}</view>
@@ -624,6 +624,11 @@
         </view>
       </scroll-view>
 
+      <view wx:if="{{selectedComponentType === 'VIDEO_CAROUSEL'}}" class="video-carousel-selection-hint {{selectedWorkIds.length < 3 ? 'video-carousel-selection-hint-insufficient' : ''}}">
+        <view class="video-carousel-selection-hint-icon" aria-hidden="true">i</view>
+        <text wx:if="{{selectedWorkIds.length < 3}}">还需选择 {{3 - selectedWorkIds.length}} 个视频</text>
+        <text wx:else>已选 {{selectedWorkIds.length}} 个视频，最多 8 个</text>
+      </view>
       <view class="component-work-actions pe-sheet-actions">
         <button class="component-work-cancel pe-sheet-action-cancel" catchtap="handleCloseComponentEditSheet">取消</button>
         <button class="component-work-confirm pe-sheet-action-confirm" catchtap="handleConfirmComponentEditSheet">完成</button>

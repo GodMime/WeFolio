@@ -617,10 +617,10 @@
       ></single-work-picker>
 
       <block wx:else>
-      <view wx:if="{{editingComponentType === 'VIDEO_CAROUSEL' && videoCarouselSettingsCollapsed}}" class="video-carousel-settings-summary">{{videoCarouselDisplayStyle === 'PORTRAIT_CARDS' ? '竖向横滑' : '堆叠轮播'}} · {{videoCarouselShowComponentTitle ? (videoCarouselTitle || '视频作品') : '无组件标题'}}</view>
+      <view wx:if="{{editingComponentType === 'VIDEO_CAROUSEL' && videoCarouselSettingsCollapsed}}" class="video-carousel-settings-summary">{{videoCarouselDisplayStyle === 'PORTRAIT_CARDS' ? '竖向横滑' : '堆叠轮播'}} · 至少 3 个视频 · {{videoCarouselShowComponentTitle ? (videoCarouselTitle || '视频作品') : '无组件标题'}}</view>
       <view wx:if="{{editingComponentType === 'VIDEO_CAROUSEL'}}" class="video-carousel-editor-settings {{videoCarouselSettingsCollapsed ? 'video-carousel-editor-settings-collapsed' : ''}}">
         <view class="display-style-options">
-          <view class="display-style-choice {{videoCarouselDisplayStyle !== 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="STACKED" bindtap="handleVideoCarouselStyleChange" aria-role="radio" aria-checked="{{videoCarouselDisplayStyle !== 'PORTRAIT_CARDS'}}"><view class="style-thumbnail stacked"><view></view><view></view><view></view></view><text>堆叠轮播</text></view>
+          <view class="display-style-choice {{videoCarouselDisplayStyle !== 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="STACKED" bindtap="handleVideoCarouselStyleChange" aria-role="radio" aria-checked="{{videoCarouselDisplayStyle !== 'PORTRAIT_CARDS'}}" aria-label="堆叠轮播，至少 3 个视频"><view class="style-thumbnail stacked"><view></view><view></view><view></view></view><view class="video-carousel-style-copy"><text>堆叠轮播</text><text class="video-carousel-style-hint">至少 3 个视频</text></view></view>
           <view class="display-style-choice {{videoCarouselDisplayStyle === 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="PORTRAIT_CARDS" bindtap="handleVideoCarouselStyleChange" aria-role="radio" aria-checked="{{videoCarouselDisplayStyle === 'PORTRAIT_CARDS'}}"><view class="style-thumbnail portrait"><view></view><view></view></view><text>竖向横滑</text></view>
         </view>
         <view class="video-carousel-title-setting">
@@ -727,6 +727,11 @@
       </scroll-view>
       </block>
 
+      <view wx:if="{{editingComponentType === 'VIDEO_CAROUSEL'}}" class="video-carousel-selection-hint {{videoCarouselSelectedWorks.length < 3 ? 'is-insufficient' : ''}}" aria-role="text">
+        <text class="video-carousel-selection-hint-icon" aria-hidden="true">i</text>
+        <text wx:if="{{videoCarouselSelectedWorks.length < 3}}">还需选择 {{3 - videoCarouselSelectedWorks.length}} 个视频</text>
+        <text wx:else>已选 {{videoCarouselSelectedWorks.length}} 个视频，最多 8 个</text>
+      </view>
       <view class="component-work-actions pe-sheet-actions">
         <button class="pe-sheet-action-cancel" catchtap="handleCloseComponentWorkSheet">取消</button>
         <button class="pe-sheet-action-confirm" catchtap="handleConfirmComponentWorks" disabled="{{editingComponentType === 'VIDEO_CAROUSEL' && videoCarouselSelectedWorks.length < 3}}">完成</button>

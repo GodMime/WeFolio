@@ -942,6 +942,39 @@
   font-size: 22rpx;
 }
 
+/* 数量提示固定在操作区，收起设置或滚动作品时仍能说明完成条件。 */
+.team-video-selection-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: 12rpx;
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid var(--pe-color-border, #E9ECEF);
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.team-video-selection-hint-warning {
+  color: var(--pe-color-warning, #8A4B09);
+}
+
+.team-video-selection-hint-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24rpx;
+  height: 24rpx;
+  flex: none;
+  box-sizing: border-box;
+  border: 1rpx solid currentColor;
+  border-radius: 50%;
+  font-size: 20rpx;
+  line-height: 1;
+}
+
 .component-editor-actions button[disabled] {
   opacity: 0.42;
 }
@@ -1426,6 +1459,18 @@
   border-color: var(--pe-color-text-primary, #212529);
   color: var(--pe-color-text-primary, #212529);
   background: var(--pe-color-page, #F5F6F7);
+}
+
+.team-video-editor-settings .display-style-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.team-video-editor-settings .display-style-requirement {
+  color: var(--pe-color-text-secondary, #868E96);
+  font-size: 22rpx;
 }
 
 .team-video-editor-settings .style-thumbnail {

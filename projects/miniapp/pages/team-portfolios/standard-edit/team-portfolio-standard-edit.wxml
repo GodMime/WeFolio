@@ -533,10 +533,10 @@
       <scroll-view class="component-editor-scroll pe-sheet-scroll" style="{{componentEditorLayoutType === 'CAROUSEL' ? carouselEditorScrollStyle : ''}}" scroll-y type="list" bindscrolltolower="handleTeamVideoEditorScrollToLower">
         <view class="component-editor-content">
           <block wx:if="{{activeComponentType === 'VIDEO_CAROUSEL'}}">
-            <view wx:if="{{teamVideoSettingsCollapsed}}" class="team-video-settings-summary">{{teamVideoDisplayStyle === 'PORTRAIT_CARDS' ? '竖向横滑' : '堆叠轮播'}} · {{teamVideoShowComponentTitle ? (teamVideoTitle || '视频作品') : '无组件标题'}} · {{(teamVideoShowTitle ? 1 : 0) + (teamVideoShowDescription ? 1 : 0) + (teamVideoShowSwipeHint ? 1 : 0)}} 项展示已开启</view>
+            <view wx:if="{{teamVideoSettingsCollapsed}}" class="team-video-settings-summary">{{teamVideoDisplayStyle === 'PORTRAIT_CARDS' ? '竖向横滑' : '堆叠轮播'}} · 至少 3 个视频 · {{teamVideoShowComponentTitle ? (teamVideoTitle || '视频作品') : '无组件标题'}} · {{(teamVideoShowTitle ? 1 : 0) + (teamVideoShowDescription ? 1 : 0) + (teamVideoShowSwipeHint ? 1 : 0)}} 项展示已开启</view>
             <view wx:else class="team-video-editor-settings">
               <view class="display-style-options" aria-role="radiogroup" aria-label="轮播样式">
-                <view class="display-style-choice {{teamVideoDisplayStyle !== 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="STACKED" bindtap="handleTeamVideoStyleChange" aria-role="radio" aria-checked="{{teamVideoDisplayStyle !== 'PORTRAIT_CARDS'}}"><view class="style-thumbnail stacked" aria-hidden="true"><view></view><view></view><view></view></view><text>堆叠轮播</text></view>
+                <view class="display-style-choice {{teamVideoDisplayStyle !== 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="STACKED" bindtap="handleTeamVideoStyleChange" aria-role="radio" aria-checked="{{teamVideoDisplayStyle !== 'PORTRAIT_CARDS'}}"><view class="style-thumbnail stacked" aria-hidden="true"><view></view><view></view><view></view></view><view class="display-style-copy"><text>堆叠轮播</text><text class="display-style-requirement">至少 3 个视频</text></view></view>
                 <view class="display-style-choice {{teamVideoDisplayStyle === 'PORTRAIT_CARDS' ? 'selected' : ''}}" data-style="PORTRAIT_CARDS" bindtap="handleTeamVideoStyleChange" aria-role="radio" aria-checked="{{teamVideoDisplayStyle === 'PORTRAIT_CARDS'}}"><view class="style-thumbnail portrait" aria-hidden="true"><view></view><view></view></view><text>竖向横滑</text></view>
               </view>
               <view class="team-video-title-setting">
@@ -605,6 +605,11 @@
           <team-qr-contact wx:if="{{activeComponentType === 'QR_CONTACT'}}" id="active-component-editor" data-key="{{activeComponentKey}}" config="{{activeComponent.config}}" edit-mode="{{true}}" choosing="{{qrContactChoosing}}" bindchoose="handleQrChoose" bindsave="handleComponentSave" />
         </view>
       </scroll-view>
+      <view wx:if="{{activeComponentType === 'VIDEO_CAROUSEL'}}" class="team-video-selection-hint {{teamVideoSelectedItems.length < 3 ? 'team-video-selection-hint-warning' : ''}}">
+        <view class="team-video-selection-hint-icon" aria-hidden="true">i</view>
+        <text wx:if="{{teamVideoSelectedItems.length < 3}}">还需选择 {{3 - teamVideoSelectedItems.length}} 个视频</text>
+        <text wx:else>已选 {{teamVideoSelectedItems.length}} 个视频，最多 8 个</text>
+      </view>
       <view class="component-editor-actions pe-sheet-actions">
         <button class="pe-sheet-action-cancel" catchtap="handleCloseComponentEditor">取消</button>
         <button class="pe-sheet-action-confirm" catchtap="handleConfirmComponentEditor" disabled="{{activeComponentType === 'VIDEO_CAROUSEL' && teamVideoSelectedItems.length < 3}}">完成</button>
