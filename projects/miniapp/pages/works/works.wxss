@@ -2236,12 +2236,23 @@
 }
 
 .cover-edit-time {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   min-width: 0;
   color: #40546a;
   font-size: 23rpx;
   font-weight: 800;
   line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* 覆盖微信按钮默认宽度，为同一行的选帧时间保留空间。 */
+.cover-edit-toolbar .keyframe-cover-entry,
+.cover-edit-toolbar .cover-use-frame-button {
+  width: auto;
+}
+
+.cover-edit-toolbar .keyframe-cover-entry {
+  min-width: 44px;
 }
 
 .cover-use-frame-button {
