@@ -11,7 +11,7 @@ import java.util.List;
 @Data
 public class MineWorkSortRequest {
 
-    /** 排序范围：ALL 全部作品 / TAG 标签内 */
+    /** 排序范围：ALL 全局排序 / TAG 兼容旧客户端，将提交作品顺序合并到全局顺序 */
     private String scope;
 
     /** 标签 ID，仅 TAG 范围使用 */

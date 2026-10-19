@@ -141,7 +141,7 @@ public class MineWorkService {
     /** 全部作品排序范围 */
     private static final String SORT_SCOPE_ALL = "ALL";
 
-    /** 标签内排序范围 */
+    /** 兼容旧客户端的标签排序范围，最终仍写入全局顺序 */
     private static final String SORT_SCOPE_TAG = "TAG";
 
     /** 标签排序范围缺少标签提示 */
@@ -258,11 +258,8 @@ public class MineWorkService {
     /** 计数查询别名 */
     private static final String COUNT_ALIAS = "itemCount";
 
-    /** MySQL FIELD 排序表达式前缀 */
-    private static final String SQL_ORDER_BY_FIELD_ID_PREFIX = "ORDER BY FIELD(id, ";
-
-    /** MySQL 函数表达式右括号 */
-    private static final String SQL_FUNCTION_SUFFIX = ")";
+    /** 锁定全局作品顺序，避免旧版标签排序合并期间被并发修改 */
+    private static final String SQL_FOR_UPDATE = "FOR UPDATE";
 
     /** 批量删除成功提示 */
     private static final String BATCH_DELETE_SUCCESS_MESSAGE = "已删除";
@@ -409,10 +406,7 @@ public class MineWorkService {
         int normalizedPageSize = pageSize <= 0 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         String normalizedMediaType = normalizeOptionalMediaType(mediaType);
         String normalizedAuditStatus = normalizeOptionalAuditStatus(auditStatus);
-        List<WorkTagEntity> selectedTagRelations = tagId == null ? List.of() : findRelationsForTag(userId, tagId);
-        List<Long> taggedWorkIds = tagId == null
-                ? null
-                : selectedTagRelations.stream().map(WorkTagEntity::getWorkId).toList();
+        List<Long> taggedWorkIds = tagId == null ? null : findWorkIdsByTag(userId, tagId);
         List<Long> keywordWorkIds = findWorkIdsByKeywordTag(userId, keyword);
         var query = Wrappers.lambdaQuery(WorkEntity.class)
                 .eq(WorkEntity::getUserId, userId)
@@ -426,12 +420,9 @@ public class MineWorkService {
                         .or(!keywordWorkIds.isEmpty())
                         .in(!keywordWorkIds.isEmpty(), WorkEntity::getId, keywordWorkIds))
                 .in(taggedWorkIds != null && !taggedWorkIds.isEmpty(), WorkEntity::getId, taggedWorkIds)
-                .eq(taggedWorkIds != null && taggedWorkIds.isEmpty(), WorkEntity::getId, -1L);
-        if (tagId == null) {
-            query.orderByAsc(WorkEntity::getSortOrder).orderByDesc(WorkEntity::getId);
-        } else if (!taggedWorkIds.isEmpty()) {
-            query.last(buildWorkIdOrderClause(taggedWorkIds));
-        }
+                .eq(taggedWorkIds != null && taggedWorkIds.isEmpty(), WorkEntity::getId, -1L)
+                .orderByAsc(WorkEntity::getSortOrder)
+                .orderByDesc(WorkEntity::getId);
         Page<WorkEntity> resultPage = workEntityMapper.selectPage(
                 new Page<>(normalizedPage, normalizedPageSize),
                 query
@@ -453,13 +444,9 @@ public class MineWorkService {
         Map<Long, Long> referenceCounts = buildWorkReferenceCounts(resultPage.getRecords());
         Map<Long, List<MineWorkListResponse.TagItem>> workTags =
                 buildWorkTagItems(resultPage.getRecords(), activeTagRelations, activeTagMap);
-        Map<Long, Integer> selectedTagSortOrders = buildRelationSortOrderMap(selectedTagRelations);
         List<MineWorkListResponse.WorkItem> workItems = resultPage.getRecords().stream()
                 .map(work -> buildWorkItem(work, referenceCounts, workTags))
                 .toList();
-        if (tagId != null) {
-            workItems.forEach(item -> item.setSortOrder(selectedTagSortOrders.getOrDefault(item.getId(), item.getSortOrder())));
-        }
         response.setWorks(workItems);
         return response;
     }
@@ -1274,22 +1261,19 @@ public class MineWorkService {
         MineWorkSortItemsResponse response = new MineWorkSortItemsResponse();
         response.setScope(normalizedScope);
         response.setTagId(SORT_SCOPE_TAG.equals(normalizedScope) ? tagId : null);
+        List<Long> taggedWorkIds = null;
         if (SORT_SCOPE_TAG.equals(normalizedScope)) {
             requireOwnedActiveTag(userId, tagId);
-            List<WorkTagEntity> relations = findRelationsForTag(userId, tagId);
-            List<Long> workIds = relations.stream().map(WorkTagEntity::getWorkId).toList();
-            Map<Long, WorkEntity> workMap = buildOwnedWorkMap(userId, workIds);
-            response.setWorks(relations.stream()
-                    .filter(relation -> workMap.containsKey(relation.getWorkId()))
-                    .map(relation -> buildSortWorkItem(workMap.get(relation.getWorkId()), relation.getSortOrder()))
-                    .toList());
-            response.setTotal(response.getWorks().size());
-            return response;
+            taggedWorkIds = findWorkIdsByTag(userId, tagId);
+            if (taggedWorkIds.isEmpty()) {
+                return response;
+            }
         }
         List<WorkEntity> works = workEntityMapper.selectList(
                 Wrappers.lambdaQuery(WorkEntity.class)
                         .eq(WorkEntity::getUserId, userId)
                         .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
+                        .in(taggedWorkIds != null, WorkEntity::getId, taggedWorkIds)
                         .orderByAsc(WorkEntity::getSortOrder)
                         .orderByDesc(WorkEntity::getId)
         );
@@ -2862,21 +2846,6 @@ public class MineWorkService {
     }
 
     /**
-     * 构造作品在当前标签下的排序值映射。
-     *
-     * @param relations 标签关系
-     * @return 作品排序值映射
-     */
-    private Map<Long, Integer> buildRelationSortOrderMap(List<WorkTagEntity> relations) {
-        return relations.stream()
-                .collect(Collectors.toMap(
-                        WorkTagEntity::getWorkId,
-                        relation -> relation.getSortOrder() == null ? 0 : relation.getSortOrder(),
-                        (left, right) -> left,
-                        LinkedHashMap::new));
-    }
-
-    /**
      * 批量统计本页作品引用数量。
      *
      * @param works 本页作品
@@ -3102,7 +3071,7 @@ public class MineWorkService {
     }
 
     /**
-     * 查询当前用户指定标签下的作品关系，按标签内排序返回。
+     * 查询当前用户指定标签下的作品关系，仅用于筛选与归属校验。
      *
      * @param userId 当前用户 ID
      * @param tagId 标签 ID
@@ -3113,21 +3082,7 @@ public class MineWorkService {
                 Wrappers.lambdaQuery(WorkTagEntity.class)
                         .eq(WorkTagEntity::getUserId, userId)
                         .eq(WorkTagEntity::getTagId, tagId)
-                        .orderByAsc(WorkTagEntity::getSortOrder)
-                        .orderByDesc(WorkTagEntity::getWorkId)
         );
-    }
-
-    /**
-     * 构造按作品 ID 列表顺序排序的 SQL 片段。
-     *
-     * @param workIds 作品 ID
-     * @return SQL 排序片段
-     */
-    private String buildWorkIdOrderClause(List<Long> workIds) {
-        return SQL_ORDER_BY_FIELD_ID_PREFIX
-                + workIds.stream().map(String::valueOf).collect(Collectors.joining(","))
-                + SQL_FUNCTION_SUFFIX;
     }
 
     /**
@@ -3434,7 +3389,7 @@ public class MineWorkService {
     }
 
     /**
-     * 更新标签内作品排序。
+     * 兼容旧版标签排序请求，将提交作品的相对顺序合并到全局顺序。
      *
      * @param userId 当前用户 ID
      * @param tagId 标签 ID
@@ -3458,7 +3413,37 @@ public class MineWorkService {
         if (!relationWorkIds.containsAll(workIds)) {
             throw new BusinessException(SORT_TAG_WORK_MISMATCH_MESSAGE);
         }
-        workTagEntityMapper.updateSortOrders(userId, tagId, validItems);
+        List<WorkEntity> globalWorks = workEntityMapper.selectList(
+                Wrappers.lambdaQuery(WorkEntity.class)
+                        .select(WorkEntity::getId)
+                        .eq(WorkEntity::getUserId, userId)
+                        .eq(WorkEntity::getStatus, WorkStatusDict.ACTIVE.getCode())
+                        .orderByAsc(WorkEntity::getSortOrder)
+                        .orderByDesc(WorkEntity::getId)
+                        .last(SQL_FOR_UPDATE)
+        );
+        Set<Long> globalWorkIds = globalWorks.stream().map(WorkEntity::getId).collect(Collectors.toSet());
+        if (!globalWorkIds.containsAll(workIds)) {
+            throw new BusinessException(MineWorkMessage.WORK_NOT_FOUND_MESSAGE);
+        }
+        List<Long> orderedWorkIds = validItems.stream()
+                .sorted(Comparator.comparingInt(MineWorkSortRequest.Item::getSortOrder)
+                        .thenComparing(MineWorkSortRequest.Item::getWorkId, Comparator.reverseOrder()))
+                .map(MineWorkSortRequest.Item::getWorkId)
+                .toList();
+        Set<Long> requestedWorkIds = new HashSet<>(workIds);
+        List<MineWorkSortRequest.Item> mergedItems = new ArrayList<>(globalWorks.size());
+        int requestedIndex = 0;
+        for (int index = 0; index < globalWorks.size(); index++) {
+            Long workId = globalWorks.get(index).getId();
+            MineWorkSortRequest.Item item = new MineWorkSortRequest.Item();
+            // 只替换提交作品占据的位置，未提交作品（含同标签作品）保留原位置。
+            item.setWorkId(requestedWorkIds.contains(workId) ? orderedWorkIds.get(requestedIndex++) : workId);
+            // 历史作品可能具有相同排序值，重新编号才能确保合并后的顺序稳定。
+            item.setSortOrder(index + 1);
+            mergedItems.add(item);
+        }
+        workEntityMapper.updateSortOrders(userId, mergedItems);
     }
 
     /**

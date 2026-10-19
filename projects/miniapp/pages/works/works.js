@@ -69,7 +69,7 @@ const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const DELETE_CONFIRM_COLOR = '#a9354f'
 const SORT_SCOPE_ALL = 'ALL'
-const SORT_SCOPE_TAG = 'TAG'
+const WORK_SORT_TITLE = '调整全部作品顺序'
 const SORT_ORDER_STEP = 1000
 const SORT_DRAG_SCALE = 1.015
 const COVER_EDIT_MODE_FRAME = 'frame'
@@ -480,9 +480,7 @@ Page({
     videoPreviewVisible: false,
     videoPreview: null,
     sortMode: false,
-    sortScope: SORT_SCOPE_ALL,
-    sortTagId: null,
-    sortTitle: '调整作品顺序',
+    sortTitle: WORK_SORT_TITLE,
     sortWorks: [],
     sortLoading: false,
     sortSaving: false,
@@ -2655,11 +2653,6 @@ Page({
     }
   },
 
-  getSelectedTagName() {
-    const tag = this.findTagById(this.data.selectedTagId)
-    return tag && tag.name ? tag.name : '当前标签'
-  },
-
   async handleOpenSortMode() {
     if (String(this.data.keyword || '').trim()) {
       wx.showToast({
@@ -2668,13 +2661,9 @@ Page({
       })
       return
     }
-    const sortScope = this.data.selectedTagId ? SORT_SCOPE_TAG : SORT_SCOPE_ALL
-    const sortTagId = sortScope === SORT_SCOPE_TAG ? this.data.selectedTagId : null
+    // 标签仅用于列表筛选，所有入口均调整同一份全局顺序。
     this.setData({
       sortMode: true,
-      sortScope,
-      sortTagId,
-      sortTitle: sortScope === SORT_SCOPE_TAG ? `调整「${this.getSelectedTagName()}」顺序` : '调整全部作品顺序',
       sortWorks: [],
       sortLoading: true,
       sortSaving: false,
@@ -2691,11 +2680,8 @@ Page({
     try {
       const response = await request({
         url: WORK_SORT_ITEMS_API_URL,
-        data: sortTagId ? {
-          scope: sortScope,
-          tagId: sortTagId
-        } : {
-          scope: sortScope
+        data: {
+          scope: SORT_SCOPE_ALL
         }
       })
       this.setData({
@@ -2854,8 +2840,7 @@ Page({
         url: WORK_SORT_API_URL,
         method: 'POST',
         data: {
-          scope: this.data.sortScope,
-          tagId: this.data.sortTagId || undefined,
+          scope: SORT_SCOPE_ALL,
           items
         }
       })

@@ -11,7 +11,7 @@ import java.util.List;
 @Data
 public class MineWorkSortItemsResponse {
 
-    /** 排序范围：ALL 全部 / TAG 标签内 */
+    /** 查询范围：ALL 全部 / TAG 标签筛选，两种范围均按全局顺序返回 */
     private String scope;
 
     /** 标签 ID，仅 TAG 范围使用 */
@@ -41,7 +41,7 @@ public class MineWorkSortItemsResponse {
         /** 封面访问 URL */
         private String coverUrl;
 
-        /** 当前排序值 */
+        /** 当前全局排序值 */
         private Integer sortOrder;
     }
 }

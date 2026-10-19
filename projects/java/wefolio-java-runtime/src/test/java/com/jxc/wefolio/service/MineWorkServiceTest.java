@@ -76,10 +76,12 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -235,7 +237,7 @@ class MineWorkServiceTest {
         when(wfTagEntityMapper.selectList(any())).thenReturn(List.of(tag));
         when(wfTagEntityMapper.selectById(31L)).thenReturn(tag);
         when(workTagEntityMapper.selectList(any())).thenReturn(List.of(workTagRelation(19L, 31L)));
-        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(audio));
+        when(workEntityMapper.selectList(any())).thenReturn(List.of(audio));
         assertThat(service().listTags().getTags()).singleElement().satisfies(item -> assertThat(item.getCount()).isEqualTo(1));
         assertThat(service().listSortItems("TAG", 31L).getWorks()).singleElement()
                 .satisfies(item -> assertThat(item.getMediaType()).isEqualTo("AUDIO"));
@@ -564,6 +566,40 @@ class MineWorkServiceTest {
         service().deleteTag(31L);
 
         verify(wfTagEntityMapper).deleteById(31L);
+    }
+
+    /** 标签只缩小作品集合，列表顺序和响应排序值始终沿用全局排序。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void listWorksShouldKeepGlobalOrderWhenFilteringByTag(boolean filtered) {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), WorkEntity.class);
+        WorkEntity first = activeSortedWork(12L, 10);
+        WorkEntity second = activeSortedWork(11L, 20);
+        WorkTagEntity firstRelation = workTagRelation(11L, 31L);
+        firstRelation.setSortOrder(1000);
+        WorkTagEntity secondRelation = workTagRelation(12L, 31L);
+        secondRelation.setSortOrder(2000);
+        when(wfTagEntityMapper.selectList(any())).thenReturn(List.of(ownedTag(31L, "室内", "#0f766e")));
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(firstRelation, secondRelation));
+        when(workEntityMapper.selectPage(any(), any())).thenAnswer(invocation -> {
+            LambdaQueryWrapper<WorkEntity> query = invocation.getArgument(1);
+            assertThat(query.getSqlSegment()).contains("ORDER BY sort_order ASC,id DESC")
+                    .doesNotContain("FIELD(");
+            if (filtered) {
+                assertThat(query.getSqlSegment()).contains("id IN");
+                assertThat(query.getParamNameValuePairs().values()).contains(11L, 12L);
+            }
+            Page<WorkEntity> page = new Page<>(1, 20, 2);
+            page.setRecords(List.of(first, second));
+            return page;
+        });
+
+        MineWorkListResponse response = service().listWorks(null, filtered ? 31L : null, 1, 20);
+
+        assertThat(response.getWorks()).extracting(MineWorkListResponse.WorkItem::getId)
+                .containsExactly(12L, 11L);
+        assertThat(response.getWorks()).extracting(MineWorkListResponse.WorkItem::getSortOrder)
+                .containsExactly(10, 20);
     }
 
     @Test
@@ -2800,26 +2836,87 @@ class MineWorkServiceTest {
         verify(workEntityMapper).updateSortOrders(eq(7L), any());
     }
 
+    /** 历史标签排序请求在全局排序值均为零时仍能交换作品，非标签作品保留原位置。 */
     @Test
-    void sortWorksShouldUpdateTagScopedSortWithoutChangingGlobalOrder() {
-        WorkEntity first = ownedWork(11L);
-        WorkEntity second = ownedWork(12L);
-        when(wfTagEntityMapper.selectById(31L)).thenReturn(ownedTag(31L, "高端婚礼", "#0f766e"));
-        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(first, second));
-        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(
-                workTagRelation(11L, 31L),
-                workTagRelation(12L, 31L)
-        ));
-        when(workTagEntityMapper.updateSortOrders(eq(7L), eq(31L), any())).thenReturn(2);
-        MineWorkSortRequest request = new MineWorkSortRequest();
-        request.setScope("TAG");
-        request.setTagId(31L);
-        request.setItems(List.of(sortItem(11L, 2000), sortItem(12L, 1000)));
+    void sortWorksShouldMergeTagOrderIntoGlobalSlotsWhenAllRanksAreZero() {
+        List<WorkEntity> globalWorks = List.of(
+                activeSortedWork(14L, 0), activeSortedWork(13L, 0),
+                activeSortedWork(12L, 0), activeSortedWork(11L, 0));
+        stubTagSortOwnership(List.of(globalWorks.get(0), globalWorks.get(2)), List.of(14L, 12L));
+        stubLockedGlobalSortWorks(globalWorks);
 
-        service().sortWorks(request);
+        service().sortWorks(tagSortRequest(List.of(sortItem(14L, 2000), sortItem(12L, 1000))));
+
+        assertGlobalSortWrite(12L, 13L, 14L, 11L);
+    }
+
+    /** 旧客户端只提交部分标签作品时，其余标签作品与其它作品都保留原槽位。 */
+    @Test
+    void sortWorksShouldPreserveUnsubmittedTagAndOtherWorkSlots() {
+        List<WorkEntity> globalWorks = List.of(
+                activeSortedWork(16L, -100), activeSortedWork(15L, 0),
+                activeSortedWork(14L, 0), activeSortedWork(13L, 5),
+                activeSortedWork(12L, 100), activeSortedWork(11L, Integer.MAX_VALUE));
+        stubTagSortOwnership(List.of(globalWorks.get(0), globalWorks.get(4)), List.of(16L, 14L, 12L, 11L));
+        stubLockedGlobalSortWorks(globalWorks);
+
+        service().sortWorks(tagSortRequest(List.of(sortItem(16L, 2000), sortItem(12L, 1000))));
+
+        assertGlobalSortWrite(12L, 15L, 14L, 13L, 16L, 11L);
+    }
+
+    /** 保留空项过滤及重复作品末值生效，极值与相同排序值均按稳定全局规则处理。 */
+    @Test
+    void sortWorksShouldNormalizeLegacyTagItemsAndCompareExtremeRanksSafely() {
+        List<WorkEntity> globalWorks = List.of(
+                activeSortedWork(14L, 0), activeSortedWork(13L, 0),
+                activeSortedWork(12L, 0), activeSortedWork(11L, 0));
+        stubTagSortOwnership(globalWorks, List.of(14L, 13L, 12L, 11L));
+        stubLockedGlobalSortWorks(globalWorks);
+        List<MineWorkSortRequest.Item> items = Arrays.asList(
+                null, sortItem(null, 1), sortItem(99L, null),
+                sortItem(11L, Integer.MAX_VALUE), sortItem(14L, Integer.MAX_VALUE),
+                sortItem(12L, Integer.MIN_VALUE), sortItem(13L, Integer.MAX_VALUE),
+                sortItem(11L, Integer.MIN_VALUE));
+
+        service().sortWorks(tagSortRequest(items));
+
+        assertGlobalSortWrite(12L, 11L, 14L, 13L);
+        verify(workEntityMapper).selectBatchIds(List.of(11L, 14L, 12L, 13L));
+    }
+
+    /** 所属校验后作品被删除或不再有效时，不得根据旧快照部分写入排序。 */
+    @Test
+    void sortWorksShouldRejectTagItemsMissingFromLockedGlobalWorks() {
+        WorkEntity first = activeSortedWork(12L, 0);
+        WorkEntity second = activeSortedWork(11L, 0);
+        stubTagSortOwnership(List.of(first, second), List.of(12L, 11L));
+        stubLockedGlobalSortWorks(List.of(first));
+
+        assertThatThrownBy(() -> service().sortWorks(
+                tagSortRequest(List.of(sortItem(12L, 2000), sortItem(11L, 1000)))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.WORK_NOT_FOUND_MESSAGE);
 
         verify(workEntityMapper, never()).updateSortOrders(any(), any());
-        verify(workTagEntityMapper).updateSortOrders(eq(7L), eq(31L), any());
+        verify(workTagEntityMapper, never()).updateSortOrders(any(), any(), any());
+    }
+
+    /** 标签排序兼容路径仍拒绝他人作品，不读取或改写全局顺序。 */
+    @Test
+    void sortWorksShouldRejectForeignWorkInTagScope() {
+        WorkEntity foreign = activeSortedWork(11L, 0);
+        foreign.setUserId(8L);
+        when(wfTagEntityMapper.selectById(31L)).thenReturn(ownedTag(31L, "室内", "#0f766e"));
+        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(foreign));
+
+        assertThatThrownBy(() -> service().sortWorks(tagSortRequest(List.of(sortItem(11L, 1000)))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage(MineWorkMessage.WORK_NOT_FOUND_MESSAGE);
+
+        verify(workEntityMapper, never()).selectList(any());
+        verify(workEntityMapper, never()).updateSortOrders(any(), any());
+        verify(workTagEntityMapper, never()).updateSortOrders(any(), any(), any());
     }
 
     @Test
@@ -2841,25 +2938,32 @@ class MineWorkServiceTest {
         verify(workEntityMapper, never()).updateSortOrders(any(), any());
     }
 
+    /** 旧标签排序列表保留范围字段，但作品次序与排序值都取全局顺序。 */
     @Test
-    void listSortItemsShouldReturnTagScopedOrderItems() {
-        WorkEntity first = ownedWork(11L);
+    void listSortItemsShouldReturnTagSubsetInGlobalOrder() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), WorkEntity.class);
+        WorkEntity first = activeSortedWork(11L, 2000);
         first.setTitle("草坪婚礼");
         first.setMediaType(MediaTypeDict.IMAGE.getCode());
         first.setCoverObjectKey("WFA3B1E7A2/work/image/photo.jpg");
-        first.setSortOrder(2000);
-        WorkEntity second = ownedWork(12L);
+        WorkEntity second = activeSortedWork(12L, 1000);
         second.setTitle("片头快剪");
         second.setMediaType(MediaTypeDict.VIDEO.getCode());
         second.setCoverObjectKey("WFA3B1E7A2/work/video/film-thumb.jpg");
-        second.setSortOrder(1000);
         WorkTagEntity firstRelation = workTagRelation(11L, 31L);
-        firstRelation.setSortOrder(3000);
+        firstRelation.setSortOrder(1000);
         WorkTagEntity secondRelation = workTagRelation(12L, 31L);
-        secondRelation.setSortOrder(1000);
+        secondRelation.setSortOrder(3000);
         when(wfTagEntityMapper.selectById(31L)).thenReturn(ownedTag(31L, "高端婚礼", "#0f766e"));
-        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(secondRelation, firstRelation));
-        when(workEntityMapper.selectBatchIds(any())).thenReturn(List.of(first, second));
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of(firstRelation, secondRelation));
+        when(workEntityMapper.selectList(any())).thenAnswer(invocation -> {
+            LambdaQueryWrapper<WorkEntity> query = invocation.getArgument(0);
+            assertThat(query.getSqlSegment()).contains("user_id =", "status =", "id IN", "ORDER BY sort_order ASC,id DESC")
+                    .doesNotContain("FIELD(");
+            assertThat(query.getParamNameValuePairs().values())
+                    .contains(7L, WorkStatusDict.ACTIVE.getCode(), 11L, 12L);
+            return List.of(second, first);
+        });
         when(cosService.publicUrl(any())).thenAnswer(invocation -> "https://cos.example/" + invocation.getArgument(0));
 
         MineWorkSortItemsResponse response = service().listSortItems("TAG", 31L);
@@ -2870,9 +2974,24 @@ class MineWorkServiceTest {
         assertThat(response.getWorks()).extracting(MineWorkSortItemsResponse.SortWorkItem::getId)
                 .containsExactly(12L, 11L);
         assertThat(response.getWorks()).extracting(MineWorkSortItemsResponse.SortWorkItem::getSortOrder)
-                .containsExactly(1000, 3000);
+                .containsExactly(1000, 2000);
         assertThat(response.getWorks().get(0).getCoverUrl())
                 .isEqualTo("https://cos.example/WFA3B1E7A2/work/video/film-thumb.jpg");
+    }
+
+    /** 空标签不得回退为全部作品列表。 */
+    @Test
+    void listSortItemsShouldKeepEmptyTagSubsetEmpty() {
+        when(wfTagEntityMapper.selectById(31L)).thenReturn(ownedTag(31L, "室内", "#0f766e"));
+        when(workTagEntityMapper.selectList(any())).thenReturn(List.of());
+
+        MineWorkSortItemsResponse response = service().listSortItems("TAG", 31L);
+
+        assertThat(response.getScope()).isEqualTo("TAG");
+        assertThat(response.getTagId()).isEqualTo(31L);
+        assertThat(response.getTotal()).isZero();
+        assertThat(response.getWorks()).isEmpty();
+        verify(workEntityMapper, never()).selectList(any());
     }
 
     @Test
@@ -3120,6 +3239,55 @@ class MineWorkServiceTest {
         verify(workEntityMapper, times(1)).update(any(), any());
         verify(workTagEntityMapper, times(1)).delete(any());
         verify(cosService).delete("WFA3B1E7A2/work/image/photo.jpg");
+    }
+
+    /** 创建具有全局排序值的有效作品，供排序兼容测试使用。 */
+    private WorkEntity activeSortedWork(Long workId, int sortOrder) {
+        WorkEntity work = ownedWork(workId);
+        work.setStatus(WorkStatusDict.ACTIVE.getCode());
+        work.setSortOrder(sortOrder);
+        return work;
+    }
+
+    /** 构造历史客户端的标签范围排序请求。 */
+    private MineWorkSortRequest tagSortRequest(List<MineWorkSortRequest.Item> items) {
+        MineWorkSortRequest request = new MineWorkSortRequest();
+        request.setScope("TAG");
+        request.setTagId(31L);
+        request.setItems(items);
+        return request;
+    }
+
+    /** 模拟标签、作品归属及标签成员关系，保持原有访问校验路径。 */
+    private void stubTagSortOwnership(List<WorkEntity> submittedWorks, List<Long> taggedWorkIds) {
+        when(wfTagEntityMapper.selectById(31L)).thenReturn(ownedTag(31L, "室内", "#0f766e"));
+        when(workEntityMapper.selectBatchIds(any())).thenReturn(submittedWorks);
+        when(workTagEntityMapper.selectList(any())).thenReturn(taggedWorkIds.stream()
+                .map(workId -> workTagRelation(workId, 31L))
+                .toList());
+    }
+
+    /** 校验全局排序读取在事务锁内进行，并返回按全局顺序排列的最新有效作品。 */
+    private void stubLockedGlobalSortWorks(List<WorkEntity> globalWorks) {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), WorkEntity.class);
+        when(workEntityMapper.selectList(any())).thenAnswer(invocation -> {
+            LambdaQueryWrapper<WorkEntity> query = invocation.getArgument(0);
+            assertThat(query.getSqlSegment()).contains("user_id =", "status =", "ORDER BY sort_order ASC,id DESC", "FOR UPDATE");
+            assertThat(query.getParamNameValuePairs().values()).contains(7L, WorkStatusDict.ACTIVE.getCode());
+            return globalWorks;
+        });
+    }
+
+    /** 验证只写一次全局排序，连续正整数能够区分原本排序值相同的作品。 */
+    private void assertGlobalSortWrite(Long... expectedIds) {
+        ArgumentCaptor<List<MineWorkSortRequest.Item>> captor = ArgumentCaptor.captor();
+        verify(workEntityMapper).updateSortOrders(eq(7L), captor.capture());
+        List<MineWorkSortRequest.Item> items = captor.getValue();
+        assertThat(items).extracting(MineWorkSortRequest.Item::getWorkId).containsExactly(expectedIds);
+        assertThat(items).extracting(MineWorkSortRequest.Item::getSortOrder)
+                .containsExactlyElementsOf(IntStream.rangeClosed(1, expectedIds.length).boxed().toList());
+        verify(workTagEntityMapper, never()).updateSortOrders(any(), any(), any());
+        verify(workEntityMapper, never()).updateById(any(WorkEntity.class));
     }
 
     private MineWorkService service() {

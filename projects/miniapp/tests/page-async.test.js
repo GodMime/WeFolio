@@ -2216,85 +2216,132 @@ test('works page batch delete checks references then deletes allowed works', asy
   assert.deepEqual(page.data.selectedWorkIds, [])
 })
 
-test('works page drags tag scoped sort order then saves', async () => {
+test('works page tag filtering preserves the returned global order', async () => {
   const requests = []
-  const fakeRequest = (options) => {
+  const works = [
+    { id: 199, title: '紫潮潮汐', mediaType: 'VIDEO' },
+    { id: 170, title: '户外婚礼', mediaType: 'VIDEO' },
+    { id: 150, title: '室内仪式', mediaType: 'VIDEO' }
+  ]
+  const page = loadPage('pages/works/works.js', async (options) => {
     requests.push(options)
-    if (options.url === '/api/mine/works/sort-items') {
-      return Promise.resolve({
-        scope: 'TAG',
-        tagId: 31,
-        total: 2,
-        works: [
-          { id: 12, title: '片头快剪', mediaType: 'VIDEO', sortOrder: 1000 },
-          { id: 11, title: '草坪婚礼', mediaType: 'IMAGE', sortOrder: 3000 }
-        ]
-      })
-    }
-    if (options.url === '/api/mine/works/sort') {
-      return Promise.resolve({})
-    }
-    return Promise.resolve({
-      works: [],
-      tags: [{ id: 31, name: '高端婚礼', color: '#0f766e', count: 2 }],
-      summary: {},
+    return {
+      works: options.data.tagId ? works.filter((work) => work.id !== 170) : works,
+      tags: [{ id: 31, name: '室内', color: '#2d5f9a', count: 2 }],
       page: 1,
       pageSize: 20,
       hasMore: false
-    })
-  }
-  const page = loadPage('pages/works/works.js', fakeRequest)
-  page.data.loading = false
-  page.data.keyword = ''
-  page.data.selectedTagId = 31
-  page.data.list.tags = [{ id: 31, name: '高端婚礼', color: '#0f766e', count: 2 }]
+    }
+  })
 
-  await page.handleOpenSortMode()
-  page.handleSortDragStart({
-    currentTarget: {
-      dataset: {
-        index: '1'
-      }
-    },
-    touches: [
-      { clientY: 220 }
-    ]
-  })
-  page.handleSortDragMove({
-    currentTarget: {
-      dataset: {
-        index: '0'
-      }
-    },
-    touches: [
-      { clientY: 120 }
-    ]
-  })
-  assert.equal(page.data.sortDraggingWorkId, 11)
-  assert.match(page.data.sortDragStyle, /translate3d\(0,\s*-100px,\s*0\)/)
-  page.handleSortDragEnd()
-  assert.equal(page.data.sortDragStyle, '')
-  await page.handleSaveSort()
+  await page.loadWorks(true)
+  assert.deepEqual(page.data.list.works.map((work) => work.id), [199, 170, 150])
+
+  page.handleTagTap({ currentTarget: { dataset: { id: 31 } } })
   await flushPromises()
+  assert.equal(page.data.selectedTagId, 31)
+  assert.deepEqual(page.data.list.works.map((work) => work.id), [199, 150])
 
-  assert.deepEqual(requests.map((request) => `${request.method || 'GET'} ${request.url}`), [
-    'GET /api/mine/works/sort-items',
-    'POST /api/mine/works/sort',
-    'GET /api/mine/works'
-  ])
-  assert.deepEqual(requests[0].data, { scope: 'TAG', tagId: 31 })
-  assert.deepEqual(requests[1].data, {
-    scope: 'TAG',
-    tagId: 31,
-    items: [
-      { workId: 11, sortOrder: 1000 },
-      { workId: 12, sortOrder: 2000 }
-    ]
-  })
-  assert.deepEqual(page.data.sortWorks.map((work) => work.id), [])
-  assert.equal(page.data.sortDraggingWorkId, null)
-  assert.equal(page.data.sortMode, false)
+  page.handleTagTap({ currentTarget: { dataset: { id: '' } } })
+  await flushPromises()
+  assert.equal(page.data.selectedTagId, null)
+  assert.deepEqual(page.data.list.works.map((work) => work.id), [199, 170, 150])
+  assert.deepEqual(requests.map((request) => request.data.tagId), [undefined, 31, undefined])
+  assert.equal(requests.every((request) => request.url === '/api/mine/works'), true)
 })
+
+for (const selectedTagId of [null, 31]) {
+  test(`works page opens and saves global sort while retaining filter ${selectedTagId}`, async () => {
+    const requests = []
+    const sortedWorks = [
+      { id: 11, title: '草坪婚礼', mediaType: 'IMAGE' },
+      { id: 12, title: '片头快剪', mediaType: 'VIDEO' },
+      { id: 13, title: '其他作品', mediaType: 'IMAGE' }
+    ]
+    const fakeRequest = (options) => {
+      requests.push(options)
+      if (options.url === '/api/mine/works/sort-items') {
+        return Promise.resolve({
+          scope: 'ALL',
+          total: 3,
+          works: [
+            { id: 12, title: '片头快剪', mediaType: 'VIDEO', sortOrder: 1000 },
+            { id: 13, title: '其他作品', mediaType: 'IMAGE', sortOrder: 2000 },
+            { id: 11, title: '草坪婚礼', mediaType: 'IMAGE', sortOrder: 3000 }
+          ]
+        })
+      }
+      if (options.url === '/api/mine/works/sort') {
+        return Promise.resolve({})
+      }
+      return Promise.resolve({
+        works: options.data.tagId ? sortedWorks.slice(0, 2) : sortedWorks,
+        tags: [{ id: 31, name: '高端婚礼', color: '#0f766e', count: 2 }],
+        summary: {},
+        page: 1,
+        pageSize: 20,
+        hasMore: false
+      })
+    }
+    const page = loadPage('pages/works/works.js', fakeRequest)
+    page.data.loading = false
+    page.data.keyword = ''
+    page.data.selectedTagId = selectedTagId
+    page.data.list.tags = [{ id: 31, name: '高端婚礼', color: '#0f766e', count: 2 }]
+
+    await page.handleOpenSortMode()
+    assert.equal(page.data.sortTitle, '调整全部作品顺序')
+    assert.deepEqual(page.data.sortWorks.map((work) => work.id), [12, 13, 11])
+    assert.equal(page.data.selectedTagId, selectedTagId)
+    page.handleSortDragStart({
+      currentTarget: {
+        dataset: {
+          index: '2'
+        }
+      },
+      touches: [
+        { clientY: 220 }
+      ]
+    })
+    page.handleSortDragMove({
+      currentTarget: {
+        dataset: {
+          index: '0'
+        }
+      },
+      touches: [
+        { clientY: 120 }
+      ]
+    })
+    assert.equal(page.data.sortDraggingWorkId, 11)
+    assert.match(page.data.sortDragStyle, /translate3d\(0,\s*-100px,\s*0\)/)
+    page.handleSortDragEnd()
+    assert.equal(page.data.sortDragStyle, '')
+    await page.handleSaveSort()
+    await flushPromises()
+
+    assert.deepEqual(requests.map((request) => `${request.method || 'GET'} ${request.url}`), [
+      'GET /api/mine/works/sort-items',
+      'POST /api/mine/works/sort',
+      'GET /api/mine/works'
+    ])
+    assert.deepEqual(requests[0].data, { scope: 'ALL' })
+    assert.deepEqual(requests[1].data, {
+      scope: 'ALL',
+      items: [
+        { workId: 11, sortOrder: 1000 },
+        { workId: 12, sortOrder: 2000 },
+        { workId: 13, sortOrder: 3000 }
+      ]
+    })
+    assert.deepEqual(requests[2].data, { keyword: '', tagId: selectedTagId || undefined, page: 1, pageSize: 20 })
+    assert.equal(page.data.selectedTagId, selectedTagId)
+    assert.deepEqual(page.data.list.works.map((work) => work.id), selectedTagId ? [11, 12] : [11, 12, 13])
+    assert.deepEqual(page.data.sortWorks.map((work) => work.id), [])
+    assert.equal(page.data.sortDraggingWorkId, null)
+    assert.equal(page.data.sortMode, false)
+  })
+}
 
 test('team maintenance member invite closes sheet and refreshes current detail', async () => {
   const requests = []
