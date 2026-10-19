@@ -703,6 +703,18 @@ Runtime 删除 `PortfolioAiReferenceMediaProbe` 与 `PortfolioAiReferenceStorage
 
 证据：`/private/tmp/wefolio-keyframe-cdn-runtime-deploy-20261018.log`、`/private/tmp/wefolio-keyframe-cdn-runtime-postdeploy-20261018.json`（`verified=true`）；界面证据仅保留本地 `design/video-keyframe-cover-cdn-verified.png`。
 
+### 4.33 AI 字段说明与用户唯一码日志 Job 发布（2026-10-19）
+
+按用户“提交git 并发布job”授权，提交本次 22 个 AI 文件为 `380de7e`（`fix(ai): 完善字段说明并补充用户唯一码日志`），随后单独发布 Job。两工程组件契约同步补充 40 处 description，字段类型、必填性、合法值域与协议版本未变，兼容当前线上 Runtime；补充媒体/原视频摘要的三字段说明和合法示例。Job 通过 `requested_by → wf_user.unique_code` 获取发起用户唯一码，仅作为任务内存字段，执行、模型请求响应、摘要校验、费用、重试及终态日志记录 `requestedByUniqueCode`；团队任务仍记录发起用户，不使用团队或素材所有者的唯一码。
+
+- 发布前 Runtime 全量 2,906 项、0 失败/错误、35 项条件跳过；Job 全量 1,146 项、0 失败/错误、5 项条件跳过。Job 首轮受沙箱本地端口和 FFmpeg 探测权限影响，在允许这些本地测试能力后全量重跑通过。构建退出码 0，制品与生产旧包仅有本次源码对应 class/内部类、四份提示词/契约资源和版本元数据差异。
+- 新构建版本 `380de7e`，构建时间 `2026-10-19 14:55:16`，JAR SHA-256 `2ad4db01f2ad26bd32572ede20afe7fb96bba85c89b30794f64f1e222e72fa2f`。先校验上传包并备份旧包，再调用现有停用接口确认 `DISABLED / activeTaskCount=0`，随后原子换包和重启；新 PID `14158`，启动时间 `14:57:52`。
+- 发布后独立验收 `verified=true`：本机及正式 HTTPS `/job-api/health` 均 UP，`/job-api/version` 均匹配新版本与构建时间，实际 JAR 摘要一致，服务 active/running，调度活动恢复。观察至 `14:58:45` 的 journal/application ERROR/FATAL 均为 0；新增日志字段和三字段摘要提示词已在实际 JAR 核验。观察窗口尚未出现新的 AI 身份日志，没有发起收费模型任务，不据此声称真实生成成功率已完成验收。
+- 基础 `.env` 内容、权限及音频、原视频摘要、AI 媒体、参考附件有效开关保持不变；音频工具预检通过。本次没有数据库迁移，没有发布 Runtime 或小程序，用户并行的小程序改动未纳入本次提交。
+- 旧包保留在 `/root/java/job/wefolio-java-job.jar.backup-ai-fields-user-code-20261019-380de7e`，版本 `4e25e0f`、构建时间 `2026-10-18 09:54:56`，SHA-256 `2ea565f5a709bb3e47217a7c183adfcf093baaf77163988fc8268eb403c2de66`。需回退时先排空当前实例，再恢复该包并重启，核验旧版本和健康；不回退数据库。
+
+证据：`/private/tmp/wefolio-ai-fields-runtime-full.log`、`/private/tmp/wefolio-ai-fields-job-full-approved.log`、`/private/tmp/wefolio-ai-fields-job-package.log`、`/private/tmp/wefolio-ai-fields-job-release-result.json`、`/private/tmp/wefolio-ai-fields-job-postdeploy.json`。服务器保留 `/root/java/job/release-ai-fields-user-code-20261019-380de7e.json` 发布状态记录。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |
@@ -1027,3 +1039,4 @@ Runtime 双节点已完成发布，服务、制品、有效配置和正式入口
 
 | 2026-10-14 | Codex | 按授权发布 Runtime 双节点、Job 单节点并执行 V64/V65；按用户确认通过 systemd drop-in 开启原视频摘要及 Runtime v3，三服务 active/UP、Nginx 轮询正常、新启动无 ERROR/FATAL | 两个可空数据库字段及两服务摘要配置；独立 ASR 仍关闭，未手动补历史 | 先关 Runtime v3 并排空新合同任务，再回退 Job；保留新列与发布前 JAR 备份，详见 §4.24 |
 | 2026-10-14 | Codex | 修复 Snapshot 日期格式、摘要截断与费用预留结算并发布 Job；安装官方签名校验的 FFmpeg 5.1.10，发布前修改实际 `.env` 开启 ASR，真实摘要和 ASR 探针通过 | Job 单节点、独立媒体工具及三项非敏感音频配置；Runtime 沿用现有 v3，未重跑历史批次 | 旧 JAR 与 `.env` 均有独立备份，回退须恢复并验证旧版本健康；详见 §4.26 |
+| 2026-10-19 | Codex | 提交 `380de7e` 并发布 AI 字段说明与发起用户唯一码日志；Job 已排空换包，健康与版本核验通过，调度恢复，启动后无 ERROR/FATAL | Job 单节点；两工程契约仅更新说明，Runtime 和小程序未发布，无数据库或环境变更 | 旧包独立保留为 `backup-ai-fields-user-code-20261019-380de7e`，回退先排空再恢复并验收；详见 §4.33 |
