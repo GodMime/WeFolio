@@ -92,23 +92,29 @@
                     disabled="{{deletingPortfolioId === item.portfolioId}}"
                     data-id="{{item.portfolioId}}"
                     catchtap="handleDeletePortfolioTap"
-                  >删除</button>
+                  >
+                    <view class="portfolio-delete-icon" aria-hidden="true"></view>
+                    <text>删除</text>
+                  </button>
                 </view>
                 <view class="portfolio-item-card {{item.templateType === 'ADVANCED' ? 'advanced' : ''}}" data-id="{{item.portfolioId}}" bindtap="handlePortfolioCardTap">
-                  <view wx:if="{{item.templateType === 'ADVANCED'}}" class="portfolio-type-badge">高级</view>
                   <view class="portfolio-cover">
-                    <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+                    <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFit" aria-label="{{item.coverAlt}}"></image>
                   </view>
                   <view class="portfolio-copy">
-                    <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
-                      <view class="portfolio-title-track">
-                        <text class="portfolio-title-text">{{item.title}}</text>
-                        <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+                    <view class="portfolio-title-row">
+                      <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
+                        <view class="portfolio-title-track">
+                          <text class="portfolio-title-text">{{item.title}}</text>
+                          <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+                        </view>
                       </view>
+                      <view class="portfolio-arrow"></view>
                     </view>
                     <view class="portfolio-meta">{{item.updatedText}}</view>
                     <view class="portfolio-badges">
                       <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
+                      <view wx:if="{{item.templateType === 'ADVANCED'}}" class="portfolio-type-badge">高级</view>
                     </view>
                   </view>
                   <view class="portfolio-side">
@@ -118,7 +124,6 @@
                       <button wx:if="{{item.actionType === 'SHARE'}}" class="portfolio-action-button share" data-id="{{item.portfolioId}}" data-owner-type="USER" data-action="{{item.actionType}}" catchtap="handleShareTap" aria-label="分享作品集">分享</button>
                       <button wx:else class="portfolio-action-button {{item.actionType === 'PUBLISH' ? 'publish' : ''}} {{item.actionType === 'EDIT' ? 'edit' : ''}}" data-id="{{item.portfolioId}}" data-action="{{item.actionType}}" catchtap="handlePrimaryActionTap">{{item.actionText}}</button>
                     </view>
-                    <view class="portfolio-arrow"></view>
                   </view>
                 </view>
               </view>
@@ -191,23 +196,35 @@
                     disabled="{{deletingTeamPortfolioId === item.portfolioId}}"
                     data-item="{{item}}"
                     catchtap="handleTeamDeleteTap"
-                  >删除</button>
+                  >
+                    <view class="portfolio-delete-icon" aria-hidden="true"></view>
+                    <text>删除</text>
+                  </button>
                 </view>
                 <view class="portfolio-item-card team-portfolio-card {{item.templateType === 'ADVANCED' ? 'advanced' : ''}}" data-item="{{item}}" bindtap="handleTeamPortfolioCardTap">
-                  <view wx:if="{{item.templateType === 'ADVANCED'}}" class="portfolio-type-badge">高级</view>
-                  <view class="team-portfolio-affiliation">{{item.teamName}} · {{item.currentRole}}</view>
                   <view class="portfolio-cover">
-                    <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+                    <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFit" aria-label="{{item.coverAlt}}"></image>
                   </view>
                   <view class="portfolio-copy">
-                    <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
-                      <view class="portfolio-title-track">
-                        <text class="portfolio-title-text">{{item.title}}</text>
-                        <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+                    <view class="portfolio-title-row">
+                      <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
+                        <view class="portfolio-title-track">
+                          <text class="portfolio-title-text">{{item.title}}</text>
+                          <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+                        </view>
                       </view>
+                      <view wx:if="{{item.canMaintain}}" class="portfolio-arrow"></view>
+                    </view>
+                    <view class="team-portfolio-affiliation">
+                      <text class="team-portfolio-name">{{item.teamName}}</text>
+                      <text class="team-portfolio-separator">·</text>
+                      <text class="team-portfolio-role">{{item.currentRole}}</text>
                     </view>
                     <view class="portfolio-meta">{{item.updatedText}}</view>
-                    <view class="portfolio-badges"><view class="status-badge {{item.statusTone}}">{{item.statusText}}</view></view>
+                    <view class="portfolio-badges">
+                      <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
+                      <view wx:if="{{item.templateType === 'ADVANCED'}}" class="portfolio-type-badge">高级</view>
+                    </view>
                   </view>
                   <view class="portfolio-side">
                     <view class="portfolio-action-row">
@@ -216,7 +233,6 @@
                       <button wx:if="{{item.actionType === 'PUBLISH' && item.canMaintain}}" class="portfolio-action-button publish" data-item="{{item}}" catchtap="handleTeamPublishTap" loading="{{publishingTeamPortfolioId === item.portfolioId}}" disabled="{{publishingTeamPortfolioId === item.portfolioId}}">发布</button>
                       <button wx:elif="{{item.canShare}}" class="portfolio-action-button share" data-id="{{item.portfolioId}}" data-owner-type="TEAM" catchtap="handleShareTap">分享</button>
                     </view>
-                    <view wx:if="{{item.canMaintain}}" class="portfolio-arrow"></view>
                   </view>
                 </view>
               </view>

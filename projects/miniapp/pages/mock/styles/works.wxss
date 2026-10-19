@@ -357,7 +357,7 @@
 .work-swipe-row {
   position: relative;
   overflow: hidden;
-  border-radius: 40rpx;
+  border-radius: 14px;
 }
 
 .work-swipe-row + .work-swipe-row {
@@ -399,7 +399,7 @@
   gap: 20rpx;
   padding: 20rpx;
   border: 1rpx solid rgba(33, 37, 41, 0.06);
-  border-radius: 40rpx;
+  border-radius: 14px;
   background: #ffffff;
   box-sizing: border-box;
   transition: transform 180ms ease;
@@ -450,11 +450,11 @@
 
 .thumb {
   position: relative;
-  width: 148rpx;
-  height: 128rpx;
+  width: 185rpx;
+  height: 160rpx;
   flex: none;
   overflow: hidden;
-  border-radius: 12rpx;
+  border-radius: 14px;
   background: #e7edf4;
 }
 

@@ -26,22 +26,29 @@
         <view class="portfolio-list">
           <view wx:for="{{portfolioList.portfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
             <view class="portfolio-delete-pane">
-              <button class="portfolio-delete-button" catchtap="handleActionTap" data-action="delete">删除</button>
+              <button class="portfolio-delete-button" catchtap="handleActionTap" data-action="delete">
+                <view class="portfolio-delete-icon" aria-hidden="true"></view>
+                <text>删除</text>
+              </button>
             </view>
-            <view class="portfolio-item-card" data-id="{{item.portfolioId}}" bindtap="handlePortfolioTap">
+            <view class="portfolio-item-card {{item.templateType === 'ADVANCED' ? 'advanced' : ''}}" data-id="{{item.portfolioId}}" bindtap="handlePortfolioTap">
               <view class="portfolio-cover">
-                <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+                <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFit" aria-label="{{item.coverAlt}}"></image>
               </view>
               <view class="portfolio-copy">
-                <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
-                  <view class="portfolio-title-track">
-                    <text class="portfolio-title-text">{{item.title}}</text>
-                    <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+                <view class="portfolio-title-row">
+                  <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
+                    <view class="portfolio-title-track">
+                      <text class="portfolio-title-text">{{item.title}}</text>
+                      <text wx:if="{{item.titleScrollable}}" class="portfolio-title-text duplicate" aria-hidden="true">{{item.title}}</text>
+                    </view>
                   </view>
+                  <view class="portfolio-arrow"></view>
                 </view>
                 <view class="portfolio-meta">{{item.updatedText}}</view>
                 <view class="portfolio-badges">
                   <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
+                  <view wx:if="{{item.templateType === 'ADVANCED'}}" class="portfolio-type-badge">高级</view>
                 </view>
               </view>
               <view class="portfolio-side">
@@ -58,7 +65,6 @@
                     data-action="{{item.actionType}}"
                   >{{item.actionText}}</button>
                 </view>
-                <view class="portfolio-arrow"></view>
               </view>
             </view>
           </view>
@@ -88,28 +94,40 @@
               <view class="portfolio-list">
                 <view wx:for="{{teamPortfolioList.portfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
                   <view class="portfolio-delete-pane">
-                    <button class="portfolio-delete-button" catchtap="handleTeamActionTap" data-action="delete">删除</button>
+                    <button class="portfolio-delete-button" catchtap="handleTeamActionTap" data-action="delete">
+                      <view class="portfolio-delete-icon" aria-hidden="true"></view>
+                      <text>删除</text>
+                    </button>
                   </view>
-                  <view class="portfolio-item-card team-portfolio-card" bindtap="handleTeamPortfolioTap">
-                    <view class="team-portfolio-affiliation">{{item.teamName}} · {{item.currentRole}}</view>
+                  <view class="portfolio-item-card team-portfolio-card {{item.templateType === 'ADVANCED' ? 'advanced' : ''}}" bindtap="handleTeamPortfolioTap">
                     <view class="portfolio-cover">
-                      <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFill" aria-label="{{item.coverAlt}}"></image>
+                      <image class="portfolio-cover-image" src="{{item.coverUrl}}" mode="aspectFit" aria-label="{{item.coverAlt}}"></image>
                     </view>
                     <view class="portfolio-copy">
-                      <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
-                        <view class="portfolio-title-track">
-                          <text class="portfolio-title-text">{{item.title}}</text>
+                      <view class="portfolio-title-row">
+                        <view class="portfolio-title {{item.titleScrollable ? 'scrolling' : ''}}">
+                          <view class="portfolio-title-track">
+                            <text class="portfolio-title-text">{{item.title}}</text>
+                          </view>
                         </view>
+                        <view wx:if="{{item.canMaintain}}" class="portfolio-arrow"></view>
+                      </view>
+                      <view class="team-portfolio-affiliation">
+                        <text class="team-portfolio-name">{{item.teamName}}</text>
+                        <text class="team-portfolio-separator">·</text>
+                        <text class="team-portfolio-role">{{item.currentRole}}</text>
                       </view>
                       <view class="portfolio-meta">{{item.updatedText}}</view>
-                      <view class="portfolio-badges"><view class="status-badge {{item.statusTone}}">{{item.statusText}}</view></view>
+                      <view class="portfolio-badges">
+                        <view class="status-badge {{item.statusTone}}">{{item.statusText}}</view>
+                        <view wx:if="{{item.templateType === 'ADVANCED'}}" class="portfolio-type-badge">高级</view>
+                      </view>
                     </view>
                     <view class="portfolio-side">
                       <view class="portfolio-action-row">
                         <button wx:if="{{item.canPublishedPreview}}" class="portfolio-action-button preview" catchtap="handleTeamActionTap" data-action="preview">预览</button>
                         <button wx:if="{{item.canShare}}" class="portfolio-action-button share" catchtap="handleTeamActionTap" data-action="share">分享</button>
                       </view>
-                      <view wx:if="{{item.canMaintain}}" class="portfolio-arrow"></view>
                     </view>
                   </view>
                 </view>

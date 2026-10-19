@@ -66,7 +66,7 @@ test('mock portfolio scroll viewport occupies the remaining page height on devic
   assert.match(scrollRule, /min-height:\s*0/)
 })
 
-test('portfolio list matches the Travel design hierarchy and measurements', () => {
+test('portfolio list uses compact cards while preserving tabs and creation controls', () => {
   styleFiles.forEach((styleFile) => {
     const wxss = read(styleFile)
     const segmentRule = readRule(wxss, '.segment')
@@ -103,24 +103,19 @@ test('portfolio list matches the Travel design hierarchy and measurements', () =
     assert.doesNotMatch(listPanelRule, /box-shadow/)
     assert.match(listTitleRule, /font-weight:\s*700/)
     assert.match(summaryPillRule, /height:\s*48rpx/)
-    assert.match(summaryPillRule, /padding:\s*0 8rpx/)
+    assert.match(summaryPillRule, /padding:\s*0/)
     assert.doesNotMatch(summaryPillRule, /border|background/)
     assert.match(summaryPillBeforeRule, /width:\s*12rpx/)
     assert.match(summaryPillBeforeRule, /height:\s*12rpx/)
     assert.match(summaryPillBeforeRule, /border-radius:\s*50%/)
 
-    assert.match(cardRule, /min-height:\s*184rpx/)
-    assert.match(cardRule, /padding:\s*24rpx/)
+    assert.match(cardRule, /min-height:\s*192rpx/)
+    assert.match(cardRule, /padding:\s*16rpx 20rpx/)
     assert.match(cardRule, /gap:\s*20rpx/)
-    assert.match(cardRule, /border-radius:\s*48rpx/)
-    if (styleFile === FORMAL_PORTFOLIO_STYLE_FILE) {
-      assert.match(coverRule, /width:\s*152rpx/)
-      assert.match(coverRule, /height:\s*133rpx/)
-    } else {
-      assert.match(coverRule, /width:\s*128rpx/)
-      assert.match(coverRule, /height:\s*112rpx/)
-    }
-    assert.match(coverRule, /border-radius:\s*40rpx/)
+    assert.match(cardRule, /border-radius:\s*14px/)
+    assert.match(coverRule, /width:\s*200rpx/)
+    assert.match(coverRule, /height:\s*160rpx/)
+    assert.match(coverRule, /border-radius:\s*14px/)
     assert.match(coverRule, /background:\s*#e9ecef/)
     assert.match(metaRule, /color:\s*#adb5bd/)
 
@@ -150,9 +145,9 @@ test('portfolio list matches the Travel design hierarchy and measurements', () =
       assert.doesNotMatch(advancedActionRule, /border|box-shadow/)
     }
     assert.match(actionButtonRule, /color:\s*#212529/)
-    assert.match(actionButtonRule, /(?:^|\n)\s*width:\s*108rpx/)
-    assert.match(actionButtonRule, /(?:^|\n)\s*min-width:\s*108rpx/)
-    assert.match(actionButtonRule, /(?:^|\n)\s*max-width:\s*108rpx/)
+    assert.match(actionButtonRule, /(?:^|\n)\s*width:\s*116rpx/)
+    assert.match(actionButtonRule, /(?:^|\n)\s*min-width:\s*116rpx/)
+    assert.match(actionButtonRule, /(?:^|\n)\s*max-width:\s*116rpx/)
   })
 })
 

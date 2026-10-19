@@ -293,7 +293,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(statusRejectedRule, /color:\s*#b55656/)
   assert.match(worksContentRule, /padding:\s*20rpx 32rpx calc\(172rpx \+ env\(safe-area-inset-bottom\)\)/)
   assert.match(libraryPanelRule, /border-radius:\s*48rpx/)
-  assert.match(workCardRule, /border-radius:\s*40rpx/)
+  assert.match(workCardRule, /border-radius:\s*14px/)
   assert.match(sheetRule, /border-radius:\s*56rpx 56rpx 0 0/)
   assert.match(uploadErrorRule, /color:\s*#b55656/)
   assert.match(workAddButtonRule, /background:\s*#212529/)

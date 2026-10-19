@@ -500,7 +500,7 @@ test('mock draft portfolio card edits on card tap and renders only preview and p
   const wxml = read('pages/mock/portfolios/portfolios.wxml')
   const actionRowMarkup = wxml.match(/<view class="portfolio-action-row">([\s\S]*?)<\/view>/)[1]
 
-  assert.match(wxml, /class="portfolio-item-card"[\s\S]*bindtap="handlePortfolioTap"/)
+  assert.match(wxml, /class="portfolio-item-card \{\{item\.templateType === 'ADVANCED' \? 'advanced' : ''\}\}"[\s\S]*bindtap="handlePortfolioTap"/)
   assert.match(actionRowMarkup, /showDraftPreview/)
   assert.match(actionRowMarkup, /data-action="preview"[\s\S]*预览/)
   assert.match(actionRowMarkup, /item\.actionType === 'PUBLISH'[\s\S]*data-action="\{\{item\.actionType\}\}"[\s\S]*\{\{item\.actionText\}\}/)
@@ -510,10 +510,10 @@ test('mock draft portfolio card edits on card tap and renders only preview and p
   assert.doesNotMatch(actionRowMarkup, /data-action="share"/)
 })
 
-test('mock portfolio list inherits wider title layout with visible fixed-width action buttons', () => {
+test('mock portfolio list independently uses compact covers and vertical fixed-width action buttons', () => {
   const wxml = read('pages/mock/portfolios/portfolios.wxml')
   const mockWxss = read('pages/mock/portfolios/portfolios.wxss')
-  const listWxss = read('pages/portfolios/portfolios.wxss')
+  const listWxss = read('pages/mock/styles/portfolios.wxss')
   const actionRowRule = readRule(listWxss, '.portfolio-action-row')
   const actionButtonRule = readRule(listWxss, '.portfolio-action-button')
 
@@ -522,13 +522,14 @@ test('mock portfolio list inherits wider title layout with visible fixed-width a
   assert.match(wxml, /class="portfolio-cover"/)
   assert.match(wxml, /class="portfolio-action-row"/)
   assert.match(listWxss, /\.portfolio-item-card\s*\{[\s\S]*gap:\s*20rpx;/)
-  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*152rpx;[\s\S]*height:\s*133rpx;/)
-  assert.match(actionRowRule, /flex:\s*0 0 auto/)
-  assert.match(actionButtonRule, /(?:^|\n)\s*width:\s*108rpx/)
-  assert.match(actionButtonRule, /(?:^|\n)\s*min-width:\s*108rpx/)
-  assert.match(actionButtonRule, /(?:^|\n)\s*max-width:\s*108rpx/)
-  assert.match(actionButtonRule, /height:\s*60rpx/)
-  assert.match(actionButtonRule, /padding:\s*0 26rpx/)
+  assert.match(listWxss, /\.portfolio-cover\s*\{[\s\S]*width:\s*200rpx;[\s\S]*height:\s*160rpx;/)
+  assert.match(actionRowRule, /flex:\s*none/)
+  assert.match(actionRowRule, /flex-direction:\s*column/)
+  assert.match(actionButtonRule, /(?:^|\n)\s*width:\s*116rpx/)
+  assert.match(actionButtonRule, /(?:^|\n)\s*min-width:\s*116rpx/)
+  assert.match(actionButtonRule, /(?:^|\n)\s*max-width:\s*116rpx/)
+  assert.match(actionButtonRule, /height:\s*64rpx/)
+  assert.match(actionButtonRule, /padding:\s*0 12rpx/)
   assert.doesNotMatch(mockWxss, /\.portfolio-(item-card|cover|action-button)\s*\{/)
 })
 
