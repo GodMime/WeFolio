@@ -254,7 +254,7 @@ test('works pages expose expected upload and edit structure', () => {
   assert.match(worksWxml, /<scroll-view class="work-edit-scroll video-edit-scroll" scroll-y[^>]*>[\s\S]*<view class="work-edit-content">/)
   assert.match(worksWxml, /class="field-heading"[\s\S]*作品标题[\s\S]*\{\{videoEditFieldCounters\.title\}\}/)
   assert.match(worksWxml, /class="field-heading"[\s\S]*作品说明[\s\S]*\{\{videoEditFieldCounters\.description\}\}/)
-  assert.match(worksWxml, /class="cover-export-button"[\s\S]*bindtap="handleStartVideoCoverEdit"[\s\S]*选帧修改封面/)
+  assert.match(worksWxml, /class="cover-export-button \{\{videoEditForm\.coverEditMode === 'frame' \? 'is-active' : ''\}\}"[\s\S]*bindtap="handleStartVideoCoverEdit"[\s\S]*选帧修改封面/)
   assert.match(worksWxml, /class="cover-upload-button"[\s\S]*bindtap="handleChooseVideoCoverUpload"[\s\S]*上传封面/)
   assert.match(worksWxml, /class="cover-standby"[\s\S]*选帧修改封面[\s\S]*上传封面/)
   assert.match(worksWxml, /wx:if="\{\{videoEditForm\.coverEditMode === 'frame'\}\}"[\s\S]*class="cover-edit-toolbar"[\s\S]*bindtap="handleExportVideoCover"[\s\S]*使用当前帧[\s\S]*id="workCoverVideo"[\s\S]*src="\{\{videoEditForm\.tempFilePath\}\}"/)

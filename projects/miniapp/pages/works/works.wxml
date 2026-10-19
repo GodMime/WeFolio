@@ -724,7 +724,7 @@
             </view>
             <view class="cover-standby">
               <button
-                class="cover-export-button"
+                class="cover-export-button {{videoEditForm.coverEditMode === 'frame' ? 'is-active' : ''}}"
                 bindtap="handleStartVideoCoverEdit"
                 loading="{{videoDownloading}}"
                 disabled="{{videoEditSaving || videoDownloading || videoFrameExporting}}"

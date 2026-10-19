@@ -2289,12 +2289,12 @@
   font-weight: 800;
   border: 1rpx solid #cbd8e5;
   border-radius: 999rpx;
-  background: #eef3f7;
+  background: #ffffff;
   box-sizing: border-box;
 }
 
-.cover-upload-button {
-  background: #ffffff;
+.cover-export-button.is-active {
+  background: #eef3f7;
 }
 
 .cover-upload-button.compact {
