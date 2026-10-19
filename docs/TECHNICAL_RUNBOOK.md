@@ -727,6 +727,17 @@ Runtime 删除 `PortfolioAiReferenceMediaProbe` 与 `PortfolioAiReferenceStorage
 
 证据：`/tmp/wefolio-video-title-full.log`、`/tmp/wefolio-video-title-targeted.log`、`/tmp/wefolio-video-title-job-package.log`、`/tmp/wefolio-video-title-job-artifact.json`、`/tmp/wefolio-video-title-job-package-diff.json`、`/tmp/wefolio-video-title-job-release-verify.json`、`/tmp/wefolio-video-title-job-public.json`、`/tmp/wefolio-video-title-job-postdeploy.json`。服务器发布记录：`/root/java/job/release-video-title-20261019-851f811.json`。
 
+### 4.35 作品统一排序 Runtime 发布（2026-10-19）
+
+按用户“发布并提交git”及“只发布后端”授权，提交 `869cefd`（`fix(works): 统一作品排序并保持标签仅筛选`），使用标准 `deploy.sh` 完成 Runtime 双节点滚动发布，退出码 0，耗时 100.024 秒。作品列表统一使用 `wf_work.sort_order ASC, id DESC`，标签只缩小结果集合，响应排序值也统一来自作品全局排序。旧客户端 `scope=TAG` 的路由、字段和归属校验保留；保存时在事务内锁定全局有效作品，将提交作品重新排列到原有位置，其余作品保位，再写入全局排序。
+
+- 发布前 Runtime 全量测试 2,913 项，0 失败、0 错误、35 项既有条件跳过；排序服务、Controller 与历史迁移定向 120 项全部通过。小程序全量 2,830 项通过，排序入口统一调整全部作品的代码已随上述提交入库，但本次未上传、提审或发布小程序。
+- 构建版本 `869cefd`，构建时间 `2026-10-19 21:41:19`（上海），JAR SHA-256 `b14205112386eb7630e2bf88dcb39e362aac2bb51ac7dde7ee5a5927b9f30551`。旧/新节点 PID 为 `9482` / `3451`，启动时间 `21:42:01` / `21:42:40`；两节点实际 JAR、版本及构建时间一致，服务 active/running、健康 UP，字体 enabled/ready 均为 true。正式 HTTPS 健康与版本入口核验通过。
+- 截至 `21:44:36`，两节点本次启动后的 journal/application ERROR/FATAL 均为 0。Nginx 语法检查通过，upstream 已恢复双节点轮询，无 down/backup 标记。Job 未发布或重启，仍为版本 `851f811`、PID `30426`，健康 UP。
+- 两节点旧包保留在 `/root/java/wefolio-java-runtime.jar.backup`，SHA-256 均为 `b18070f981dd82fa861666a2f6214086783e48cb5f11be8b1aa74fe94ecf9838`。未新增数据库迁移或修改环境配置；回退时逐节点摘流、恢复旧包、重启并核验健康后恢复轮询。
+
+证据：`/tmp/wefolio-unified-order-runtime-full.log`、`/tmp/wefolio-unified-order-miniapp-tests.log`、`/tmp/wefolio-unified-order-runtime-deploy.log`、`/tmp/wefolio-unified-order-postdeploy.json`。本轮未通过生产账号执行真实排序写入。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |
@@ -1053,3 +1064,4 @@ Runtime 双节点已完成发布，服务、制品、有效配置和正式入口
 | 2026-10-14 | Codex | 修复 Snapshot 日期格式、摘要截断与费用预留结算并发布 Job；安装官方签名校验的 FFmpeg 5.1.10，发布前修改实际 `.env` 开启 ASR，真实摘要和 ASR 探针通过 | Job 单节点、独立媒体工具及三项非敏感音频配置；Runtime 沿用现有 v3，未重跑历史批次 | 旧 JAR 与 `.env` 均有独立备份，回退须恢复并验证旧版本健康；详见 §4.26 |
 | 2026-10-19 | Codex | 提交 `380de7e` 并发布 AI 字段说明与发起用户唯一码日志；Job 已排空换包，健康与版本核验通过，调度恢复，启动后无 ERROR/FATAL | Job 单节点；两工程契约仅更新说明，Runtime 和小程序未发布，无数据库或环境变更 | 旧包独立保留为 `backup-ai-fields-user-code-20261019-380de7e`，回退先排空再恢复并验收；详见 §4.33 |
 | 2026-10-19 | Codex | 提交 `851f811` 并发布视频默认作品推荐名称；Job 排空后换包，版本、健康、制品、提示词及调度恢复核验通过，启动后无 ERROR/FATAL | Job 单节点；名称更新隔离于已提交摘要，Runtime 和小程序未发布，无数据库或环境变更 | 旧包独立保留为 `backup-video-title-20261019-851f811`，回退先排空再恢复并验收；详见 §4.34 |
+| 2026-10-19 | Codex | 提交 `869cefd` 并发布作品统一排序；Runtime 双节点滚动发布完成，版本、健康、制品、备份及 Nginx 轮询核验通过，启动后无 ERROR/FATAL | Runtime 双节点；兼容旧客户端 TAG 排序，小程序仅提交代码未发布，Job 未重启，无数据库或环境变更 | 两节点固定 `.backup` 保留旧包，回退须逐节点摘流并验收；详见 §4.35 |
