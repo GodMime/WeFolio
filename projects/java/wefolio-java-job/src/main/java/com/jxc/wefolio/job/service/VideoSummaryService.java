@@ -1,23 +1,34 @@
 package com.jxc.wefolio.job.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.job.config.VideoSummaryProperties;
 import com.jxc.wefolio.job.repo.VideoSummaryRepository;
 import com.jxc.wefolio.job.repo.VideoSummaryRepository.Snapshot;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiStoredVideoSummary;
+import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
+import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.qcloud.cos.model.ObjectMetadata;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 import static com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract.LIMITATIONS;
+import static com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract.KEY_SOURCE_VERSION;
 import static com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract.OBSERVATIONS;
 
 /** 原视频摘要用例：独立准入、预算、互斥、单次请求与带源身份的条件发布。 */
@@ -36,6 +47,18 @@ public class VideoSummaryService {
     private static final String DIAGNOSTIC_UNAVAILABLE = "UNAVAILABLE";
     /** 无栈异常使用固定标记，不尝试读取可能包含远端原文的异常消息。 */
     private static final String LOCATION_UNAVAILABLE = "UNKNOWN";
+    /** 推荐名称仅供可选改名，不进入共享摘要正文。 */
+    private static final String SUGGESTED_TITLE = "suggestedTitle";
+    /** 模型完整响应沿用摘要正文的严格解析规模。 */
+    private static final int MAX_MODEL_CONTENT_BYTES = 16 * 1024, MAX_MODEL_CONTENT_DEPTH = 8;
+    /** 自动推荐名称按 Unicode 码点计数，不改变用户名称的原有长度限制。 */
+    private static final int MAX_TITLE_CODE_POINTS = 10;
+    /** 精确匹配小程序相册上传生成的名称，序号只允许规范的正整数形式。 */
+    private static final Pattern DEFAULT_VIDEO_TITLE = Pattern.compile(
+            "视频 ([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}) (?:0[1-9]|[1-9][0-9]+)");
+    /** 严格校验日期，拒绝不存在的日期和越界时间。 */
+    private static final DateTimeFormatter DEFAULT_TITLE_TIME = DateTimeFormatter
+            .ofPattern("uuuu-MM-dd HH:mm:ss", Locale.ROOT).withResolverStyle(ResolverStyle.STRICT);
     /** 阶段名只用于定位失败，不改变准入、重试、预算或保存规则。 */
     private enum Stage {
         DEADLINE_CHECK, SOURCE_READ, SOURCE_HEAD, SUMMARY_CHECK, SOURCE_REVALIDATE,
@@ -179,7 +202,9 @@ public class VideoSummaryService {
                 stage = Stage.USAGE_ACCOUNT;
                 prepared.run.recordUsage(prepared.reservation, response);
                 stage = Stage.CONTENT_VALIDATE;
-                var normalized = PortfolioAiStoredVideoSummary.normalizeModelContent(response.content());
+                var modelContent = parseModelContent(response.content());
+                JsonNode suggestedTitle = modelContent.remove(SUGGESTED_TITLE);
+                var normalized = PortfolioAiStoredVideoSummary.normalizeModelContent(modelContent.toString());
                 var content = normalized.content();
                 if (normalized.changed()) {
                     log.info("原视频摘要条目已规整: workId={}, observationsBefore={}, observationsAfter={}, limitationsBefore={}, limitationsAfter={}",
@@ -199,6 +224,7 @@ public class VideoSummaryService {
                 log.info("原视频摘要已保存: workId={}, inputMode={}, sourceVersion={}, elapsedMs={}, contentCodePoints={}, promptTokens={}, completionTokens={}",
                         current.id(), PortfolioAiStoredVideoSummary.INPUT_MODE, prepared.source.sourceVersion(),
                         elapsedMillis(started), contentCodePoints(response), response.promptTokens(), response.completionTokens());
+                tryRenameDefaultTitle(current, document, suggestedTitle);
                 stage = Stage.LOCK_RELEASE;
                 return Outcome.SAVED;
             }
@@ -223,6 +249,52 @@ public class VideoSummaryService {
                     prepared.initial.id(), stage, exception.getClass().getSimpleName(), failureLocation(exception), elapsedMillis(started));
             return Outcome.FAILED;
         } finally { capacity.release(); }
+    }
+
+    /** 仅拆出已知推荐字段，非法 JSON 继续由原摘要合同提供相同的失败诊断。 */
+    private static ObjectNode parseModelContent(String raw) {
+        try { return StrictAiJson.parseObject(raw, MAX_MODEL_CONTENT_BYTES, MAX_MODEL_CONTENT_DEPTH); }
+        catch (AiProtocolException exception) {
+            // 同一解析边界必定失败；复用原合同保留摘要的错误码和安全诊断。
+            PortfolioAiStoredVideoSummary.normalizeModelContent(raw);
+            throw exception;
+        }
+    }
+
+    /** 摘要事务已提交；名称读取、检查或更新失败均不能改变摘要结果。 */
+    private void tryRenameDefaultTitle(Snapshot savedSource, ObjectNode document, JsonNode suggestedTitle) {
+        try {
+            String title = normalizeSuggestedTitle(suggestedTitle);
+            if (title == null) { return; }
+            var latest = repository.findForTitle(savedSource.id());
+            if (latest == null || !savedSource.sameSource(latest.source()) || !isDefaultVideoTitle(latest.title())) { return; }
+            var stored = PortfolioAiStoredVideoSummary.documentOrNull(latest.source().summary(),
+                    document.path(KEY_SOURCE_VERSION).asText());
+            if (!document.equals(stored)) { return; }
+            boolean renamed = repository.renameDefaultTitle(latest, title);
+            log.info("原视频默认名称更新结束: workId={}, renamed={}", savedSource.id(), renamed);
+        } catch (Exception exception) {
+            log.warn("原视频默认名称更新失败，摘要已保存: workId={}, exceptionType={}, failureLocation={}",
+                    savedSource.id(), exception.getClass().getSimpleName(), failureLocation(exception));
+        }
+    }
+
+    /** 无效名称只跳过改名，不截断、不重试；安全清理后仍须满足十码点限制。 */
+    private static String normalizeSuggestedTitle(JsonNode value) {
+        if (value == null || !value.isTextual() || value.asText().codePoints().anyMatch(Character::isISOControl)) { return null; }
+        String title = value.asText().strip();
+        if (title.isBlank() || title.codePointCount(0, title.length()) > MAX_TITLE_CODE_POINTS) { return null; }
+        title = PortfolioAiVideoAudioContext.sanitize(title).strip();
+        return title.isBlank() || title.codePointCount(0, title.length()) > MAX_TITLE_CODE_POINTS ? null : title;
+    }
+
+    /** 只识别完整的时间序号占位名，原文件名与用户自定义名称均保留。 */
+    private static boolean isDefaultVideoTitle(String title) {
+        if (title == null) { return false; }
+        var match = DEFAULT_VIDEO_TITLE.matcher(title);
+        if (!match.matches()) { return false; }
+        try { LocalDateTime.parse(match.group(1), DEFAULT_TITLE_TIME); return true; }
+        catch (DateTimeParseException exception) { return false; }
     }
 
     /** HEAD 仅访问数据库验证过的作品对象，不接受调用方任意 URL。 */

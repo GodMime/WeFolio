@@ -6,12 +6,16 @@ import ch.qos.logback.core.read.ListAppender;
 import com.jxc.wefolio.job.config.VideoSummaryProperties;
 import com.jxc.wefolio.job.repo.VideoSummaryRepository;
 import com.jxc.wefolio.job.repo.VideoSummaryRepository.Snapshot;
+import com.jxc.wefolio.job.repo.VideoSummaryRepository.TitleSnapshot;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiStoredVideoSummary;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.qcloud.cos.model.ObjectMetadata;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +40,10 @@ class VideoSummaryServiceTest {
     private VideoSummaryService service;
     private VideoSummaryService.RunBudget run;
     private Snapshot snapshot;
+    /** 模拟已提交的摘要，命名查询只能在保存之后读到它。 */
+    private String savedSummary;
+    /** 小程序生成的明确占位名称。 */
+    private static final String DEFAULT_TITLE = "视频 2026-10-19 12:00:00 01";
     /** 捕获真实用例失败日志，验证诊断可用且业务原文不泄漏。 */
     private final Logger logger = (Logger) LoggerFactory.getLogger(VideoSummaryService.class);
     private ListAppender<ILoggingEvent> events;
@@ -47,7 +55,9 @@ class VideoSummaryServiceTest {
         service = new VideoSummaryService(properties, repository, locks, storage, client);
         run = service.newRun(); snapshot = snapshot(2, 1, null);
         when(repository.find(1)).thenReturn(snapshot);
-        when(repository.save(any(), anyString())).thenReturn(true);
+        when(repository.save(any(), anyString())).thenAnswer(invocation -> {
+            savedSummary = invocation.getArgument(1); return true;
+        });
         when(locks.tryAcquire(1)).thenReturn(Optional.of(lock));
         when(storage.head(eq(KEY), any())).thenReturn(metadata(100, "etag"));
         when(storage.headTimeoutSeconds()).thenReturn(30);
@@ -59,6 +69,181 @@ class VideoSummaryServiceTest {
 
     /** 移除监听，避免跨测试累计日志。 */
     @AfterEach void detachLogger() { logger.detachAppender(events); events.stop(); }
+
+    /** 四字段响应只保存原摘要合同，提交后使用最新版本替换默认名。 */
+    @Test void savesSummaryBeforeRenamingLatestDefaultTitle() {
+        replyWithTitle("  花间有约  "); latestTitle(DEFAULT_TITLE);
+        when(repository.renameDefaultTitle(any(), anyString())).thenReturn(true);
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        var stored = PortfolioAiStoredVideoSummary.parse(savedSummary, source());
+        assertEquals(3, stored.path("content").size());
+        assertFalse(savedSummary.contains("suggestedTitle"));
+        var order = inOrder(repository);
+        order.verify(repository).save(eq(snapshot), anyString());
+        order.verify(repository).findForTitle(1);
+        order.verify(repository).renameDefaultTitle(
+                eq(new TitleSnapshot(snapshot(3, 1, savedSummary), DEFAULT_TITLE)), eq("花间有约"));
+        verify(client, times(1)).summarize(eq(1L), anyString(), any());
+    }
+
+    /** 推荐名称缺失或非法时仍保存合法摘要，不能触发命名查询或额外模型调用。 */
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "　", "一二三四五六七八九十甲", "🎤🎤🎤🎤🎤🎤🎤🎤🎤🎤🎤", "花间\n有约", "\t花间有约", "花间\u0000有约"})
+    void invalidSuggestedTitleDoesNotBlockSummary(String title) {
+        replyWithTitle(title);
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        assertNotNull(PortfolioAiStoredVideoSummary.parse(savedSummary, source()));
+        verify(repository, never()).findForTitle(anyLong());
+        verify(repository, never()).renameDefaultTitle(any(), anyString());
+        verify(client, times(1)).summarize(eq(1L), anyString(), any());
+    }
+
+    /** 非字符串名称只被舍弃，其余三个字段继续按原合同处理。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"42", "true", "[]", "{}"})
+    void nonTextSuggestedTitleDoesNotBlockSummary(String titleJson) {
+        reply(CONTENT.substring(0, CONTENT.length() - 1) + ",\"suggestedTitle\":" + titleJson + "}");
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        assertNotNull(PortfolioAiStoredVideoSummary.parse(savedSummary, source()));
+        verify(repository, never()).findForTitle(anyLong());
+    }
+
+    /** 十个码点合法；补充平面的字符不能按两个 UTF-16 单元误判超长。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"一二三四五六七八九十", "🎤🎤🎤🎤🎤🎤🎤🎤🎤🎤"})
+    void acceptsTenCodePointTitle(String title) {
+        replyWithTitle(title); latestTitle(DEFAULT_TITLE);
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        verify(repository).renameDefaultTitle(any(), eq(title));
+    }
+
+    /** 原文件名、自定义名称及不符合实际生成规则的伪默认名都必须保留。 */
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"婚礼终版", "视频作品", "未命名作品", "视频 2026-10-19 12:00:00 01 ",
+            "视频 2026-02-29 12:00:00 01", "视频 2026-10-19 24:00:00 01", "视频 2026-10-19 12:00:00 00",
+            "视频 2026-10-19 12:00:00 001", "视频 2026-10-19 12:00:00 1"})
+    void preservesLatestNonDefaultTitle(String title) {
+        replyWithTitle("灯火为序"); latestTitle(title);
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        verify(repository).findForTitle(1);
+        verify(repository, never()).renameDefaultTitle(any(), anyString());
+    }
+
+    /** 合法闰日和递增序号按小程序的实际格式识别。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"视频 2024-02-29 23:59:59 09", "视频 2026-10-19 12:00:00 10", "视频 2026-10-19 12:00:00 100"})
+    void recognizesCanonicalDefaultTitles(String title) {
+        replyWithTitle("灯火为序"); latestTitle(title);
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        verify(repository).renameDefaultTitle(any(), eq("灯火为序"));
+    }
+
+    /** 数据库 JSON 的键序与空白差异不能使刚保存的同一摘要被误判失效。 */
+    @Test void comparesSavedDocumentStructurally() {
+        replyWithTitle("花间有约");
+        when(repository.findForTitle(1)).thenAnswer(invocation -> {
+            var parsed = StrictAiJson.parseObject(savedSummary, 24576, 10);
+            String reformatted = StrictAiJson.canonical(parsed).replace(",", ", ");
+            assertNotEquals(savedSummary, reformatted);
+            return new TitleSnapshot(snapshot(3, 1, reformatted), DEFAULT_TITLE);
+        });
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        verify(repository).renameDefaultTitle(any(), eq("花间有约"));
+    }
+
+    /** 已提交后作品失效、换源、重审或摘要被替换时，推荐名不得用于后来的内容。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"missing", "source", "sha", "owner", "round", "cleared", "replaced", "broken"})
+    void skipsRenameWhenSourceOrSummaryChanges(String change) {
+        replyWithTitle("花间有约");
+        when(repository.findForTitle(1)).thenAnswer(invocation -> {
+            if (change.equals("missing")) { return null; }
+            String summary = switch (change) {
+                case "cleared" -> null;
+                case "replaced" -> document();
+                case "broken" -> "{broken";
+                default -> savedSummary;
+            };
+            return new TitleSnapshot(new Snapshot(1, change.equals("owner") ? 2 : 1,
+                    change.equals("source") ? "OWNER/work/video/b.mp4" : KEY,
+                    change.equals("sha") ? "changed" : "sha", change.equals("round") ? 2 : 1,
+                    4, 84613, summary, "OWNER"), DEFAULT_TITLE);
+        });
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        verify(repository, never()).renameDefaultTitle(any(), anyString());
+        assertNotNull(savedSummary);
+    }
+
+    /** 命名读取或写入异常必须局部隔离，日志不能携带数据库原始异常或名称。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void namingFailureKeepsSavedOutcome(boolean writeFails) {
+        replyWithTitle("花间有约"); latestTitle(DEFAULT_TITLE);
+        var failure = new IllegalStateException("private-title-db-marker");
+        if (writeFails) { when(repository.renameDefaultTitle(any(), anyString())).thenThrow(failure); }
+        else { when(repository.findForTitle(1)).thenThrow(failure); }
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        assertNotNull(PortfolioAiStoredVideoSummary.parse(savedSummary, source()));
+        String logged = events.list.stream().map(ILoggingEvent::getFormattedMessage).reduce("", (a, b) -> a + b);
+        assertTrue(logged.contains("摘要已保存"), logged);
+        assertFalse(logged.contains("private-title-db-marker") || logged.contains("花间有约"), logged);
+        verify(client, times(1)).summarize(eq(1L), anyString(), any());
+    }
+
+    /** 读取后用户并发改名导致条件更新零行时，既有摘要结果保持成功且不重试。 */
+    @Test void concurrentRenameDoesNotChangeSummaryOutcome() {
+        replyWithTitle("花间有约"); latestTitle(DEFAULT_TITLE);
+        when(repository.renameDefaultTitle(any(), anyString())).thenReturn(false);
+        assertEquals(SAVED, service.summarize(1, run, future()));
+        verify(repository, times(1)).renameDefaultTitle(any(), eq("花间有约"));
+        verify(client, times(1)).summarize(eq(1L), anyString(), any());
+    }
+
+    /** 原摘要 CAS 拒绝或事务失败时不能进入名称分支。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void failedSummaryNeverAttemptsNaming(boolean throwsException) {
+        replyWithTitle("花间有约");
+        if (throwsException) { when(repository.save(any(), anyString())).thenThrow(new IllegalStateException()); }
+        else { when(repository.save(any(), anyString())).thenReturn(false); }
+        assertEquals(throwsException ? FAILED : STALE, service.summarize(1, run, future()));
+        verify(repository, never()).findForTitle(anyLong());
+        verify(repository, never()).renameDefaultTitle(any(), anyString());
+    }
+
+    /** 只剥离推荐名，未知字段、重复键、尾随内容、超量和过深 JSON 仍然失败。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"unknown", "duplicate", "trailing", "oversized", "deep"})
+    void titleExtractionDoesNotWeakenSummaryValidation(String kind) {
+        String body = switch (kind) {
+            case "unknown" -> CONTENT.substring(0, CONTENT.length() - 1) + ",\"suggestedTitle\":\"花间有约\",\"unknown\":true}";
+            case "duplicate" -> CONTENT.substring(0, CONTENT.length() - 1) + ",\"suggestedTitle\":\"花间有约\",\"suggestedTitle\":null}";
+            case "trailing" -> CONTENT + "{}";
+            case "oversized" -> CONTENT + " ".repeat(16384);
+            default -> CONTENT.substring(0, CONTENT.length() - 1) + ",\"suggestedTitle\":" + "[".repeat(8) + "0" + "]".repeat(8) + "}";
+        };
+        reply(body);
+        assertEquals(FAILED, service.summarize(1, run, future()));
+        verify(repository, never()).save(any(), anyString());
+        verify(repository, never()).findForTitle(anyLong());
+    }
+
+    /** 构造可选名称响应，null 模拟模型无法给出名称。 */
+    private void replyWithTitle(String title) {
+        reply(StrictAiJson.parseObject(CONTENT, 16384, 8).put("suggestedTitle", title).toString());
+    }
+
+    /** 一次模型结果保持相同的费用计量，便于检查没有隐藏重试。 */
+    private void reply(String content) {
+        when(client.summarize(eq(1L), anyString(), any())).thenReturn(new PortfolioAiModelClient.Completion(content, 20L, 10L));
+    }
+
+    /** 名称阶段读取摘要提交后的版本与内容。 */
+    private void latestTitle(String title) {
+        when(repository.findForTitle(1)).thenAnswer(invocation -> new TitleSnapshot(snapshot(3, 1, savedSummary), title));
+    }
 
     /** 复现作品29返回12条观察：完整校验后保留前8条并沿既有合同保存，只调用一次。 */
     @Test void modelArrayOverflowIsBoundedAndSavedWithoutAnotherPaidRequest() {

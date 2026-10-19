@@ -26,6 +26,10 @@ class PortfolioAiPromptExampleTest {
     private static final String SUMMARY_EXAMPLE_START = "合法摘要示例（开始）";
     /** 示例正文结束位置，不将字段说明当成模型返回内容。 */
     private static final String SUMMARY_EXAMPLE_END = "合法摘要示例（结束）";
+    /** 原视频摘要额外返回推荐名称，但持久摘要正文仍沿用三字段合同。 */
+    private static final String DIRECT_VIDEO_SUMMARY_RESOURCE = "/portfolioai/direct-video-summary.txt";
+    /** 推荐名称字段不进入持久摘要正文。 */
+    private static final String SUGGESTED_TITLE = "suggestedTitle";
     /** 示例场景中已经冻结的素材与字体，均不依赖真实数据库或远端资源。 */
     private static final String CREATE_FACTS = """
             {"input":{"ownerType":"USER","mode":"CREATE","targetMenuKey":"__root__","prompt":"黑底作品集","baseConfig":null},
@@ -64,7 +68,7 @@ class PortfolioAiPromptExampleTest {
         return request;
     }
 
-    /** 真实摘要提示词的示例必须通过消费端严格校验，不能依赖原视频生产端裁剪超量条目。 */
+    /** 原视频示例提取推荐名称后仍通过消费端严格校验，不能依赖生产端裁剪超量条目。 */
     @ParameterizedTest
     @ValueSource(strings = {"/portfolioai/media-summary.txt", "/portfolioai/direct-video-summary.txt"})
     void summaryExamplesPassTheActualClosedContentContract(String resource) throws IOException {
@@ -77,7 +81,15 @@ class PortfolioAiPromptExampleTest {
             assertThat(end).isGreaterThan(start);
             String content = prompt.substring(start + SUMMARY_EXAMPLE_START.length(), end).strip();
             ObjectNode example = StrictAiJson.parseObject(content, StrictAiJson.RESPONSE_MAX_BYTES, StrictAiJson.MAX_DEPTH);
-            assertThat(PortfolioAiStoredVideoSummary.validateContent(content)).isEqualTo(example);
+            if (DIRECT_VIDEO_SUMMARY_RESOURCE.equals(resource)) {
+                assertThat(example.size()).isEqualTo(4);
+                JsonNode title = example.remove(SUGGESTED_TITLE);
+                assertThat(title).isNotNull();
+                assertThat(title.isTextual()).isTrue();
+                assertThat(title.asText()).isNotBlank();
+                assertThat(title.asText().codePointCount(0, title.asText().length())).isBetween(1, 10);
+            }
+            assertThat(PortfolioAiStoredVideoSummary.validateContent(example.toString())).isEqualTo(example);
         }
     }
 

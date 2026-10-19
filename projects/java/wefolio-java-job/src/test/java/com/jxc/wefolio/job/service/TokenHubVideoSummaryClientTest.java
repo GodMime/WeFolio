@@ -35,7 +35,16 @@ class TokenHubVideoSummaryClientTest {
         assertEquals(URL, content.get(1).path("video_url").path("url").asText());
         assertFalse(payload.toString().contains("image_url"));
         assertFalse(payload.toString().contains("videoAudioText"));
-        assertTrue(payload.path("messages").get(0).path("content").asText().contains("不把字幕当成已经识别的原声"));
+        String prompt = payload.path("messages").get(0).path("content").asText();
+        assertTrue(prompt.contains("不把字幕当成已经识别的原声"));
+        assertTrue(prompt.contains("summary、observations、limitations、suggestedTitle 四个字段"));
+        assertTrue(prompt.contains("文艺、简洁、有画面感"));
+        assertTrue(prompt.contains("优先4至8个字，最多10个Unicode码点"));
+        assertTrue(prompt.contains("无法可靠概括时返回空字符串"));
+        assertTrue(prompt.contains("恰好四个顶层字段"));
+        assertFalse(prompt.contains("三个字段"));
+        assertFalse(prompt.contains("恰好三个顶层字段"));
+        assertFalse(prompt.contains("不得增加第四个顶层字段"));
     }
 
     /** 临时签名变化不影响缓存分组，实际静态参数和原源变化影响输入身份。 */
