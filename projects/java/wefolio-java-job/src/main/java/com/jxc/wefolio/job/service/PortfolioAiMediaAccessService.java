@@ -177,8 +177,8 @@ public class PortfolioAiMediaAccessService {
     private void logFeatureFallback(AiGenerationTaskEntity task, long workId, JsonNode frames, JsonNode selected) {
         var coverage = PortfolioAiFrameSelection.featureCoverage(frames, selected);
         if (coverage.usable() == coverage.total()) { return; }
-        log.info("作品集视频选帧降级: taskId={}, attempt={}, workId={}, policyVersion={}, totalFrames={}, usableFeatures={}, missingFeatures={}, invalidFeatures={}",
-                task.getId(), task.getAttemptCount(), workId, selected.path(KEY_POLICY_VERSION).textValue(),
+        log.info("作品集视频选帧降级: taskId={}, requestedByUniqueCode={}, attempt={}, workId={}, policyVersion={}, totalFrames={}, usableFeatures={}, missingFeatures={}, invalidFeatures={}",
+                task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), workId, selected.path(KEY_POLICY_VERSION).textValue(),
                 coverage.total(), coverage.usable(), coverage.missing(), coverage.invalid());
     }
 

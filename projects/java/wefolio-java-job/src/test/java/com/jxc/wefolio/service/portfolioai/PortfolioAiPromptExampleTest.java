@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,6 +22,10 @@ class PortfolioAiPromptExampleTest {
     private static final String EXAMPLE_START = "完整 CREATE 示例（开始）";
     /** 完整示例信封的结束标记。 */
     private static final String EXAMPLE_END = "完整 CREATE 示例（结束）";
+    /** 两种素材摘要提示词使用相同的封闭输出示例边界。 */
+    private static final String SUMMARY_EXAMPLE_START = "合法摘要示例（开始）";
+    /** 示例正文结束位置，不将字段说明当成模型返回内容。 */
+    private static final String SUMMARY_EXAMPLE_END = "合法摘要示例（结束）";
     /** 示例场景中已经冻结的素材与字体，均不依赖真实数据库或远端资源。 */
     private static final String CREATE_FACTS = """
             {"input":{"ownerType":"USER","mode":"CREATE","targetMenuKey":"__root__","prompt":"黑底作品集","baseConfig":null},
@@ -56,6 +62,23 @@ class PortfolioAiPromptExampleTest {
         ObjectNode request = StrictAiJson.parseObject(CREATE_FACTS, StrictAiJson.RESPONSE_MAX_BYTES, StrictAiJson.MAX_DEPTH);
         request.put("contractVersion", AiPortfolioProtocol.CONTRACT_VERSION).put("promptVersion", AiPortfolioProtocol.PROMPT_VERSION);
         return request;
+    }
+
+    /** 真实摘要提示词的示例必须通过消费端严格校验，不能依赖原视频生产端裁剪超量条目。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"/portfolioai/media-summary.txt", "/portfolioai/direct-video-summary.txt"})
+    void summaryExamplesPassTheActualClosedContentContract(String resource) throws IOException {
+        try (InputStream stream = getClass().getResourceAsStream(resource)) {
+            assertThat(stream).isNotNull();
+            String prompt = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            int start = prompt.indexOf(SUMMARY_EXAMPLE_START);
+            int end = prompt.indexOf(SUMMARY_EXAMPLE_END);
+            assertThat(start).as(resource).isGreaterThanOrEqualTo(0);
+            assertThat(end).isGreaterThan(start);
+            String content = prompt.substring(start + SUMMARY_EXAMPLE_START.length(), end).strip();
+            ObjectNode example = StrictAiJson.parseObject(content, StrictAiJson.RESPONSE_MAX_BYTES, StrictAiJson.MAX_DEPTH);
+            assertThat(PortfolioAiStoredVideoSummary.validateContent(content)).isEqualTo(example);
+        }
     }
 
     /** 作品集封面必须写入全局分享配置，不擅自增加正文首图。 */

@@ -3,6 +3,7 @@ package com.jxc.wefolio.job.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.job.config.PortfolioAiProperties;
+import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
 import lombok.extern.slf4j.Slf4j;
 
@@ -44,13 +45,13 @@ final class PortfolioAiModelContract {
     }
 
     /** 开关差异仅影响部署诊断；冻结媒体任务始终执行原契约，旧文字任务保持原行为。 */
-    static void warnMediaSwitchMismatch(Long taskId, ObjectNode request, PortfolioAiProperties properties) {
+    static void warnMediaSwitchMismatch(AiGenerationTaskEntity task, ObjectNode request, PortfolioAiProperties properties) {
         JsonNode frozen = request.path(MODEL_CONFIG).path(MEDIA_ENABLED);
         boolean hasPlan = request.path(FACTS).has(MEDIA_PLAN);
         if ((frozen.isBoolean() || hasPlan)
                 && (frozen.isBoolean() ? frozen.booleanValue() : hasPlan) != properties.isMediaEnabled()) {
-            log.warn("高级 AI 媒体开关配置不一致: taskId={}, runtimeMediaEnabled={}, jobMediaEnabled={}, 配置项=WEFOLIO_AI_MEDIA_ENABLED",
-                    taskId, frozen.isBoolean() ? frozen.booleanValue() : hasPlan, properties.isMediaEnabled());
+            log.warn("高级 AI 媒体开关配置不一致: taskId={}, requestedByUniqueCode={}, runtimeMediaEnabled={}, jobMediaEnabled={}, 配置项=WEFOLIO_AI_MEDIA_ENABLED",
+                    task.getId(), task.getRequestedByUniqueCode(), frozen.isBoolean() ? frozen.booleanValue() : hasPlan, properties.isMediaEnabled());
         }
     }
 }

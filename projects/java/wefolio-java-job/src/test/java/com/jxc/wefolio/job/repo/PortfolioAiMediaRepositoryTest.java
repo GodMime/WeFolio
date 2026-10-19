@@ -84,6 +84,23 @@ class PortfolioAiMediaRepositoryTest {
         task.setId(id); task.setRequestedBy(2L); task.setVersion(1); task.setAttemptCount(1);
         return task;
     }
+
+    /** 正常用量、未知用量与重复回执均保留发起用户码，结算幂等性与费用保持原语义。 */
+    @Test void feeLogsCarryRequesterCodeAcrossUnknownSettledAndDuplicateUsage() {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(PortfolioAiMediaRepository.class);
+        var events = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        events.start(); logger.addAppender(events);
+        try {
+            var task = task(1); task.setRequestedByUniqueCode("WFREQUEST1");
+            int call = repository.reserve(task, 5, now);
+            repository.settle(task, call, null, null, now);
+            repository.settle(task, call, 1000L, 100L, now);
+            repository.settle(task, call, 1000L, 100L, now);
+            assertThat(events.list).hasSize(3).allSatisfy(event -> assertThat(event.getFormattedMessage())
+                    .contains("taskId=1", "requestedByUniqueCode=WFREQUEST1", "callNo=1"));
+            assertThat(budget(1).find(1, call).charged()).isEqualTo(1);
+        } finally { logger.detachAppender(events); events.stop(); }
+    }
     /** 读取独立费用账本，测试只查询已有任务表。 */
     private PortfolioAiMediaBudget budget(long id) {
         return PortfolioAiMediaBudget.parse(jdbc.queryForObject("SELECT media_budget_json FROM wf_ai_generation_task WHERE id=?", String.class, id));

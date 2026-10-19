@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.job.config.PortfolioAiProperties;
+import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -32,15 +33,16 @@ class PortfolioAiMediaSwitchContractTest {
             ObjectNode media = request(); media.withObject("modelConfig").put("mediaEnabled", true);
             media.withObject("facts").putObject("mediaPlan");
             assertThatCode(() -> PortfolioAiModelContract.validate(media, properties)).doesNotThrowAnyException();
-            PortfolioAiModelContract.warnMediaSwitchMismatch(7L, media, properties);
+            AiGenerationTaskEntity task = new AiGenerationTaskEntity(); task.setId(7L); task.setRequestedByUniqueCode("WFREQUEST1");
+            PortfolioAiModelContract.warnMediaSwitchMismatch(task, media, properties);
             properties.setMediaEnabled(true);
             ObjectNode text = request(); text.withObject("modelConfig").put("mediaEnabled", false);
-            PortfolioAiModelContract.warnMediaSwitchMismatch(8L, text, properties);
+            task.setId(8L); PortfolioAiModelContract.warnMediaSwitchMismatch(task, text, properties);
             // 上个部署的文字任务没有能力快照，不能把历史合法任务当成部署错误。
-            PortfolioAiModelContract.warnMediaSwitchMismatch(9L, request(), properties);
+            task.setId(9L); PortfolioAiModelContract.warnMediaSwitchMismatch(task, request(), properties);
             assertThat(events.list).hasSize(2);
             assertThat(events.list).allSatisfy(event -> assertThat(event.getFormattedMessage())
-                    .contains("WEFOLIO_AI_MEDIA_ENABLED").doesNotContain("apiKey", "request_json"));
+                    .contains("WEFOLIO_AI_MEDIA_ENABLED", "requestedByUniqueCode=WFREQUEST1").doesNotContain("apiKey", "request_json"));
         } finally { logger.detachAppender(events); events.stop(); }
     }
 }

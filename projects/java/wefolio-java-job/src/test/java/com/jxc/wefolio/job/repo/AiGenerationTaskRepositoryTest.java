@@ -46,8 +46,38 @@ class AiGenerationTaskRepositoryTest {
                 error_message CLOB,created_at TIMESTAMP(3),updated_at TIMESTAMP(3),deleted BIGINT DEFAULT 0,version INT DEFAULT 0,
                 reference_attachments_json CLOB,media_budget_json CLOB,media_budget_unknown_count INT DEFAULT 0)
                 """);
-        jdbc.execute("CREATE TABLE wf_user(id BIGINT PRIMARY KEY,status VARCHAR(32),deleted BIGINT)");
-        jdbc.update("INSERT INTO wf_user VALUES(1,'ACTIVE',0)");
+        jdbc.execute("CREATE TABLE wf_user(id BIGINT PRIMARY KEY,status VARCHAR(32),deleted BIGINT,unique_code VARCHAR(32))");
+        jdbc.update("INSERT INTO wf_user VALUES(1,'ACTIVE',0,'WFREQUEST1')");
+    }
+
+    /** 团队任务始终记录发起用户身份，过期扫描、普通队列与附件队列的身份口径一致。 */
+    @Test void taskScansReadRequesterCodeInsteadOfOwnerOrFrozenRequest() {
+        var now = businessNow();
+        var task = pending(now.minusSeconds(200));
+        jdbc.update("INSERT INTO wf_user VALUES(2,'ACTIVE',0,'WFOTHER02')");
+        jdbc.update("UPDATE wf_ai_generation_task SET owner_type='TEAM',owner_id=2,request_json=? WHERE id=?",
+                "{\"requestedByUniqueCode\":\"WFFORGED0\"}", task.getId());
+        for (var loaded : List.of(repository.findPending(now, 10).getFirst(),
+                repository.findPendingWithoutReferences(now, 10).getFirst(),
+                repository.findRecoverable(now, 180, 90, 10).getFirst())) {
+            assertThat(loaded.getRequestedByUniqueCode()).isEqualTo("WFREQUEST1");
+            assertThat(loaded.getOwnerType()).isEqualTo("TEAM");
+            assertThat(loaded.getOwnerId()).isEqualTo(2L);
+        }
+    }
+
+    /** 用户行被物理移除时任务仍可被扫描并按原条件结束，不能因日志字段缺失丢弃任务。 */
+    @Test void missingRequesterDoesNotHideTaskOrPreventFailure() {
+        var now = businessNow();
+        var task = pending(now.minusSeconds(200));
+        jdbc.update("DELETE FROM wf_user WHERE id=1");
+        for (var loaded : List.of(repository.findPending(now, 10).getFirst(),
+                repository.findPendingWithoutReferences(now, 10).getFirst(),
+                repository.findRecoverable(now, 180, 90, 10).getFirst())) {
+            assertThat(loaded.getId()).isEqualTo(task.getId());
+            assertThat(loaded.getRequestedByUniqueCode()).isNull();
+        }
+        assertThat(repository.fail(repository.findPending(now, 10).getFirst(), "TIMEOUT", "已超时", now)).isTrue();
     }
 
     /** 重试、终态和成功均保留同字段历史，长摘要不再受原五百字符限制。 */

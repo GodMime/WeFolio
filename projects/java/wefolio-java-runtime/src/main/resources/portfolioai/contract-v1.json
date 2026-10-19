@@ -54,7 +54,7 @@
         "bio": {
           "type": "string",
           "maxCodePoints": 1000,
-          "description": "当前作品集展示的个人简介，不回写账号基础资料。"
+          "description": "仅 MODIFY_PAGE 对已有 PROFILE 使用 UPDATE_TEXT 修改 bio；CREATE 或 INSERT_COMPONENT 的 params 不接受 bio，新增时使用当前可信个人资料。只修改本作品集展示的个人简介，不回写账号基础资料。"
         }
       },
       "description": "展示当前个人的公开基础资料；用户要求展示个人资料或姓名头像名片时才新增，不是作品集默认首项。文艺主持描述应使用文字组件，访客留资应使用 CONTACT_FORM，不附带本组件。修改简介只影响本作品集展示，不修改账号资料。没有主素材，sourceNos=[]。"
@@ -125,7 +125,7 @@
         "content": {
           "type": "string",
           "maxCodePoints": 200,
-          "description": "当前文字内容；可生成非事实性的主持风格文案，不虚构经历、奖项或联系方式。"
+          "description": "当前文字内容；CREATE 或 INSERT_COMPONENT 时必须放在 params.content，修改已有文字使用 UPDATE_TEXT 的 field=content 与 value，不放入 UPDATE_PARAMS。可生成非事实性的主持风格文案，不虚构经历、奖项或联系方式。"
         },
         "alignment": {
           "type": "string",
@@ -155,7 +155,7 @@
       "bindingSlots": {
         "fontId": {
           "kind": "FONT",
-          "description": "绑定可信 FONT ref 来选择远程字体，实际字体 ID 与固定版本由 Runtime 写入；文艺中文字体须匹配可用字体名称和语言，不把字体名称写进 fontFamily。"
+          "description": "绑定可信 FONT ref 来选择远程字体，实际字体 ID 与固定版本由 Runtime 写入；文艺中文字体须匹配可用字体名称和语言，不把字体名称写进 fontFamily。填写到组件 bindings 数组的 {slot:\"fontId\",ref:\"可信字体ref\"}，不要将 fontId 或 ref 直接写入 params；新建时不能使用 reuseOnly=true 的原位引用。"
         },
         "backgroundWorkId": {
           "kind": "WORK",
@@ -164,7 +164,7 @@
             "VIDEO",
             "ANIMATION"
           ],
-          "description": "绑定已选图片、视频或动画作品的 sourceNo，作为当前文字区域的局部背景；同时设置 backgroundEnabled=true。不能写入 sourceNos 或用作全页背景。"
+          "description": "绑定已选图片、视频或动画作品的 sourceNo，作为当前文字区域的局部背景；同时设置 backgroundEnabled=true。不能写入 sourceNos 或用作全页背景。填写到组件 bindings 数组的 {slot:\"backgroundWorkId\",sourceNo:素材正整数编号}，不要在 params 中直接写入 backgroundWorkId。"
         }
       },
       "description": "展示一段文字，可用已选图片、视频或动画作品作这段文字的局部背景，并独立设置字体和排版；不设置全页背景。没有主素材，sourceNos=[]。"
@@ -228,23 +228,23 @@
                   "HINT",
                   "SPACER"
                 ],
-                "description": "文字块类型：TITLE 标题，PARAGRAPH 段落，LIST 列表，HINT 提示，SPACER 空白；列表使用 items，其它文字块使用 content，空白块使用 heightRpx。"
+                "description": "必填文字块类型：TITLE 标题、PARAGRAPH 段落、HINT 提示均必须填写非空白 content；LIST 列表必须填写非空白字符串数组 items；SPACER 空白块仅接受 type、heightRpx 和上下外边距，不填写正文、字体、行高、对齐或 bindings。"
               },
               "content": {
                 "type": "string",
                 "maxCodePoints": 2000,
-                "description": "当前文字内容；可生成非事实性的主持风格文案，不虚构经历、奖项或联系方式。"
+                "description": "TITLE、PARAGRAPH、HINT 的必填正文字符串，不能为纯空白；不与 items 同时填写，LIST 和 SPACER 不填写此字段。修改已有块时定位到 blockKey 后使用 UPDATE_TEXT，不重建 blocks。"
               },
               "items": {
                 "type": "array",
                 "items": {
                   "type": "string",
                   "maxCodePoints": 2000,
-                  "description": "列表型文字块的逐条内容；仅用于 LIST，不作为作品素材列表。"
+                  "description": "一条列表正文，必须是非空白字符串；不使用 {text:...} 对象，也不是作品素材编号。"
                 },
                 "maxItems": 10,
                 "minItems": 1,
-                "description": "列表型文字块的逐条内容；仅用于 LIST，不作为作品素材列表。"
+                "description": "LIST 的必填正文数组，含 1 至 10 条非空白字符串，按数组顺序显示；不与 content 同时填写，其它块类型不填写。修改已有 LIST 时使用 UPDATE_TEXT 的 field=items 与完整字符串数组 value。"
               },
               "heightRpx": {
                 "type": "integer",
@@ -319,11 +319,11 @@
             "required": [
               "type"
             ],
-            "description": "当前文字块的封闭参数结构；只填写 properties 中列出的字段。"
+            "description": "当前文字块的封闭参数结构；只填写 properties 中列出的字段，并遵守 type 对 content、items、heightRpx 的互斥规则。不要输出 blockKey、expectedHash 或未列出的标题、说明、样式对象；节点标识由服务端生成。"
           },
           "maxItems": 20,
           "minItems": 1,
-          "description": "按显示顺序排列的文字块，各块类型、内容和排版必须符合内部字段；当前协议未开放通过结构操作重建已有文字块。"
+          "description": "CREATE 或 INSERT_COMPONENT 时必填的 1 至 20 个文字块，按数组顺序展示。多个段落用多个 PARAGRAPH；LIST 的逐条正文放在块内 items。修改已有块时按其 blockKey 使用文字或参数操作，不能通过 UPDATE_PARAMS 重写 blocks 或改变块类型。"
         }
       },
       "requiredParams": [
@@ -338,7 +338,7 @@
             "VIDEO",
             "ANIMATION"
           ],
-          "description": "绑定已选图片、视频或动画作品的 sourceNo，作为当前文字区域的局部背景；同时设置 backgroundEnabled=true。不能写入 sourceNos 或用作全页背景。"
+          "description": "绑定已选图片、视频或动画作品的 sourceNo，作为当前文字区域的局部背景；同时设置 backgroundEnabled=true。不能写入 sourceNos 或用作全页背景。填写到组件 bindings 数组的 {slot:\"backgroundWorkId\",sourceNo:素材正整数编号}，不要在 params 中直接写入 backgroundWorkId。"
         }
       },
       "description": "按顺序展示标题、段落、列表、提示和空白等文字块，各文字块独立设置字体与排版；多段或分段描述使用多个 PARAGRAPH，并可共享同一背景图片或视频。整个组件所有 content 与 LIST.items 合计最多 2000 个 Unicode 码点，不是每块各 2000 字；修改已有文字时也要计入未修改的内容。必须至少包含一个非 SPACER 文字块，不能全部为留白块。需要文艺字体时在各文字块绑定可信 FONT ref，不因此拆成多个 TEXT_SECTION。没有主素材，sourceNos=[]。"
@@ -367,7 +367,7 @@
           },
           "maxItems": 5,
           "minItems": 1,
-          "description": "各列宽度的相对权重，无单位；数量必须等于 columns，值越大该列越宽。"
+          "description": "各列宽度的相对权重，无单位；数量必须等于 columns，值越大该列越宽。新建时可省略，服务端为每列补 1，即等宽；填写时须给出完整数组，不能为 [] 或 null。"
         },
         "rowMinHeightsRpx": {
           "type": "array",
@@ -379,7 +379,7 @@
           },
           "maxItems": 8,
           "minItems": 1,
-          "description": "各行最小高度，单位 rpx；数量必须等于 rows，文字较多时可自然增高。"
+          "description": "各行最小高度，单位 rpx；数量必须等于 rows，文字较多时可自然增高。新建时可省略，服务端为每行补 180 rpx；填写时须给出完整数组，不能为 [] 或 null。"
         },
         "gapRpx": {
           "type": "integer",
@@ -535,7 +535,7 @@
                           "text": {
                             "type": "string",
                             "maxCodePoints": 2000,
-                            "description": "当前文字片段的实际内容。"
+                            "description": "当前片段的正文字符串，字段名固定为 text；可为 \"\" 以保留空白单元格结构。修改已有片段时定位到 cellKey、blockKey、runKey 后使用 UPDATE_TEXT 的 field=text 与字符串 value。"
                           },
                           "fontWeight": {
                             "type": "string",
@@ -550,21 +550,21 @@
                         "required": [
                           "text"
                         ],
-                        "description": "当前文字片段的封闭参数结构；只填写 properties 中列出的字段。"
+                        "description": "当前文字片段的封闭参数结构；text 必填，字体、字号、颜色与字重均可省略。空白片段使用 text=\"\"，不能省略 text 或写 null；不要输出 runKey、content 或其它未列出的字段。"
                       },
                       "maxItems": 8,
                       "minItems": 1,
-                      "description": "当前文字块中按顺序显示的文字片段，每个片段可设置自身字体、字号、颜色与字重。"
+                      "description": "当前段落内按顺序连续显示的 1 至 8 个文字片段，必须填写；同段局部样式变化拆成多个 run，另起一段则新增 block。每个片段使用 text 字符串。"
                     }
                   },
                   "required": [
                     "runs"
                   ],
-                  "description": "当前文字块的封闭参数结构；只填写 properties 中列出的字段。"
+                  "description": "网格文字段落的封闭参数结构；runs 必填，只能在本层设置对齐、上下外边距和行高，字体、字号、颜色与字重放在 runs 的各片段内；不要输出 type、content、items 或 blockKey。"
                 },
                 "maxItems": 8,
                 "minItems": 1,
-                "description": "按显示顺序排列的文字块，各块类型、内容和排版必须符合内部字段；当前协议未开放通过结构操作重建已有文字块。"
+                "description": "当前单元格内按上下顺序展示的 1 至 8 段文字，必须填写；每段正文由 runs 组成，不使用 STRUCTURED_TEXT_SECTION 的 type、content 或 items。"
               }
             },
             "required": [
@@ -574,11 +574,11 @@
               "columnSpan",
               "blocks"
             ],
-            "description": "当前单元格的封闭参数结构；只填写 properties 中列出的字段。"
+            "description": "当前单元格的封闭参数结构；row、column、rowSpan、columnSpan、blocks 均必填。文字放在 blocks[].runs[].text，不能在单元格上直接填 text、content 或 fontFamily；不要输出 cellKey，标识由服务端生成。"
           },
           "maxItems": 40,
           "minItems": 1,
-          "description": "文字网格单元格配置，按零起始行列坐标和跨行跨列范围覆盖完整网格，不得重叠。"
+          "description": "必填单元格数组。按零起始 row、column 与 rowSpan、columnSpan 覆盖完整网格，每个坐标恰好被一个单元格覆盖。合并区域只输出一个带跨度的单元格，不再输出被其覆盖的小格；不能通过 UPDATE_PARAMS 重写 cells。"
         }
       },
       "requiredParams": [
@@ -588,7 +588,7 @@
       ],
       "primarySource": null,
       "bindingSlots": {},
-      "description": "用行列、合并单元格、文字块和文字片段编排文字版面；不是作品图片网格。整个组件所有单元格中 runs.text 合计最多 2000 个 Unicode 码点，不是每个片段各 2000 字；修改已有文字时也要计入未修改的内容。没有主素材，sourceNos=[]。"
+      "description": "用行列、合并单元格、文字块和文字片段编排文字版面；不是作品图片网格。整个组件所有单元格中 runs.text 合计最多 2000 个 Unicode 码点，不是每个片段各 2000 字；修改已有文字时也要计入未修改的内容。没有主素材，sourceNos=[]。CREATE 或 INSERT_COMPONENT 的 params 必须包含 rows、columns、cells，组件 bindings=[]；文字层级固定为 cells[].blocks[].runs[].text，不能把结构化文字块直接放进 cells。"
     },
     "CAROUSEL": {
       "params": {},
@@ -600,7 +600,7 @@
         ],
         "min": 1,
         "max": 9,
-        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。sourceNos 是不重复的正整数数组，使用本次 sources 中 canBind=true 的 sourceNo，不使用字符串、对象、真实作品 ID 或附件编号。CREATE/INSERT_COMPONENT 必须满足 min/max；MODIFY_PAGE 的 BIND_RESOURCES 中 [] 表示保留现有主素材，不是清空。"
       },
       "bindingSlots": {},
       "description": "轮播展示已选图片作品，主图片按 sourceNos 顺序绑定；不是作品集分享封面设置。"
@@ -646,7 +646,7 @@
         ],
         "min": 3,
         "max": 8,
-        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。sourceNos 是不重复的正整数数组，使用本次 sources 中 canBind=true 的 sourceNo，不使用字符串、对象、真实作品 ID 或附件编号。CREATE/INSERT_COMPONENT 必须满足 min/max；MODIFY_PAGE 的 BIND_RESOURCES 中 [] 表示保留现有主素材，不是清空。"
       },
       "bindingSlots": {},
       "description": "滑动展示多项已选视频作品；视频主素材通过 sourceNos 绑定，数量和媒体类型遵守 primarySource。"
@@ -696,7 +696,7 @@
         ],
         "min": 1,
         "max": 1,
-        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。sourceNos 是不重复的正整数数组，使用本次 sources 中 canBind=true 的 sourceNo，不使用字符串、对象、真实作品 ID 或附件编号。CREATE/INSERT_COMPONENT 必须满足 min/max；MODIFY_PAGE 的 BIND_RESOURCES 中 [] 表示保留现有主素材，不是清空。"
       },
       "bindingSlots": {},
       "description": "在正文单独展示一项已选图片、视频或动画作品。放在顶部可作为正文首图，但不设置作品集封面或分享封面；封面应使用全局 share.coverUrl。"
@@ -727,7 +727,7 @@
         ],
         "min": 1,
         "max": 50,
-        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。sourceNos 是不重复的正整数数组，使用本次 sources 中 canBind=true 的 sourceNo，不使用字符串、对象、真实作品 ID 或附件编号。CREATE/INSERT_COMPONENT 必须满足 min/max；MODIFY_PAGE 的 BIND_RESOURCES 中 [] 表示保留现有主素材，不是清空。"
       },
       "bindingSlots": {},
       "description": "按双列网格展示已选个人图片或视频作品；主素材通过 sourceNos 绑定，已有作品分组保留原边界。"
@@ -758,7 +758,7 @@
         ],
         "min": 1,
         "max": 50,
-        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。sourceNos 是不重复的正整数数组，使用本次 sources 中 canBind=true 的 sourceNo，不使用字符串、对象、真实作品 ID 或附件编号。CREATE/INSERT_COMPONENT 必须满足 min/max；MODIFY_PAGE 的 BIND_RESOURCES 中 [] 表示保留现有主素材，不是清空。"
       },
       "bindingSlots": {},
       "description": "按单列列表展示已选个人图片或视频作品；主素材通过 sourceNos 绑定，已有作品分组保留原边界。"
@@ -776,7 +776,7 @@
         "mediaTypes": [],
         "min": 1,
         "max": 50,
-        "description": "主成员作品集仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
+        "description": "主成员作品集仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。sourceNos 是不重复的正整数数组，使用本次 sources 中 canBind=true 的 sourceNo，不使用字符串、对象、真实作品 ID 或附件编号。CREATE/INSERT_COMPONENT 必须满足 min/max；MODIFY_PAGE 的 BIND_RESOURCES 中 [] 表示保留现有主素材，不是清空。"
       },
       "bindingSlots": {},
       "description": "在团队作品集中用固定双列网格展示已选成员作品集的整体入口，不能配置其它列数；展示封面、标题，并由 showMemberName 控制成员姓名，点击进入对应成员作品集；不展开或修改成员作品集内部内容。"
@@ -794,7 +794,7 @@
         "mediaTypes": [],
         "min": 1,
         "max": 50,
-        "description": "主成员作品集仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
+        "description": "主成员作品集仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。sourceNos 是不重复的正整数数组，使用本次 sources 中 canBind=true 的 sourceNo，不使用字符串、对象、真实作品 ID 或附件编号。CREATE/INSERT_COMPONENT 必须满足 min/max；MODIFY_PAGE 的 BIND_RESOURCES 中 [] 表示保留现有主素材，不是清空。"
       },
       "bindingSlots": {},
       "description": "在团队作品集中用固定单列列表展示已选成员作品集的整体入口，不能配置其它列数；展示封面、标题、有内容时展示简介，并由 showMemberName 控制成员姓名，点击进入对应成员作品集；不展开或修改成员作品集内部内容。"
@@ -875,7 +875,7 @@
           "required": [
             "type"
           ],
-          "description": "允许访客查询的日期范围：根据 type 填对应天数或起止日期，仅限制查询展示，不修改真实档期。"
+          "description": "允许访客查询的日期范围，必须包含 type 且只填写当前类型对应字段：UNLIMITED 只填 type；FUTURE_DAYS 只填 type、futureDays；DATE_RANGE 只填 type、startDate、endDate。其它类型的日期或天数字段须省略，不能填 null。仅限制查询展示，不修改真实档期。"
         }
       },
       "requiredParams": [],
@@ -919,7 +919,7 @@
           },
           "maxItems": 4,
           "minItems": 2,
-          "description": "留资表单字段配置：contactName 姓名，phone 电话，wechat 微信，needs 需求；必须包含 contactName，并至少包含 phone 或 wechat。"
+          "description": "留资表单字段配置：contactName 姓名，phone 电话，wechat 微信，needs 需求；必须包含 contactName，并至少包含 phone 或 wechat。字段名不能重复；数组内容是字段名字符串，不是含 label、required 或 value 的对象。"
         }
       },
       "requiredParams": [],
@@ -1035,7 +1035,7 @@
         ],
         "min": 1,
         "max": 1,
-        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。"
+        "description": "主作品仅通过 sourceNos 按顺序绑定已选且可新增使用的来源；素材数量与媒体类型按此规则，不包含背景、字体或全局封面等辅助资源。sourceNos 是不重复的正整数数组，使用本次 sources 中 canBind=true 的 sourceNo，不使用字符串、对象、真实作品 ID 或附件编号。CREATE/INSERT_COMPONENT 必须满足 min/max；MODIFY_PAGE 的 BIND_RESOURCES 中 [] 表示保留现有主素材，不是清空。"
       },
       "bindingSlots": {
         "targetPortfolioId": {
@@ -1164,23 +1164,23 @@
           "HINT",
           "SPACER"
         ],
-        "description": "文字块类型：TITLE 标题，PARAGRAPH 段落，LIST 列表，HINT 提示，SPACER 空白；列表使用 items，其它文字块使用 content，空白块使用 heightRpx。"
+        "description": "已有文字块的类型：TITLE 标题、PARAGRAPH 段落、LIST 列表、HINT 提示、SPACER 空白；本字段只用于理解现有节点，不能通过 UPDATE_PARAMS 修改类型。"
       },
       "content": {
         "type": "string",
         "maxCodePoints": 2000,
-        "description": "当前文字内容；可生成非事实性的主持风格文案，不虚构经历、奖项或联系方式。"
+        "description": "已有 TITLE、PARAGRAPH、HINT 文字块的非空白正文；定位到 blockKey 后用 UPDATE_TEXT 的 field=content 修改，LIST 和 SPACER 不接受此字段。"
       },
       "items": {
         "type": "array",
         "items": {
           "type": "string",
           "maxCodePoints": 2000,
-          "description": "列表型文字块的逐条内容；仅用于 LIST，不作为作品素材列表。"
+          "description": "一条列表正文，必须是非空白字符串，不是文字对象或作品素材编号。"
         },
         "maxItems": 10,
         "minItems": 1,
-        "description": "列表型文字块的逐条内容；仅用于 LIST，不作为作品素材列表。"
+        "description": "已有 LIST 文字块的非空白正文列表；定位到 blockKey 后用 UPDATE_TEXT 的 field=items 和完整字符串数组 value 修改，不接受 content。"
       },
       "heightRpx": {
         "type": "integer",
@@ -1228,25 +1228,25 @@
         "type": "integer",
         "min": 0,
         "max": 7,
-        "description": "单元格起始行坐标，从 0 开始，不是用户可见的行号或素材序号。"
+        "description": "单元格起始行坐标，从 0 开始，不是用户可见的行号或素材序号。此处只描述已有单元格位置，当前 MODIFY_PAGE 不支持通过 UPDATE_PARAMS 移动、合并或拆分单元格。"
       },
       "column": {
         "type": "integer",
         "min": 0,
         "max": 4,
-        "description": "单元格起始列坐标，从 0 开始，不是素材序号。"
+        "description": "单元格起始列坐标，从 0 开始，不是素材序号。此处只描述已有单元格位置，当前 MODIFY_PAGE 不支持通过 UPDATE_PARAMS 移动、合并或拆分单元格。"
       },
       "rowSpan": {
         "type": "integer",
         "min": 1,
         "max": 8,
-        "description": "单元格跨越的行数，至少为 1，不能超出网格总行数。"
+        "description": "单元格跨越的行数，至少为 1，不能超出网格总行数。此处只描述已有单元格位置，当前 MODIFY_PAGE 不支持通过 UPDATE_PARAMS 移动、合并或拆分单元格。"
       },
       "columnSpan": {
         "type": "integer",
         "min": 1,
         "max": 5,
-        "description": "单元格跨越的列数，至少为 1，不能超出网格总列数。"
+        "description": "单元格跨越的列数，至少为 1，不能超出网格总列数。此处只描述已有单元格位置，当前 MODIFY_PAGE 不支持通过 UPDATE_PARAMS 移动、合并或拆分单元格。"
       },
       "verticalAlignment": {
         "type": "string",
@@ -1315,7 +1315,7 @@
       "text": {
         "type": "string",
         "maxCodePoints": 2000,
-        "description": "当前文字片段的实际内容。"
+        "description": "已有网格文字片段的正文字符串；定位到 cellKey、blockKey、runKey 后用 UPDATE_TEXT 的 field=text 与字符串 value 修改，清空片段可传 \"\"，不使用 null。"
       },
       "fontWeight": {
         "type": "string",

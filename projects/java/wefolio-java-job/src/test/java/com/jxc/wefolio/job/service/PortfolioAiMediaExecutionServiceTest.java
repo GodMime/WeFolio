@@ -70,7 +70,7 @@ class PortfolioAiMediaExecutionServiceTest {
         logger.setLevel(originalLevel);
     }
     /** 新任务与执行代次。 */
-    private AiGenerationTaskEntity task() { var task = new AiGenerationTaskEntity(); task.setId(1L); task.setOwnerType("USER"); task.setOwnerId(2L); task.setRequestedBy(2L); task.setAttemptCount(1); task.setVersion(1); task.setCreatedAt(LocalDateTime.now(ZoneId.of("Asia/Shanghai"))); return task; }
+    private AiGenerationTaskEntity task() { var task = new AiGenerationTaskEntity(); task.setId(1L); task.setOwnerType("USER"); task.setOwnerId(2L); task.setRequestedBy(2L); task.setRequestedByUniqueCode("WFREQUEST1"); task.setAttemptCount(1); task.setVersion(1); task.setCreatedAt(LocalDateTime.now(ZoneId.of("Asia/Shanghai"))); return task; }
     /** 新冻结计划，源标识不包含标题或文字样式。 */
     private ObjectNode request() {
         return StrictAiJson.parseObject("""
@@ -577,7 +577,7 @@ class PortfolioAiMediaExecutionServiceTest {
         ILoggingEvent event = events.list.getFirst();
         assertThat(event.getLevel()).isEqualTo(Level.WARN);
         assertThat(event.getThrowableProxy()).isNull();
-        assertThat(event.getFormattedMessage()).contains(FAILURE_LOG_PREFIX, "taskId=1", "attempt=1", "workId=9", "sourceNo=1",
+        assertThat(event.getFormattedMessage()).contains(FAILURE_LOG_PREFIX, "taskId=1", "requestedByUniqueCode=WFREQUEST1", "attempt=1", "workId=9", "sourceNo=1",
                         "stage=" + stage, "callNo=" + callNo, "errorCode=" + PortfolioAiMediaContract.ERROR_INVALID_SUMMARY, "diagnostic=")
                 .contains(diagnostic)
                 .doesNotContain("private-summary-marker", PRIVATE_FIELD, "private.example", "signature=temporary", "13800138000", "婚礼舞台");

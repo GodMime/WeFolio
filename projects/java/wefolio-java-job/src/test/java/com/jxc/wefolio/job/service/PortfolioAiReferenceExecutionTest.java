@@ -134,6 +134,7 @@ class PortfolioAiReferenceExecutionTest {
         events.start(); logger.addAppender(events); logger.setLevel(ch.qos.logback.classic.Level.WARN);
         try {
             var task = task(item(1, true));
+            task.setRequestedByUniqueCode("WFREQUEST1");
             String text = "private-content https://private.example/?signature=secret 13800138000 " + "中".repeat(2001);
             when(fees.reserve(eq(task), anyInt(), any())).thenReturn(7);
             when(model.summarizeReferences(eq(task), any(), anyList(), anyList(), any())).thenReturn(
@@ -142,7 +143,7 @@ class PortfolioAiReferenceExecutionTest {
                     .isInstanceOf(PortfolioAiReferenceContract.SummaryValidationException.class);
             var logs = events.list.stream().filter(event -> event.getFormattedMessage().startsWith("高级 AI 参考附件摘要校验失败")).toList();
             assertThat(logs).hasSize(1);
-            assertThat(logs.getFirst().getFormattedMessage()).contains("taskId=1", "attempt=1", "callNo=7", "itemCount=1",
+            assertThat(logs.getFirst().getFormattedMessage()).contains("taskId=1", "requestedByUniqueCode=WFREQUEST1", "attempt=1", "callNo=7", "itemCount=1",
                     "promptTokens=93000", "completionTokens=45", "reason=SUMMARY_TOO_LONG", "expected=2000")
                     .doesNotContain("private-content", "signature", "13800138000", "https://");
             assertThat(logs.getFirst().getThrowableProxy()).isNull();

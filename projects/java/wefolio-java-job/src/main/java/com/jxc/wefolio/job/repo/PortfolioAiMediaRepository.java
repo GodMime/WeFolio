@@ -127,7 +127,7 @@ public class PortfolioAiMediaRepository {
                         rs.getString(3), rs.getInt(4)), task.getRequestedBy());
         for (DailyBudget stored : daily) {
             // 已达到日上限后无需累加超大历史金额，避免不同坏行的合计溢出继续冒泡。
-            dailyTotal += Math.min(dailyTotal(stored, now), properties.getMediaDailyBudgetCents() - dailyTotal);
+            dailyTotal += Math.min(dailyTotal(stored, now, task.getRequestedByUniqueCode()), properties.getMediaDailyBudgetCents() - dailyTotal);
         }
         return new BudgetCapacity(budget, dailyTotal);
     }
@@ -152,8 +152,8 @@ public class PortfolioAiMediaRepository {
     public void settle(AiGenerationTaskEntity task, int callNo, Long prompt, Long completion,
                        Long cachedTokens, CacheStatus cacheStatus, LocalDateTime now) {
         if (prompt == null || completion == null || prompt < 0 || completion < 0) {
-            log.info("媒体模型用量未知 taskId={}, attempt={}, callNo={}, cacheStatus={}",
-                    task.getId(), task.getAttemptCount(), callNo, CacheStatus.CORE_USAGE_UNKNOWN);
+            log.info("媒体模型用量未知 taskId={}, requestedByUniqueCode={}, attempt={}, callNo={}, cacheStatus={}",
+                    task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), callNo, CacheStatus.CORE_USAGE_UNKNOWN);
             return;
         }
         // 清理只锁任务行，不申请用户锁；这里固定用户 -> 任务顺序以避免跨实例预算竞态。
@@ -168,8 +168,8 @@ public class PortfolioAiMediaRepository {
         if (call == null) { throw unavailable(); }
         // 第一次完整返回才写费用，晚到或重复 usage 不改变已知真实费用。
         if (call.charged() != null) {
-            log.info("媒体模型重复费用回执未采用 taskId={}, attempt={}, callNo={}, adopted=false, chargedCents={}",
-                    task.getId(), task.getAttemptCount(), callNo, call.charged());
+            log.info("媒体模型重复费用回执未采用 taskId={}, requestedByUniqueCode={}, attempt={}, callNo={}, adopted=false, chargedCents={}",
+                    task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), callNo, call.charged());
             return;
         }
         CacheStatus status = settlementCacheStatus(prompt, cachedTokens, cacheStatus);
@@ -186,8 +186,8 @@ public class PortfolioAiMediaRepository {
          * 余额不足及可靠补偿规则；不得在当前事务锁内调用远端服务，
          * 不得因积分结算失败回滚已发生的模型费用。
          */
-        log.info("媒体模型费用结算 taskId={}, attempt={}, callNo={}, pricingModel={}, pricingRegion={}, priceVersion={}, promptTokens={}, completionTokens={}, cachedTokens={}, cacheStatus={}, fullCents={}, chargedCents={}, savedCents={}, adopted=true",
-                task.getId(), task.getAttemptCount(), callNo, PortfolioAiProperties.TOKENHUB_MODEL, PRICE_REGION, PRICE_VERSION,
+        log.info("媒体模型费用结算 taskId={}, requestedByUniqueCode={}, attempt={}, callNo={}, pricingModel={}, pricingRegion={}, priceVersion={}, promptTokens={}, completionTokens={}, cachedTokens={}, cacheStatus={}, fullCents={}, chargedCents={}, savedCents={}, adopted=true",
+                task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), callNo, PortfolioAiProperties.TOKENHUB_MODEL, PRICE_REGION, PRICE_VERSION,
                 prompt, completion, adoptedCache, status, fullCents, cents, fullCents - cents);
         if (cents > call.reserved()) {
             throw new PortfolioAiCallException(ERROR_BUDGET_OVERRUN, "模型用量超过预留，本次任务已停止", false);
@@ -285,10 +285,10 @@ public class PortfolioAiMediaRepository {
      * 坏账本保留原文并隔离；仅在任务可能发送付费请求的日期计入完整任务上限。
      * 请求的发送不能晚于绝对期限，因此历史坏行不会永久冻结请求人的未来额度。
      */
-    private long dailyTotal(DailyBudget stored, LocalDateTime now) {
+    private long dailyTotal(DailyBudget stored, LocalDateTime now, String requestedByUniqueCode) {
         try { return validatedBudget(stored.json(), stored.unknown()).total(now.toLocalDate()); }
         catch (PortfolioAiCallException exception) {
-            log.warn("媒体费用账本已隔离: taskId={}", stored.id());
+            log.warn("媒体费用账本已隔离: taskId={}, requestedByUniqueCode={}", stored.id(), requestedByUniqueCode);
             if (stored.createdAt() == null) { return properties.getMediaTaskBudgetCents(); }
             var day = now.toLocalDate();
             return !day.isBefore(stored.createdAt().toLocalDate())

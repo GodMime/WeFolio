@@ -36,6 +36,34 @@ class PortfolioAiExecutionServiceTest {
 
     @AfterEach void stop() { service.close(); }
 
+    /** 成功和失败日志都可按发起用户搜索；同线程后续缺失身份的任务不能继承前一任务身份。 */
+    @Test void executionLogsKeepRequesterIdentityPerTaskAcrossSuccessAndFailure() {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(PortfolioAiExecutionService.class);
+        var events = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        events.start(); logger.addAppender(events);
+        try {
+            AiGenerationTaskEntity successful = task(1); successful.setRequestedByUniqueCode("WFREQUEST1");
+            successful.setOwnerType("TEAM"); successful.setOwnerId(99L);
+            when(client.generate(eq(successful), any(), any())).thenReturn("""
+                    {"schemaVersion":"ai-portfolio-v1","promptVersion":"portfolio-ai-2026-10-10.2","status":"CANDIDATE",
+                     "mode":"MODIFY_PAGE","page":null,"operations":[],"questions":[],"notes":[]}
+                    """);
+            when(repository.succeed(eq(successful), anyString(), any(), anyInt())).thenReturn(true);
+            service.executeClaimed(successful, request(successful));
+            assertThat(events.list).hasSize(2).allSatisfy(event -> assertThat(event.getFormattedMessage())
+                    .contains("requestedByUniqueCode=WFREQUEST1"));
+            assertThat(events.list.getLast().getFormattedMessage()).contains("结果回写", "applied=true");
+            events.list.clear();
+
+            AiGenerationTaskEntity missingRequester = task(1); missingRequester.setId(2L);
+            when(client.generate(eq(missingRequester), any(), any())).thenThrow(new IllegalStateException("private-secret"));
+            service.executeClaimed(missingRequester, request(missingRequester));
+            assertThat(events.list).hasSize(3).allSatisfy(event -> assertThat(event.getFormattedMessage())
+                    .contains("taskId=2", "requestedByUniqueCode=null").doesNotContain("WFREQUEST1", "private-secret"));
+            verify(repository).fail(eq(missingRequester), eq("INTERNAL_ERROR"), anyString(), eq(now));
+        } finally { logger.detachAppender(events); events.stop(); }
+    }
+
     /** 原三分钟预算仅用于保留既有恢复和迟到回写场景。 */
     private PortfolioAiProperties legacyTimeoutProperties() {
         PortfolioAiProperties properties = new PortfolioAiProperties();

@@ -702,14 +702,46 @@ class TokenHubPortfolioAiClientTest {
             doReturn(transport).when(client).createHttpClient(any());
             when(transport.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
                     .thenReturn(CompletableFuture.failedFuture(new HttpTimeoutException("secret-private-url")));
-            assertThatThrownBy(() -> client.generate(task(), request(), Duration.ofSeconds(400)))
+            var task = task(); task.setRequestedByUniqueCode("WFREQUEST1");
+            assertThatThrownBy(() -> client.generate(task, request(), Duration.ofSeconds(400)))
                     .isInstanceOf(PortfolioAiCallException.class);
             String logs = appender.list.stream().map(ILoggingEvent::getFormattedMessage)
                     .collect(Collectors.joining("\n"));
-            assertThat(logs).contains("portfolio:1:1:generation", "HttpTimeoutException", "timeoutMs=300000",
+            assertThat(logs).contains("portfolio:1:1:generation", "requestedByUniqueCode=WFREQUEST1", "HttpTimeoutException", "timeoutMs=300000",
                     "elapsedMs=", "errorCode=REMOTE_ERROR", "retryable=true")
                     .doesNotContain("secret-private-url", "test-fake-key", "13800138000");
         } finally { logger.detachAppender(appender); appender.stop(); }
+    }
+
+    /** HTTP 回调切换线程后仍携带当前任务唯一码，随后缺失身份的调用不能残留上一次身份。 */
+    @Test void asynchronousResponseLogsCarryOnlyCurrentRequesterIdentity() {
+        var logger = (Logger) LoggerFactory.getLogger(TokenHubCompletionTransport.class);
+        var events = new ListAppender<ILoggingEvent>(); events.start(); logger.addAppender(events);
+        try {
+            var client = spy(new TokenHubPortfolioAiClient(properties()));
+            HttpClient transport = mock(HttpClient.class); doReturn(transport).when(client).createHttpClient(any());
+            HttpResponse<byte[]> response = mock(HttpResponse.class);
+            when(response.statusCode()).thenReturn(200);
+            when(response.headers()).thenReturn(HttpHeaders.of(Map.of(), (name, value) -> true));
+            when(response.body()).thenReturn(responseWithUsage("{\"prompt_tokens\":100,\"completion_tokens\":20}").getBytes(StandardCharsets.UTF_8));
+            when(transport.sendAsync(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenAnswer(invocation -> {
+                HttpResponse.BodyHandler<byte[]> handler = invocation.getArgument(1);
+                return CompletableFuture.supplyAsync(() -> {
+                    HttpResponse.ResponseInfo info = mock(HttpResponse.ResponseInfo.class); when(info.statusCode()).thenReturn(200);
+                    handler.apply(info);
+                    return response;
+                });
+            });
+            var task = task(); task.setRequestedByUniqueCode("WFREQUEST1");
+            assertThat(client.generate(task, request(), Duration.ofSeconds(2))).isEqualTo("{}");
+            assertThat(events.list).hasSize(4).allSatisfy(event -> assertThat(event.getFormattedMessage())
+                    .contains("requestedByUniqueCode=WFREQUEST1"));
+            assertThat(events.list).anySatisfy(event -> assertThat(event.getFormattedMessage()).contains("TokenHub HTTP"));
+            events.list.clear();
+            assertThat(client.generate(task(), request(), Duration.ofSeconds(2))).isEqualTo("{}");
+            assertThat(events.list).hasSize(4).allSatisfy(event -> assertThat(event.getFormattedMessage())
+                    .contains("requestedByUniqueCode=null").doesNotContain("WFREQUEST1"));
+        } finally { logger.detachAppender(events); events.stop(); }
     }
 
     /** 音频只进入当前作品的 user 文本块，最终真实 payload 也保留且实际字节预算随之增长。 */

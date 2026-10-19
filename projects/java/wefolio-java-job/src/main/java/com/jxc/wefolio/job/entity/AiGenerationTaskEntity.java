@@ -23,6 +23,9 @@ public class AiGenerationTaskEntity extends BaseEntity {
     private Long portfolioId;
     /** 发起人主键，生成不扣发起人积分。 */
     private Long requestedBy;
+    /** 发起用户唯一码，仅从用户表读取用于日志追踪，与团队或素材归属无关，不持久化到任务。 */
+    @TableField(exist = false)
+    private String requestedByUniqueCode;
     /** 请求人作用域内的提交幂等键。 */
     private String idempotencyKey;
     /** 不可变业务请求、可信事实、模型配置及版本，不含密钥。 */

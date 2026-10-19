@@ -50,6 +50,8 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
     private static final String GENERATION_CACHE_STAGE = "generation";
     private static final String MEDIA_SUMMARY_CACHE_STAGE = "media-summary";
     private static final String REFERENCE_SUMMARY_CACHE_STAGE = "reference-summary";
+    /** 日志上下文显式随 HTTP 异步回调传递，使用发起用户唯一码且不改变请求体。 */
+    private static final String LOG_CONTEXT_FORMAT = "portfolio:%s:%s:%s, requestedByUniqueCode=%s";
     /** 缓存键采用固定长度的摘要，不传提示词原文、业务内容或用户身份。 */
     private static final String PROMPT_CACHE_DIGEST_ALGORITHM = "SHA-256";
     private static final String PROMPT_CACHE_DIGEST_UNAVAILABLE = "AI 缓存键摘要算法不可用";
@@ -105,7 +107,8 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
                 ? timeout : Duration.ofSeconds(properties.getConnectTimeoutSeconds());
         String baseUrl = PortfolioAiProperties.canonicalBaseUrl(config.path("baseUrl").textValue());
         return TokenHubCompletionTransport.complete(URI.create(baseUrl + COMPLETION_PATH), properties.getApiKey(), body,
-                timeout, connection, properties.getMaxResponseBytes(), "portfolio:" + task.getId() + ":" + task.getAttemptCount() + ":" + stage,
+                timeout, connection, properties.getMaxResponseBytes(),
+                LOG_CONTEXT_FORMAT.formatted(task.getId(), task.getAttemptCount(), stage, task.getRequestedByUniqueCode()),
                 this::createHttpClient);
     }
 

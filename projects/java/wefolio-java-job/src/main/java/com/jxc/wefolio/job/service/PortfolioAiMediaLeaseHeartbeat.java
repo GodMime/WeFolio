@@ -78,8 +78,8 @@ final class PortfolioAiMediaLeaseHeartbeat implements AutoCloseable {
             } catch (PortfolioAiCallException exception) { throw exception; }
             catch (RuntimeException exception) {
                 lost = true;
-                log.warn("媒体阶段租约检查失败 taskId={}, attempt={}, exceptionType={}",
-                        task.getId(), task.getAttemptCount(), exception.getClass().getSimpleName());
+                log.warn("媒体阶段租约检查失败 taskId={}, requestedByUniqueCode={}, attempt={}, exceptionType={}",
+                        task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), exception.getClass().getSimpleName());
                 throw interrupted();
             }
         }
@@ -89,8 +89,8 @@ final class PortfolioAiMediaLeaseHeartbeat implements AutoCloseable {
             if (closed || lost || stopped) { return; }
             try { renew(); }
             catch (RuntimeException exception) {
-                log.warn("媒体心跳续约失败 taskId={}, attempt={}, exceptionType={}",
-                        task.getId(), task.getAttemptCount(), exception.getClass().getSimpleName());
+                log.warn("媒体心跳续约失败 taskId={}, requestedByUniqueCode={}, attempt={}, exceptionType={}",
+                        task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), exception.getClass().getSimpleName());
             }
         }
 

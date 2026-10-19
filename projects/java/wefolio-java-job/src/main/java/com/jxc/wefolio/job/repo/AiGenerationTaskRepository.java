@@ -34,11 +34,15 @@ public class AiGenerationTaskRepository {
     /** 清理仅允许终态任务；空对象代表隐私原文已经销毁。 */
     private static final Set<String> TERMINAL = Set.of(AiTaskStatusDict.SUCCEEDED.getCode(), AiTaskStatusDict.FAILED.getCode(), AiTaskStatusDict.CANCELLED.getCode());
     private static final String CLEARED_REQUEST = "{}";
+    /** 按发起人读取日志身份；用户记录缺失不影响任务扫描，绝不使用 owner 或冻结请求作为身份。 */
+    private static final String TASK_SELECT = "SELECT t.*, (SELECT u.unique_code FROM wf_user u WHERE u.id=t.requested_by) "
+            + "AS requested_by_unique_code FROM wf_ai_generation_task t ";
     /** 完整任务读取，物理清理显式包含逻辑删除行。 */
     private static final RowMapper<AiGenerationTaskEntity> ROW = (rs, row) -> {
         AiGenerationTaskEntity task = new AiGenerationTaskEntity();
         task.setId(rs.getLong("id")); task.setOwnerType(rs.getString("owner_type")); task.setOwnerId(rs.getLong("owner_id"));
         task.setPortfolioId(rs.getObject("portfolio_id", Long.class)); task.setRequestedBy(rs.getLong("requested_by"));
+        task.setRequestedByUniqueCode(rs.getString("requested_by_unique_code"));
         task.setIdempotencyKey(rs.getString("idempotency_key")); task.setRequestJson(rs.getString("request_json"));
         task.setReferenceAttachmentsJson(rs.getString("reference_attachments_json"));
         task.setResultJson(rs.getString("result_json")); task.setStatus(rs.getString("status"));
@@ -53,8 +57,8 @@ public class AiGenerationTaskRepository {
 
     /** 读取一批需超时或中断恢复的活动记录。 */
     public List<AiGenerationTaskEntity> findRecoverable(LocalDateTime now, int timeout, int recovery, int limit) {
-        return jdbc.query("""
-                SELECT * FROM wf_ai_generation_task WHERE deleted=0 AND status IN ('PENDING','RUNNING')
+        return jdbc.query(TASK_SELECT + """
+                WHERE deleted=0 AND status IN ('PENDING','RUNNING')
                 AND (created_at <= ? OR (status='RUNNING' AND started_at <= ? AND updated_at <= ?)) ORDER BY id LIMIT ?
                 """, ROW, now.minusSeconds(timeout), now.minusSeconds(recovery), now.minusSeconds(recovery), limit);
     }
@@ -71,23 +75,26 @@ public class AiGenerationTaskRepository {
 
     /** 媒体陈旧租约直接结束，重验心跳以拒绝扫描后的竞争续约，不回队列或重复付费。 */
     public boolean failInterruptedMedia(AiGenerationTaskEntity task, LocalDateTime now, int recovery, int timeout) {
-        return jdbc.update("""
+        boolean applied = jdbc.update("""
                 UPDATE wf_ai_generation_task SET status='FAILED',result_json=NULL,error_code='EXECUTION_INTERRUPTED',
                 error_message=%s,completed_at=?,updated_at=?,version=version+1
                 WHERE id=? AND status='RUNNING' AND version=? AND deleted=0
                 AND updated_at<=TIMESTAMPADD(SECOND, ?, %s)
                 """.formatted(APPEND_ERROR_SQL, PortfolioAiDatabaseTime.NOW_SQL) + LIVE_DEADLINE,
                 PortfolioAiFailureHistory.entry(task.getAttemptCount(), INTERRUPTED_CODE, MEDIA_INTERRUPTED_MESSAGE), now, now, task.getId(), task.getVersion(), -recovery, timeout) == 1;
+        log.warn("高级 AI 媒体中断终态 taskId={}, requestedByUniqueCode={}, attempt={}, errorCode={}, applied={}",
+                task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), INTERRUPTED_CODE, applied);
+        return applied;
     }
 
     /** 读取可领取队列；最终领取仍以 version 防并发。 */
     public List<AiGenerationTaskEntity> findPending(LocalDateTime now, int limit) {
-        return jdbc.query("SELECT * FROM wf_ai_generation_task WHERE deleted=0 AND status='PENDING' AND next_run_at<=? ORDER BY next_run_at,id LIMIT ?", ROW, now, limit);
+        return jdbc.query(TASK_SELECT + "WHERE deleted=0 AND status='PENDING' AND next_run_at<=? ORDER BY next_run_at,id LIMIT ?", ROW, now, limit);
     }
 
     /** 附件额度耗尽时在 SQL 内排除附件，避免队首附件阻塞普通请求。 */
     public List<AiGenerationTaskEntity> findPendingWithoutReferences(LocalDateTime now, int limit) {
-        return jdbc.query("SELECT * FROM wf_ai_generation_task WHERE deleted=0 AND status='PENDING' AND next_run_at<=? "
+        return jdbc.query(TASK_SELECT + "WHERE deleted=0 AND status='PENDING' AND next_run_at<=? "
                 + "AND reference_attachments_json IS NULL ORDER BY next_run_at,id LIMIT ?", ROW, now, limit);
     }
 
@@ -153,18 +160,21 @@ public class AiGenerationTaskRepository {
                 UPDATE wf_ai_generation_task SET status='FAILED',result_json=NULL,error_code=?,error_message=%s,
                 completed_at=?,updated_at=?,version=version+1 WHERE id=? AND status=? AND version=? AND deleted=0
                 """.formatted(APPEND_ERROR_SQL), code, PortfolioAiFailureHistory.entry(task.getAttemptCount(), code, message), now, now, task.getId(), task.getStatus(), task.getVersion()) == 1;
-        log.warn("高级 AI 失败终态 taskId={}, attempt={}, errorCode={}, applied={}, completedAt={}",
-                task.getId(), task.getAttemptCount(), code, applied, now);
+        log.warn("高级 AI 失败终态 taskId={}, requestedByUniqueCode={}, attempt={}, errorCode={}, applied={}, completedAt={}",
+                task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), code, applied, now);
         return applied;
     }
 
     /** 过期执行代次恢复为等待，旧 worker 的版本在同一写入中失效。 */
     public boolean recover(AiGenerationTaskEntity task, LocalDateTime now, int timeout) {
-        return jdbc.update("""
+        boolean applied = jdbc.update("""
                 UPDATE wf_ai_generation_task SET status='PENDING',next_run_at=?,updated_at=?,error_code='EXECUTION_INTERRUPTED',
                 error_message=%s,version=version+1 WHERE id=? AND status='RUNNING' AND version=? AND deleted=0
                 """.formatted(APPEND_ERROR_SQL) + LIVE_DEADLINE, now.plusSeconds(task.getAttemptCount() == 1 ? 5 : 10), now, PortfolioAiFailureHistory.entry(task.getAttemptCount(), INTERRUPTED_CODE, RECOVERY_MESSAGE),
                 task.getId(), task.getVersion(), timeout) == 1;
+        log.info("高级 AI 中断恢复入队 taskId={}, requestedByUniqueCode={}, attempt={}, errorCode={}, applied={}",
+                task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), INTERRUPTED_CODE, applied);
+        return applied;
     }
 
     /**

@@ -179,8 +179,8 @@ public class PortfolioAiMediaExecutionService {
                     summaries.addAll(PortfolioAiReferenceContract.summaries(completion.content(), group));
                 } catch (PortfolioAiReferenceContract.SummaryValidationException exception) {
                     // 只输出固定分类和数值，不记录模型原文、附件标识、资源地址或异常堆栈。
-                    log.warn("高级 AI 参考附件摘要校验失败 taskId={}, attempt={}, callNo={}, itemCount={}, promptTokens={}, completionTokens={}, errorCode={}, diagnostic={}",
-                            task.getId(), task.getAttemptCount(), referenceCall, group.size(),
+                    log.warn("高级 AI 参考附件摘要校验失败 taskId={}, requestedByUniqueCode={}, attempt={}, callNo={}, itemCount={}, promptTokens={}, completionTokens={}, errorCode={}, diagnostic={}",
+                            task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), referenceCall, group.size(),
                             completion.promptTokens(), completion.completionTokens(), PortfolioAiReferenceContract.ERROR_ANALYSIS,
                             exception.diagnostic());
                     throw exception;
@@ -406,8 +406,8 @@ public class PortfolioAiMediaExecutionService {
         if (task == null) { return; }
         String diagnostic = exception instanceof PortfolioAiStoredVideoSummary.ValidationException validation
                 ? validation.diagnostic() : SUMMARY_DIAGNOSTIC_UNAVAILABLE;
-        log.warn("高级 AI 媒体摘要校验失败 taskId={}, attempt={}, workId={}, sourceNo={}, stage={}, callNo={}, errorCode={}, diagnostic={}",
-                task.getId(), task.getAttemptCount(), entry.path(KEY_WORK_ID).asLong(), entry.path(KEY_SOURCE_NO).asInt(),
+        log.warn("高级 AI 媒体摘要校验失败 taskId={}, requestedByUniqueCode={}, attempt={}, workId={}, sourceNo={}, stage={}, callNo={}, errorCode={}, diagnostic={}",
+                task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), entry.path(KEY_WORK_ID).asLong(), entry.path(KEY_SOURCE_NO).asInt(),
                 stage, callNo, ERROR_INVALID_SUMMARY, diagnostic);
     }
 

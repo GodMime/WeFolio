@@ -130,7 +130,7 @@ public class PortfolioAiExecutionService {
                 ObjectNode request = request(task);
                 AiPortfolioProtocol.checkVersion(request);
                 PortfolioAiModelContract.validate(request, properties);
-                PortfolioAiModelContract.warnMediaSwitchMismatch(task.getId(), request, properties);
+                PortfolioAiModelContract.warnMediaSwitchMismatch(task, request, properties);
                 if (!repository.claim(task, now, properties.getMaxAttempts(), properties.getTotalTimeoutSeconds())) { continue; }
                 boolean releaseReference = referencePermit;
                 executor.execute(() -> {
@@ -152,6 +152,8 @@ public class PortfolioAiExecutionService {
     void executeClaimed(AiGenerationTaskEntity task, ObjectNode request) {
         PortfolioAiMediaLeaseHeartbeat.Lease lease = null;
         try {
+            log.info("高级 AI 开始执行 taskId={}, requestedByUniqueCode={}, requestedBy={}, ownerType={}, ownerId={}, attempt={}",
+                    task.getId(), task.getRequestedByUniqueCode(), task.getRequestedBy(), task.getOwnerType(), task.getOwnerId(), task.getAttemptCount());
             Duration remaining = Duration.between(now(), task.getCreatedAt().plusSeconds(properties.getTotalTimeoutSeconds()));
             if (remaining.isNegative() || remaining.isZero()) { failure(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, false); return; }
             PortfolioAiModelContract.validate(request, properties);
@@ -169,6 +171,8 @@ public class PortfolioAiExecutionService {
             boolean succeeded = lease == null
                     ? repository.succeed(task, result.toString(), now, properties.getTotalTimeoutSeconds())
                     : repository.succeedMedia(task, result.toString(), now, properties.getTotalTimeoutSeconds(), properties.getRecoverySeconds());
+            log.info("高级 AI 结果回写 taskId={}, requestedByUniqueCode={}, attempt={}, applied={}",
+                    task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), succeeded);
             if (!succeeded && expired(task, now)) {
                 repository.fail(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, now);
             }
@@ -180,7 +184,8 @@ public class PortfolioAiExecutionService {
             if (!failLostLease(task, lease)) { failure(task, exception.getCode(), exception.getMessage(), exception.isRetryable()); }
         } catch (RuntimeException exception) {
             // 不记录堆栈或 exception.message，避免第三方异常包含原文、地址或密钥。
-            log.error("高级 AI 内部执行失败 taskId={}, attempt={}, exceptionType={}", task.getId(), task.getAttemptCount(), exception.getClass().getSimpleName());
+            log.error("高级 AI 内部执行失败 taskId={}, requestedByUniqueCode={}, attempt={}, exceptionType={}",
+                    task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), exception.getClass().getSimpleName());
             if (!failLostLease(task, lease)) { failure(task, "INTERNAL_ERROR", PortfolioAiTaskMessage.TASK_FAILED_MESSAGE, false); }
         } finally { if (lease != null) { lease.close(); } }
     }
@@ -196,8 +201,8 @@ public class PortfolioAiExecutionService {
     private void failure(AiGenerationTaskEntity task, String code, String message, boolean retryable) {
         LocalDateTime now = now();
         boolean media = requiresMediaExecution(task);
-        log.warn("高级 AI 执行失败 taskId={}, attempt={}, errorCode={}, retryable={}, elapsedMs={}, remainingMs={}, maxAttempts={}",
-                task.getId(), task.getAttemptCount(), code, retryable, Duration.between(task.getCreatedAt(), now).toMillis(),
+        log.warn("高级 AI 执行失败 taskId={}, requestedByUniqueCode={}, attempt={}, errorCode={}, retryable={}, elapsedMs={}, remainingMs={}, maxAttempts={}",
+                task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), code, retryable, Duration.between(task.getCreatedAt(), now).toMillis(),
                 Math.max(0, Duration.between(now, task.getCreatedAt().plusSeconds(properties.getTotalTimeoutSeconds())).toMillis()),
                 properties.getMaxAttempts());
         if (expired(task, now)) { repository.fail(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, now); }
@@ -206,8 +211,8 @@ public class PortfolioAiExecutionService {
             boolean retried = media
                     ? repository.retryMedia(task, code, message, now, properties.getTotalTimeoutSeconds(), properties.getRecoverySeconds())
                     : repository.retry(task, code, message, now, properties.getTotalTimeoutSeconds());
-            log.info("高级 AI 重试入队 taskId={}, attempt={}, errorCode={}, applied={}",
-                    task.getId(), task.getAttemptCount(), code, retried);
+            log.info("高级 AI 重试入队 taskId={}, requestedByUniqueCode={}, attempt={}, errorCode={}, applied={}",
+                    task.getId(), task.getRequestedByUniqueCode(), task.getAttemptCount(), code, retried);
             if (!retried && expired(task, now())) {
                 repository.fail(task, "TIMEOUT", PortfolioAiTaskMessage.TASK_TIMEOUT_MESSAGE, now());
             }
