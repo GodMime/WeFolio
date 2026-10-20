@@ -628,15 +628,19 @@
   font-size: 23rpx;
   font-weight: 600;
   line-height: 1;
-  border: 0;
+  border: 1rpx solid #e9ecef;
   border-radius: 20rpx;
   background: #f5f6f7;
   box-sizing: border-box;
 }
 
+/* 卡片操作按钮的线框跟随所属作品集类型。 */
+.portfolio-item-card.advanced .portfolio-action-button {
+  border-color: #d9c28d;
+}
+
 .portfolio-action-button.publish {
   color: #ffffff;
-  border-color: #212529;
   background: #212529;
 }
 
