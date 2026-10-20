@@ -1102,13 +1102,13 @@
             <view
               wx:for="{{scheduleQueryDisplayModeOptions}}"
               wx:key="value"
-              class="schedule-query-mode-option pe-sheet-choice {{scheduleQueryForm.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}"
+              class="schedule-query-mode-option pe-sheet-choice {{scheduleQueryForm.displayMode === item.value ? 'pe-sheet-choice-selected radio-option-selected' : ''}}"
               data-value="{{item.value}}"
               catchtap="handleScheduleQueryDisplayModeTap"
               aria-role="radio"
               aria-checked="{{scheduleQueryForm.displayMode === item.value}}"
             >
-              <view class="schedule-query-mode-radio"></view>
+              <view class="schedule-query-mode-radio" aria-hidden="true"><view wx:if="{{scheduleQueryForm.displayMode === item.value}}" class="schedule-query-mode-radio-dot"></view></view>
               <view class="schedule-query-mode-label">{{item.label}}</view>
             </view>
           </view>
@@ -1139,13 +1139,13 @@
             <view
               wx:for="{{contactFormDisplayModeOptions}}"
               wx:key="value"
-              class="schedule-query-mode-option pe-sheet-choice {{contactFormConfigForm.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}"
+              class="schedule-query-mode-option pe-sheet-choice {{contactFormConfigForm.displayMode === item.value ? 'pe-sheet-choice-selected radio-option-selected' : ''}}"
               data-value="{{item.value}}"
               catchtap="handleContactFormDisplayModeTap"
               aria-role="radio"
               aria-checked="{{contactFormConfigForm.displayMode === item.value}}"
             >
-              <view class="schedule-query-mode-radio"></view>
+              <view class="schedule-query-mode-radio" aria-hidden="true"><view wx:if="{{contactFormConfigForm.displayMode === item.value}}" class="schedule-query-mode-radio-dot"></view></view>
               <view class="schedule-query-mode-label">{{item.label}}</view>
             </view>
           </view>
@@ -1194,7 +1194,7 @@
                 wx:for="{{textSectionFontOptions}}"
                 wx:if="{{!item.remote || moreFontsExpanded || textSectionForm.fontId === item.value}}"
                 wx:key="value"
-                class="text-section-font-option pe-sheet-choice {{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
+                class="text-section-font-option pe-sheet-choice {{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value ? 'pe-sheet-choice-selected radio-option-selected' : ''}} {{item.available ? '' : 'disabled'}}"
                 data-value="{{item.value}}"
                 catchtap="handleTextSectionFontTap"
                 aria-role="radio"
@@ -1211,7 +1211,7 @@
                     class="text-section-font-hint current"
                   >当前设备以系统字体预览</view>
                 </view>
-                <view class="schedule-query-mode-radio"></view>
+                <view class="schedule-query-mode-radio" aria-hidden="true"><view wx:if="{{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value}}" class="schedule-query-mode-radio-dot"></view></view>
               </view>
             </view>
           </view>
@@ -1252,13 +1252,13 @@
               <view
                 wx:for="{{textSectionAlignmentOptions}}"
                 wx:key="value"
-                class="schedule-query-mode-option pe-sheet-choice {{textSectionForm.alignment === item.value ? 'pe-sheet-choice-selected' : ''}}"
+                class="schedule-query-mode-option pe-sheet-choice {{textSectionForm.alignment === item.value ? 'pe-sheet-choice-selected radio-option-selected' : ''}}"
                 data-value="{{item.value}}"
                 catchtap="handleTextSectionAlignmentTap"
                 aria-role="radio"
                 aria-checked="{{textSectionForm.alignment === item.value}}"
               >
-                <view class="schedule-query-mode-radio"></view>
+                <view class="schedule-query-mode-radio" aria-hidden="true"><view wx:if="{{textSectionForm.alignment === item.value}}" class="schedule-query-mode-radio-dot"></view></view>
                 <view class="schedule-query-mode-label">{{item.label}}</view>
               </view>
             </view>

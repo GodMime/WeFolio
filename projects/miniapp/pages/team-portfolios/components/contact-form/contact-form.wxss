@@ -13,7 +13,9 @@
 .editor-choice { width: 100%; min-height: 88rpx; display: flex; align-items: center; gap: 16rpx; margin: 0; padding: 0 20rpx; color: #212529; font-size: 28rpx; font-weight: 800; text-align: left; border: 1rpx solid #e9ecef; border-radius: 28rpx; background: #f5f6f7; box-sizing: border-box; }
 .editor-choice.active { border-color: #212529; background: #fff; }
 .editor-choice-radio, .editor-choice-check { width: 28rpx; height: 28rpx; flex: none; border: 3rpx solid #b6c4d2; border-radius: 50%; background: #fff; box-sizing: border-box; }
-.editor-choice.active .editor-choice-radio { border-color: #212529; background: #212529; box-shadow: inset 0 0 0 7rpx #fff; }
+.editor-choice-radio { display: flex; align-items: center; justify-content: center; }
+.editor-choice.active .editor-choice-radio { border-color: #212529; }
+.editor-choice-radio-dot { width: 10rpx; height: 10rpx; border-radius: 50%; background: #212529; }
 .editor-choice-check { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 19rpx; border-radius: 8rpx; }
 .editor-choice.active .editor-choice-check { border-color: #212529; background: #212529; }
 .editor-error { padding: 16rpx 18rpx; color: #b55656; font-size: 22rpx; border-radius: 28rpx; background: #fbefef; }

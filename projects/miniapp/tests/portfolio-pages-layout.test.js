@@ -96,8 +96,8 @@ test('personal and team text section editors share typography control styles', (
   for (const selector of [
     '.text-section-font-list',
     '.text-section-font-option',
-    '.text-section-font-option[aria-checked="true"] .schedule-query-mode-radio',
-    '.text-section-font-option[aria-checked="true"] .text-section-alignment-radio',
+    '.text-section-font-option.radio-option-selected .schedule-query-mode-radio',
+    '.text-section-font-option.radio-option-selected .text-section-alignment-radio',
     '.text-section-font-option.disabled[aria-checked="false"]',
     '.text-section-size-list',
     '.text-section-size-option'
@@ -407,7 +407,7 @@ test('maintainer portfolio pages expose expected controls', () => {
   assert.match(editWxml, /bindchange="handleDividerColorChange"/)
   assert.match(editWxml, /handleDividerHeightInput/)
   assert.match(editWxss, /\.schedule-query-mode-option\s*\{/)
-  assert.match(editWxss, /\.schedule-query-mode-option\[aria-checked="true"\] \.schedule-query-mode-radio\s*\{/)
+  assert.match(editWxss, /\.schedule-query-mode-option\.radio-option-selected \.schedule-query-mode-radio\s*\{/)
   assert.match(editWxss, /\.schedule-query-mode-radio\s*\{/)
   assert.match(editWxss, /\.text-section-sheet-textarea\s*\{/)
   assert.match(editWxss, /\.divider-color-option\s*\{/)

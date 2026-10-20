@@ -1790,6 +1790,9 @@
 }
 
 .schedule-query-mode-radio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 28rpx;
   height: 28rpx;
   flex: none;
@@ -1799,10 +1802,16 @@
   box-sizing: border-box;
 }
 
-.schedule-query-mode-option[aria-checked="true"] .schedule-query-mode-radio {
+.schedule-query-mode-option.radio-option-selected .schedule-query-mode-radio {
   border-color: var(--pe-color-text-primary, #212529);
+}
+
+.schedule-query-mode-radio-dot {
+  width: 10rpx;
+  height: 10rpx;
+  flex: none;
+  border-radius: 50%;
   background: var(--pe-color-text-primary, #212529);
-  box-shadow: inset 0 0 0 7rpx var(--pe-color-surface, #FFFFFF);
 }
 
 .schedule-query-mode-label {

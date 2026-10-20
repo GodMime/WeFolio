@@ -392,7 +392,7 @@
                 wx:for="{{textSectionFontOptions}}"
                 wx:if="{{!item.remote || moreFontsExpanded || textSectionForm.fontId === item.value}}"
                 wx:key="value"
-                class="text-section-font-option pe-sheet-choice {{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value ? 'pe-sheet-choice-selected' : ''}} {{item.available ? '' : 'disabled'}}"
+                class="text-section-font-option pe-sheet-choice {{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value ? 'pe-sheet-choice-selected radio-option-selected' : ''}} {{item.available ? '' : 'disabled'}}"
                 data-value="{{item.value}}"
                 catchtap="handleTextSectionFontTap"
                 aria-role="radio"
@@ -409,7 +409,9 @@
                     class="text-section-font-hint current"
                   >当前设备以系统字体预览</view>
                 </view>
-                <view class="text-section-alignment-radio"></view>
+                <view class="text-section-alignment-radio" aria-hidden="true">
+                  <view wx:if="{{(textSectionForm.fontId || textSectionForm.fontFamily) === item.value}}" class="text-section-alignment-radio-dot"></view>
+                </view>
               </view>
             </view>
           </view>
@@ -443,8 +445,10 @@
           <view class="form-row">
             <view class="field-heading"><view class="field-label">左右对齐方式</view></view>
             <view class="text-section-alignment-list">
-              <view wx:for="{{textSectionAlignmentOptions}}" wx:key="value" class="text-section-alignment-option pe-sheet-choice {{textSectionForm.alignment === item.value ? 'pe-sheet-choice-selected' : ''}}" data-value="{{item.value}}" catchtap="handleTextSectionAlignmentTap" aria-role="radio" aria-checked="{{textSectionForm.alignment === item.value}}">
-                <view class="text-section-alignment-radio"></view>
+              <view wx:for="{{textSectionAlignmentOptions}}" wx:key="value" class="text-section-alignment-option pe-sheet-choice {{textSectionForm.alignment === item.value ? 'pe-sheet-choice-selected radio-option-selected' : ''}}" data-value="{{item.value}}" catchtap="handleTextSectionAlignmentTap" aria-role="radio" aria-checked="{{textSectionForm.alignment === item.value}}">
+                <view class="text-section-alignment-radio" aria-hidden="true">
+                  <view wx:if="{{textSectionForm.alignment === item.value}}" class="text-section-alignment-radio-dot"></view>
+                </view>
                 <view class="text-section-alignment-label">{{item.label}}</view>
               </view>
             </view>
@@ -479,8 +483,10 @@
         <view class="form-row">
           <view class="field-heading"><view class="field-label">展示方式</view></view>
           <view class="contact-form-display-mode-list">
-            <view wx:for="{{contactFormDisplayModeOptions}}" wx:key="value" class="contact-form-display-mode-option pe-sheet-choice {{contactFormConfigForm.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}" data-value="{{item.value}}" catchtap="handleContactFormDisplayModeTap" aria-role="radio" aria-checked="{{contactFormConfigForm.displayMode === item.value}}">
-              <view class="contact-form-display-mode-radio"></view>
+            <view wx:for="{{contactFormDisplayModeOptions}}" wx:key="value" class="contact-form-display-mode-option pe-sheet-choice {{contactFormConfigForm.displayMode === item.value ? 'pe-sheet-choice-selected radio-option-selected' : ''}}" data-value="{{item.value}}" catchtap="handleContactFormDisplayModeTap" aria-role="radio" aria-checked="{{contactFormConfigForm.displayMode === item.value}}">
+              <view class="contact-form-display-mode-radio" aria-hidden="true">
+                <view wx:if="{{contactFormConfigForm.displayMode === item.value}}" class="contact-form-display-mode-radio-dot"></view>
+              </view>
               <view class="contact-form-display-mode-label">{{item.label}}</view>
             </view>
           </view>
@@ -497,7 +503,7 @@
     <view class="schedule-query-sheet-panel pe-sheet-panel pe-sheet-size-compact {{scheduleQuerySheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
       <view class="pe-sheet-grabber"></view>
       <view class="pe-sheet-heading"><view class="pe-sheet-title">编辑档期查询</view><view class="pe-sheet-meta">{{scheduleQueryForm.displayMode === 'INLINE_CALENDAR' ? '内联' : '弹层'}}</view></view>
-      <view class="schedule-query-sheet-form"><view class="form-row"><view class="field-heading"><view class="field-label">展示方式</view></view><view class="schedule-query-display-mode-list"><view wx:for="{{scheduleQueryDisplayModeOptions}}" wx:key="value" class="schedule-query-display-mode-option pe-sheet-choice {{scheduleQueryForm.displayMode === item.value ? 'pe-sheet-choice-selected' : ''}}" data-value="{{item.value}}" catchtap="handleScheduleQueryDisplayModeTap" aria-role="radio" aria-checked="{{scheduleQueryForm.displayMode === item.value}}"><view class="schedule-query-display-mode-radio"></view><view class="schedule-query-display-mode-label">{{item.label}}</view></view></view></view></view>
+      <view class="schedule-query-sheet-form"><view class="form-row"><view class="field-heading"><view class="field-label">展示方式</view></view><view class="schedule-query-display-mode-list"><view wx:for="{{scheduleQueryDisplayModeOptions}}" wx:key="value" class="schedule-query-display-mode-option pe-sheet-choice {{scheduleQueryForm.displayMode === item.value ? 'pe-sheet-choice-selected radio-option-selected' : ''}}" data-value="{{item.value}}" catchtap="handleScheduleQueryDisplayModeTap" aria-role="radio" aria-checked="{{scheduleQueryForm.displayMode === item.value}}"><view class="schedule-query-display-mode-radio" aria-hidden="true"><view wx:if="{{scheduleQueryForm.displayMode === item.value}}" class="schedule-query-display-mode-radio-dot"></view></view><view class="schedule-query-display-mode-label">{{item.label}}</view></view></view></view></view>
       <view class="schedule-query-sheet-actions pe-sheet-actions"><button class="pe-sheet-action-cancel" catchtap="handleCloseScheduleQuerySheet">取消</button><button class="pe-sheet-action-confirm" catchtap="handleConfirmScheduleQueryConfig">完成</button></view>
     </view>
   </view>

@@ -589,7 +589,7 @@ test('shared text typography editor uses the neutral portfolio editor tokens', (
 
   assert.doesNotMatch(wxss, /#2d5f9a|#edf5fb|#536b82/i)
   assert.match(ruleBody(rules, '.text-section-font-option'), /background:\s*var\(--pe-color-page,\s*#F5F6F7\)/i)
-  assert.match(ruleBody(rules, '.text-section-font-option[aria-checked="true"] .text-section-alignment-radio'), /background:\s*var\(--pe-color-text-primary,\s*#212529\)/i)
+  assert.match(ruleBody(rules, '.text-section-font-option.radio-option-selected .text-section-alignment-radio'), /border-color:\s*var\(--pe-color-text-primary,\s*#212529\)/i)
   assert.match(ruleBody(rules, '.text-section-font-sample'), /color:\s*var\(--pe-color-text-strong,\s*#495057\)/i)
   assert.match(ruleBody(rules, '.text-section-font-hint'), /color:\s*var\(--pe-color-text-muted,\s*#ADB5BD\)/i)
   assert.match(ruleBody(rules, '.text-section-font-hint.current'), /color:\s*var\(--pe-color-text-secondary,\s*#868E96\)/i)

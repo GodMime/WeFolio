@@ -32,16 +32,12 @@
   box-sizing: border-box;
 }
 
-.text-section-font-option[aria-checked="true"] .schedule-query-mode-radio {
+.text-section-font-option.radio-option-selected .schedule-query-mode-radio {
   border-color: var(--pe-color-text-primary, #212529);
-  background: var(--pe-color-text-primary, #212529);
-  box-shadow: inset 0 0 0 7rpx var(--pe-color-surface, #FFFFFF);
 }
 
-.text-section-font-option[aria-checked="true"] .text-section-alignment-radio {
+.text-section-font-option.radio-option-selected .text-section-alignment-radio {
   border-color: var(--pe-color-text-primary, #212529);
-  background: var(--pe-color-text-primary, #212529);
-  box-shadow: inset 0 0 0 7rpx var(--pe-color-surface, #FFFFFF);
 }
 
 .text-section-font-option.disabled[aria-checked="false"] {

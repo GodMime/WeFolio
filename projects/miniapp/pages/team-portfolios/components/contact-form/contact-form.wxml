@@ -20,7 +20,7 @@
       </view>
       <view class="editor-card">
         <view class="editor-label">表单展示方式</view>
-        <view class="editor-choice-list"><button class="editor-choice {{draftConfig.displayMode === 'MODAL_FORM' ? 'active' : ''}}" data-mode="MODAL_FORM" bindtap="selectDisplayMode"><view class="editor-choice-radio"></view><view>弹窗展示</view></button><button class="editor-choice {{draftConfig.displayMode === 'INLINE_FORM' ? 'active' : ''}}" data-mode="INLINE_FORM" bindtap="selectDisplayMode"><view class="editor-choice-radio"></view><view>页面内展示</view></button></view>
+        <view class="editor-choice-list"><button class="editor-choice {{draftConfig.displayMode === 'MODAL_FORM' ? 'active' : ''}}" data-mode="MODAL_FORM" bindtap="selectDisplayMode"><view class="editor-choice-radio" aria-hidden="true"><view wx:if="{{draftConfig.displayMode === 'MODAL_FORM'}}" class="editor-choice-radio-dot"></view></view><view>弹窗展示</view></button><button class="editor-choice {{draftConfig.displayMode === 'INLINE_FORM' ? 'active' : ''}}" data-mode="INLINE_FORM" bindtap="selectDisplayMode"><view class="editor-choice-radio" aria-hidden="true"><view wx:if="{{draftConfig.displayMode === 'INLINE_FORM'}}" class="editor-choice-radio-dot"></view></view><view>页面内展示</view></button></view>
       </view>
       <view class="editor-card">
         <view class="editor-label">展示字段</view>
