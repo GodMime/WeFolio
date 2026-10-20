@@ -846,7 +846,10 @@ test('standard team editor uses the personal editor core visual measurements', (
     '.component-option-scroll', '.component-option', '.component-option-name',
     '.component-option-desc', '.component-option-plus', '.component-option-added', '.bottom-actions',
     '.action-button', '.preview-action-stack', '.preview-action-title',
-    '.preview-action-note', '.primary-button', '.secondary-button', '.publish-button'
+    '.preview-action-note', '.primary-button', '.secondary-button', '.publish-button',
+    '.preview-version-trigger-arrow', '.preview-version-menu-layer', '.preview-version-menu',
+    '.preview-version-menu__arrow', '.preview-version-menu__option',
+    '.preview-version-menu__label', '.preview-version-menu__description'
   ]
   for (const selector of sharedSelectors) {
     assert.equal(readCssRule(teamCss, selector), readCssRule(personalCss, selector), selector)
@@ -855,6 +858,24 @@ test('standard team editor uses the personal editor core visual measurements', (
   assert.match(readCssRule(teamCss, '.component-drag-line'), /width:22rpx/)
   assert.match(readCssRule(teamCss, '.component-drag-line'), /height:4rpx/)
   assert.doesNotMatch(teamCss, /\binset\s*:/)
+})
+
+test('formal editor preview menus float above content and consume outside taps without a dimmed mask', () => {
+  for (const prefix of ['../portfolios/standard-edit/portfolio-standard-edit', 'standard-edit/team-portfolio-standard-edit']) {
+    const wxml = read(`${prefix}.wxml`)
+    const css = read(`${prefix}.wxss`)
+    assert.match(wxml, /id="preview-version-trigger"[^>]*bindtap="handlePreview(?:Tap)?"/)
+    assert.match(wxml, /\{\{publicationStatus === 'PUBLISHED' \? '预览' : '预览草稿'\}\}/)
+    assert.match(wxml, /wx:if="\{\{publicationStatus !== 'PUBLISHED'\}\}" class="preview-action-note">请保存后预览/)
+    assert.match(wxml, /<root-portal wx:if="\{\{previewVersionMenu\}\}">/)
+    assert.match(wxml, /class="preview-version-menu-layer" catchtap="handleClosePreviewVersionMenu" catchtouchmove="handleClosePreviewVersionMenu"/)
+    assert.match(wxml, /class="preview-version-menu__option"[^>]*catchtap="handlePreviewVersionSelect"/)
+    assert.match(wxml, /bindscroll="handleClosePreviewVersionMenu"/)
+    assert.match(wxml, /bindtouchmove="handleClosePreviewVersionMenu"/)
+    assert.match(readCssRule(css, '.preview-version-menu-layer'), /background:transparent/)
+    assert.match(readCssRule(css, '.preview-version-menu'), /height:104px/)
+    assert.match(readCssRule(css, '.preview-version-menu__option'), /height:47px/)
+  }
 })
 
 test('team component edit branches retain forms while page owns editor actions', () => {

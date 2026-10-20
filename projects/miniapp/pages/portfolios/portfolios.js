@@ -16,6 +16,7 @@ const {
   showTeamPortfolioUnavailableToast
 } = require('./utils/team-portfolio-list.js')
 const { confirmPortfolioPublishDisclaimer } = require('./utils/portfolio-publish-disclaimer')
+const { buildPreviewVersionOptions, calculatePreviewVersionMenuLayout } = require('./utils/preview-version-menu')
 
 const PORTFOLIOS_API_URL = '/api/mine/portfolios'
 const PORTFOLIO_DELETE_API_PREFIX = '/api/mine/portfolios/delete'
@@ -53,6 +54,12 @@ const SHARE_SCENE_TEAM_PORTFOLIO_LIST = 'TEAM_PORTFOLIO_LIST'
 const IDEMPOTENCY_PREFIX_TEAM_PUBLISH = 'team-publish'
 const SHARE_UNAVAILABLE_MESSAGE = '当前作品集暂不可分享'
 const PERSONAL_PORTFOLIO_REFERENCED_ERROR_CODE = 'PERSONAL_PORTFOLIO_REFERENCED'
+const PREVIEW_SCOPE_DRAFT = 'draft'
+const PREVIEW_SCOPE_PUBLISHED = 'published'
+const PREVIEW_DRAFT_DESCRIPTION = '最近保存的内容'
+const PREVIEW_PUBLISHED_DESCRIPTION = '访客当前看到的内容'
+const PERSONAL_PREVIEW_ANCHOR_PREFIX = '#personal-preview-'
+const TEAM_PREVIEW_ANCHOR_PREFIX = '#team-preview-'
 
 function makeIdempotencyKey(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
@@ -203,6 +210,7 @@ Page({
     shareSheetVisible: false,
     shareActionPending: false,
     shareTarget: null,
+    previewVersionMenu: null,
     tabs: [
       { key: 'schedule', label: '档期', icon: 'schedule' },
       { key: 'work', label: '作品', icon: 'work' },
@@ -232,10 +240,15 @@ Page({
   },
 
   onUnload() {
+    this.closePreviewVersionMenu()
     if (this.ownerSwitchTimer) {
       clearTimeout(this.ownerSwitchTimer)
       this.ownerSwitchTimer = null
     }
+  },
+
+  onHide() {
+    this.closePreviewVersionMenu()
   },
 
   onPullDownRefresh() {
@@ -246,6 +259,7 @@ Page({
   },
 
   handlePullDownRefresh() {
+    this.closePreviewVersionMenu()
     if (this.data.pullDownRefreshing) {
       if (wx.stopPullDownRefresh) {
         wx.stopPullDownRefresh()
@@ -264,6 +278,7 @@ Page({
   },
 
   handleTeamPullDownRefresh() {
+    this.closePreviewVersionMenu()
     if (this.data.teamPullDownRefreshing) {
       if (wx.stopPullDownRefresh) {
         wx.stopPullDownRefresh()
@@ -282,6 +297,7 @@ Page({
   },
 
   bootstrap() {
+    this.closePreviewVersionMenu()
     this.resetShareSheetState()
     if (!hasLocalToken()) {
       wx.navigateTo({ url: '/pages/login/login' })
@@ -311,6 +327,7 @@ Page({
   },
 
   async bootstrapTeam({ onlyIfNeeded = false } = {}) {
+    this.closePreviewVersionMenu()
     if (onlyIfNeeded && (this.data.teamLoaded || this.data.teamLoading)) {
       return
     }
@@ -352,6 +369,7 @@ Page({
   },
 
   handleOwnerTypeTap(event) {
+    this.closePreviewVersionMenu()
     const ownerType = event.currentTarget.dataset.type === OWNER_TYPE_TEAM ? OWNER_TYPE_TEAM : OWNER_TYPE_USER
     if (ownerType === this.data.ownerType || this.data.switching) {
       return
@@ -484,6 +502,11 @@ Page({
       this.setData({ revealedTeamPortfolioId: null })
       return
     }
+    if (item.publicationStatus === PUBLICATION_STATUS_PUBLISHED) {
+      if (!item.canShare) return
+      this.openPreviewVersionMenu(OWNER_TYPE_TEAM, item)
+      return
+    }
     wx.navigateTo({ url: `${TEAM_PREVIEW_URL}?portfolioId=${item.portfolioId}&scope=${scope}${advancedQuery(item)}` })
   },
 
@@ -513,6 +536,7 @@ Page({
   },
 
   handleTeamPortfolioTouchMove() {
+    this.closePreviewVersionMenu()
   },
 
   handleTeamPortfolioTouchEnd(event) {
@@ -641,6 +665,7 @@ Page({
   },
 
   handlePortfolioTouchMove() {
+    this.closePreviewVersionMenu()
   },
 
   handlePortfolioTouchEnd(event) {
@@ -823,14 +848,70 @@ Page({
 
   handlePublishedPreviewTap(event) {
     const portfolioId = normalizeId(event.currentTarget.dataset.id)
-    if (!portfolioId) {
+    const item = this.findPortfolioById(portfolioId)
+    if (!portfolioId || !item || item.publicationStatus !== PUBLICATION_STATUS_PUBLISHED) {
       return
     }
     if (this.data.revealedPortfolioId === portfolioId) {
       this.setData({ revealedPortfolioId: null })
       return
     }
-    wx.navigateTo({ url: `${PREVIEW_PAGE_URL}?portfolioId=${portfolioId}&scope=published${advancedQuery(this.findPortfolioById(portfolioId))}` })
+    this.openPreviewVersionMenu(OWNER_TYPE_USER, item)
+  },
+
+  /** 定位回调只对本次目标生效，收起或换目标后不得重新打开菜单。 */
+  openPreviewVersionMenu(ownerType, item) {
+    const portfolioId = normalizeId(item.portfolioId)
+    const currentTarget = this.previewVersionTarget
+    if (currentTarget && currentTarget.ownerType === ownerType && currentTarget.portfolioId === portfolioId) {
+      this.closePreviewVersionMenu()
+      return
+    }
+    this.closePreviewVersionMenu()
+    if (!portfolioId || !wx.createSelectorQuery) return
+    const token = this.previewVersionMeasureToken
+    const target = { ownerType, portfolioId, templateType: item.templateType || '' }
+    this.previewVersionTarget = target
+    const selector = `${ownerType === OWNER_TYPE_TEAM ? TEAM_PREVIEW_ANCHOR_PREFIX : PERSONAL_PREVIEW_ANCHOR_PREFIX}${portfolioId}`
+    try {
+      const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync()
+      wx.createSelectorQuery().in(this).select(selector).boundingClientRect((rect) => {
+        if (token !== this.previewVersionMeasureToken) return
+        const layout = calculatePreviewVersionMenuLayout(rect, windowInfo, { preferAbove: false })
+        if (!layout) {
+          this.closePreviewVersionMenu()
+          return
+        }
+        this.setData({
+          previewVersionMenu: {
+            ...target,
+            ...layout,
+            options: buildPreviewVersionOptions({
+              draftDescription: PREVIEW_DRAFT_DESCRIPTION,
+              publishedDescription: PREVIEW_PUBLISHED_DESCRIPTION
+            })
+          }
+        })
+      }).exec()
+    } catch (error) {
+      this.closePreviewVersionMenu()
+    }
+  },
+
+  closePreviewVersionMenu() {
+    this.previewVersionMeasureToken = (this.previewVersionMeasureToken || 0) + 1
+    this.previewVersionTarget = null
+    if (this.data.previewVersionMenu) this.setData({ previewVersionMenu: null })
+  },
+
+  handlePreviewVersionSelect(event) {
+    const menu = this.data.previewVersionMenu
+    const scope = event.currentTarget.dataset.scope
+    if (!menu || (scope !== PREVIEW_SCOPE_DRAFT && scope !== PREVIEW_SCOPE_PUBLISHED)) return
+    this.closePreviewVersionMenu()
+    const teamPreview = menu.ownerType === OWNER_TYPE_TEAM
+    const scopeQuery = teamPreview || scope === PREVIEW_SCOPE_PUBLISHED ? `&scope=${scope}` : ''
+    wx.navigateTo({ url: `${teamPreview ? TEAM_PREVIEW_URL : PREVIEW_PAGE_URL}?portfolioId=${menu.portfolioId}${scopeQuery}${advancedQuery(menu)}` })
   },
 
   handleDraftPreviewTap(event) {

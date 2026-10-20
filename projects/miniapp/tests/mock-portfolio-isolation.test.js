@@ -71,7 +71,7 @@ function createRuntime() {
   const storage = new Map(), calls = [], modules = new Map()
   let definition
   const forbidden = () => { throw new Error('mock 不允许访问后端或身份能力') }
-  const checkKey = key => assert.equal(key, STORAGE_KEY)
+  const checkKey = key => assert.ok([STORAGE_KEY, `${STORAGE_KEY}_9002`, `${STORAGE_KEY}_9902`].includes(key), key)
   const wx = {
     request: forbidden, uploadFile: forbidden, login: forbidden,
     getStorageSync(key) { checkKey(key); return storage.get(key) },
@@ -80,7 +80,12 @@ function createRuntime() {
     showToast(options) { calls.push(options.title) },
     navigateTo(options) { assert.match(options.url, /^\/pages\/mock\//) },
     createVideoContext() { return { pause() {} } },
-    getWindowInfo() { return { windowWidth: 375 } }
+    getWindowInfo() { return { windowWidth: 375, windowHeight: 812 } },
+    createSelectorQuery() {
+      let callback
+      return { in() { return this }, select() { return this }, boundingClientRect(value) { callback = value; return this },
+        exec() { callback({ left: 130, right: 230, top: 700, bottom: 746, width: 100, height: 46 }) } }
+    }
   }
   const context = vm.createContext({ wx, Page: value => { definition = value }, setTimeout, clearTimeout })
   function load(file) {
@@ -100,6 +105,36 @@ function createRuntime() {
     return { ...definition, data: copy(definition.data), setData(patch, callback) { Object.assign(this.data, patch); if (callback) callback() } }
   } }
 }
+
+test('已发布个人与团队双版本全流程仅使用各自mock数据，保存发布仍锁定', () => {
+  const runtime = createRuntime()
+  const edit = runtime.page('portfolio-standard-edit')
+  edit.onLoad({ portfolioId: 9002 })
+  edit.data.draft.config.share.title = '本地版本选择体验'
+  edit.handlePreview()
+  edit.handlePreviewVersionSelect(event({ scope: 'published' }))
+  assert.equal(runtime.storage.size, 0)
+  const published = runtime.page('portfolio-standard-preview')
+  published.onLoad({ portfolioId: 9002, scope: 'published' }); published.onShow()
+  assert.equal(published.data.portfolio.title, '婚礼纪实个人作品集')
+  published.onUnload(); edit.onShow()
+  assert.equal(edit.data.draft.config.share.title, '本地版本选择体验')
+  edit.handlePreview()
+  edit.handlePreviewVersionSelect(event({ scope: 'draft' }))
+  assert.deepEqual([...runtime.storage.keys()], [`${STORAGE_KEY}_9002`])
+  const draft = runtime.page('portfolio-standard-preview')
+  draft.onLoad({ portfolioId: 9002, scope: 'draft' }); draft.onShow()
+  assert.equal(draft.data.portfolio.title, '本地版本选择体验')
+  draft.onUnload(); edit.onShow()
+  const team = runtime.page('portfolio-standard-preview')
+  team.onLoad({ portfolioId: 9902, scope: 'published' }); team.onShow()
+  assert.equal(team.data.portfolio.title, '城市婚礼影像团队作品集')
+  team.onUnload()
+  edit.handleSaveDraft(); edit.handlePublish()
+  assert.deepEqual(runtime.calls.slice(-2), ['请去“我的”页面注册登录', '请去“我的”页面注册登录'])
+  assert.equal(runtime.storage.has(STORAGE_KEY), false)
+  edit.onUnload()
+})
 
 for (const type of TYPES) {
   test(`${type} 创建、编辑、确认、预览和返回均只使用 mock 草稿`, () => {

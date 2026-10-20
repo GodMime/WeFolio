@@ -402,6 +402,113 @@ test('unsaved editor blocks preview and member-source requests that need a portf
   } finally { page.cleanup() }
 })
 
+function teamPreviewMenuRuntime(callbacks, navigations) {
+  return {
+    getWindowInfo() { return { windowWidth: 375, windowHeight: 812 } },
+    createSelectorQuery() {
+      const query = {
+        in() { return query },
+        select(selector) { assert.equal(selector, '#preview-version-trigger'); return query },
+        boundingClientRect(callback) { callbacks.push(callback); return query },
+        exec() {}
+      }
+      return query
+    },
+    navigateTo(options) { navigations.push(options) }
+  }
+}
+
+const TEAM_PREVIEW_TRIGGER_RECT = { left: 145, right: 260, top: 720, bottom: 764, width: 115, height: 44 }
+
+test('team editor previews saved drafts directly and selects either published version without saving', () => {
+  const callbacks = [], navigations = [], requests = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async options => { requests.push(options); return {} }, teamPreviewMenuRuntime(callbacks, navigations))
+  const config = clone(page.data.config)
+  config.share.title = '未保存的团队标题'
+  page.setData({ portfolioId: 41, canMaintain: true, config })
+  try {
+    for (const publicationStatus of ['DRAFT_ONLY', 'OFFLINE']) {
+      page.setData({ publicationStatus, publishedRevision: 3 })
+      page.handlePreviewTap()
+      assert.equal(page.data.previewVersionMenu, null)
+      assert.equal(callbacks.length, 0)
+      assert.equal(navigations.pop().url, '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=41&scope=draft')
+    }
+    for (const advancedEditing of [false, true]) {
+      page.setData({ publicationStatus: 'PUBLISHED', advancedEditing })
+      for (const scope of ['draft', 'published']) {
+        page.handlePreviewTap()
+        assert.equal(navigations.length, 0)
+        callbacks.shift()(TEAM_PREVIEW_TRIGGER_RECT)
+        assert.equal(page.data.previewVersionMenu.placement, 'above')
+        assert.deepEqual(page.data.previewVersionMenu.options, [
+          { scope: 'draft', label: '草稿版', description: '仅包含已保存内容' },
+          { scope: 'published', label: '发布版', description: '访客当前看到的内容' }
+        ])
+        page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope } } })
+        page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope } } })
+        assert.equal(page.data.previewVersionMenu, null)
+        assert.equal(navigations.length, 1)
+        assert.equal(navigations.pop().url, `/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=41&scope=${scope}${advancedEditing ? '&templateType=ADVANCED' : ''}`)
+        assert.deepEqual(page.data.config, config)
+      }
+    }
+    assert.deepEqual(requests, [])
+  } finally { page.cleanup() }
+})
+
+test('team editor preserves preview disabled conditions before and after opening the version menu', () => {
+  const callbacks = [], navigations = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), teamPreviewMenuRuntime(callbacks, navigations))
+  const available = { portfolioId: 41, canMaintain: true, publicationStatus: 'PUBLISHED', saving: false, publishing: false }
+  try {
+    for (const blocked of [{ portfolioId: 0 }, { canMaintain: false }, { saving: true }, { publishing: true }]) {
+      page.setData(Object.assign({}, available, blocked))
+      page.handlePreviewTap()
+      assert.equal(callbacks.length, 0)
+      page.setData(available)
+      page.handlePreviewTap()
+      page.setData(blocked)
+      callbacks.shift()(TEAM_PREVIEW_TRIGGER_RECT)
+      assert.equal(page.data.previewVersionMenu, null)
+      page.setData(available)
+      page.handlePreviewTap()
+      callbacks.shift()(TEAM_PREVIEW_TRIGGER_RECT)
+      page.setData(blocked)
+      page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope: 'published' } } })
+      assert.equal(page.data.previewVersionMenu, null)
+    }
+    assert.deepEqual(navigations, [])
+  } finally { page.cleanup() }
+})
+
+test('team editor cancels stale preview measurements and dismisses menus on scroll, hide and unload', () => {
+  const callbacks = [], navigations = []
+  const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async () => ({}), teamPreviewMenuRuntime(callbacks, navigations))
+  page.setData({ portfolioId: 41, canMaintain: true, publicationStatus: 'PUBLISHED' })
+  try {
+    for (const close of ['handlePreviewTap', 'handleClosePreviewVersionMenu', 'onPageScroll', 'onHide', 'onUnload']) {
+      page.handlePreviewTap()
+      const staleCallback = callbacks.shift()
+      page[close]()
+      staleCallback(TEAM_PREVIEW_TRIGGER_RECT)
+      assert.equal(page.data.previewVersionMenu, null)
+      page.handlePreviewTap()
+      callbacks.shift()(TEAM_PREVIEW_TRIGGER_RECT)
+      assert.ok(page.data.previewVersionMenu)
+      page[close]()
+      assert.equal(page.data.previewVersionMenu, null)
+    }
+    page.handlePreviewTap()
+    callbacks.shift()(null)
+    assert.equal(page.data.previewVersionMenu, null)
+    page.handlePreviewTap()
+    callbacks.shift()(TEAM_PREVIEW_TRIGGER_RECT)
+    page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope: 'invalid' } } })
+    assert.deepEqual(navigations, [])
+  } finally { page.cleanup() }
+})
+
 test('new editor configures single work through team-scoped sources before creating the portfolio', async () => {
   const requests = []
   const page = loadPage('standard-edit/team-portfolio-standard-edit.js', async (options) => {

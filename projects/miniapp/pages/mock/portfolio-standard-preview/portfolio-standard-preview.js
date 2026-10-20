@@ -5,6 +5,7 @@ const {
   buildMockPortfolioRenderData,
   buildMockCalendarMonth,
   getMockPortfolioDraft,
+  getMockPortfolioPreview,
   getMockMenuComponents,
   switchMockPortfolioMenu,
   showMockLoginRequiredToast
@@ -146,6 +147,8 @@ Page({
     this.mockFontSession=createMockFontSession({wxApi:wx})
     registerMockTextFont(wx)
     this.demoTarget = options.demoTarget || ''
+    this.previewPortfolioId = options.portfolioId
+    this.previewScope = options.scope
     this.copyController = createMockCopyController({wxApi:wx,
       onContactState:field=>this.setData({copiedField:field}),
       onPrompt:prompt=>this.setData({hyperlinkPrompt:prompt}),
@@ -195,7 +198,7 @@ Page({
         this.mockFontConfig=target.config
         portfolio = buildMockPortfolioRenderData(target.config,this.mockFontSession && this.mockFontSession.context(target.config.fonts))
       } else {
-        const draft = getMockPortfolioDraft()
+        const draft = getMockPortfolioPreview(this.previewPortfolioId, this.previewScope)
         this.mockFontConfig=draft.config
         portfolio = buildMockPortfolioRenderData(draft.config,this.mockFontSession && this.mockFontSession.context(draft.config.fonts))
         if(draft.draftWarning) wx.showToast({title:draft.draftWarning,icon:'none'})

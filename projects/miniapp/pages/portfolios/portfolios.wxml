@@ -21,7 +21,7 @@
   </view>
 </template>
 
-<view class="page-shell portfolios-page">
+<view class="page-shell portfolios-page" bindtouchmove="closePreviewVersionMenu">
   <navigation-bar title="作品集" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <view class="portfolio-segment-shell {{switching ? 'switching' : ''}}">
@@ -59,6 +59,7 @@
               refresher-enabled="{{true}}"
               refresher-triggered="{{pullDownRefreshing}}"
               bindrefresherrefresh="handlePullDownRefresh"
+              bindscroll="closePreviewVersionMenu"
             >
             <view wx:if="{{loaded && errorMessage}}" class="refresh-error">
               <text class="refresh-error-text">{{errorMessage}}</text>
@@ -119,7 +120,7 @@
                   </view>
                   <view class="portfolio-side">
                     <view class="portfolio-action-row">
-                      <button wx:if="{{item.showPublishedPreview}}" class="portfolio-action-button preview" data-id="{{item.portfolioId}}" data-action="PREVIEW_PUBLISHED" catchtap="handlePublishedPreviewTap">预览</button>
+                      <button wx:if="{{item.showPublishedPreview}}" id="personal-preview-{{item.portfolioId}}" class="portfolio-action-button preview preview-version-trigger" data-id="{{item.portfolioId}}" data-action="PREVIEW_PUBLISHED" catchtap="handlePublishedPreviewTap" aria-label="选择预览版本"><text>预览</text><view class="preview-version-trigger__arrow" aria-hidden="true"></view></button>
                       <button wx:if="{{item.showDraftPreview}}" class="portfolio-action-button preview" data-id="{{item.portfolioId}}" data-action="PREVIEW_DRAFT" catchtap="handleDraftPreviewTap">预览</button>
                       <button wx:if="{{item.actionType === 'SHARE'}}" class="portfolio-action-button share" data-id="{{item.portfolioId}}" data-owner-type="USER" data-action="{{item.actionType}}" catchtap="handleShareTap" aria-label="分享作品集">分享</button>
                       <button wx:else class="portfolio-action-button {{item.actionType === 'PUBLISH' ? 'publish' : ''}} {{item.actionType === 'EDIT' ? 'edit' : ''}}" data-id="{{item.portfolioId}}" data-action="{{item.actionType}}" catchtap="handlePrimaryActionTap">{{item.actionText}}</button>
@@ -163,6 +164,7 @@
               refresher-enabled="{{true}}"
               refresher-triggered="{{teamPullDownRefreshing}}"
               bindrefresherrefresh="handleTeamPullDownRefresh"
+              bindscroll="closePreviewVersionMenu"
             >
             <view wx:if="{{teamLoaded && teamErrorMessage}}" class="refresh-error">
               <text class="refresh-error-text">{{teamErrorMessage}}</text>
@@ -229,7 +231,7 @@
                   <view class="portfolio-side">
                     <view class="portfolio-action-row">
                       <button wx:if="{{item.canPreviewDraft}}" class="portfolio-action-button preview" data-item="{{item}}" data-scope="draft" catchtap="handleTeamPreviewTap">预览</button>
-                      <button wx:elif="{{item.canPublishedPreview}}" class="portfolio-action-button preview" data-item="{{item}}" data-scope="published" catchtap="handleTeamPreviewTap">预览</button>
+                      <button wx:elif="{{item.canPublishedPreview}}" id="team-preview-{{item.portfolioId}}" class="portfolio-action-button preview preview-version-trigger" data-item="{{item}}" data-scope="published" catchtap="handleTeamPreviewTap" aria-label="选择预览版本"><text>预览</text><view class="preview-version-trigger__arrow" aria-hidden="true"></view></button>
                       <button wx:if="{{item.actionType === 'PUBLISH' && item.canMaintain}}" class="portfolio-action-button publish" data-item="{{item}}" catchtap="handleTeamPublishTap" loading="{{publishingTeamPortfolioId === item.portfolioId}}" disabled="{{publishingTeamPortfolioId === item.portfolioId}}">发布</button>
                       <button wx:elif="{{item.canShare}}" class="portfolio-action-button share" data-id="{{item.portfolioId}}" data-owner-type="TEAM" catchtap="handleShareTap">分享</button>
                     </view>
@@ -268,6 +270,18 @@
     bindtimeline="handleTimelineShare"
     bindqrcode="handleQrCodeShare"
   ></share-channel-sheet>
+
+  <root-portal wx:if="{{previewVersionMenu}}">
+    <view class="preview-version-menu-layer" catchtap="closePreviewVersionMenu" catchtouchmove="closePreviewVersionMenu">
+      <view class="preview-version-menu preview-version-menu--{{previewVersionMenu.placement}}" style="{{previewVersionMenu.menuStyle}}" catchtap="noop">
+        <view class="preview-version-menu__arrow" style="{{previewVersionMenu.arrowStyle}}"></view>
+        <view wx:for="{{previewVersionMenu.options}}" wx:key="scope" class="preview-version-menu__option" data-scope="{{item.scope}}" catchtap="handlePreviewVersionSelect" aria-role="button" aria-label="{{item.label}}，{{item.description}}">
+          <text class="preview-version-menu__label">{{item.label}}</text>
+          <text class="preview-version-menu__description">{{item.description}}</text>
+        </view>
+      </view>
+    </view>
+  </root-portal>
 
   <root-portal wx:if="{{teamSelectSheetVisible}}">
     <view class="team-select-sheet-mask" catchtap="handleCloseTeamSelectSheet" catchtouchmove="noop">

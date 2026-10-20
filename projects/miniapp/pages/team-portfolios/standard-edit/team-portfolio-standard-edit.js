@@ -1,5 +1,6 @@
 const { advancedEditorPageMethods, editorRequest, installAdvancedEditor, loadAdvancedMetadata, markAdvancedSaved, SAVE_INCOMPLETE_MESSAGE, confirmAdvancedPortfolioPublish } = require('../utils/advanced-editor-page')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
+const { buildPreviewVersionOptions, calculatePreviewVersionMenuLayout } = require('../utils/preview-version-menu')
 const { normalizeTextGrid, validateTextGrid } = require('../utils/portfolio-text-grid')
 const { normalizeContactInfo, validateContactInfo } = require('../utils/portfolio-contact-info')
 const { portfolioAudioPageMethods, AUDIO_STYLE_OPTIONS, normalizeAudioResource } = require('../utils/portfolio-audio-player')
@@ -109,6 +110,14 @@ function buildCarouselEditorLayoutState(scrollHeightRpx) {
 const QR_CONTACT_CROP_FAILED_MESSAGE = '二维码裁剪失败，请重试'
 const PORTFOLIO_LIST_ROUTE_SUFFIX = '/portfolios/portfolios'
 const TEAM_PORTFOLIOS_COMPAT_PAGE_URL = '/pages/team-portfolios/portfolios'
+const PREVIEW_VERSION_TRIGGER_SELECTOR = '#preview-version-trigger'
+const PREVIEW_PUBLICATION_STATUS = 'PUBLISHED'
+const PREVIEW_SCOPE_DRAFT = 'draft'
+const PREVIEW_SCOPE_PUBLISHED = 'published'
+const PREVIEW_VERSION_OPTIONS = buildPreviewVersionOptions({
+  draftDescription: '仅包含已保存内容',
+  publishedDescription: '访客当前看到的内容'
+})
 const TEXT_SECTION_MAX_LENGTH = 200
 const TEXT_SECTION_REQUIRED_MESSAGE = '请填写文字说明'
 const TEAM_PORTFOLIO_TITLE_REQUIRED_MESSAGE = '请填写团队作品集标题'
@@ -555,6 +564,7 @@ Page({
   teamVideoRequestSeq: 0,
   teamVideoMembersRequestSeq: 0,
   data: {
+    previewVersionMenu: null,
     newComponentSheetVisible: false, newComponentType: '', newComponentKey: '', newComponentConfig: {},
     backgroundAudioStyles: AUDIO_STYLE_OPTIONS, backgroundAudioResource: normalizeAudioResource(), backgroundAudioPlaying: false,
     backgroundAudioPickerVisible: false, backgroundAudioOptions: [], backgroundAudioLoading: false,
@@ -635,8 +645,10 @@ Page({
     } catch (error) { if (handleTeamMaintainerAuthError(error)) return; if (showTeamPortfolioUnavailableToast(error)) return; this.setData({ errorMessage: '团队作品集加载失败，请重试', canMaintain: false }) } finally { this.setData({ loading: false }) }
   },
   onShow() { this.showBackgroundAudio(); if (this.data.openingLibrary) this.setData({ openingLibrary: false }) },
-  onHide() { this.hideBackgroundAudio() },
+  onHide() { this.handleClosePreviewVersionMenu(); this.hideBackgroundAudio() },
+  onPageScroll() { this.handleClosePreviewVersionMenu() },
   onUnload() {
+    this.handleClosePreviewVersionMenu()
     if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.destroyBackgroundAudio()
     this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
@@ -2279,7 +2291,68 @@ Page({
     if (delta > 0) return wx.navigateBack({ delta })
     wx.redirectTo({ url: TEAM_PORTFOLIOS_COMPAT_PAGE_URL })
   },
-  handlePreviewTap() { if (!this.data.portfolioId) { if (this.data.advancedEditing) wx.showToast({ title: '请先保存草稿再预览', icon: 'none' }); return }; wx.navigateTo({ url: `/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=${this.data.portfolioId}&scope=draft${this.data.advancedEditing ? '&templateType=ADVANCED' : ''}` }) },
+  handlePreviewTap() {
+    if (this.data.previewVersionMenu || this.previewVersionMenuMeasuring) {
+      this.handleClosePreviewVersionMenu()
+      return
+    }
+    if (!this.data.portfolioId) {
+      if (this.data.advancedEditing) wx.showToast({ title: '请先保存草稿再预览', icon: 'none' })
+      return
+    }
+    if (!this.data.canMaintain || this.data.saving || this.data.publishing) return
+    if (this.data.publicationStatus === PREVIEW_PUBLICATION_STATUS) {
+      this.openPreviewVersionMenu()
+      return
+    }
+    this.navigateToPreview(PREVIEW_SCOPE_DRAFT, this.data)
+  },
+
+  /** 菜单只选择预览版本，正式编辑内容仍由原保存流程处理。 */
+  openPreviewVersionMenu() {
+    const target = { portfolioId: this.data.portfolioId, advancedEditing: !!this.data.advancedEditing }
+    const requestSeq = (this.previewVersionMenuRequestSeq || 0) + 1
+    this.previewVersionMenuRequestSeq = requestSeq
+    this.previewVersionMenuMeasuring = true
+    try {
+      const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : (wx.getSystemInfoSync ? wx.getSystemInfoSync() : {})
+      wx.createSelectorQuery().in(this).select(PREVIEW_VERSION_TRIGGER_SELECTOR).boundingClientRect((rect) => {
+        if (requestSeq !== this.previewVersionMenuRequestSeq) return
+        this.previewVersionMenuMeasuring = false
+        if (!this.data.canMaintain || this.data.saving || this.data.publishing
+          || this.data.portfolioId !== target.portfolioId
+          || !!this.data.advancedEditing !== target.advancedEditing
+          || this.data.publicationStatus !== PREVIEW_PUBLICATION_STATUS) return
+        const layout = calculatePreviewVersionMenuLayout(rect, windowInfo, { preferAbove: true })
+        if (layout) this.setData({ previewVersionMenu: Object.assign({}, target, layout, { options: PREVIEW_VERSION_OPTIONS }) })
+      }).exec()
+    } catch (error) {
+      if (requestSeq === this.previewVersionMenuRequestSeq) this.handleClosePreviewVersionMenu()
+    }
+  },
+
+  /** 立即作废待返回的测量结果，关闭后不会重新出现或重复导航。 */
+  handleClosePreviewVersionMenu() {
+    this.previewVersionMenuRequestSeq = (this.previewVersionMenuRequestSeq || 0) + 1
+    this.previewVersionMenuMeasuring = false
+    if (this.data.previewVersionMenu) this.setData({ previewVersionMenu: null })
+  },
+
+  handlePreviewVersionSelect(event) {
+    const menu = this.data.previewVersionMenu
+    const scope = event.currentTarget.dataset.scope
+    this.handleClosePreviewVersionMenu()
+    if (!menu || (scope !== PREVIEW_SCOPE_DRAFT && scope !== PREVIEW_SCOPE_PUBLISHED)
+      || !this.data.canMaintain || this.data.saving || this.data.publishing
+      || this.data.portfolioId !== menu.portfolioId
+      || !!this.data.advancedEditing !== menu.advancedEditing
+      || this.data.publicationStatus !== PREVIEW_PUBLICATION_STATUS) return
+    this.navigateToPreview(scope, menu)
+  },
+
+  navigateToPreview(scope, target) {
+    wx.navigateTo({ url: `/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=${target.portfolioId}&scope=${scope}${target.advancedEditing ? '&templateType=ADVANCED' : ''}` })
+  },
   finishPublishedSnapshot() {
     const editorChanged = this.pendingPublishSnapshot !== stableEditorConfigJson(this.data.config)
     this.pendingPublishSnapshot = null

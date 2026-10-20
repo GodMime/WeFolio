@@ -21,6 +21,13 @@ const { createMockComponentConfig, validateMockComponentConfig } = require('./mo
 const CALENDAR_DAY_COUNT = 42
 const MOCK_PORTFOLIO_DRAFT_STORAGE_KEY = 'wefolio_mock_portfolio_draft'
 const MOCK_PORTFOLIO_ID = 9001
+const MOCK_PUBLISHED_PORTFOLIO_ID = 9002
+const MOCK_TEAM_PORTFOLIO_ID = 9902
+const MOCK_PUBLISHED_STATUS = 'PUBLISHED'
+const MOCK_DRAFT_SCOPE = 'draft'
+const MOCK_PUBLISHED_SCOPE = 'published'
+const MOCK_PORTFOLIO_UNAVAILABLE_MESSAGE = '演示作品集暂不可用'
+const MOCK_PREVIEW_UNAVAILABLE_MESSAGE = '演示预览版本暂不可用'
 const MOCK_TAG = {
   id: 201,
   name: '风景作品',
@@ -502,7 +509,7 @@ const MOCK_PORTFOLIO_LIST = {
   ownerType: 'USER',
   ownerTitle: '个人作品集',
   summary: {
-    publishedText: '0 已发布',
+    publishedText: '1 已发布',
     draftText: '1 草稿'
   },
   portfolios: [
@@ -532,6 +539,31 @@ const MOCK_PORTFOLIO_LIST = {
         publish: 'toast-login-required',
         delete: 'toast-login-required'
       }
+    },
+    {
+      portfolioId: MOCK_PUBLISHED_PORTFOLIO_ID,
+      ownerType: 'USER',
+      templateType: 'STANDARD',
+      publicationStatus: MOCK_PUBLISHED_STATUS,
+      statusText: '已发布',
+      statusTone: 'published',
+      title: '婚礼纪实个人作品集',
+      titleScrollable: false,
+      coverUrl: `${MOCK_ASSET_ROOT}/demo-image-2.jpg`,
+      coverAlt: '婚礼纪实个人作品集',
+      updatedText: '最近更新 07-08',
+      draftRevision: 2,
+      publishedRevision: 1,
+      showDraftPreview: true,
+      showPublishedPreview: true,
+      actionType: 'SHARE',
+      actionText: '分享',
+      actions: {
+        cardTap: 'edit',
+        preview: 'preview',
+        share: 'toast-login-required',
+        delete: 'toast-login-required'
+      }
     }
   ]
 }
@@ -545,7 +577,7 @@ const MOCK_TEAM_PORTFOLIO_LIST = {
   },
   portfolios: [
     {
-      portfolioId: 9902,
+      portfolioId: MOCK_TEAM_PORTFOLIO_ID,
       ownerType: 'TEAM',
       templateType: 'STANDARD',
       publicationStatus: 'PUBLISHED',
@@ -1218,6 +1250,55 @@ function buildStandardPortfolio(config = MOCK_PORTFOLIO_CONFIG) {
 
 const MOCK_STANDARD_PORTFOLIO = buildStandardPortfolio()
 
+/** 复用现有展示结构，仅为版本选择提供固定的本地演示内容。 */
+function buildPublishedMockSample(metadata, scope) {
+  const sample = buildStandardPortfolio()
+  sample.portfolio = Object.assign({}, sample.portfolio, {
+    portfolioId: metadata.portfolioId,
+    ownerType: metadata.ownerType,
+    publicationStatus: MOCK_PUBLISHED_STATUS,
+    title: metadata.title,
+    coverUrl: metadata.coverUrl,
+    draftRevision: 2,
+    publishedRevision: 1
+  })
+  sample.config.share.title = metadata.title
+  sample.config.share.coverUrl = metadata.coverUrl
+  const profile = sample.config.components.find(component => component.componentType === COMPONENT_TYPES.PROFILE)
+  profile.config.profile.displayName = metadata.teamName || '映期婚礼纪实'
+  profile.config.profile.bio = scope === MOCK_PUBLISHED_SCOPE
+    ? '记录婚礼中的温暖瞬间，留下自然而真挚的影像。'
+    : '记录婚礼中的温暖瞬间，新增户外婚礼与自然光影的创作介绍。'
+  sample.renderData = buildMockPortfolioRenderData(sample.config)
+  return sample
+}
+
+// 快照仅在模块内部持有，读取时克隆，避免体验编辑污染发布内容。
+const MOCK_PUBLISHED_SAMPLES = [MOCK_PORTFOLIO_LIST.portfolios[1], MOCK_TEAM_PORTFOLIO_LIST.portfolios[0]]
+const MOCK_DRAFT_SAMPLES = {
+  [MOCK_PORTFOLIO_ID]: MOCK_STANDARD_PORTFOLIO
+}
+const MOCK_PUBLISHED_SNAPSHOTS = {}
+MOCK_PUBLISHED_SAMPLES.forEach(metadata => {
+  MOCK_DRAFT_SAMPLES[metadata.portfolioId] = buildPublishedMockSample(metadata, MOCK_DRAFT_SCOPE)
+  MOCK_PUBLISHED_SNAPSHOTS[metadata.portfolioId] = buildPublishedMockSample(metadata, MOCK_PUBLISHED_SCOPE)
+})
+
+/** 显式样本参数必须有效，不能误读另一份体验草稿。 */
+function getMockPortfolioSample(portfolioId = MOCK_PORTFOLIO_ID) {
+  const sampleId = Number(portfolioId)
+  const sample = MOCK_DRAFT_SAMPLES[sampleId]
+  if (!Number.isInteger(sampleId) || !sample) throw new Error(MOCK_PORTFOLIO_UNAVAILABLE_MESSAGE)
+  return sample
+}
+
+/** 保留原样本的缓存键，新样本使用各自的本地空间。 */
+function getMockPortfolioStorageKey(portfolioId) {
+  return portfolioId === MOCK_PORTFOLIO_ID
+    ? MOCK_PORTFOLIO_DRAFT_STORAGE_KEY
+    : `${MOCK_PORTFOLIO_DRAFT_STORAGE_KEY}_${portfolioId}`
+}
+
 function resolveMockComponentType(componentType) {
   const normalized = trimText(componentType)
   return MOCK_COMPONENT_OPTIONS.some((item) => item.componentType === normalized)
@@ -1424,41 +1505,60 @@ function switchMockPortfolioMenu(portfolio, menuKey) {
   return nextPortfolio
 }
 
-function getMockPortfolioDraft() {
+function getMockPortfolioDraft(portfolioId = MOCK_PORTFOLIO_ID) {
+  const sample = getMockPortfolioSample(portfolioId)
+  const sampleId = sample.portfolio.portfolioId
   const runtimeWx = getRuntimeWx()
   if (!runtimeWx || !runtimeWx.getStorageSync) {
-    return clone(MOCK_STANDARD_PORTFOLIO)
+    return clone(sample)
   }
   try {
-    const storedDraft = runtimeWx.getStorageSync(MOCK_PORTFOLIO_DRAFT_STORAGE_KEY)
+    const storedDraft = runtimeWx.getStorageSync(getMockPortfolioStorageKey(sampleId))
     if (storedDraft && storedDraft.config && Array.isArray(storedDraft.config.components)) {
-      return refreshMockDraftRenderData(storedDraft)
+      const draft = refreshMockDraftRenderData(storedDraft)
+      draft.portfolio = sampleId === MOCK_PORTFOLIO_ID
+        ? Object.assign({}, sample.portfolio, draft.portfolio || {})
+        : clone(sample.portfolio)
+      return draft
     }
     if (storedDraft) throw new Error('本地体验草稿无法读取，已展示默认示例')
   } catch (error) {
-    return Object.assign(clone(MOCK_STANDARD_PORTFOLIO),{draftWarning: (error && error.message && error.message.includes('版本不兼容') ? error.message : '本地体验草稿无法读取，已展示默认示例')})
+    return Object.assign(clone(sample),{draftWarning: (error && error.message && error.message.includes('版本不兼容') ? error.message : '本地体验草稿无法读取，已展示默认示例')})
   }
-  return clone(MOCK_STANDARD_PORTFOLIO)
+  return clone(sample)
 }
 
-function saveMockPortfolioDraft(draft) {
-  const nextDraft = Object.assign({}, clone(draft || MOCK_STANDARD_PORTFOLIO))
+/** 只供体验预览缓存内容，不代表真实保存或发布。 */
+function saveMockPortfolioDraft(draft, portfolioId = MOCK_PORTFOLIO_ID) {
+  const sample = getMockPortfolioSample(portfolioId)
+  const nextDraft = Object.assign({}, clone(draft || sample))
+  if (sample.portfolio.portfolioId !== MOCK_PORTFOLIO_ID) nextDraft.portfolio = clone(sample.portfolio)
   nextDraft.config = normalizeMockPortfolioConfig(nextDraft.config)
   nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
   delete nextDraft.draftWarning
   const runtimeWx = getRuntimeWx()
   if (runtimeWx && runtimeWx.setStorageSync) {
-    runtimeWx.setStorageSync(MOCK_PORTFOLIO_DRAFT_STORAGE_KEY, nextDraft)
+    runtimeWx.setStorageSync(getMockPortfolioStorageKey(sample.portfolio.portfolioId), nextDraft)
   }
   return nextDraft
 }
 
-function resetMockPortfolioDraft() {
+function resetMockPortfolioDraft(portfolioId = MOCK_PORTFOLIO_ID) {
+  const sample = getMockPortfolioSample(portfolioId)
   const runtimeWx = getRuntimeWx()
   if (runtimeWx && runtimeWx.removeStorageSync) {
-    runtimeWx.removeStorageSync(MOCK_PORTFOLIO_DRAFT_STORAGE_KEY)
+    runtimeWx.removeStorageSync(getMockPortfolioStorageKey(sample.portfolio.portfolioId))
   }
-  return clone(MOCK_STANDARD_PORTFOLIO)
+  return clone(sample)
+}
+
+/** 版本只在本地选择，发布版从不回退到草稿或其他作品集。 */
+function getMockPortfolioPreview(portfolioId = MOCK_PORTFOLIO_ID, scope = MOCK_DRAFT_SCOPE) {
+  const sample = getMockPortfolioSample(portfolioId)
+  if (scope === MOCK_DRAFT_SCOPE) return getMockPortfolioDraft(sample.portfolio.portfolioId)
+  const snapshot = MOCK_PUBLISHED_SNAPSHOTS[sample.portfolio.portfolioId]
+  if (scope !== MOCK_PUBLISHED_SCOPE || !snapshot) throw new Error(MOCK_PREVIEW_UNAVAILABLE_MESSAGE)
+  return clone(snapshot)
 }
 
 function updateComponentConfig(portfolioDraft, componentKey, updater, menuKey) {
@@ -1541,6 +1641,7 @@ module.exports = {
   buildMockPortfolioRenderData,
   buildStandardPortfolio,
   getMockPortfolioDraft,
+  getMockPortfolioPreview,
   saveMockPortfolioDraft,
   resetMockPortfolioDraft,
   addMockComponent,

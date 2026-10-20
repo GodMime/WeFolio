@@ -19,16 +19,153 @@ function runtime() {
   const storage=new Map(),calls=[],instances=[]
   const forbidden=()=>{throw new Error('不允许后端或身份调用')}
   const wxApi={request:forbidden,uploadFile:forbidden,login:forbidden,
-    getStorageSync(key){assert.equal(key,mock.MOCK_PORTFOLIO_DRAFT_STORAGE_KEY);return storage.get(key)},
-    setStorageSync(key,value){assert.equal(key,mock.MOCK_PORTFOLIO_DRAFT_STORAGE_KEY);storage.set(key,value)},
-    removeStorageSync(key){assert.equal(key,mock.MOCK_PORTFOLIO_DRAFT_STORAGE_KEY);storage.delete(key)},
+    getStorageSync(key){assert.match(key,/^wefolio_mock_portfolio_draft(?:_9002|_9902)?$/);return storage.get(key)},
+    setStorageSync(key,value){assert.match(key,/^wefolio_mock_portfolio_draft(?:_9002|_9902)?$/);storage.set(key,value)},
+    removeStorageSync(key){assert.match(key,/^wefolio_mock_portfolio_draft(?:_9002|_9902)?$/);storage.delete(key)},
     showToast(value){calls.push(['toast',value.title])},navigateTo(value){assert.match(value.url,/^\/pages\/mock\//);calls.push(['navigate',value.url])},
     previewImage(value){calls.push(['image',value.current])},createVideoContext(){return {pause(){calls.push(['videoPause'])}}},
-    setClipboardData(value){calls.push(['copy',value.data]);value.success()},getWindowInfo(){return {windowWidth:375}},
+    setClipboardData(value){calls.push(['copy',value.data]);value.success()},getWindowInfo(){return {windowWidth:375,windowHeight:812}},
+    createSelectorQuery(){let callback;return {in(){return this},select(){return this},boundingClientRect(value){callback=value;return this},exec(){callback({left:240,right:342,top:620,bottom:666,width:102,height:46})}}},
     createInnerAudioContext(){const callbacks={};const audio={play(){calls.push(['audioPlay']);callbacks.Play?.()},pause(){calls.push(['audioPause']);callbacks.Pause?.()},stop(){},destroy(){calls.push(['audioDestroy'])}};for(const event of ['Play','Pause','Ended','Error','Stop'])audio['on'+event]=cb=>{callbacks[event]=cb};instances.push(audio);return audio}
   }
   return {wxApi,storage,calls,instances}
 }
+
+test('mock列表草稿直达，个人与团队发布项先选版本且只导航一次', () => {
+  const rt = runtime(); global.wx = rt.wxApi
+  try {
+    const page = loadPage('portfolios')
+    page.handleActionTap(event({action:'preview',id:9001}))
+    assert.deepEqual(rt.calls.at(-1), ['navigate','/pages/mock/portfolio-standard-preview/portfolio-standard-preview?portfolioId=9001&scope=draft'])
+    page.onShow()
+    page.handleActionTap(event({action:'preview',id:9002}))
+    assert.equal(page.data.previewVersionMenu.options[0].description, '本地体验草稿')
+    assert.equal(rt.calls.length, 1)
+    page.handlePreviewVersionSelect(event({scope:'published'}))
+    page.handlePreviewVersionSelect(event({scope:'published'}))
+    assert.equal(rt.calls.length, 2)
+    assert.match(rt.calls.at(-1)[1], /portfolioId=9002&scope=published$/)
+    page.onShow()
+    page.handleOwnerTypeTap(event({type:'TEAM'}))
+    page.handleTeamActionTap(event({action:'preview',id:9902}))
+    page.handlePreviewVersionSelect(event({scope:'draft'}))
+    assert.match(rt.calls.at(-1)[1], /portfolioId=9902&scope=draft$/)
+    assert.equal(rt.storage.size, 0)
+    page.onShow()
+    page.handleTeamPortfolioTap()
+    page.handleTeamActionTap(event({action:'share',id:9902}))
+    assert.deepEqual(rt.calls.slice(-2).map(call=>call[1]), Array(2).fill(mock.MOCK_LOGIN_REQUIRED_MESSAGE))
+  } finally { delete global.wx }
+})
+
+test('mock已发布编辑的菜单和发布预览不写草稿，返回保留当前编辑', () => {
+  const rt = runtime(); global.wx = rt.wxApi
+  try {
+    const edit = loadPage('portfolio-standard-edit'); edit.onLoad({portfolioId:'9002'})
+    edit.data.draft.config.share.title = '尚未缓存的编辑'
+    const before = JSON.stringify(edit.data.draft)
+    edit.handlePreview()
+    assert.equal(edit.data.previewVersionMenu.options[0].description, '当前编辑的体验内容')
+    edit.handleClosePreviewVersionMenu()
+    assert.equal(rt.storage.size, 0)
+    edit.handlePreview()
+    edit.handlePreviewVersionSelect(event({scope:'published'}))
+    assert.equal(rt.storage.size, 0)
+    const preview = loadPage('portfolio-standard-preview'); preview.onLoad({portfolioId:'9002',scope:'published'}); preview.onShow()
+    assert.equal(preview.data.errorMessage, '')
+    assert.equal(preview.data.portfolio.title, '婚礼纪实个人作品集')
+    preview.onHide(); preview.onUnload(); edit.onShow()
+    assert.equal(JSON.stringify(edit.data.draft), before)
+    edit.handlePreview()
+    edit.handlePreviewVersionSelect(event({scope:'draft'}))
+    assert.equal(rt.storage.size, 1)
+    assert.equal(mock.getMockPortfolioDraft(9002).config.share.title, '尚未缓存的编辑')
+    assert.notEqual(mock.getMockPortfolioPreview(9002,'published').config.share.title, '尚未缓存的编辑')
+    edit.onShow(); edit.onUnload()
+  } finally { delete global.wx }
+})
+
+test('mock预览按样本和版本读取，未知样本或版本明确失败', () => {
+  const rt = runtime(); global.wx = rt.wxApi
+  try {
+    for (const options of [{portfolioId:'9902',scope:'published'},{portfolioId:'9902',scope:'draft'}]) {
+      const preview = loadPage('portfolio-standard-preview'); preview.onLoad(options); preview.onShow()
+      assert.equal(preview.data.errorMessage, '')
+      assert.equal(preview.data.portfolio.title, '城市婚礼影像团队作品集')
+      preview.onUnload()
+    }
+    for (const options of [{portfolioId:'12345'},{portfolioId:'9001',scope:'published'},{portfolioId:'9002',scope:'bad'}]) {
+      const preview = loadPage('portfolio-standard-preview'); preview.onLoad(options); preview.onShow()
+      assert.match(preview.data.errorMessage, /暂不可用/)
+      preview.onUnload()
+    }
+    assert.equal(rt.storage.size, 0)
+  } finally { delete global.wx }
+})
+
+test('mock草稿导航失败后继续编辑再预览发布版，返回不会回读失败前缓存', () => {
+  const rt = runtime(); global.wx = rt.wxApi
+  try {
+    const edit = loadPage('portfolio-standard-edit'); edit.onLoad({portfolioId:9002})
+    rt.wxApi.navigateTo = options => options.fail()
+    edit.handlePreview()
+    edit.handlePreviewVersionSelect(event({scope:'draft'}))
+    assert.equal(edit.data.previewReturnPending, false)
+    assert.equal(edit.previewNavigating, false)
+    edit.data.draft.config.share.title = '失败后继续编辑'
+    rt.wxApi.navigateTo = options => rt.calls.push(['navigate', options.url])
+    edit.handlePreview()
+    edit.handlePreviewVersionSelect(event({scope:'published'}))
+    edit.onHide(); edit.onShow()
+    assert.equal(edit.data.draft.config.share.title, '失败后继续编辑')
+    assert.notEqual(mock.getMockPortfolioDraft(9002).config.share.title, '失败后继续编辑')
+    edit.onUnload()
+  } finally { delete global.wx }
+})
+
+test('mock草稿预览等待setData回调期间重复点击只导航一次', () => {
+  const rt = runtime(); global.wx = rt.wxApi
+  try {
+    const edit = loadPage('portfolio-standard-edit'); edit.onLoad()
+    const callbacks = []
+    edit.setData = function (patch, callback) {
+      Object.assign(this.data, patch)
+      if (callback) callbacks.push(callback)
+    }
+    edit.handlePreview(); edit.handlePreview()
+    assert.equal(callbacks.length, 1)
+    callbacks.pop()()
+    assert.equal(rt.calls.filter(call => call[0] === 'navigate').length, 1)
+    edit.onUnload()
+  } finally { delete global.wx }
+})
+
+test('mock菜单关闭、切面板、离页和滚动后旧定位回调不会重新打开', () => {
+  const rt = runtime(); global.wx = rt.wxApi
+  const callbacks = []
+  rt.wxApi.createSelectorQuery = () => ({in(){return this},select(){return this},boundingClientRect(callback){callbacks.push(callback);return this},exec(){}})
+  try {
+    for (const close of ['handleClosePreviewVersionMenu','onHide','onUnload','onPullDownRefresh']) {
+      const page = loadPage('portfolios')
+      page.handleActionTap(event({action:'preview',id:9002}))
+      page[close]()
+      callbacks.pop()({left:220,right:320,top:180,bottom:225,width:100,height:45})
+      assert.equal(page.data.previewVersionMenu, null)
+    }
+    const page = loadPage('portfolios')
+    page.handleActionTap(event({action:'preview',id:9002}))
+    page.handleOwnerTypeTap(event({type:'TEAM'}))
+    callbacks.pop()({left:220,right:320,top:180,bottom:225,width:100,height:45})
+    assert.equal(page.data.previewVersionMenu, null)
+    const edit = loadPage('portfolio-standard-edit'); edit.onLoad({portfolioId:9002})
+    edit.handlePreview(); edit.handleClosePreviewVersionMenu()
+    callbacks.pop()({left:120,right:220,top:700,bottom:745,width:100,height:45})
+    assert.equal(edit.data.previewVersionMenu, null)
+    assert.equal(rt.storage.size, 0)
+    assert.equal(rt.calls.length, 0)
+    edit.onUnload()
+  } finally { delete global.wx }
+})
 
 test('背景音频选择器按开关和选择动作收起，关闭保留引用，移除清空引用',()=>{
   const rt=runtime();global.wx=rt.wxApi

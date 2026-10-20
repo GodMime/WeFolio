@@ -487,7 +487,14 @@ test('mock portfolio list exposes preview while locking backend actions', () => 
   const mock = loadMockExperience()
   const item = mock.MOCK_PORTFOLIO_LIST.portfolios[0]
 
-  assert.equal(mock.MOCK_PORTFOLIO_LIST.portfolios.length, 1)
+  assert.equal(mock.MOCK_PORTFOLIO_LIST.portfolios.length, 2)
+  assert.equal(item.portfolioId, 9001)
+  assert.equal(item.publicationStatus, 'DRAFT')
+  const published = mock.MOCK_PORTFOLIO_LIST.portfolios[1]
+  assert.equal(published.portfolioId, 9002)
+  assert.equal(published.publicationStatus, 'PUBLISHED')
+  assert.equal(published.actions.share, 'toast-login-required')
+  assert.equal(mock.MOCK_PORTFOLIO_LIST.summary.publishedText, '1 已发布')
   assert.equal(item.ownerType, 'USER')
   assert.equal(item.templateType, 'STANDARD')
   assert.equal(item.actions.cardTap, 'edit')
@@ -545,7 +552,7 @@ test('mock portfolio edit page mirrors production component orchestration intera
   assert.match(wxml, /bindblur="handleCustomBackgroundColorBlur"/)
   assert.match(wxml, /handleBottomNavCountTap/)
   assert.match(wxml, /handleEditorMenuTitleInput/)
-  assert.match(wxml, /<scroll-view class="edit-scroll" scroll-y type="list" scroll-top="\{\{editScrollTop\}\}">/)
+  assert.match(wxml, /<scroll-view class="edit-scroll" scroll-y type="list" scroll-top="\{\{editScrollTop\}\}"[^>]*bindscroll="handleClosePreviewVersionMenu"/)
   assert.match(wxml, /class="component-swipe-row[\s\S]*data-index="\{\{index\}\}"[\s\S]*data-key="\{\{item\.componentKey\}\}"[\s\S]*data-type="\{\{item\.componentType\}\}"/)
   assert.match(wxml, /bindtouchstart="handleComponentTouchStart"/)
   assert.match(wxml, /bindlongpress="handleComponentDragStart"/)

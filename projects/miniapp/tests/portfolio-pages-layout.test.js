@@ -1388,3 +1388,18 @@ test('standard personal portfolio picker shows disabled profile as an auto-width
   assert.match(addedRule, /border-radius:\s*999rpx/)
   assert.match(addedRule, /white-space:\s*nowrap/)
 })
+
+
+test('portfolio list version menus stay outside scrolling cards and close without click-through', () => {
+  const wxml = read('pages/portfolios/portfolios.wxml')
+  const wxss = read('pages/portfolios/portfolios.wxss')
+  assert.match(wxml, /<root-portal wx:if="\{\{previewVersionMenu\}\}">[\s\S]*?class="preview-version-menu-layer" catchtap="closePreviewVersionMenu" catchtouchmove="closePreviewVersionMenu"/)
+  assert.match(wxml, /class="preview-version-menu preview-version-menu--\{\{previewVersionMenu\.placement\}\}"[^>]*catchtap="noop"/)
+  assert.match(wxml, /id="personal-preview-\{\{item\.portfolioId\}\}"/)
+  assert.match(wxml, /id="team-preview-\{\{item\.portfolioId\}\}"/)
+  assert.equal((wxml.match(/bindscroll="closePreviewVersionMenu"/g) || []).length, 2)
+  assert.match(wxml, /class="preview-version-menu__option"[^>]*catchtap="handlePreviewVersionSelect"/)
+  assert.match(wxss, /\.preview-version-menu-layer\s*\{[^}]*background:\s*transparent;/)
+  assert.match(wxss, /\.preview-version-menu__option\s*\{[^}]*height:\s*47px;[^}]*display:\s*flex;/)
+  assert.ok(wxml.indexOf('<root-portal wx:if="{{previewVersionMenu}}">') > wxml.lastIndexOf('</scroll-view>', wxml.indexOf('<share-channel-sheet')))
+})

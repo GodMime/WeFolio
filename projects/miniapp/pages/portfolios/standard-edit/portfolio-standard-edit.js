@@ -1,5 +1,6 @@
 const { advancedEditorPageMethods, editorRequest, installAdvancedEditor, loadAdvancedMetadata, markAdvancedSaved, SAVE_INCOMPLETE_MESSAGE, confirmAdvancedPortfolioPublish } = require('../utils/advanced-editor-page')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
+const { buildPreviewVersionOptions, calculatePreviewVersionMenuLayout } = require('../utils/preview-version-menu')
 const { normalizeTextGrid, validateTextGrid } = require('../utils/portfolio-text-grid')
 const { normalizeContactInfo, validateContactInfo } = require('../utils/portfolio-contact-info')
 const { portfolioAudioPageMethods, AUDIO_STYLE_OPTIONS, normalizeAudioResource } = require('../utils/portfolio-audio-player')
@@ -144,6 +145,14 @@ const VIDEO_CAROUSEL_WORKS_API_URL = '/api/mine/portfolios/components/video-caro
 const PASSED_WORK_AUDIT_STATUS = 'PASSED'
 const PORTFOLIOS_PAGE_ROUTE = 'pages/portfolios/portfolios'
 const PORTFOLIOS_PAGE_URL = `/${PORTFOLIOS_PAGE_ROUTE}`
+const PREVIEW_VERSION_TRIGGER_SELECTOR = '#preview-version-trigger'
+const PREVIEW_PUBLICATION_STATUS = 'PUBLISHED'
+const PREVIEW_SCOPE_DRAFT = 'draft'
+const PREVIEW_SCOPE_PUBLISHED = 'published'
+const PREVIEW_VERSION_OPTIONS = buildPreviewVersionOptions({
+  draftDescription: '仅包含已保存内容',
+  publishedDescription: '访客当前看到的内容'
+})
 const SWIPE_REVEAL_THRESHOLD = -32
 const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
@@ -1220,6 +1229,7 @@ Page({
   singleWorkSummaryRequestSeq: 0,
 
   data: {
+    previewVersionMenu: null,
     newComponentSheetVisible: false, newComponentType: '', newComponentKey: '', newComponentConfig: {},
     backgroundAudioStyles: AUDIO_STYLE_OPTIONS, backgroundAudioResource: normalizeAudioResource(), backgroundAudioPlaying: false,
     backgroundAudioPickerVisible: false,
@@ -2515,8 +2525,10 @@ Page({
   },
 
   onShow() { this.showBackgroundAudio() },
-  onHide() { this.hideBackgroundAudio() },
+  onHide() { this.handleClosePreviewVersionMenu(); this.hideBackgroundAudio() },
+  onPageScroll() { this.handleClosePreviewVersionMenu() },
   onUnload() {
+    this.handleClosePreviewVersionMenu()
     if (this.remoteFontPage) this.remoteFontPage.dispose()
     this.destroyBackgroundAudio()
     this.backgroundAudioRequestSeq = (this.backgroundAudioRequestSeq || 0) + 1
@@ -4551,10 +4563,62 @@ Page({
   },
 
   handlePreview() {
+    if (this.data.previewVersionMenu || this.previewVersionMenuMeasuring) {
+      this.handleClosePreviewVersionMenu()
+      return
+    }
     if (!this.data.portfolioId) {
       if (this.data.advancedEditing) wx.showToast({ title: '请先保存草稿再预览', icon: 'none' })
       return
     }
-    wx.navigateTo({ url: `/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=${this.data.portfolioId}${this.data.advancedEditing ? '&templateType=ADVANCED' : ''}` })
+    if (this.data.publicationStatus === PREVIEW_PUBLICATION_STATUS) {
+      this.openPreviewVersionMenu()
+      return
+    }
+    this.navigateToPreview(PREVIEW_SCOPE_DRAFT, this.data)
+  },
+
+  /** 只测量预览入口，不保存编辑内容，也不提前读取任一版本。 */
+  openPreviewVersionMenu() {
+    const target = { portfolioId: this.data.portfolioId, advancedEditing: !!this.data.advancedEditing }
+    const requestSeq = (this.previewVersionMenuRequestSeq || 0) + 1
+    this.previewVersionMenuRequestSeq = requestSeq
+    this.previewVersionMenuMeasuring = true
+    try {
+      const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : (wx.getSystemInfoSync ? wx.getSystemInfoSync() : {})
+      wx.createSelectorQuery().in(this).select(PREVIEW_VERSION_TRIGGER_SELECTOR).boundingClientRect((rect) => {
+        if (requestSeq !== this.previewVersionMenuRequestSeq) return
+        this.previewVersionMenuMeasuring = false
+        if (this.data.portfolioId !== target.portfolioId
+          || !!this.data.advancedEditing !== target.advancedEditing
+          || this.data.publicationStatus !== PREVIEW_PUBLICATION_STATUS) return
+        const layout = calculatePreviewVersionMenuLayout(rect, windowInfo, { preferAbove: true })
+        if (layout) this.setData({ previewVersionMenu: Object.assign({}, target, layout, { options: PREVIEW_VERSION_OPTIONS }) })
+      }).exec()
+    } catch (error) {
+      if (requestSeq === this.previewVersionMenuRequestSeq) this.handleClosePreviewVersionMenu()
+    }
+  },
+
+  /** 关闭时同步作废待返回的测量结果，防止离页后重新展开。 */
+  handleClosePreviewVersionMenu() {
+    this.previewVersionMenuRequestSeq = (this.previewVersionMenuRequestSeq || 0) + 1
+    this.previewVersionMenuMeasuring = false
+    if (this.data.previewVersionMenu) this.setData({ previewVersionMenu: null })
+  },
+
+  handlePreviewVersionSelect(event) {
+    const menu = this.data.previewVersionMenu
+    const scope = event.currentTarget.dataset.scope
+    this.handleClosePreviewVersionMenu()
+    if (!menu || (scope !== PREVIEW_SCOPE_DRAFT && scope !== PREVIEW_SCOPE_PUBLISHED)
+      || this.data.portfolioId !== menu.portfolioId
+      || !!this.data.advancedEditing !== menu.advancedEditing
+      || this.data.publicationStatus !== PREVIEW_PUBLICATION_STATUS) return
+    this.navigateToPreview(scope, menu)
+  },
+
+  navigateToPreview(scope, target) {
+    wx.navigateTo({ url: `/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=${target.portfolioId}${scope === PREVIEW_SCOPE_PUBLISHED ? '&scope=published' : ''}${target.advancedEditing ? '&templateType=ADVANCED' : ''}` })
   }
 })

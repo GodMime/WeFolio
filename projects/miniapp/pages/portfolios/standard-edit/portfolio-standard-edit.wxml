@@ -1,6 +1,6 @@
 <wxs module="componentRows" src="./component-rows.wxs"></wxs>
 
-<view class="page-shell portfolio-edit-page">
+<view class="page-shell portfolio-edit-page" bindtouchmove="handleClosePreviewVersionMenu">
   <navigation-bar title="{{advancedEditing ? '高级个人作品集' : '标准个人作品集'}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <scroll-view
@@ -9,6 +9,7 @@
     type="list"
     scroll-top="{{editScrollTop}}"
     scroll-into-view="{{validationComponentAnchor}}"
+    bindscroll="handleClosePreviewVersionMenu"
   >
     <view class="edit-content pe-page-content">
       <view wx:if="{{advancedEditing}}" class="panel advanced-tools pe-page-card">
@@ -1358,13 +1359,25 @@
   <view class="bottom-actions pe-page-actions">
     <button class="action-button primary-button pe-page-action-primary" bindtap="handleSaveDraft">保存草稿</button>
     <view class="preview-action-stack">
-      <button class="action-button secondary-button preview-draft-button pe-page-action-secondary" bindtap="handlePreview">
-        <view class="preview-action-title">预览草稿</view>
-        <view class="preview-action-note">请保存后预览</view>
+      <button id="preview-version-trigger" class="action-button secondary-button preview-draft-button pe-page-action-secondary" bindtap="handlePreview">
+        <view class="preview-action-title">{{publicationStatus === 'PUBLISHED' ? '预览' : '预览草稿'}}<view wx:if="{{publicationStatus === 'PUBLISHED'}}" class="preview-version-trigger-arrow" aria-hidden="true"></view></view>
+        <view wx:if="{{publicationStatus !== 'PUBLISHED'}}" class="preview-action-note">请保存后预览</view>
       </button>
     </view>
     <button wx:if="{{showPublishAction}}" class="action-button publish-button pe-page-action-primary" bindtap="handlePublish">发布</button>
   </view>
 </view>
+
+<root-portal wx:if="{{previewVersionMenu}}">
+  <view class="preview-version-menu-layer" catchtap="handleClosePreviewVersionMenu" catchtouchmove="handleClosePreviewVersionMenu">
+    <view class="preview-version-menu preview-version-menu--{{previewVersionMenu.placement}}" style="{{previewVersionMenu.menuStyle}}">
+      <view class="preview-version-menu__arrow" style="{{previewVersionMenu.arrowStyle}}"></view>
+      <view wx:for="{{previewVersionMenu.options}}" wx:key="scope" class="preview-version-menu__option" data-scope="{{item.scope}}" catchtap="handlePreviewVersionSelect" aria-role="button" aria-label="{{item.label}}，{{item.description}}">
+        <text class="preview-version-menu__label">{{item.label}}</text>
+        <text class="preview-version-menu__description">{{item.description}}</text>
+      </view>
+    </view>
+  </view>
+</root-portal>
 
 <view wx:if="{{hasRemoteFonts}}" class="font-controls"><button bindtap="handlePrepareFonts" disabled="{{fontPreparing}}">刷新字体</button><button bindtap="handleRepairFontVersions">修复字体版本</button><text wx:if="{{fontMessage}}">{{fontMessage}}</text></view>

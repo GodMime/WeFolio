@@ -4434,6 +4434,103 @@ test('preview action does not navigate before portfolio is created', () => {
   assert.deepEqual(navigations, [])
 })
 
+function previewMenuRuntime(callbacks, navigations) {
+  return {
+    getWindowInfo() { return { windowWidth: 375, windowHeight: 812 } },
+    createSelectorQuery() {
+      const query = {
+        in() { return query },
+        select(selector) { assert.equal(selector, '#preview-version-trigger'); return query },
+        boundingClientRect(callback) { callbacks.push(callback); return query },
+        exec() {}
+      }
+      return query
+    },
+    navigateTo(options) { navigations.push(options) }
+  }
+}
+
+const PREVIEW_TRIGGER_RECT = { left: 145, right: 260, top: 720, bottom: 764, width: 115, height: 44 }
+
+test('personal editor only asks published portfolios to choose a preview version and never saves current edits', () => {
+  const callbacks = [], navigations = [], requests = []
+  const page = loadPortfolioEditorPage(options => { requests.push(options); return Promise.resolve({}) }, previewMenuRuntime(callbacks, navigations))
+  const config = clone(page.data.config)
+  config.share.title = '尚未保存的标题'
+  page.setData({ portfolioId: 88, config })
+
+  for (const publicationStatus of ['DRAFT_ONLY', 'OFFLINE']) {
+    page.setData({ publicationStatus, publishedRevision: 2 })
+    page.handlePreview()
+    assert.equal(page.data.previewVersionMenu, null)
+    assert.equal(callbacks.length, 0)
+    assert.equal(navigations.pop().url, '/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=88')
+  }
+
+  for (const advancedEditing of [false, true]) {
+    page.setData({ publicationStatus: 'PUBLISHED', advancedEditing })
+    for (const scope of ['draft', 'published']) {
+      page.handlePreview()
+      assert.equal(navigations.length, 0)
+      callbacks.shift()(PREVIEW_TRIGGER_RECT)
+      assert.equal(page.data.previewVersionMenu.placement, 'above')
+      assert.deepEqual(page.data.previewVersionMenu.options, [
+        { scope: 'draft', label: '草稿版', description: '仅包含已保存内容' },
+        { scope: 'published', label: '发布版', description: '访客当前看到的内容' }
+      ])
+      page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope } } })
+      page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope } } })
+      assert.equal(page.data.previewVersionMenu, null)
+      assert.equal(navigations.length, 1)
+      assert.equal(navigations.pop().url, `/pages/portfolios/standard-preview/portfolio-standard-preview?portfolioId=88${scope === 'published' ? '&scope=published' : ''}${advancedEditing ? '&templateType=ADVANCED' : ''}`)
+      assert.deepEqual(page.data.config, config)
+    }
+  }
+  assert.deepEqual(requests, [])
+})
+
+test('personal editor dismisses preview menus and ignores measurements after cancellation or page departure', () => {
+  const callbacks = [], navigations = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), previewMenuRuntime(callbacks, navigations))
+  page.setData({ portfolioId: 88, publicationStatus: 'PUBLISHED' })
+  for (const close of ['handlePreview', 'handleClosePreviewVersionMenu', 'onPageScroll', 'onHide', 'onUnload']) {
+    page.handlePreview()
+    const staleCallback = callbacks.shift()
+    page[close]()
+    staleCallback(PREVIEW_TRIGGER_RECT)
+    assert.equal(page.data.previewVersionMenu, null)
+    page.handlePreview()
+    callbacks.shift()(PREVIEW_TRIGGER_RECT)
+    assert.ok(page.data.previewVersionMenu)
+    page[close]()
+    assert.equal(page.data.previewVersionMenu, null)
+  }
+  assert.deepEqual(navigations, [])
+})
+
+test('personal editor retries invalid anchors and rejects stale targets or invalid preview choices', () => {
+  const callbacks = [], navigations = []
+  const page = loadPortfolioEditorPage(() => Promise.resolve({}), previewMenuRuntime(callbacks, navigations))
+  page.setData({ portfolioId: 88, publicationStatus: 'PUBLISHED' })
+  page.handlePreview()
+  callbacks.shift()(null)
+  assert.equal(page.data.previewVersionMenu, null)
+  page.handlePreview()
+  const staleCallback = callbacks.shift()
+  page.setData({ portfolioId: 89 })
+  staleCallback(PREVIEW_TRIGGER_RECT)
+  assert.equal(page.data.previewVersionMenu, null)
+  page.handlePreview()
+  callbacks.shift()(PREVIEW_TRIGGER_RECT)
+  page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope: 'invalid' } } })
+  assert.deepEqual(navigations, [])
+  page.handlePreview()
+  callbacks.shift()(PREVIEW_TRIGGER_RECT)
+  page.setData({ publicationStatus: 'OFFLINE' })
+  page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope: 'published' } } })
+  assert.deepEqual(navigations, [])
+})
+
 test('个人页面组件间距可调整并随草稿保存，背景色与间距互不覆盖', async () => {
   const requests = []
   const page = loadPortfolioEditorPage(options => {

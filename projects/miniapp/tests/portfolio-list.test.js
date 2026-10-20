@@ -71,6 +71,15 @@ function loadPortfolioListPage(fakeRequest, wxOverrides = {}, sessionOverrides =
     navigateTo() {},
     redirectTo() {},
     showToast() {},
+    getWindowInfo() { return { windowWidth: 375, windowHeight: 812 } },
+    createSelectorQuery() {
+      return {
+        in() { return this },
+        select() { return this },
+        boundingClientRect(callback) { this.callback = callback; return this },
+        exec() { this.callback({ left: 260, right: 320, top: 250, bottom: 290, width: 60, height: 40 }) }
+      }
+    },
     showModal(options) {
       options.success({ confirm: true })
     }
@@ -507,6 +516,9 @@ test('ordinary team members preview drafts and published versions without mainte
     page.handleTeamPortfolioCardTap({ currentTarget: { dataset: { item: draft } } })
     page.handleTeamPreviewTap({ currentTarget: { dataset: { item: draft, scope: 'draft' } } })
     page.handleTeamPreviewTap({ currentTarget: { dataset: { item: published, scope: 'published' } } })
+    assert.equal(page.data.previewVersionMenu.ownerType, 'TEAM')
+    assert.equal(navigations.length, 1)
+    page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope: 'published' } } })
     assert.deepEqual(navigations.map((item) => item.url), [
       '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=33&scope=draft',
       '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=34&scope=published'
@@ -664,6 +676,7 @@ test('unified team cards keep edit and preview routes in the team subpackage', (
   const publishedItem = {
     portfolioId: 34,
     teamId: 7,
+    publicationStatus: 'PUBLISHED',
     teamName: '甲团队',
     currentRole: 'OWNER',
     canMaintain: true,
@@ -675,6 +688,8 @@ test('unified team cards keep edit and preview routes in the team subpackage', (
     page.handleTeamPortfolioCardTap({ currentTarget: { dataset: { item: draftItem } } })
     page.handleTeamPreviewTap({ currentTarget: { dataset: { item: draftItem, scope: 'draft' } } })
     page.handleTeamPreviewTap({ currentTarget: { dataset: { item: publishedItem, scope: 'published' } } })
+    assert.equal(navigations.length, 2)
+    page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope: 'published' } } })
     assert.deepEqual(navigations.map((entry) => entry.url), [
       '/pages/team-portfolios/standard-edit/team-portfolio-standard-edit?portfolioId=33',
       '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=33&scope=draft',
@@ -1439,7 +1454,7 @@ test('canceling publish disclaimer from list does not call publish api', async (
   }
 })
 
-test('previewing a published portfolio from list opens published preview without sharing', async () => {
+test('previewing a published portfolio from list selects a version before navigating without sharing', async () => {
   const requests = []
   const navigations = []
   const page = loadPortfolioListPage((options) => {
@@ -1473,6 +1488,10 @@ test('previewing a published portfolio from list opens published preview without
 
   try {
     assert.equal(page.data.displayPortfolios[0].showPublishedPreview, true)
+    assert.deepEqual(navigations, [])
+    assert.deepEqual(page.data.previewVersionMenu.options.map((option) => option.scope), ['draft', 'published'])
+    page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope: 'published' } } })
+    assert.equal(page.data.previewVersionMenu, null)
     assert.deepEqual(requests.map((item) => [item.url, item.method || 'GET']), [
       ['/api/mine/portfolios', 'GET']
     ])
@@ -1611,5 +1630,148 @@ test('miniapp code entry blocks targets unpublished after the sheet opened', () 
     assert.equal(typeof page.handleQrCodeShare, 'function')
     page.handleQrCodeShare()
     assert.equal(navigations.length, 0); assert.equal(page.data.shareTarget, null)
+  } finally { page.cleanup() }
+})
+
+
+for (const ownerType of ['USER', 'TEAM']) {
+  for (const templateType of ['STANDARD', 'ADVANCED']) {
+    for (const scope of ['draft', 'published']) {
+      test(`${ownerType} ${templateType} published preview menu navigates once to ${scope}`, () => {
+        const requests = [], navigations = []
+        const page = loadPortfolioListPage((options) => { requests.push(options); return Promise.resolve({}) }, {
+          navigateTo(options) { navigations.push(options) }
+        })
+        const item = { portfolioId: 88, publicationStatus: 'PUBLISHED', templateType, canShare: true, canMaintain: false }
+        page.setData({ displayPortfolios: [item], teamDisplayPortfolios: [item] })
+        try {
+          if (ownerType === 'TEAM') page.handleTeamPreviewTap({ currentTarget: { dataset: { item, scope: 'published' } } })
+          else page.handlePublishedPreviewTap({ currentTarget: { dataset: { id: 88 } } })
+          assert.deepEqual(navigations, [])
+          assert.equal(page.data.previewVersionMenu.ownerType, ownerType)
+          assert.equal(page.data.previewVersionMenu.options[0].description, '最近保存的内容')
+          assert.equal(page.data.previewVersionMenu.options[1].description, '访客当前看到的内容')
+          page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope } } })
+          page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope } } })
+          const path = ownerType === 'TEAM' ? '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview' : '/pages/portfolios/standard-preview/portfolio-standard-preview'
+          const scopeQuery = ownerType === 'TEAM' || scope === 'published' ? `&scope=${scope}` : ''
+          assert.deepEqual(navigations, [{ url: `${path}?portfolioId=88${scopeQuery}${templateType === 'ADVANCED' ? '&templateType=ADVANCED' : ''}` }])
+          assert.deepEqual(requests, [])
+          assert.equal(page.data.previewVersionMenu, null)
+        } finally { page.cleanup() }
+      })
+    }
+  }
+}
+
+test('published preview keeps team permission and revealed-delete guards', () => {
+  const navigations = []
+  const page = loadPortfolioListPage(async () => ({}), { navigateTo(options) { navigations.push(options) } })
+  const item = { portfolioId: 88, publicationStatus: 'PUBLISHED', canShare: true }
+  page.setData({ displayPortfolios: [item], revealedPortfolioId: 88, revealedTeamPortfolioId: 88 })
+  try {
+    page.handlePublishedPreviewTap({ currentTarget: { dataset: { id: 88 } } })
+    assert.equal(page.data.revealedPortfolioId, null)
+    assert.equal(page.data.previewVersionMenu, null)
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item, scope: 'published' } } })
+    assert.equal(page.data.revealedTeamPortfolioId, null)
+    assert.equal(page.data.previewVersionMenu, null)
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item: { ...item, canShare: false }, scope: 'published' } } })
+    assert.equal(page.data.previewVersionMenu, null)
+    assert.deepEqual(navigations, [])
+  } finally { page.cleanup() }
+})
+
+test('offline personal preview stays hidden and offline team preview stays a direct draft', async () => {
+  const navigations = []
+  const personal = { portfolioId: 88, publicationStatus: 'OFFLINE', publishedRevision: 3 }
+  const page = loadPortfolioListPage(async (options) => {
+    if (options.url.endsWith('/maintainable-teams')) return []
+    return options.url === '/api/mine/portfolios' ? { portfolios: [personal] } : [{ ...personal, teamId: 7, canShare: false }]
+  }, { navigateTo(options) { navigations.push(options) } })
+  try {
+    await page.bootstrap()
+    assert.equal(page.data.displayPortfolios[0].showPublishedPreview, false)
+    assert.equal(page.data.displayPortfolios[0].showDraftPreview, false)
+    page.handlePublishedPreviewTap({ currentTarget: { dataset: { id: 88 } } })
+    assert.equal(page.data.previewVersionMenu, null)
+    await page.bootstrapTeam()
+    const teamItem = page.data.teamDisplayPortfolios[0]
+    assert.equal(teamItem.canPreviewDraft, true)
+    page.handleTeamPreviewTap({ currentTarget: { dataset: { item: teamItem, scope: 'draft' } } })
+    assert.deepEqual(navigations, [{ url: '/pages/team-portfolios/standard-preview/team-portfolio-standard-preview?portfolioId=88&scope=draft' }])
+  } finally { page.cleanup() }
+})
+
+for (const closeAction of ['closePreviewVersionMenu', 'handlePortfolioTouchMove', 'handleTeamPortfolioTouchMove', 'onHide', 'onUnload', 'bootstrap', 'bootstrapTeam', 'handleOwnerTypeTap']) {
+  test(`preview menu ${closeAction} discards pending measurements`, async () => {
+    const callbacks = [], navigations = []
+    const page = loadPortfolioListPage(async options => options.url === '/api/mine/portfolios' ? { portfolios: [] } : [], {
+      navigateTo(options) { navigations.push(options) },
+      createSelectorQuery() {
+        return { in() { return this }, select() { return this }, boundingClientRect(callback) { callbacks.push(callback); return this }, exec() {} }
+      }
+    })
+    page.setData({ displayPortfolios: [{ portfolioId: 88, publicationStatus: 'PUBLISHED' }], teamLoaded: true })
+    try {
+      page.handlePublishedPreviewTap({ currentTarget: { dataset: { id: 88 } } })
+      assert.equal(callbacks.length, 1)
+      await page[closeAction]({ currentTarget: { dataset: { type: 'TEAM' } } })
+      callbacks[0]({ left: 260, right: 320, top: 250, bottom: 290, width: 60, height: 40 })
+      assert.equal(page.data.previewVersionMenu, null)
+      assert.deepEqual(navigations, [])
+    } finally { page.cleanup() }
+  })
+}
+
+test('preview menu toggles closed, ignores invalid selections and can retry a failed measurement', () => {
+  const navigations = [], callbacks = []
+  const page = loadPortfolioListPage(async () => ({}), {
+    navigateTo(options) { navigations.push(options) },
+    createSelectorQuery() {
+      return { in() { return this }, select() { return this }, boundingClientRect(callback) { callbacks.push(callback); return this }, exec() {} }
+    }
+  })
+  const event = { currentTarget: { dataset: { id: 88 } } }
+  const rect = { left: 260, right: 320, top: 250, bottom: 290, width: 60, height: 40 }
+  page.setData({ displayPortfolios: [{ portfolioId: 88, publicationStatus: 'PUBLISHED' }] })
+  try {
+    page.handlePublishedPreviewTap(event)
+    callbacks[0](null)
+    assert.equal(page.data.previewVersionMenu, null)
+    page.handlePublishedPreviewTap(event)
+    callbacks[1](rect)
+    assert.ok(page.data.previewVersionMenu)
+    page.handlePreviewVersionSelect({ currentTarget: { dataset: { scope: 'unknown' } } })
+    assert.deepEqual(navigations, [])
+    page.handlePublishedPreviewTap(event)
+    assert.equal(page.data.previewVersionMenu, null)
+    page.handlePublishedPreviewTap(event)
+    page.handlePublishedPreviewTap(event)
+    callbacks[2](rect)
+    assert.equal(page.data.previewVersionMenu, null)
+    assert.deepEqual(navigations, [])
+  } finally { page.cleanup() }
+})
+
+
+test('a previous card measurement cannot replace the newly selected preview target', () => {
+  const callbacks = []
+  const page = loadPortfolioListPage(async () => ({}), {
+    createSelectorQuery() {
+      return { in() { return this }, select() { return this }, boundingClientRect(callback) { callbacks.push(callback); return this }, exec() {} }
+    }
+  })
+  const rect = { left: 260, right: 320, top: 250, bottom: 290, width: 60, height: 40 }
+  page.setData({ displayPortfolios: [88, 99].map(portfolioId => ({ portfolioId, publicationStatus: 'PUBLISHED' })) })
+  try {
+    page.handlePublishedPreviewTap({ currentTarget: { dataset: { id: 88 } } })
+    page.handlePublishedPreviewTap({ currentTarget: { dataset: { id: 99 } } })
+    callbacks[0](rect)
+    assert.equal(page.data.previewVersionMenu, null)
+    callbacks[1](rect)
+    assert.equal(page.data.previewVersionMenu.portfolioId, 99)
+    page.closePreviewVersionMenu()
+    assert.equal(page.data.previewVersionMenu, null)
   } finally { page.cleanup() }
 })

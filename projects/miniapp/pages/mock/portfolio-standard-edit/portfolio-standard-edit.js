@@ -20,6 +20,7 @@ const {
   updateMockPortfolioStyle,
   updateMockSingleWorkConfig
 } = require('../utils/mock-experience')
+const { buildPreviewVersionOptions, calculatePreviewVersionMenuLayout } = require('../utils/preview-version-menu')
 const {
   PORTFOLIO_TEXT_SELECTION_OPTIONS: PORTFOLIO_TEXT_FONT_OPTIONS,
   applyPortfolioFontSelection,
@@ -112,6 +113,14 @@ const PROFILE_TAG_COLOR_OPTIONS = [
 }))
 const PROFILE_FIELDS = [{key:'avatar',label:'头像'},{key:'displayName',label:'姓名 / 艺名'},{key:'profession',label:'职业身份'},{key:'city',label:'服务城市'},{key:'bio',label:'简介'},{key:'tags',label:'标签'},{key:'wechatQr',label:'微信二维码'}]
 const PREVIEW_URL = '/pages/mock/portfolio-standard-preview/portfolio-standard-preview'
+const PUBLISHED_STATUS = 'PUBLISHED'
+const DRAFT_SCOPE = 'draft'
+const PUBLISHED_SCOPE = 'published'
+const PREVIEW_ANCHOR_SELECTOR = '#mock-editor-preview'
+const PREVIEW_OPTIONS = buildPreviewVersionOptions({
+  draftDescription: '当前编辑的体验内容',
+  publishedDescription: '固定的演示发布内容'
+})
 const DEFAULT_SELECTED_COMPONENT_KEY = 'mock_carousel'
 const SWIPE_REVEAL_THRESHOLD = -48
 const SWIPE_CLOSE_THRESHOLD = 28
@@ -318,6 +327,7 @@ function buildState(draft, selectedComponentKey = DEFAULT_SELECTED_COMPONENT_KEY
   const textSectionTypography = buildPortfolioTextTypography(textSectionConfig)
   return {
     draft,
+    isPublishedPreview: draft.portfolio.publicationStatus === PUBLISHED_STATUS,
     componentConfig: Object.assign({}, selectedComponent.componentType === 'PROFILE' ? {profileHorizontalMarginRpx:32} : {}, JSON.parse(JSON.stringify(findConfig(selectedComponent)))),
     complexConfig: JSON.parse(JSON.stringify(findConfig(selectedComponent))),
     structuredTextTab: 'content',
@@ -405,6 +415,7 @@ Page({
     componentEditSheetVisible: false,
     editScrollTop: 0,
     previewReturnPending: false,
+    previewVersionMenu: null,
     componentTouchStart: null,
     draggingIndex: -1,
     dragTargetIndex: -1,
@@ -423,7 +434,22 @@ Page({
     audioPlaying: false
   }, buildState(getMockPortfolioDraft())),
 
-  onLoad() {
+  onLoad(options = {}) {
+    this.mockPortfolioId = options.portfolioId
+    try {
+      const sample = getMockPortfolioDraft(this.mockPortfolioId)
+      if (sample.portfolio.ownerType !== 'USER') {
+        showMockLoginRequiredToast()
+        this.mockPreviewUnavailable = true
+      }
+    } catch (error) {
+      this.mockPreviewUnavailable = true
+      wx.showToast({ title: error.message, icon: 'none' })
+    }
+    if (this.mockPreviewUnavailable) {
+      if (wx.navigateBack) wx.navigateBack()
+      return
+    }
     this.mockFontSession = createMockFontSession({wxApi:wx,onChange:()=>this.refreshMockFonts(false)})
     textTools.registerMockTextFont(wx, capability => {
       if(this.mockFontDisposed)return
@@ -434,11 +460,13 @@ Page({
     if(this.data.draft.draftWarning) wx.showToast({title:this.data.draft.draftWarning,icon:'none'})
   },
 
-  onHide() { if (this.mockAudio) this.mockAudio.hide() },
+  onHide() { this.handleClosePreviewVersionMenu(); if (this.mockAudio) this.mockAudio.hide() },
 
-  onUnload() { this.mockFontDisposed=true; if(this.mockFontSession)this.mockFontSession.destroy(); if (this.mockAudio) this.mockAudio.destroy() },
+  onUnload() { this.handleClosePreviewVersionMenu(); this.mockFontDisposed=true; if(this.mockFontSession)this.mockFontSession.destroy(); if (this.mockAudio) this.mockAudio.destroy() },
 
   onShow() {
+    this.previewNavigating = false
+    this.handleClosePreviewVersionMenu()
     if (this.mockAudio) this.mockAudio.show()
     if (!this.data.previewReturnPending) {
       return
@@ -455,11 +483,12 @@ Page({
   },
 
   loadDraft(options) {
+    this.handleClosePreviewVersionMenu()
     const nextOptions = options || {}
     this.setData(
       Object.assign(
         buildState(
-          getMockPortfolioDraft(),
+          getMockPortfolioDraft(this.mockPortfolioId),
           this.data.selectedComponentKey,
           this.data.activeMenuKey
         ),
@@ -1289,25 +1318,86 @@ Page({
   },
 
   handlePreview() {
+    if (this.mockPreviewUnavailable || this.previewNavigating) return
+    if (this.previewMenuTarget || this.data.previewVersionMenu) {
+      this.handleClosePreviewVersionMenu()
+      return
+    }
+    if (this.data.draft.portfolio.publicationStatus === PUBLISHED_STATUS) {
+      this.openPreviewVersionMenu()
+      return
+    }
+    this.navigateMockPreview(DRAFT_SCOPE)
+  },
+
+  /** 发布预览只读取固定快照，不将当前编辑写入本地草稿。 */
+  navigateMockPreview(scope) {
+    if (this.mockPreviewUnavailable || this.previewNavigating) return
+    const portfolioId = this.data.draft.portfolio.portfolioId
+    const navigate = () => {
+      this.previewNavigating = true
+      wx.navigateTo({
+        url: `${PREVIEW_URL}?portfolioId=${portfolioId}&scope=${scope}`,
+        fail: () => {
+          this.previewNavigating = false
+          this.setData({ previewReturnPending: false })
+        }
+      })
+    }
+    if (scope === PUBLISHED_SCOPE) {
+      this.setData({ previewReturnPending: false })
+      navigate()
+      return
+    }
     if (this.data.componentEditSheetVisible) this.handleCloseComponentEditSheet()
-    saveMockPortfolioDraft(this.data.draft)
+    saveMockPortfolioDraft(this.data.draft, this.mockPortfolioId)
+    this.previewNavigating = true
     this.setData({
       previewReturnPending: true,
       componentSheetVisible: false,
       componentEditSheetVisible: false,
       revealedComponentKey: ''
-    }, () => {
-      wx.navigateTo({
-        url: PREVIEW_URL
-      })
-    })
+    }, navigate)
+  },
+
+  openPreviewVersionMenu() {
+    if (!wx.createSelectorQuery || !wx.getWindowInfo) return
+    const target = { portfolioId: this.data.draft.portfolio.portfolioId }
+    this.previewMenuTarget = target
+    const token = this.previewMenuMeasureToken
+    wx.createSelectorQuery().in(this).select(PREVIEW_ANCHOR_SELECTOR)
+      .boundingClientRect(rect => {
+        if (token !== this.previewMenuMeasureToken || this.previewMenuTarget !== target) return
+        const layout = calculatePreviewVersionMenuLayout(rect, wx.getWindowInfo(), { preferAbove: true })
+        if (!layout) {
+          this.handleClosePreviewVersionMenu()
+          return
+        }
+        this.setData({ previewVersionMenu: Object.assign({}, layout, { options: PREVIEW_OPTIONS }) })
+      }).exec()
+  },
+
+  handleClosePreviewVersionMenu() {
+    this.previewMenuMeasureToken = (this.previewMenuMeasureToken || 0) + 1
+    this.previewMenuTarget = null
+    if (this.data.previewVersionMenu) this.setData({ previewVersionMenu: null })
+  },
+
+  handlePreviewVersionSelect(event) {
+    const target = this.previewMenuTarget
+    const scope = event.currentTarget.dataset.scope
+    if (!this.data.previewVersionMenu || !target || ![DRAFT_SCOPE, PUBLISHED_SCOPE].includes(scope)) return
+    this.handleClosePreviewVersionMenu()
+    if (target.portfolioId !== this.data.draft.portfolio.portfolioId) return
+    this.navigateMockPreview(scope)
   },
 
   handleResetDraft() {
+    this.handleClosePreviewVersionMenu()
     this.componentEditSnapshot = null
     if(this.mockAudio) this.mockAudio.setResource(null)
     this.setData({audioPlaying:false})
-    this.setDraftState(resetMockPortfolioDraft(), DEFAULT_SELECTED_COMPONENT_KEY)
+    this.setDraftState(resetMockPortfolioDraft(this.mockPortfolioId), DEFAULT_SELECTED_COMPONENT_KEY)
   },
 
   handleSaveDraft() {

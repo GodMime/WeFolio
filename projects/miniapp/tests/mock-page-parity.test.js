@@ -28,6 +28,28 @@ function loadMockExperience() {
   return require(modulePath)
 }
 
+test('mock C菜单使用透明防穿透层、两行内联说明并在滚动时收起', () => {
+  for (const page of ['portfolios', 'portfolio-standard-edit']) {
+    const wxml = read(`pages/mock/${page}/${page}.wxml`)
+    const wxss = read(`pages/mock/${page}/${page}.wxss`)
+    const portal = wxml.match(/<root-portal wx:if="\{\{previewVersionMenu\}\}">([\s\S]*?)<\/root-portal>/)[1]
+    assert.match(portal, /catchtap="handleClosePreviewVersionMenu" catchtouchmove="handleClosePreviewVersionMenu"/)
+    assert.match(portal, /preview-version-menu__option[^>]*catchtap="handlePreviewVersionSelect"/)
+    assert.match(portal, /preview-version-menu__label[\s\S]*preview-version-menu__description/)
+    assert.match(wxml, /bindscroll="handleClosePreviewVersionMenu"/)
+    assert.match(readRule(wxss, '.preview-version-menu-layer'), /background:\s*transparent/)
+    assert.match(readRule(wxss, '.preview-version-menu__option'), /height:\s*47px/)
+    assert.match(readRule(wxss, '.preview-version-menu__option'), /display:\s*flex/)
+    assert.match(readRule(wxss, '.preview-version-menu__label'), /font-size:\s*13px/)
+    assert.match(readRule(wxss, '.preview-version-menu__arrow'), /box-sizing:\s*border-box/)
+  }
+  const list = read('pages/mock/portfolios/portfolios.wxml')
+  assert.match(list, /id="mock-preview-\{\{item.portfolioId\}\}"/)
+  const edit = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
+  assert.match(edit, /id="mock-editor-preview"/)
+  assert.match(edit, /wx:if="\{\{!isPublishedPreview\}\}"[^>]*>本地草稿/)
+})
+
 test('mock page settings match formal field order and audio visibility', () => {
   const formal = read('pages/portfolios/standard-edit/portfolio-standard-edit.wxml')
   const mock = read('pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')

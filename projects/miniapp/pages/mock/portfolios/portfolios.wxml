@@ -1,4 +1,4 @@
-<view class="page-shell portfolios-page mock-portfolios-page">
+<view class="page-shell portfolios-page mock-portfolios-page" bindtouchmove="handleClosePreviewVersionMenu">
   <navigation-bar title="作品集" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <view class="portfolio-segment-shell">
@@ -22,7 +22,7 @@
           </view>
         </view>
 
-            <scroll-view class="portfolio-list-scroll personal-portfolio-list-scroll" scroll-y type="list">
+            <scroll-view class="portfolio-list-scroll personal-portfolio-list-scroll" scroll-y type="list" bindscroll="handleClosePreviewVersionMenu">
         <view class="portfolio-list">
           <view wx:for="{{portfolioList.portfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
             <view class="portfolio-delete-pane">
@@ -56,9 +56,11 @@
                   <button
                     wx:if="{{item.showDraftPreview}}"
                     class="portfolio-action-button preview"
+                    id="mock-preview-{{item.portfolioId}}"
                     catchtap="handleActionTap"
                     data-action="preview"
-                  >预览</button>
+                    data-id="{{item.portfolioId}}"
+                  >预览<text wx:if="{{item.publicationStatus === 'PUBLISHED'}}" class="preview-version-trigger-arrow"></text></button>
                   <button
                     class="portfolio-action-button {{item.actionType === 'PUBLISH' ? 'publish' : ''}}"
                     catchtap="handleActionTap"
@@ -90,7 +92,7 @@
               </view>
             </view>
 
-            <scroll-view class="portfolio-list-scroll team-portfolio-list-scroll" scroll-y type="list">
+            <scroll-view class="portfolio-list-scroll team-portfolio-list-scroll" scroll-y type="list" bindscroll="handleClosePreviewVersionMenu">
               <view class="portfolio-list">
                 <view wx:for="{{teamPortfolioList.portfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
                   <view class="portfolio-delete-pane">
@@ -125,7 +127,7 @@
                     </view>
                     <view class="portfolio-side">
                       <view class="portfolio-action-row">
-                        <button wx:if="{{item.canPublishedPreview}}" class="portfolio-action-button preview" catchtap="handleTeamActionTap" data-action="preview">预览</button>
+                        <button wx:if="{{item.canPublishedPreview}}" id="mock-preview-{{item.portfolioId}}" class="portfolio-action-button preview" catchtap="handleTeamActionTap" data-action="preview" data-id="{{item.portfolioId}}">预览<text wx:if="{{item.publicationStatus === 'PUBLISHED'}}" class="preview-version-trigger-arrow"></text></button>
                         <button wx:if="{{item.canShare}}" class="portfolio-action-button share" catchtap="handleTeamActionTap" data-action="share">分享</button>
                       </view>
                     </view>
@@ -148,4 +150,16 @@
   </view>
 
   <mock-tabbar tabs="{{tabs}}"></mock-tabbar>
+
+  <root-portal wx:if="{{previewVersionMenu}}">
+    <view class="preview-version-menu-layer" catchtap="handleClosePreviewVersionMenu" catchtouchmove="handleClosePreviewVersionMenu">
+      <view class="preview-version-menu preview-version-menu--{{previewVersionMenu.placement}}" style="{{previewVersionMenu.menuStyle}}">
+        <view class="preview-version-menu__arrow" style="{{previewVersionMenu.arrowStyle}}"></view>
+        <view wx:for="{{previewVersionMenu.options}}" wx:key="scope" class="preview-version-menu__option" data-scope="{{item.scope}}" catchtap="handlePreviewVersionSelect" aria-role="button" aria-label="{{item.label}}，{{item.description}}">
+          <text class="preview-version-menu__label">{{item.label}}</text>
+          <text class="preview-version-menu__description">{{item.description}}</text>
+        </view>
+      </view>
+    </view>
+  </root-portal>
 </view>
