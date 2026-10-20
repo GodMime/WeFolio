@@ -1,4 +1,5 @@
 const { createMockAudioController } = require('../utils/mock-portfolio-audio')
+const { openMockVideoPlayer } = require('../utils/mock-video-player')
 const {
   MOCK_WORK_LIBRARY,
   filterMockWorks,
@@ -16,27 +17,24 @@ Page({
     selectedTagId: 0,
     visibleWorks: MOCK_WORK_LIBRARY.works,
     imagePreviewVisible: false,
-    imagePreview: null,
-    videoPreviewVisible: false,
-    videoPreview: {
-      title: '',
-      src: '',
-      poster: ''
-    }
+    imagePreview: null
   },
 
   onHide() {
+    this.mockVideoHidden = true
     if (this.mockAudio) this.mockAudio.hide()
-    this.handleCloseVideoPreview()
   },
 
-  onShow() { if (this.mockAudio) this.mockAudio.show() },
+  onShow() {
+    this.mockVideoHidden = false
+    this.mockVideoSession = null
+    if (this.mockAudio) this.mockAudio.show()
+  },
 
-  onUnload() { if (this.mockAudio) this.mockAudio.destroy() },
-
-  handleVideoError() {
-    this.handleCloseVideoPreview()
-    wx.showToast({title:'视频播放失败，请稍后重试',icon:'none'})
+  onUnload() {
+    this.mockVideoDisposed = true
+    this.mockVideoSession = null
+    if (this.mockAudio) this.mockAudio.destroy()
   },
 
   applyFilters(patch = {}) {
@@ -80,6 +78,7 @@ Page({
   },
 
   handleWorkPreviewTap(event) {
+    if (this.mockVideoDisposed || this.mockVideoHidden || this.mockVideoSession) return false
     const workId = Number(event.currentTarget.dataset.id || 0)
     const work = MOCK_WORK_LIBRARY.works.find((item) => item.id === workId)
     if (!work) {
@@ -87,7 +86,6 @@ Page({
     }
     if (work.mediaType === 'AUDIO') {
       if (!this.mockAudio) this.mockAudio = createMockAudioController({wxApi:wx,
-        beforePlay:()=>this.handleCloseVideoPreview(),
         onPlaying:playing=>this.setData({audioPlaying:playing}),
         onError:()=>wx.showToast({title:'音频播放失败，请点击重试',icon:'none'})})
       if (this.data.audioWorkId !== work.id) {
@@ -99,15 +97,7 @@ Page({
     }
     if (this.mockAudio) this.mockAudio.pause()
     if (work.mediaType === 'VIDEO') {
-      this.setData({
-        videoPreviewVisible: true,
-        videoPreview: {
-          title: work.title,
-          src: work.mediaUrl,
-          poster: work.coverUrl
-        }
-      })
-      return
+      return this.openVideoPreview(work)
     }
     this.setData({
       imagePreviewVisible: true,
@@ -125,22 +115,24 @@ Page({
     })
   },
 
-  handleCloseVideoPreview() {
-    this.setData({
-      videoPreviewVisible: false,
-      videoPreview: {
-        title: '',
-        src: '',
-        poster: ''
-      }
-    })
+  async openVideoPreview(work) {
+    if (this.mockVideoDisposed || this.mockVideoHidden || this.mockVideoSession) return false
+    // mock 视频也必须离开带底栏的 Skyline 页面，避免 iPhone 全屏被底栏遮挡。
+    const session = {}
+    this.mockVideoSession = session
+    const opened = await openMockVideoPlayer({
+      url: work.mediaUrl,
+      poster: work.coverUrl,
+      title: work.title
+    }, wx)
+    // 返回或重新打开后，旧失败回调不能解除新播放会话的保护。
+    if (!opened && this.mockVideoSession === session) this.mockVideoSession = null
+    return opened
   },
 
   handleLockedAction() {
     showMockLoginRequiredToast()
   },
 
-  handleImagePreviewPanelTap() {},
-
-  handleVideoPreviewPanelTap() {}
+  handleImagePreviewPanelTap() {}
 })

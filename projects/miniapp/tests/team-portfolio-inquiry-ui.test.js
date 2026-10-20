@@ -123,7 +123,7 @@ test('team schedule query renders the personal-style month calendar grid', () =>
   assert.match(dayMetaRule, /font-size:\s*20rpx/)
   assert.match(dayMetaRule, /font-weight:\s*500/)
   assert.match(dayDotsRule, /height:\s*10rpx/)
-  assert.match(dayDotsRule, /margin-top:\s*6rpx/)
+  assert.match(dayDotsRule, /flex:\s*none/)
   assert.match(dayDotRule, /width:\s*10rpx/)
   assert.match(dayDotRule, /height:\s*10rpx/)
 })

@@ -1,4 +1,5 @@
 const { createPortfolioOpening } = require('../utils/portfolio-opening')
+const { openMockVideoPlayer } = require('../utils/mock-video-player')
 const {
   MOCK_SCHEDULE_DATA,
   MOCK_WORK_LIBRARY,
@@ -128,12 +129,6 @@ Page({
       desiredSchedule: '',
       needs: ''
     },
-    videoPreviewVisible: false,
-    videoPreview: {
-      title: '',
-      src: '',
-      poster: ''
-    },
     activeSingleWorkVideoKey: '',
     portfolioScrollTop: 0
   },
@@ -154,12 +149,14 @@ Page({
       onPrompt:prompt=>this.setData({hyperlinkPrompt:prompt}),
       onError:title=>wx.showToast({title,icon:'none'})})
     this.mockAudio = createMockAudioController({wxApi:wx,
-      beforePlay:()=>{this.stopActiveSingleWorkVideo();this.handleCloseVideoPreview()},
+      beforePlay:()=>this.stopActiveSingleWorkVideo(),
       onPlaying:playing=>this.setData({audioPlaying:playing}),
       onError:()=>wx.showToast({title:'音频播放失败，请点击重试',icon:'none'})})
   },
 
   onShow() {
+    this.mockPageHidden = false
+    this.previewVideoSession = null
     this.setData({mediaActive:true})
     if(this.copyController) this.copyController.show()
     if(this.mockAudio) this.mockAudio.show()
@@ -169,22 +166,23 @@ Page({
   },
 
   onHide() {
+    this.mockPageHidden = true
     if(this.mockOpening) this.mockOpening.hide()
     this.setData({mediaActive:false})
     if(this.mockAudio) this.mockAudio.hide()
     if(this.copyController) this.copyController.hide()
-    this.handleCloseVideoPreview()
     this.stopActiveSingleWorkVideo()
     this.clearPortfolioMenuTransition()
   },
 
   onUnload() {
+    this.mockPreviewDisposed = true
+    this.previewVideoSession = null
     if(this.mockOpening) this.mockOpening.dispose()
     this.mockOpening = null
     if(this.mockFontSession)this.mockFontSession.destroy()
     if(this.mockAudio) this.mockAudio.destroy()
     if(this.copyController) this.copyController.destroy()
-    this.handleCloseVideoPreview()
     this.stopActiveSingleWorkVideo()
     this.clearPortfolioMenuTransition()
   },
@@ -224,6 +222,7 @@ Page({
   blockPortfolioOpeningTouch() {},
 
   onPortfolioFontsReady() {
+    if (this.previewVideoSession || this.mockPageHidden || this.mockPreviewDisposed) return
     if(this.mockAudio && !this.audioAttempted && this.data.audioResource) {
       this.audioAttempted=true
       this.mockAudio.play()
@@ -271,14 +270,28 @@ Page({
   handleWorkTap(event) {
     const data = readMockComponentEventData(event)
     const work = this.findEventWork(data)
-    if (!work) return
+    if (!work) return false
+    if (work.mediaType === 'VIDEO') return this.openVideoPreview(work)
     if (this.mockAudio) this.mockAudio.pause()
     this.stopActiveSingleWorkVideo()
-    if (work.mediaType === 'VIDEO') {
-      this.setData({videoPreviewVisible:true,videoPreview:{title:work.title,src:work.mediaUrl,poster:work.coverUrl || ''}})
-      return
-    }
     if(['IMAGE','ANIMATION'].includes(work.mediaType)) wx.previewImage({current:work.mediaUrl,urls:[work.mediaUrl]})
+  },
+
+  async openVideoPreview(work) {
+    if (this.mockPreviewDisposed || this.mockPageHidden || this.previewVideoSession) return false
+    if (this.mockAudio) this.mockAudio.pause()
+    this.stopActiveSingleWorkVideo()
+    const session = {}
+    this.previewVideoSession = session
+    // 导航之前先暂停文字背景视频，避免与独立播放页的声音及原生画面重叠。
+    this.setData({ mediaActive: false })
+    const opened = await openMockVideoPlayer({ url: work.mediaUrl, poster: work.coverUrl || '', title: work.title || '' }, wx)
+    // 旧导航失败不能解除新会话；隐藏和卸载期间也不恢复源页面媒体。
+    if (!opened && this.previewVideoSession === session) {
+      this.previewVideoSession = null
+      if (!this.mockPreviewDisposed && !this.mockPageHidden) this.setData({ mediaActive: true })
+    }
+    return opened
   },
 
   handleSingleWorkTap(event) {
@@ -287,7 +300,6 @@ Page({
     if (!work) return false
     if (work.mediaType === 'VIDEO') {
       if(this.mockAudio) this.mockAudio.pause()
-      this.handleCloseVideoPreview()
       this.stopActiveSingleWorkVideo()
       this.setData({activeSingleWorkVideoKey:data.componentKey})
       return true
@@ -311,17 +323,6 @@ Page({
   handleSingleWorkVideoError() {
     this.stopActiveSingleWorkVideo()
     wx.showToast({ title: '视频播放失败，请稍后重试', icon: 'none' })
-  },
-
-  handleCloseVideoPreview() {
-    this.setData({
-      videoPreviewVisible: false,
-      videoPreview: {
-        title: '',
-        src: '',
-        poster: ''
-      }
-    })
   },
 
   handleDisplayTagTap(event) {
@@ -374,13 +375,7 @@ Page({
       portfolioMenuTransitionClass: `portfolio-menu-enter-${direction}`,
       portfolioScrollTop: 1,
       contactFormModalVisible: false,
-      activeContactFormComponent: createEmptyContactFormComponent(),
-      videoPreviewVisible: false,
-      videoPreview: {
-        title: '',
-        src: '',
-        poster: ''
-      }
+      activeContactFormComponent: createEmptyContactFormComponent()
     }, () => {
       this.loadMockOpeningFonts()
       this.setData({ portfolioScrollTop: 0 })
@@ -468,12 +463,7 @@ Page({
     return work || null
   },
 
-  handleToggleAudio() { if(this.mockAudio) this.mockAudio.toggle() },
-
-  handleVideoError() {
-    this.handleCloseVideoPreview()
-    wx.showToast({title:'视频播放失败，请稍后重试',icon:'none'})
-  },
+  handleToggleAudio() { if(this.mockAudio && !this.previewVideoSession) this.mockAudio.toggle() },
 
   ensureCopyController() {
     if(!this.copyController) this.copyController=createMockCopyController({wxApi:wx,
@@ -497,7 +487,6 @@ Page({
     if(!url) {wx.showToast({title:'演示作品集暂不可用',icon:'none'});return}
     if(this.mockAudio) this.mockAudio.pause()
     this.stopActiveSingleWorkVideo()
-    this.handleCloseVideoPreview()
     wx.navigateTo({url})
   },
 

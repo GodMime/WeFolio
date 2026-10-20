@@ -186,7 +186,8 @@ Page({
       success() {
         wx.showToast({
           title: '已复制团队唯一码',
-          icon: 'success'
+          // 带图标的提示最多显示 7 个汉字，使用纯文字避免末尾被截断。
+          icon: 'none'
         })
       }
     })

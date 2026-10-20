@@ -39,6 +39,8 @@ for (const packageName of packages) {
     assert.equal(state.page.data.loadingContext, true)
     assert.equal(state.page.data.available, false)
     assert.equal(state.page.data.url, '')
+    assert.equal(state.page.data.portrait, false)
+    assert.equal(state.page.data.fullscreenDirection, 90)
     state.receive()
     assert.equal(state.page.data.available, true)
     assert.equal(state.page.data.loadingContext, false)
@@ -94,6 +96,21 @@ for (const packageName of packages) {
     state.page.handleVideoPlay(); state.page.handleVideoEnded()
     assert.equal(state.page.data.playing, false)
     state.page.onUnload()
+  })
+
+  test(`${packageName} 只有显式竖屏载荷启用竖屏布局并以 0 度进入全屏`, () => {
+    for (const portrait of [true, false, undefined, 'true', 1]) {
+      const state = harness(utility)
+      state.receive(payload({ portrait }))
+      state.page.onShow()
+      assert.equal(state.page.data.portrait, portrait === true)
+      assert.equal(state.page.data.fullscreenDirection, portrait === true ? 0 : 90)
+      state.page.handleEnterFullscreen()
+      assert.deepEqual(state.calls.find(call => call[0] === 'requestFullScreen')[1], {
+        direction: portrait === true ? 0 : 90
+      })
+      state.page.onUnload()
+    }
   })
 
   test(`${packageName} normal native fullscreen exit keeps the player page and video mounted`, () => {
@@ -295,7 +312,8 @@ test('各分包保留一致的播放器实现和独立 webview 页面，并按�
     assert.deepEqual(config.usingComponents, {})
     const markup = read(packageName, 'video-player/video-player.wxml')
     assert.match(markup, /<video\b[^>]*wx:if="\{\{available\}\}"/)
-    assert.match(markup, /direction="\{\{90\}\}"/)
+    assert.match(markup, /direction="\{\{fullscreenDirection\}\}"/)
+    assert.match(markup, /class="portfolio-video-page \{\{portrait \? 'portfolio-video-page-portrait' : ''\}\}"/)
     for (const control of ['controls', 'show-fullscreen-btn', 'show-play-btn', 'show-center-play-btn', 'autoplay']) {
       assert.match(markup, new RegExp(`${control}="\\{\\{true\\}\\}"`))
     }
@@ -309,6 +327,11 @@ test('各分包保留一致的播放器实现和独立 webview 页面，并按�
     assert.doesNotMatch(markup, /catchtouch|catchtap|<scroll-view|<cover-view|hidden="\{\{fullscreen\}\}"[^>]*src=/)
     const styles = read(packageName, 'video-player/video-player.wxss')
     assert.doesNotMatch(styles, /pointer-events|overflow|transform|portfolio-video-toolbar|portfolio-video-actions|portfolio-video-back/)
+    assert.match(styles, /\.portfolio-video\s*\{[^}]*height:\s*56\.25vw/)
+    assert.match(styles, /\.portfolio-video-page-portrait\s*\{[^}]*height:\s*100%/)
+    assert.match(styles, /\.portfolio-video-page-portrait \.portfolio-video\s*\{[^}]*flex:\s*1/)
+    assert.match(styles, /\.portfolio-video-page-portrait \.portfolio-video\s*\{[^}]*min-height:\s*0/)
+    assert.match(styles, /\.portfolio-video-page-portrait \.portfolio-video-title\s*\{[^}]*flex-shrink:\s*0/)
     const source = read(packageName, 'video-player/video-player.js')
     assert.match(source, /require\('\.\.\/utils\/portfolio-video-player-page'\)/)
     if (packageName === 'works') {

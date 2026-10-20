@@ -33,7 +33,14 @@
         <view wx:if="{{!capabilities.enabled}}" class="notice">AI 服务暂未开放，可继续管理内容；已有作品集仍可手动编辑、保存和发布。</view>
         <view wx:if="{{activeTaskId}}" class="notice notice-action"><text>已有等待或执行任务</text><button class="text-button" bindtap="handleCancel">取消该任务</button></view>
         <block wx:if="{{step === 'sources'}}">
-          <view class="selection-heading"><view class="selection-title">{{managingSources ? '管理已选内容' : '先选内容，再告诉 AI 怎么排'}}</view><text class="help-text">{{team ? '作品与成员作品集可以一起选择' : '选择你想展示的作品'}}</text></view>
+          <view class="selection-heading">
+            <view class="selection-title">{{managingSources ? '管理已选内容' : '先选内容，再告诉 AI 怎么排'}}</view>
+            <view wx:if="{{mode === 'CREATE' && !managingSources}}" class="selection-subtitle-row">
+              <text class="help-text">{{team ? '作品与成员作品集可以一起选择' : '选择你想展示的作品'}}</text>
+              <button class="tutorial-entry" bindtap="handleOpenTutorial" aria-label="播放高级作品集教学视频"><view class="tutorial-entry-face"><image class="tutorial-icon" src="/assets/system/video-tutorial.svg" mode="aspectFit"></image><text>教程</text></view></button>
+            </view>
+            <text wx:else class="help-text">{{team ? '作品与成员作品集可以一起选择' : '选择你想展示的作品'}}</text>
+          </view>
           <view wx:if="{{team}}" class="source-tabs">
             <button class="source-tab {{sourceKind === 'WORK' ? 'active' : ''}}" data-kind="WORK" bindtap="handleKindTap">成员作品</button>
             <button class="source-tab {{sourceKind === 'MEMBER_PORTFOLIO' ? 'active' : ''}}" data-kind="MEMBER_PORTFOLIO" bindtap="handleKindTap">成员作品集</button>
@@ -85,7 +92,14 @@
           </view>
         </block>
         <block wx:else>
-          <view class="selection-heading"><view class="selection-title">{{task.status === 'FAILED' && taskError ? '生成失败' : mode === 'CREATE' ? '你想怎样展示？' : '想怎样调整作品集？'}}</view><text class="help-text">{{mode === 'CREATE' ? '说出重点、顺序和风格就好。' : '描述整体修改需求，AI 会基于当前编辑内容调整，包括未保存的修改。'}}</text></view>
+          <view class="selection-heading">
+            <view class="selection-title">{{task.status === 'FAILED' && taskError ? '生成失败' : mode === 'CREATE' ? '你想怎样展示？' : '想怎样调整作品集？'}}</view>
+            <view wx:if="{{mode === 'CREATE' && !managingSources}}" class="selection-subtitle-row">
+              <text class="help-text">说出重点、顺序和风格就好。</text>
+              <button class="tutorial-entry" bindtap="handleOpenTutorial" aria-label="播放高级作品集教学视频"><view class="tutorial-entry-face"><image class="tutorial-icon" src="/assets/system/video-tutorial.svg" mode="aspectFit"></image><text>教程</text></view></button>
+            </view>
+            <text wx:else class="help-text">{{mode === 'CREATE' ? '说出重点、顺序和风格就好。' : '描述整体修改需求，AI 会基于当前编辑内容调整，包括未保存的修改。'}}</text>
+          </view>
           <view wx:if="{{task.status === 'FAILED' && taskError}}" class="panel failure-panel"><view class="field-label">失败原因</view><view class="notice error">{{taskError}}</view><text class="help-text">已选内容与描述已保留，可修改描述后再生成。</text><view wx:if="{{tokenUsageText}}" class="token-usage">{{tokenUsageText}}</view></view>
           <view class="panel selected-panel"><view class="card-heading"><view class="section-title">{{mode === 'CREATE' ? '已选内容' : '可引用的内容'}}</view><button class="text-button" bindtap="handleBackToSources" disabled="{{waiting || adopting || submitting || submissionUncertain}}">{{mode === 'CREATE' ? '调整' : '管理内容'}}</button></view><template is="selected-strip" data="{{selectedSources, step, waiting, adopting, submitting, submissionUncertain}}"></template><text wx:if="{{!selectedSources.length}}" class="help-text">尚未选内容；修改已有文字、样式与顺序可以不选来源。</text><text wx:else class="help-text">点击缩略图，将序号插入描述。</text></view>
           <view wx:if="{{waiting}}" class="panel generation-panel"><view class="generation-mark"><image class="generation-mark-icon" src="/assets/system/ai-sparkle.svg" mode="aspectFit"></image></view><view class="section-title">{{statusText}}</view><text class="help-text">已选内容与描述已保留，完成后先查看候选效果。</text><view wx:if="{{taskError}}" class="notice error">{{taskError}}</view></view>

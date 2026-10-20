@@ -100,6 +100,8 @@ test('mock works keeps production media preview geometry and local filtering', (
   assert.match(wxml, /class="image-preview-title"/)
   assert.match(wxml, /class="image-preview-close"/)
   assert.match(wxml, /class="image-preview-media"/)
+  assert.doesNotMatch(wxml, /<video\b|video-preview-/)
+  assert.doesNotMatch(wxss, /\.video-preview-/)
   assert.match(imageMaskRule, /align-items:\s*center/)
   assert.match(imageMaskRule, /justify-content:\s*center/)
   assert.match(imageMaskRule, /background:\s*rgba\(10,\s*14,\s*20,\s*0\.88\)/)

@@ -22,7 +22,7 @@ function runtime() {
     getStorageSync(key){assert.match(key,/^wefolio_mock_portfolio_draft(?:_9002|_9902)?$/);return storage.get(key)},
     setStorageSync(key,value){assert.match(key,/^wefolio_mock_portfolio_draft(?:_9002|_9902)?$/);storage.set(key,value)},
     removeStorageSync(key){assert.match(key,/^wefolio_mock_portfolio_draft(?:_9002|_9902)?$/);storage.delete(key)},
-    showToast(value){calls.push(['toast',value.title])},navigateTo(value){assert.match(value.url,/^\/pages\/mock\//);calls.push(['navigate',value.url])},
+    showToast(value){calls.push(['toast',value.title])},navigateTo(value){assert.match(value.url,/^\/pages\/mock\//);calls.push(['navigate',value.url]);if(value.success)value.success({eventChannel:{emit(event,payload){calls.push(['player',event,payload])}}})},
     previewImage(value){calls.push(['image',value.current])},createVideoContext(){return {pause(){calls.push(['videoPause'])}}},
     setClipboardData(value){calls.push(['copy',value.data]);value.success()},getWindowInfo(){return {windowWidth:375,windowHeight:812}},
     createSelectorQuery(){let callback;return {in(){return this},select(){return this},boundingClientRect(value){callback=value;return this},exec(){callback({left:240,right:342,top:620,bottom:666,width:102,height:46})}}},
@@ -551,12 +551,15 @@ test('音频配置关闭保留选择、移除清选择并与预览视频互斥',
     assert.equal(preview.data.audioPlaying,false)
     const carousel=preview.data.portfolio.activeComponents.find(x=>x.componentType==='VIDEO_CAROUSEL')
     preview.handleToggleAudio()
-    preview.handleWorkTap({detail:{componentKey:carousel.componentKey,workId:110,mediaUrl:'https://wrong.invalid'}})
+    assert.equal(await preview.handleWorkTap({detail:{componentKey:carousel.componentKey,workId:110,mediaUrl:'https://wrong.invalid'}}),true)
     assert.equal(preview.data.audioPlaying,false)
-    assert.equal(preview.data.videoPreviewVisible,true)
-    assert.equal(preview.data.videoPreview.src,mock.MOCK_WORK_LIBRARY.works.find(w=>w.id===110).mediaUrl)
-    preview.handleToggleAudio();assert.equal(preview.data.videoPreviewVisible,false)
+    assert.equal(preview.data.videoPreviewVisible,undefined)
+    const player=rt.calls.find(call=>call[0]==='player')
+    assert.equal(player[1],'mockVideoPlayer')
+    assert.equal(player[2].url,mock.MOCK_WORK_LIBRARY.works.find(w=>w.id===110).mediaUrl)
+    preview.handleToggleAudio();assert.equal(preview.data.audioPlaying,false)
     preview.onHide();assert.equal(preview.data.audioPlaying,false)
+    preview.onShow();preview.handleToggleAudio();assert.equal(preview.data.audioPlaying,true)
     preview.onUnload()
     edit.handleAudioSetting(event({field:'enabled'},false));assert.equal(edit.data.draft.config.backgroundAudio.workId,108)
     edit.handleAudioSetting(event({field:'remove'}));assert.equal(edit.data.draft.config.backgroundAudio.workId,null)

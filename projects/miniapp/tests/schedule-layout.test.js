@@ -19,6 +19,38 @@ function readRule(content, selector) {
   return match ? match[1] : ''
 }
 
+const calendarMarkerLayouts = [
+  ['pages/schedule/schedule.wxss', '.date-stack', '.day-colors'],
+  ['pages/mock/styles/schedule.wxss', '.date-stack', '.day-colors'],
+  ['pages/portfolios/components/portfolio-schedule-query/portfolio-schedule-query.wxss', '.schedule-query-day-stack', '.schedule-query-day-dots'],
+  ['pages/team-portfolios/components/schedule-query/schedule-query.wxss', '.schedule-query-day-stack', '.schedule-query-day-dots'],
+  ['components/mock/portfolio-schedule-query/portfolio-schedule-query.wxss', '.schedule-query-day-stack', '.schedule-query-day-dots'],
+]
+
+for (const [filePath, stackSelector, markersSelector] of calendarMarkerLayouts) {
+  test(`${filePath} 的档期圆点在选中圆圈外保留可见间距`, () => {
+    const wxss = readProjectFile(filePath)
+    const markersRule = readRule(wxss, markersSelector)
+    const marginMatch = markersRule.match(/margin-top:\s*([\d.]+)rpx/)
+    assert.ok(marginMatch, '圆点行需要显式上间距')
+    const markerMargin = Number(marginMatch[1])
+    const selectedRules = Array.from(wxss.matchAll(/([^{}]+)\{([^{}]*)\}/g))
+      .filter((match) => match[1].includes('.selected') && match[1].trim().endsWith(stackSelector))
+    assert.ok(selectedRules.length > 0, '必须检查实际选中态及深色主题覆盖')
+
+    for (const [, selector, rule] of selectedRules) {
+      const shadowMatch = rule.match(/box-shadow:\s*0\s+0\s+0\s+([\d.]+)rpx/)
+      assert.ok(shadowMatch, `${selector.trim()} 应能读取圆圈的阴影外扩尺寸`)
+      const shadowSpread = Number(shadowMatch[1])
+      // 阴影不占布局空间；不依赖 space-between 偶然分配的余量，最紧凑时也要留白。
+      const visibleGap = markerMargin - shadowSpread
+      assert.ok(visibleGap >= 6, `${selector.trim()} 圆点与圆圈间距 ${visibleGap}rpx，小于 6rpx`)
+    }
+
+    assert.match(markersRule, /flex:\s*none;/, '圆点行不能被纵向 flex 布局压缩')
+  })
+}
+
 test('正式和体验档期的月份箭头不依赖字体或原生按钮内容区', () => {
   const pages = [
     ['pages/schedule/schedule.wxml', 'pages/schedule/schedule.wxss'],
@@ -326,7 +358,7 @@ test('schedule page contains definition and maintenance views wired to backend A
   assert.match(dayMetaRule, /font-weight:\s*500/)
   assert.match(dayMetaRule, /text-overflow:\s*ellipsis/)
   assert.match(dayColorsRule, /min-height:\s*10rpx/)
-  assert.match(dayColorsRule, /margin-top:\s*6rpx/)
+  assert.match(dayColorsRule, /flex:\s*none/)
   assert.match(dayColorRule, /width:\s*10rpx/)
   assert.match(dayColorRule, /height:\s*10rpx/)
   assert.match(dayHeadingRule, /display:\s*flex/)

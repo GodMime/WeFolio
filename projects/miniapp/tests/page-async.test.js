@@ -1735,12 +1735,20 @@ test('works page previews original media from cover tap without opening edit she
   assert.equal(page.data.videoEditSheetVisible, false)
 })
 
-test('mock works page locks card body while cover tap previews original media', () => {
+test('mock works page locks card body while cover tap previews original media', async () => {
   const fakeRequest = () => Promise.resolve({})
   const toasts = []
+  const navigationUrls = []
+  const playerMessages = []
   const page = loadPage('pages/mock/works/works.js', fakeRequest, {
     showToast(options) {
       toasts.push(options)
+    },
+    navigateTo(options) {
+      navigationUrls.push(options.url)
+      options.success({ eventChannel: {
+        emit(event, payload) { playerMessages.push({ event, payload }) }
+      } })
     }
   })
 
@@ -1766,14 +1774,14 @@ test('mock works page locks card body while cover tap previews original media', 
   assert.equal(page.data.imagePreviewVisible, true)
   assert.match(page.data.imagePreview.src, /demo-image-3\.jpg$/)
   assert.equal(page.data.imagePreview.title, '风景图片 3')
-  assert.equal(page.data.videoPreviewVisible, false)
+  assert.deepEqual(navigationUrls, [])
 
   page.handleCloseImagePreview()
 
   assert.equal(page.data.imagePreviewVisible, false)
   assert.equal(page.data.imagePreview, null)
 
-  page.handleWorkPreviewTap({
+  const opened = await page.handleWorkPreviewTap({
     currentTarget: {
       dataset: {
         id: '107'
@@ -1781,12 +1789,15 @@ test('mock works page locks card body while cover tap previews original media', 
     }
   })
 
-  assert.equal(page.data.videoPreviewVisible, true)
-  assert.deepEqual(page.data.videoPreview, {
+  assert.equal(opened, true)
+  assert.equal(page.data.videoPreviewVisible, undefined)
+  assert.equal(page.data.videoPreview, undefined)
+  assert.deepEqual(navigationUrls, ['/pages/mock/video-player/video-player'])
+  assert.deepEqual(playerMessages, [{ event: 'mockVideoPlayer', payload: {
     title: '风景视频 1',
-    src: 'https://cdn2.we-folio.dingchenyong.top/demo/demo-video-1.mp4',
+    url: 'https://cdn2.we-folio.dingchenyong.top/demo/demo-video-1.mp4',
     poster: 'https://cdn2.we-folio.dingchenyong.top/demo/demo-video-1-thumb.jpg'
-  })
+  } }])
 })
 
 test('works page starts remote video frame selection without downloading the video', async () => {

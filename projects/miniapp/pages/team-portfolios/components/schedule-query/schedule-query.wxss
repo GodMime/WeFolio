@@ -63,7 +63,8 @@
 .schedule-calendar-day.muted .schedule-query-day-meta,
 .schedule-calendar-day.disabled .schedule-query-day-meta { color: #dee2e6; }
 .schedule-calendar-day.selected .schedule-query-day-meta { color: #fff; }
-.schedule-query-day-dots { height: 10rpx; display: flex; align-items: center; justify-content: center; gap: 6rpx; margin-top: 6rpx; }
+/* 选中圆圈阴影外扩 9rpx，额外留出 7rpx 可见间距。 */
+.schedule-query-day-dots { height: 10rpx; display: flex; flex: none; align-items: center; justify-content: center; gap: 6rpx; margin-top: 16rpx; }
 .schedule-query-day-dot { width: 10rpx; height: 10rpx; border-radius: 50%; }
 .schedule-query-selected-date { min-height: 40rpx; margin-top: 16rpx; color: #59636f; font-size: 24rpx; line-height: 40rpx; text-align: center; }
 .schedule-query-submit { width: 260rpx; height: 72rpx; margin: 24rpx auto 0; padding: 0; color: #fff; font-size: 26rpx; line-height: 72rpx; border-radius: 999rpx; background: #212529; }

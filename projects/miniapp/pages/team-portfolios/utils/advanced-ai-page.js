@@ -1,4 +1,5 @@
 const { referencePageMethods, referenceExampleText } = require('./advanced-reference-page')
+const { openVideoPlayer } = require('./portfolio-video-player')
 const { normalizeReferenceItems, referenceNextNo, hasReferenceState, referenceUiState } = require('./advanced-reference-attachments')
 const { request: defaultRequest } = require('../../../utils/request.js')
 const { hasLocalToken, handleMaintainerAuthRequired } = require('../../../utils/session.js')
@@ -6,6 +7,9 @@ const { AI_API_PREFIX, ADVANCED_API_PREFIX, ACTIVE_STATUSES, AI_TASK_MODES, PROM
   captureBasis, candidateError, taskErrorMessage, buildTaskPayload, statusMessage, makeKey, clone, text, validatePrompt } = require('./advanced-portfolios')
 const PAGE_SIZE = 20
 const CAPABILITY_CHECK_FAILED_MESSAGE = '暂时无法检查附件服务，请重试'
+/** 教程固定使用公开竖屏视频，独立播放时不改动当前新建会话。 */
+const TUTORIAL_VIDEO_URL = 'https://cdn2.we-folio.dingchenyong.top/system/wefolio-ai-portfolio-v11.mp4'
+const TUTORIAL_VIDEO_TITLE = '高级作品集使用教程'
 /** 创建示例统一用于页面展示与一键填入。 */
 /** 媒体枚举只用于显示，提交仍保留原始类型。 */
 const MEDIA_TYPE_LABELS = Object.freeze({ IMAGE: '图片', VIDEO: '视频', ANIMATION: '动图', AUDIO: '音频' })
@@ -32,6 +36,7 @@ function normalizeSource(source = {}, team = false) {
 function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {}) {
   const request = requestFn
   const packageRoot = team ? 'team-portfolios' : 'portfolios'
+  const tutorialVideoRoute = `/pages/${packageRoot}/video-player/video-player`
   return {
     ...referencePageMethods(request),
     data: { team, ownerType: team ? 'TEAM' : 'USER', ownerId: '', portfolioId: null, draftRevision: 0, localEditRevision: 0,
@@ -69,6 +74,12 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
     },
     onShow() { if (this.data.waiting && !this.pollTimer) this.schedulePoll() },
     onHide() { clearTimeout(this.pollTimer); this.pollTimer = null },
+    /** 导航到本分包播放器，返回后继续使用原页面内存中的内容与描述。 */
+    handleOpenTutorial() {
+      if (this.data.mode !== 'CREATE' || this.data.managingSources) return Promise.resolve(false)
+      return openVideoPlayer({ url: TUTORIAL_VIDEO_URL, title: TUTORIAL_VIDEO_TITLE,
+        route: tutorialVideoRoute, portrait: true }, wx)
+    },
     onUnload() {
       this.stopReferenceProcessing()
       this.disposed = true

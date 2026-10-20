@@ -122,27 +122,5 @@
     </view>
   </view>
 
-  <view class="video-preview-mask {{videoPreviewVisible ? 'visible' : ''}}" catchtap="handleCloseVideoPreview">
-    <view class="video-preview-panel" catchtap="handleVideoPreviewPanelTap">
-      <view class="video-preview-heading">
-        <view class="video-preview-title">{{videoPreview.title}}</view>
-        <view class="video-preview-close" catchtap="handleCloseVideoPreview" aria-role="button" aria-label="关闭视频">×</view>
-      </view>
-      <video
-        wx:if="{{videoPreviewVisible}}"
-        binderror="handleVideoError"
-        id="mockWorkVideo"
-        class="video-preview-player"
-        src="{{videoPreview.src}}"
-        poster="{{videoPreview.poster}}"
-        controls="{{true}}"
-        autoplay="{{true}}"
-        show-center-play-btn="{{true}}"
-        enable-progress-gesture="{{true}}"
-        object-fit="contain"
-      ></video>
-    </view>
-  </view>
-
   <mock-tabbar tabs="{{tabs}}"></mock-tabbar>
 </view>

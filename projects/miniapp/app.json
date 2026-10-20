@@ -27,6 +27,7 @@
         "index/index",
         "schedule/schedule",
         "works/works",
+        "video-player/video-player",
         "portfolios/portfolios",
         "portfolio-standard-edit/portfolio-standard-edit",
         "portfolio-standard-preview/portfolio-standard-preview"

@@ -346,10 +346,12 @@
 .schedule-query-day-dots {
   height: 10rpx;
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   gap: 6rpx;
-  margin-top: 6rpx;
+  /* 选中圆圈阴影外扩 9rpx，额外留出 7rpx 可见间距。 */
+  margin-top: 16rpx;
 }
 
 .schedule-query-day-dot {

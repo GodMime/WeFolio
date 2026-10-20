@@ -65,6 +65,19 @@ for (const filename of MODULES) {
     }]])
   })
 
+  test(`${label}: 仅显式竖屏参数扩展播放载荷，旧调用保持原载荷`, async () => {
+    const { openVideoPlayer } = require(filename)
+    for (const portrait of [true, false, undefined, 'true', 1]) {
+      let payload
+      assert.equal(await openVideoPlayer({ url: VIDEO.url, route, portrait }, {
+        navigateTo: options => options.success({ eventChannel: { emit: (event, value) => { payload = value } } })
+      }), true)
+      const expected = { url: VIDEO.url, poster: '', title: '', browserContext: null, contextId: '' }
+      if (portrait === true) expected.portrait = true
+      assert.deepEqual(payload, expected)
+    }
+  })
+
   test(`${label}: 会话尚无幂等键时保留会话对象并发送空标识`, async () => {
     const { openVideoPlayer } = require(filename)
     const browserContext = { visitorToken: 'test-visitor-token' }

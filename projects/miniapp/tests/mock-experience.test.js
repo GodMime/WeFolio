@@ -12,6 +12,7 @@ const MOCK_PAGE_PATHS = [
   'pages/mock/index/index',
   'pages/mock/schedule/schedule',
   'pages/mock/works/works',
+  'pages/mock/video-player/video-player',
   'pages/mock/portfolios/portfolios',
   'pages/mock/portfolio-standard-edit/portfolio-standard-edit',
   'pages/mock/portfolio-standard-preview/portfolio-standard-preview'
@@ -21,6 +22,8 @@ const MOCK_PAGE_SOURCE_FILES = MOCK_PAGE_PATHS.flatMap((pagePath) => [
   `${pagePath}.wxml`
 ]).concat([
   'pages/mock/utils/mock-experience.js',
+  'pages/mock/utils/mock-video-player.js',
+  'pages/mock/utils/mock-video-player-page.js',
   'components/mock/portfolio-renderer/portfolio-renderer.js',
   'components/mock/portfolio-renderer/portfolio-renderer.wxml',
   'components/mock/portfolio-schedule-query/portfolio-schedule-query.js',
@@ -1104,16 +1107,16 @@ test('mock page markup exposes required registration prompts and navigation acti
   assert.doesNotMatch(rendererWxml, /component\.componentType === 'CONTACT_FORM'/)
 })
 
-test('mock preview video overlay renders in root portal like production preview', () => {
+test('mock preview videos use a local independent player without the Skyline overlay', () => {
   const previewWxml = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.wxml')
-  const portalStart = previewWxml.indexOf('<root-portal wx:if="{{videoPreviewVisible}}">')
-  const maskStart = previewWxml.indexOf('class="work-video-mask {{videoPreviewVisible ? \'visible\' : \'\'}}"')
-  const portalEnd = previewWxml.indexOf('</root-portal>', portalStart)
-
-  assert.notEqual(portalStart, -1)
-  assert.notEqual(maskStart, -1)
-  assert.ok(maskStart > portalStart)
-  assert.ok(maskStart < portalEnd)
+  const previewJs = read('pages/mock/portfolio-standard-preview/portfolio-standard-preview.js')
+  assert.doesNotMatch(previewWxml, /class="work-video-|mockPortfolioWorkVideo|videoPreviewVisible/)
+  assert.match(previewJs, /require\('\.\.\/utils\/mock-video-player'\)/)
+  assert.match(previewJs, /await openMockVideoPlayer\(/)
+  const player = readJson('pages/mock/video-player/video-player.json')
+  assert.equal(player.renderer, 'webview')
+  assert.equal(player.navigationStyle, 'default')
+  assert.doesNotMatch(read('pages/mock/video-player/video-player.wxml'), /navigation-bar|tabbar|root-portal/)
 })
 
 test('mock portfolio preview keeps personal tags in the shared chromatic pill language', () => {
