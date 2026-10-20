@@ -150,13 +150,30 @@
   justify-content: center;
   flex: none;
   color: #212529;
-  font-size: 40rpx;
-  font-weight: 700;
-  line-height: 1;
+  font-size: 0;
+  line-height: 0;
   border: 1rpx solid #dee2e6;
   border-radius: 999rpx;
   background: #f5f6f7;
   box-sizing: border-box;
+}
+
+/* 固定图形不依赖字体度量，线条颜色随按钮继承作品集主题。 */
+.schedule-query-month-arrow {
+  width: 16rpx;
+  height: 16rpx;
+  flex: none;
+  box-sizing: border-box;
+  border-right: 3rpx solid currentColor;
+  border-bottom: 3rpx solid currentColor;
+}
+
+.schedule-query-month-arrow.prev {
+  transform: translateX(4rpx) rotate(135deg);
+}
+
+.schedule-query-month-arrow.next {
+  transform: translateX(-4rpx) rotate(-45deg);
 }
 
 .schedule-query-month-text {

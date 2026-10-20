@@ -40,7 +40,11 @@
 .schedule-query-close { width: 56rpx; height: 56rpx; display: flex; align-items: center; justify-content: center; flex: none; color: #59636f; font-size: 36rpx; font-weight: 700; line-height: 1; border-radius: 50%; background: #f3f6f9; }
 .schedule-query-calendar { padding: 24rpx; border: 1rpx solid #e9ecef; border-radius: 48rpx; background: #fff; box-sizing: border-box; }
 .schedule-query-month-bar { display: flex; align-items: center; justify-content: flex-start; gap: 12rpx; }
-.schedule-query-month-button { width: 60rpx; height: 60rpx; display: flex; align-items: center; justify-content: center; flex: none; color: #212529; font-size: 40rpx; font-weight: 700; line-height: 1; border: 1rpx solid #dee2e6; border-radius: 999rpx; background: #f5f6f7; box-sizing: border-box; }
+.schedule-query-month-button { width: 60rpx; height: 60rpx; display: flex; align-items: center; justify-content: center; flex: none; color: #212529; font-size: 0; line-height: 0; border: 1rpx solid #dee2e6; border-radius: 999rpx; background: #f5f6f7; box-sizing: border-box; }
+/* 固定图形不依赖字体度量，线条颜色随按钮继承作品集主题。 */
+.schedule-query-month-arrow { width: 16rpx; height: 16rpx; flex: none; box-sizing: border-box; border-right: 3rpx solid currentColor; border-bottom: 3rpx solid currentColor; }
+.schedule-query-month-arrow.prev { transform: translateX(4rpx) rotate(135deg); }
+.schedule-query-month-arrow.next { transform: translateX(-4rpx) rotate(-45deg); }
 .schedule-query-month-text { min-width: 0; flex: 1 1 auto; color: #212529; font-size: 28rpx; font-weight: 900; line-height: 1.3; text-align: left; white-space: nowrap; }
 .schedule-query-month-picker { flex: none; }
 .schedule-query-month-picker-button { height: 56rpx; display: flex; align-items: center; justify-content: center; padding: 0 18rpx; color: #36516e; font-size: 22rpx; font-weight: 800; line-height: 1; border: 1rpx solid #d8dee5; border-radius: 999rpx; background: #f8fbfd; box-sizing: border-box; white-space: nowrap; }
