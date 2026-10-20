@@ -19,6 +19,54 @@ function readRule(content, selector) {
   return match ? match[1] : ''
 }
 
+test('正式和体验档期的月份箭头不依赖字体或原生按钮内容区', () => {
+  const pages = [
+    ['pages/schedule/schedule.wxml', 'pages/schedule/schedule.wxss'],
+    ['pages/mock/schedule/schedule.wxml', 'pages/mock/styles/schedule.wxss'],
+  ]
+
+  for (const [wxmlPath, wxssPath] of pages) {
+    const wxml = readProjectFile(wxmlPath)
+    const wxss = readProjectFile(wxssPath)
+    const controlRule = readRule(wxss, '.month-control')
+    const arrowRule = readRule(wxss, '.schedule-month-arrow')
+
+    for (const [direction, handler, label] of [
+      ['prev', 'handlePrevMonth', '上个月'],
+      ['next', 'handleNextMonth', '下个月'],
+    ]) {
+      const trigger = wxml.match(new RegExp(`<view\\s+([^>]*bindtap="${handler}"[^>]*)>\\s*<view\\s+([^>]*)><\\/view>\\s*<\\/view>`))
+      assert.ok(trigger, `${wxmlPath} ${label}应使用独立图标触发器`)
+      assert.match(trigger[1], /class="month-control"/)
+      assert.match(trigger[1], /aria-role="button"/)
+      assert.ok(trigger[1].includes(`aria-label="${label}"`))
+      assert.ok(trigger[2].includes(`class="schedule-month-arrow ${direction}"`))
+      assert.match(trigger[2], /aria-hidden="true"/)
+    }
+
+    assert.doesNotMatch(wxml, /bindtap="handle(?:Prev|Next)Month">[‹›]/)
+    assert.match(controlRule, /flex:\s*0\s+0\s+64rpx/)
+    assert.match(controlRule, /padding:\s*0;/)
+    assert.match(arrowRule, /flex:\s*none;/)
+    assert.match(arrowRule, /box-sizing:\s*border-box;/)
+    assert.match(arrowRule, /border-right:\s*3rpx solid #36516e;/)
+    assert.match(arrowRule, /border-bottom:\s*3rpx solid #36516e;/)
+    assert.match(readRule(wxss, '.schedule-month-arrow.prev'), /rotate\(135deg\)/)
+    assert.match(readRule(wxss, '.schedule-month-arrow.next'), /rotate\(-45deg\)/)
+
+    // 旋转后的箭头和光学居中偏移必须完整落在圆形触发器的内容区内。
+    const arrowWidth = Number(arrowRule.match(/width:\s*(\d+)rpx/)[1])
+    const arrowHeight = Number(arrowRule.match(/height:\s*(\d+)rpx/)[1])
+    const controlSize = Number(controlRule.match(/width:\s*(\d+)rpx/)[1])
+    const controlBorder = Number(controlRule.match(/border:\s*(\d+)rpx/)[1])
+    for (const direction of ['prev', 'next']) {
+      const directionRule = readRule(wxss, `.schedule-month-arrow.${direction}`)
+      const offset = Math.abs(Number(directionRule.match(/translateX\((-?\d+)rpx\)/)[1]))
+      assert.ok(Math.hypot(arrowWidth, arrowHeight) + offset * 2 < controlSize - controlBorder * 2)
+    }
+  }
+})
+
 test('app registers active schedule page and mine tab navigates to it', () => {
   const appJson = readJson('app.json')
   const registeredPageRoutes = getRegisteredPageRoutes(appJson)

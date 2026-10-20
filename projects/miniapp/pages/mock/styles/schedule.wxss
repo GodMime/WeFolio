@@ -49,8 +49,7 @@
 .outline-button::after,
 .mini-action::after,
 .primary-button::after,
-.secondary-button::after,
-.month-control::after {
+.secondary-button::after {
   border: 0;
 }
 
@@ -352,6 +351,28 @@
   border: 2rpx solid #d8e0e8;
   border-radius: 50%;
   background: #f8fbfd;
+}
+
+.month-control-pressed {
+  opacity: 0.6;
+}
+
+/* 用固定尺寸的线条绘制箭头，避免字体字形和行高影响图标显示。 */
+.schedule-month-arrow {
+  width: 16rpx;
+  height: 16rpx;
+  flex: none;
+  box-sizing: border-box;
+  border-right: 3rpx solid #36516e;
+  border-bottom: 3rpx solid #36516e;
+}
+
+.schedule-month-arrow.prev {
+  transform: translateX(4rpx) rotate(135deg);
+}
+
+.schedule-month-arrow.next {
+  transform: translateX(-4rpx) rotate(-45deg);
 }
 
 .month-control.wide {

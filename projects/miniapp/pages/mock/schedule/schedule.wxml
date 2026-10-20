@@ -27,12 +27,16 @@
 
         <view class="calendar-group">
           <view class="calendar-toolbar">
-            <button class="month-control" bindtap="handlePrevMonth">‹</button>
+            <view class="month-control" aria-role="button" aria-label="上个月" hover-class="month-control-pressed" bindtap="handlePrevMonth">
+              <view class="schedule-month-arrow prev" aria-hidden="true"></view>
+            </view>
             <view class="month-title">{{month.title}}</view>
             <picker class="month-picker" mode="date" fields="month" value="{{month.yearMonth}}" bindchange="handleMonthPickerChange">
               <view class="month-control wide">切换年月</view>
             </picker>
-            <button class="month-control" bindtap="handleNextMonth">›</button>
+            <view class="month-control" aria-role="button" aria-label="下个月" hover-class="month-control-pressed" bindtap="handleNextMonth">
+              <view class="schedule-month-arrow next" aria-hidden="true"></view>
+            </view>
           </view>
 
           <view class="calendar-region">
