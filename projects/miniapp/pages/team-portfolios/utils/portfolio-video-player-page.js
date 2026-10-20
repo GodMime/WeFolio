@@ -1,4 +1,4 @@
-// 原生视频独立于作品集的 Skyline 布局，授权和地址只通过本次导航的内存通道传递。
+// 原生视频独立于来源页的 Skyline 布局，授权和地址只通过本次导航的内存通道传递。
 const PLAYER_EVENT = 'portfolioVideoPlayer'
 const VIDEO_ID = 'portfolioVideoPlayer'
 const CONTEXT_WAIT_MS = 1000
@@ -22,7 +22,9 @@ function validPayload(payload) {
     && !(typeof context.isDisposed === 'function' && context.isDisposed())
 }
 
-function createVideoPlayerPage({ wxApi, setTimer = setTimeout, clearTimer = clearTimeout }) {
+// 不同来源页可指定返回提示，作品集入口沿用原提示文案。
+function createVideoPlayerPage({ wxApi, setTimer = setTimeout, clearTimer = clearTimeout,
+  fullscreenExitFailedMessage = FULLSCREEN_EXIT_FAILED }) {
   return {
     data: { loadingContext: true, available: false, url: '', poster: '', title: '', playing: false, fullscreen: false },
     onLoad() {
@@ -208,7 +210,7 @@ function createVideoPlayerPage({ wxApi, setTimer = setTimeout, clearTimer = clea
     },
     exitPlayerFullscreen() {
       if (!this.callPlayerVideo('exitFullScreen') && this._playerAlive) {
-        wxApi.showToast({ title: FULLSCREEN_EXIT_FAILED, icon: TOAST_ICON })
+        wxApi.showToast({ title: fullscreenExitFailedMessage, icon: TOAST_ICON })
       }
     },
     handleBack() {

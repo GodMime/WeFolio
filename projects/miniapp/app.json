@@ -37,6 +37,7 @@
       "root": "pages/works",
       "pages": [
         "works",
+        "video-player/video-player",
         "work-add/work-add",
         "work-edit/work-edit",
         "video-frame-probe/video-frame-probe"

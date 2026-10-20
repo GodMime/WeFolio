@@ -1594,12 +1594,20 @@ test('works page opens video edit sheet and saves video text without downloading
   assert.equal(page.data.videoEditSheetVisible, false)
 })
 
-test('works page previews video from remote url without downloading full file', async () => {
+test('works page opens the independent video player without downloading full file or editing', async () => {
   const fakeRequest = () => Promise.resolve({ works: [], tags: [], summary: {} })
   let downloadCount = 0
+  const navigationUrls = []
+  const playerMessages = []
   const page = loadPage('pages/works/works.js', fakeRequest, {
     downloadFile() {
       downloadCount += 1
+    },
+    navigateTo(options) {
+      navigationUrls.push(options.url)
+      options.success({ eventChannel: {
+        emit(event, payload) { playerMessages.push({ event, payload }) }
+      } })
     }
   })
   page.data.list.works = [
@@ -1612,7 +1620,7 @@ test('works page previews video from remote url without downloading full file', 
     }
   ]
 
-  page.handlePlayVideoTap({
+  const opened = await page.handlePlayVideoTap({
     currentTarget: {
       dataset: {
         id: '18'
@@ -1620,24 +1628,39 @@ test('works page previews video from remote url without downloading full file', 
     }
   })
 
+  assert.equal(opened, true)
   assert.equal(downloadCount, 0)
-  assert.equal(page.data.videoPreviewVisible, true)
-  assert.deepEqual(page.data.videoPreview, {
-    src: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
-    poster: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film-thumb.jpg',
-    title: '片头快剪'
-  })
+  assert.deepEqual(navigationUrls, ['/pages/works/video-player/video-player'])
+  assert.deepEqual(playerMessages, [{
+    event: 'portfolioVideoPlayer',
+    payload: {
+      url: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
+      poster: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film-thumb.jpg',
+      title: '片头快剪',
+      browserContext: null,
+      contextId: ''
+    }
+  }])
+  assert.equal(page.data.imageEditSheetVisible, false)
   assert.equal(page.data.videoEditSheetVisible, false)
-
-  page.handleCloseVideoPreview()
-
-  assert.equal(page.data.videoPreviewVisible, false)
-  assert.equal(page.data.videoPreview, null)
+  assert.equal(page.data.videoPreviewVisible, undefined)
+  assert.equal(page.data.videoPreview, undefined)
 })
 
-test('works page previews original media from cover tap without opening edit sheet', () => {
+test('works page previews original media from cover tap without opening edit sheet', async () => {
   const fakeRequest = () => Promise.resolve({ works: [], tags: [], summary: {} })
-  const page = loadPage('pages/works/works.js', fakeRequest)
+  let downloadCount = 0
+  const navigationUrls = []
+  const playerMessages = []
+  const page = loadPage('pages/works/works.js', fakeRequest, {
+    downloadFile() { downloadCount += 1 },
+    navigateTo(options) {
+      navigationUrls.push(options.url)
+      options.success({ eventChannel: {
+        emit(event, payload) { playerMessages.push({ event, payload }) }
+      } })
+    }
+  })
   page.data.list.works = [
     {
       id: 17,
@@ -1678,13 +1701,14 @@ test('works page previews original media from cover tap without opening edit she
   })
   assert.equal(page.data.imageEditSheetVisible, false)
   assert.equal(page.data.videoEditSheetVisible, false)
+  assert.deepEqual(navigationUrls, [])
 
   page.handleCloseImagePreview()
 
   assert.equal(page.data.imagePreviewVisible, false)
   assert.equal(page.data.imagePreview, null)
 
-  page.handleWorkPreviewTap({
+  const opened = await page.handleWorkPreviewTap({
     currentTarget: {
       dataset: {
         id: '19'
@@ -1692,12 +1716,21 @@ test('works page previews original media from cover tap without opening edit she
     }
   })
 
-  assert.equal(page.data.videoPreviewVisible, true)
-  assert.deepEqual(page.data.videoPreview, {
-    src: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
-    poster: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film-thumb.jpg',
-    title: '片头快剪'
-  })
+  assert.equal(opened, true)
+  assert.equal(downloadCount, 0)
+  assert.deepEqual(navigationUrls, ['/pages/works/video-player/video-player'])
+  assert.deepEqual(playerMessages, [{
+    event: 'portfolioVideoPlayer',
+    payload: {
+      url: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film.mp4',
+      poster: 'https://cos.we-folio.dingchenyong.top/WF/work/video/film-thumb.jpg',
+      title: '片头快剪',
+      browserContext: null,
+      contextId: ''
+    }
+  }])
+  assert.equal(page.data.videoPreviewVisible, undefined)
+  assert.equal(page.data.videoPreview, undefined)
   assert.equal(page.data.imageEditSheetVisible, false)
   assert.equal(page.data.videoEditSheetVisible, false)
 })

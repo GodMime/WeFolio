@@ -3,13 +3,15 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
-const MODULES = ['portfolios', 'team-portfolios'].map(name =>
+const MODULES = ['portfolios', 'team-portfolios', 'works'].map(name =>
   path.join(__dirname, `../pages/${name}/utils/portfolio-video-player.js`))
 const VIDEO = { url: 'https://cdn.example.com/work.mp4', poster: 'https://cdn.example.com/cover.jpg' }
 const FAILURE_TOAST = { title: '视频打开失败，请重试', icon: 'none' }
 
-test('视频播放页导航保留在各自分包，两个实现保持一致', () => {
-  assert.equal(fs.readFileSync(MODULES[0], 'utf8'), fs.readFileSync(MODULES[1], 'utf8'))
+test('视频播放页导航保留在各自分包，三个实现保持一致', () => {
+  for (const filename of MODULES.slice(1)) {
+    assert.equal(fs.readFileSync(MODULES[0], 'utf8'), fs.readFileSync(filename, 'utf8'))
+  }
 })
 
 for (const filename of MODULES) {

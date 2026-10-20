@@ -2,6 +2,7 @@ const { request } = require('../../utils/request')
 const { normalizeId } = require('../../utils/id')
 const { handleMaintainerAuthRequired, hasLocalToken } = require('../../utils/session')
 const { isRemoteUrl } = require('../../utils/upload-file')
+const { openVideoPlayer } = require('./utils/portfolio-video-player')
 const {
   buildAspectRatio,
   buildThumbFileName,
@@ -49,6 +50,7 @@ const {
 } = require('./utils/works')
 
 const ADD_WORK_PAGE_URL = '/pages/works/work-add/work-add'
+const VIDEO_PLAYER_PAGE_URL = '/pages/works/video-player/video-player'
 const MINE_PAGE_URL = '/pages/index/index'
 const SCHEDULE_PAGE_URL = '/pages/schedule/schedule'
 const PORTFOLIOS_PAGE_URL = '/pages/portfolios/portfolios'
@@ -83,7 +85,7 @@ const WORK_THUMBNAIL_CROP_HORIZONTAL_GUTTER_RPX = 112
 const WORK_THUMBNAIL_PREVIEW_FILE_PREFIX = 'work-thumbnail-preview'
 const WORK_TAG_REFERENCED_NOTICE = '已引用作品只能新增标签，不能删除已有标签'
 const WORK_TAG_REFERENCED_TOAST = '已引用作品不能删除已有标签'
-const WORK_VIDEO_IDS = ['workPreviewVideo', 'workCoverVideo']
+const WORK_VIDEO_IDS = ['workCoverVideo']
 
 function clampNumber(value, min, max) {
   const numberValue = Number(value)
@@ -477,8 +479,6 @@ Page({
     animationEditErrorText: '',
     imagePreviewVisible: false,
     imagePreview: null,
-    videoPreviewVisible: false,
-    videoPreview: null,
     sortMode: false,
     sortTitle: WORK_SORT_TITLE,
     sortWorks: [],
@@ -498,8 +498,11 @@ Page({
   },
 
   onShow() {
+    const returningFromVideo = Boolean(this.workVideoSession)
+    this.workVideoSession = null
     this.audioHidden = false
-    this.bootstrap()
+    // 播放不会修改作品，返回时保留已加载的分页与滚动位置，避免重建整个列表。
+    if (!returningFromVideo) this.bootstrap()
   },
 
   onHide() {
@@ -638,6 +641,8 @@ Page({
   },
 
   onUnload() {
+    this.workVideoDisposed = true
+    this.workVideoSession = null
     this.resetVideoAi()
     this.pauseWorkAudio()
     this.audioDisposed = true
@@ -1257,9 +1262,6 @@ Page({
   handleEditPanelTap() {
   },
 
-  handleVideoPreviewPanelTap() {
-  },
-
   handleWorkPreviewTap(event) {
     if (this.data.batchMode || this.data.sortMode) {
       return
@@ -1270,8 +1272,7 @@ Page({
       return
     }
     if (work.mediaType === 'VIDEO') {
-      this.openVideoPreview(work)
-      return
+      return this.openVideoPreview(work)
     }
     if (work.mediaType === 'AUDIO') {
       this.toggleWorkAudio(work)
@@ -1300,7 +1301,8 @@ Page({
     })
   },
 
-  openVideoPreview(work = {}) {
+  async openVideoPreview(work = {}) {
+    if (this.workVideoDisposed || this.workVideoSession || this.audioHidden) return false
     this.pauseWorkAudio()
     const src = work.mediaUrl || ''
     if (!src) {
@@ -1308,18 +1310,24 @@ Page({
         title: '视频地址缺失',
         icon: 'none'
       })
-      return
+      return false
     }
+    // 素材库带有 Skyline 底栏，视频交给独立播放页，避免 iPhone 原生全屏被页面浮层遮挡。
+    const session = {}
+    this.workVideoSession = session
     this.setData({
-      videoPreviewVisible: true,
-      videoPreview: {
-        src,
-        poster: work.coverUrl || '',
-        title: work.title || '视频作品'
-      },
       revealedWorkId: null,
       tagManageMode: false
     })
+    const opened = await openVideoPlayer({
+      url: src,
+      poster: work.coverUrl || '',
+      title: work.title || '视频作品',
+      route: VIDEO_PLAYER_PAGE_URL
+    }, wx)
+    // 失败回调可能晚于返回或下一次点击，不能清理更新的播放会话。
+    if (!opened && this.workVideoSession === session) this.workVideoSession = null
+    return opened
   },
 
   handlePlayVideoTap(event) {
@@ -1331,14 +1339,7 @@ Page({
     if (!work || work.mediaType !== 'VIDEO') {
       return
     }
-    this.openVideoPreview(work)
-  },
-
-  handleCloseVideoPreview() {
-    this.setData({
-      videoPreviewVisible: false,
-      videoPreview: null
-    })
+    return this.openVideoPreview(work)
   },
 
   handleImagePreviewPanelTap() {

@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
-const packages = ['portfolios', 'team-portfolios']
+const packages = ['portfolios', 'team-portfolios', 'works']
 const payload = overrides => Object.assign({ url: 'https://example.test/video.mp4', poster: 'https://example.test/cover.jpg',
   title: '视频作品', browserContext: null, contextId: '' }, overrides)
 
@@ -17,7 +17,7 @@ function harness(utility, options = {}) {
     navigateBack(value) { calls.push(['navigateBack', value]) }, reLaunch(value) { calls.push(['reLaunch', value]) } }
   const channel = { on(event, handler) { listeners.set(event, handler) },
     off(event, handler) { assert.equal(listeners.get(event), handler); listeners.delete(event); calls.push(['off', event]) } }
-  const definition = utility.createVideoPlayerPage({ wxApi,
+  const definition = utility.createVideoPlayerPage({ wxApi, ...options.pageOptions,
     setTimer(callback, delay) { assert.ok([1000, 3000].includes(delay)); timers.set(++timerId, callback); return timerId },
     clearTimer(id) { timers.delete(id) } })
   const page = Object.assign({}, definition, { data: structuredClone(definition.data),
@@ -204,6 +204,22 @@ for (const packageName of packages) {
     assert.equal(waiting.timers.size, 0)
   })
 
+  test(`${packageName} failed fullscreen exit uses the source page return message and waits for the exit event`, () => {
+    for (const fullscreenExitFailedMessage of [undefined, '请先退出全屏，再返回作品']) {
+      const state = harness(utility, { throws: 'exitFullScreen', pageOptions: { fullscreenExitFailedMessage } })
+      state.receive(); state.page.onShow()
+      state.page.handleFullscreenChange({ detail: { fullScreen: true } })
+      state.page.handleBack()
+      assert.equal(state.methods().includes('navigateBack'), false)
+      assert.deepEqual(state.calls.find(call => call[0] === 'showToast')[1], {
+        title: fullscreenExitFailedMessage || '请先退出全屏，再返回作品集', icon: 'none'
+      })
+      state.page.handleFullscreenChange({ detail: { fullScreen: false } })
+      assert.equal(state.methods().includes('navigateBack'), true)
+      state.page.onUnload()
+    }
+  })
+
   test(`${packageName} visitor activity follows page visibility without disposing the source context`, () => {
     const activity = []
     const context = { idempotencyKey: 'session', show(owner) { activity.push(['show', owner]) },
@@ -255,11 +271,16 @@ for (const packageName of packages) {
   })
 }
 
-test('both subpackages retain identical player implementation and independent webview pages', () => {
+test('各分包保留一致的播放器实现和独立 webview 页面，并按来源页显示返回文案', () => {
   const read = (packageName, relative) => fs.readFileSync(path.join(__dirname, `../pages/${packageName}/${relative}`), 'utf8')
-  for (const relative of ['utils/portfolio-video-player-page.js', 'video-player/video-player.js',
-    'video-player/video-player.json', 'video-player/video-player.wxml', 'video-player/video-player.wxss']) {
-    assert.equal(read(packages[0], relative), read(packages[1], relative))
+  for (const relative of ['utils/portfolio-video-player-page.js',
+    'video-player/video-player.json', 'video-player/video-player.wxss']) {
+    for (const packageName of packages.slice(1)) {
+      assert.equal(read(packages[0], relative), read(packageName, relative))
+    }
+  }
+  for (const relative of ['video-player/video-player.js', 'video-player/video-player.wxml']) {
+    assert.equal(read('portfolios', relative), read('team-portfolios', relative))
   }
   for (const packageName of packages) {
     const config = JSON.parse(read(packageName, 'video-player/video-player.json'))
@@ -282,11 +303,19 @@ test('both subpackages retain identical player implementation and independent we
     assert.match(markup, /bindfullscreenchange="handleFullscreenChange"/)
     assert.doesNotMatch(markup, /bindtap="handleEnterFullscreen"|bindtap="handleTogglePlayback"|portfolio-video-toolbar|portfolio-video-actions|portfolio-video-back/)
     assert.match(markup, /<view\b[^>]*class="portfolio-video-title"[^>]*>\{\{title\}\}<\/view>/)
-    assert.match(markup, /<view wx:elif="\{\{!available\}\}"[^>]*>[\s\S]*?<button\b[^>]*bindtap="handleBack"[^>]*>返回作品集<\/button><\/view>/)
+    const backLabel = packageName === 'works' ? '返回作品' : '返回作品集'
+    assert.match(markup, new RegExp(`<view wx:elif="\\{\\{!available\\}\\}"[^>]*>[\\s\\S]*?<button\\b[^>]*bindtap="handleBack"[^>]*>${backLabel}<\\/button><\\/view>`))
     assert.equal((markup.match(/<button\b/g) || []).length, 1)
     assert.doesNotMatch(markup, /catchtouch|catchtap|<scroll-view|<cover-view|hidden="\{\{fullscreen\}\}"[^>]*src=/)
     const styles = read(packageName, 'video-player/video-player.wxss')
     assert.doesNotMatch(styles, /pointer-events|overflow|transform|portfolio-video-toolbar|portfolio-video-actions|portfolio-video-back/)
-    assert.match(read(packageName, 'video-player/video-player.js'), /Page\(createVideoPlayerPage\(\{ wxApi: wx \}\)\)/)
+    const source = read(packageName, 'video-player/video-player.js')
+    assert.match(source, /require\('\.\.\/utils\/portfolio-video-player-page'\)/)
+    if (packageName === 'works') {
+      assert.match(source, /const FULLSCREEN_EXIT_FAILED = '请先退出全屏，再返回作品'/)
+      assert.match(source, /Page\(createVideoPlayerPage\(\{ wxApi: wx, fullscreenExitFailedMessage: FULLSCREEN_EXIT_FAILED \}\)\)/)
+    } else {
+      assert.match(source, /Page\(createVideoPlayerPage\(\{ wxApi: wx \}\)\)/)
+    }
   }
 })
