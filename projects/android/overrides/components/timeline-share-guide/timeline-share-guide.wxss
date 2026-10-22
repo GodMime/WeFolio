@@ -1,0 +1,5 @@
+.android-timeline-mask { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 9999; background: rgba(15, 23, 42, .65); display: flex; align-items: center; justify-content: center; }
+.android-timeline-panel { background: white; border-radius: 28rpx; padding: 40rpx; width: 560rpx; color: #17202a; }
+.android-timeline-title { font-size: 34rpx; font-weight: 600; }
+.android-timeline-desc { font-size: 26rpx; line-height: 1.7; color: #64748b; margin: 24rpx 0; }
+.android-timeline-primary { margin-bottom: 24rpx; background: #0f766e; color: white; }

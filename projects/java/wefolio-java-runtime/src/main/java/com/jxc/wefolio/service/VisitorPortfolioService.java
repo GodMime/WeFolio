@@ -164,6 +164,12 @@ public class VisitorPortfolioService {
      * @return 访客作品集响应
      */
     public VisitorPortfolioResponse openPortfolio(String shareCode, VisitorPortfolioOpenRequest request) {
+        return openPortfolio(shareCode, request, null);
+    }
+
+    /** 新增移动端复用入口；身份供应者仅来自已认证的服务端用例，旧入口保持原解析流程。 */
+    public VisitorPortfolioResponse openPortfolio(String shareCode, VisitorPortfolioOpenRequest request,
+            java.util.function.Supplier<VisitorService.VisitorSession> authenticatedVisitor) {
         PortfolioOpenPerformanceLogger.Trace trace = portfolioOpenPerformanceLogger.start(
                 PortfolioOpenPerformanceLogger.PortfolioType.PERSONAL);
         Throwable failure = null;
@@ -175,11 +181,11 @@ public class VisitorPortfolioService {
                     PortfolioOpenPerformanceLogger.Phase.PORTFOLIO_LOOKUP,
                     () -> parseConfig(portfolio.getPublishedConfigJson()));
             // 匿名身份按数据库 ID 聚合，避免分享码变更后产生新的计费访客身份。
-            VisitorService.VisitorSession visitorSession = visitorService.resolveForOpen(
+            VisitorService.VisitorSession visitorSession = authenticatedVisitor == null ? visitorService.resolveForOpen(
                     request == null ? null : request.getLoginCode(),
                     request == null ? null : request.getAnonymousSessionId(),
                     TIMELINE_ANONYMOUS_SCOPE_PREFIX + portfolio.getId(),
-                    trace);
+                    trace) : authenticatedVisitor.get();
             VisitorEntity visitor = visitorSession.visitor();
             boolean ownerSelfVisitor = ownerSelfVisitService.isOwnerSelfVisitor(
                     portfolio.getOwnerId(),

@@ -1,0 +1,36 @@
+{
+  "miniVersion": "v2",
+  "name": "映期Folio",
+  "version": "0.1.0",
+  "versionCode": 1,
+  "mini-android": {
+    "sdkVersion": "1.7.0",
+    "icons": {
+      "hdpi": "resources/icons/icon-72.png",
+      "xhdpi": "resources/icons/icon-96.png",
+      "xxhdpi": "resources/icons/icon-144.png",
+      "xxxhdpi": "resources/icons/icon-192.png"
+    },
+    "useExtendedSdk": {
+      "media": true,
+      "network": true,
+      "open": true,
+      "xweb": true,
+      "skyline": true,
+      "bluetooth": false,
+      "scanner": false,
+      "nfc": false
+    },
+    "enableVConsole": "close",
+    "privateDescriptions": {
+      "CAMERA": "用于主动拍摄作品或头像",
+      "RECORD_AUDIO": "用于主动录制作品视频的声音",
+      "READ_MEDIA_IMAGES": "用于选择上传作品图片、头像和作品集素材",
+      "READ_MEDIA_VIDEO": "用于选择上传作品视频",
+      "READ_MEDIA_AUDIO": "用于选择作品集背景音乐",
+      "READ_MEDIA_VISUAL_USER_SELECTED": "用于访问您选定的图片和视频",
+      "READ_EXTERNAL_STORAGE": "用于选择上传的作品和素材",
+      "WRITE_EXTERNAL_STORAGE": "用于保存您主动下载的作品集分享图片"
+    }
+  }
+}

@@ -137,6 +137,16 @@ public class VisitorTeamPortfolioService {
             VisitorTeamPortfolioOpenRequest request,
             String templateType
     ) {
+        return openPortfolio(shareCode, request, templateType, null);
+    }
+
+    /** 新增移动端复用入口；旧入口仍解析微信登录码或原匿名会话。 */
+    public VisitorTeamPortfolioResponse openPortfolio(
+            String shareCode,
+            VisitorTeamPortfolioOpenRequest request,
+            String templateType,
+            java.util.function.Supplier<VisitorService.VisitorSession> authenticatedVisitor
+    ) {
         PortfolioOpenPerformanceLogger.Trace trace = portfolioOpenPerformanceLogger.start(
                 PortfolioOpenPerformanceLogger.PortfolioType.TEAM);
         Throwable failure = null;
@@ -155,11 +165,11 @@ public class VisitorTeamPortfolioService {
                 return maintenanceResponse;
             }
             // 匿名身份按数据库 ID 聚合，避免分享码变更后产生新的访客身份记录。
-            VisitorService.VisitorSession session = visitorService.resolveForOpen(
+            VisitorService.VisitorSession session = authenticatedVisitor == null ? visitorService.resolveForOpen(
                     request == null ? null : request.getLoginCode(),
                     request == null ? null : request.getAnonymousSessionId(),
                     TIMELINE_ANONYMOUS_SCOPE_PREFIX + published.portfolio().getId(),
-                    trace);
+                    trace) : authenticatedVisitor.get();
             VisitorEntity visitor = session == null ? null : session.visitor();
             if (visitor == null || visitor.getId() == null || visitor.getId() <= 0
                     || !hasText(visitor.getVisitorKey())) {

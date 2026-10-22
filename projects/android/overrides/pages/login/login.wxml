@@ -1,0 +1,14 @@
+<view class="android-login">
+  <image class="android-logo" src="https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png" mode="aspectFit" />
+  <view class="android-brand">映期Folio</view>
+  <view class="android-subtitle">把作品与档期，装进你的专业名片</view>
+  <view class="android-login-panel">
+    <view class="android-heading">你的作品，值得被看见</view>
+    <view class="android-description">管理作品与档期，制作个人和团队作品集。请使用已完成手机号验证的账号登录。</view>
+    <button class="android-primary" bindtap="handleLogin" loading="{{loading}}" disabled="{{loading || !loginReady}}">微信授权登录</button>
+    <button class="android-secondary" bindtap="handleExperienceTap">先体验一下</button>
+    <view class="android-agreement" bindtap="handleAgreement" aria-role="checkbox" aria-checked="{{agreed}}">{{agreed ? '☑' : '☐'}} 我同意使用微信身份登录映期Folio</view>
+    <view class="android-message" wx:if="{{message}}">{{message}}</view>
+  </view>
+  <view class="android-footer">Android · 作品 / 档期 / 作品集 / 团队</view>
+</view>

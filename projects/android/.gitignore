@@ -1,0 +1,12 @@
+generated/
+# 微信开发者工具生成的原生缓存及平台绑定资料。
+miniapp/
+dist/
+.local/
+node_modules/
+*.keystore
+*.jks
+*.apk
+*.aab
+android.local.json
+project.private.config.json

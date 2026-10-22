@@ -1,0 +1,15 @@
+{
+  "name": "wefolio-android",
+  "version": "0.1.0",
+  "private": true,
+  "description": "映期Folio Android 多端应用工程",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "sync": "node scripts/sync.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "open": "node scripts/devtools.mjs open",
+    "build:apk": "node scripts/devtools.mjs build-apk"
+  }
+}

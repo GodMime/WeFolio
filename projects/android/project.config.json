@@ -1,0 +1,23 @@
+{
+  "projectname": "WeFolio-Android",
+  "appid": "wxa214c25850cdf268",
+  "compileType": "miniprogram",
+  "projectArchitecture": "multiPlatform",
+  "miniprogramRoot": "generated/",
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "enhance": true,
+    "minifyWXML": true,
+    "ignoreDevUnusedFiles": true,
+    "ignoreUploadUnusedFiles": true
+  },
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "simulatorPluginLibVersion": {
+    "wxext14566970e7e9f62": "2.27.3"
+  }
+}

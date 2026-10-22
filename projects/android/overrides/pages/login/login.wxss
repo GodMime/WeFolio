@@ -1,0 +1,12 @@
+.android-login { min-height: 100vh; box-sizing: border-box; background: #f5f7fb; padding: 120rpx 48rpx 64rpx; color: #17202a; }
+.android-logo { width: 100rpx; height: 100rpx; display: block; margin: 0 auto 24rpx; }
+.android-brand { text-align: center; font-size: 48rpx; font-weight: 600; }
+.android-subtitle { text-align: center; color: #64748b; margin-top: 20rpx; font-size: 25rpx; }
+.android-login-panel { margin-top: 80rpx; background: white; border-radius: 32rpx; padding: 48rpx 36rpx; }
+.android-heading { font-size: 34rpx; font-weight: 600; }
+.android-description { color: #64748b; line-height: 1.8; font-size: 26rpx; margin: 20rpx 0 40rpx; }
+.android-primary { background: #0f766e; color: white; border-radius: 18rpx; font-size: 30rpx; }
+.android-secondary { background: #edf5f4; color: #0f766e; border-radius: 18rpx; margin-top: 20rpx; font-size: 28rpx; }
+.android-agreement { margin-top: 30rpx; font-size: 24rpx; color: #475569; padding: 16rpx 0; }
+.android-message { color: #8a4b09; font-size: 24rpx; line-height: 1.7; margin-top: 20rpx; }
+.android-footer { color: #94a3b8; font-size: 24rpx; text-align: center; margin-top: 64rpx; }

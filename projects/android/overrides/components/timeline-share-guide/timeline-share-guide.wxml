@@ -1,0 +1,8 @@
+<view wx:if="{{visible}}" class="android-timeline-mask" catchtap="noop" catchtouchmove="noop">
+  <view class="android-timeline-panel">
+    <view class="android-timeline-title">分享作品集到朋友圈</view>
+    <view class="android-timeline-desc">在微信中确认分享，朋友可直接打开作品集。</view>
+    <button class="android-timeline-primary" bindtap="handleShare">分享到朋友圈</button>
+    <button bindtap="handleClose">返回作品集</button>
+  </view>
+</view>
