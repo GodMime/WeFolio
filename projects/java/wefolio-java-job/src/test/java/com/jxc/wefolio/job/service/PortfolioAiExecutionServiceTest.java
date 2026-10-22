@@ -5,9 +5,13 @@ import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.job.repo.AiGenerationTaskRepository;
 import com.jxc.wefolio.job.repo.PortfolioAiMediaRepository;
+import com.jxc.wefolio.service.portfolioai.AiPortfolioProtocol;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import java.time.Clock;
@@ -364,6 +368,165 @@ class PortfolioAiExecutionServiceTest {
         return StrictAiJson.parseObject(task.getRequestJson(), 10000, 16);
     }
 
+    /** 个人和团队共用生成入口，媒体与纯文字任务都必须提供微信分享名称。 */
+    @ParameterizedTest
+    @CsvSource({"USER,false,1", "TEAM,false,3", "USER,true,3", "TEAM,true,1"})
+    void missingGeneratedTitleRetriesWithinBudgetAndNeverBecomesCandidate(String ownerType, boolean media, int attempts) {
+        List<String> settings = List.of("{}", "{\"share\":{\"params\":{},\"bindings\":[]}}",
+                "{\"share\":{\"params\":{\"title\":\"\"},\"bindings\":[]}}",
+                "{\"share\":{\"params\":{\"title\":\" \\t\\n　\"},\"bindings\":[]}}");
+        for (int index = 0; index < settings.size(); index++) {
+            AiGenerationTaskEntity task = createTask(ownerType, media, attempts); task.setId(100L + index);
+            ObjectNode output = createOutput();
+            output.withObject("page").set("settings", StrictAiJson.parseObject(settings.get(index), 10000, 16));
+            stubGeneratedOutput(task, output.toString(), media);
+            service.executeClaimed(task, request(task));
+            ArgumentCaptor<String> summary = ArgumentCaptor.forClass(String.class);
+            if (attempts == properties.getMaxAttempts()) {
+                verify(repository).fail(eq(task), eq("INVALID_OUTPUT"), summary.capture(), eq(now));
+            } else if (media) {
+                verify(repository).retryMedia(eq(task), eq("INVALID_OUTPUT"), summary.capture(), eq(now), eq(180), eq(90));
+            } else {
+                verify(repository).retry(eq(task), eq("INVALID_OUTPUT"), summary.capture(), eq(now), eq(180));
+            }
+            assertThat(summary.getValue()).contains("page.settings.share.params.title", "用户命名要求", "自动总结", "微信分享")
+                    .doesNotContain("秘密描述");
+            verify(repository, never()).succeed(eq(task), anyString(), any(), anyInt());
+            verify(repository, never()).succeedMedia(eq(task), anyString(), any(), anyInt(), anyInt());
+            if (media) { verify(client, never()).generate(eq(task), any(), any()); }
+            else { verify(mediaExecution, never()).generate(eq(task), any(), any()); }
+        }
+    }
+
+    /** 用户指定和自动总结的名称均原样写入候选，且不会被初始化默认名称替换。 */
+    @ParameterizedTest
+    @CsvSource({"USER,false,作品集名称用《相逢》,《相逢》", "TEAM,true,作品集名称用 Together · 婚礼团队,Together · 婚礼团队",
+            "USER,true,生成温柔文艺的婚礼作品集,让相逢有回响", "TEAM,false,生成团队婚礼演出作品集,共赴一场美好"})
+    void generatedTitleIsPersistedUnchanged(String ownerType, boolean media, String prompt, String title) {
+        AiGenerationTaskEntity task = createTask(ownerType, media, 1);
+        ObjectNode request = request(task);
+        request.withObject("input").put("prompt", prompt); request.withObject("facts").put("safePrompt", prompt);
+        task.setRequestJson(request.toString());
+        ObjectNode output = createOutput();
+        output.withObject("page").withObject("settings").withObject("share").withObject("params").put("title", title);
+        stubGeneratedOutput(task, output.toString(), media);
+        service.executeClaimed(task, request);
+        ArgumentCaptor<String> result = ArgumentCaptor.forClass(String.class);
+        if (media) {
+            verify(repository).succeedMedia(eq(task), result.capture(), eq(now), eq(180), eq(90));
+        } else {
+            verify(repository).succeed(eq(task), result.capture(), eq(now), eq(180));
+        }
+        ObjectNode persisted = StrictAiJson.parseObject(result.getValue(), 10000, 16);
+        assertThat(persisted.path("kind").asText()).isEqualTo("CANDIDATE");
+        assertThat(persisted.path("output")).isEqualTo(output);
+        verify(repository, never()).fail(any(), anyString(), anyString(), any());
+        verify(repository, never()).retry(any(), anyString(), anyString(), any(), anyInt());
+        verify(repository, never()).retryMedia(any(), anyString(), anyString(), any(), anyInt(), anyInt());
+    }
+
+    /** 用户可要求超过默认十二字，五十字符允许，五十一字符触发重试；补充平面字符只计一个。 */
+    @ParameterizedTest
+    @CsvSource({"USER,false,12", "USER,false,13", "USER,false,50", "TEAM,true,50", "USER,true,51", "TEAM,false,51"})
+    void generatedTitleEnforcesFiftyUnicodeCodePoints(String ownerType, boolean media, int length) {
+        AiGenerationTaskEntity task = createTask(ownerType, media, 1);
+        ObjectNode request = request(task);
+        request.withObject("facts").put("safePrompt", "作品集名称按" + length + "个字符生成");
+        task.setRequestJson(request.toString());
+        String title = "花".repeat(length - 2) + "A🌷";
+        ObjectNode output = createOutput();
+        output.withObject("page").withObject("settings").withObject("share").withObject("params").put("title", title);
+        stubGeneratedOutput(task, output.toString(), media);
+        service.executeClaimed(task, request);
+        if (length <= 50) {
+            ArgumentCaptor<String> result = ArgumentCaptor.forClass(String.class);
+            if (media) { verify(repository).succeedMedia(eq(task), result.capture(), eq(now), eq(180), eq(90)); }
+            else { verify(repository).succeed(eq(task), result.capture(), eq(now), eq(180)); }
+            assertThat(StrictAiJson.parseObject(result.getValue(), 10000, 16).at("/output/page/settings/share/params/title").asText())
+                    .isEqualTo(title);
+        } else {
+            ArgumentCaptor<String> summary = ArgumentCaptor.forClass(String.class);
+            if (media) { verify(repository).retryMedia(eq(task), eq("INVALID_OUTPUT"), summary.capture(), eq(now), eq(180), eq(90)); }
+            else { verify(repository).retry(eq(task), eq("INVALID_OUTPUT"), summary.capture(), eq(now), eq(180)); }
+            assertThat(summary.getValue()).contains("share.title", "50个字符", "12个字符", "Unicode").doesNotContain(title);
+            verify(repository, never()).succeed(eq(task), anyString(), any(), anyInt());
+            verify(repository, never()).succeedMedia(eq(task), anyString(), any(), anyInt(), anyInt());
+        }
+    }
+
+    /** 页面主动改名也遵守五十字符上限，不能通过修改模式绕过生成限制。 */
+    @ParameterizedTest
+    @ValueSource(ints = {50, 51})
+    void explicitRenameEnforcesTheSameTitleLimit(int length) {
+        AiGenerationTaskEntity task = task(1); ObjectNode request = request(task);
+        request.withObject("facts").withObject("baseConfig").putObject("share").put("title", "原名称");
+        ObjectNode output = createOutput(); output.put("mode", "MODIFY_PAGE").putNull("page");
+        ObjectNode operation = output.withArray("operations").addObject().put("op", "UPDATE_GLOBAL").put("reason", "修改名称");
+        operation.putObject("target").put("menuKey", "menu_current");
+        operation.put("expectedHash", AiPortfolioProtocol.expectedHash(request.at("/facts/baseConfig/share")));
+        ObjectNode payload = operation.putObject("payload").put("section", "share");
+        payload.putObject("params").put("title", "花".repeat(length)); payload.putArray("bindings");
+        task.setRequestJson(request.toString()); stubGeneratedOutput(task, output.toString(), false);
+        service.executeClaimed(task, request);
+        if (length == 50) { verify(repository).succeed(eq(task), anyString(), eq(now), eq(180)); }
+        else {
+            verify(repository).retry(eq(task), eq("INVALID_OUTPUT"), contains("50个字符"), eq(now), eq(180));
+            verify(repository, never()).succeed(eq(task), anyString(), any(), anyInt());
+        }
+    }
+
+    /** 修改其它全局设置时，历史长名称不得被新生成限制阻断或自动截断。 */
+    @Test
+    void unrelatedModificationRetainsHistoricalLongTitle() {
+        AiGenerationTaskEntity task = task(1); ObjectNode request = request(task);
+        request.withObject("facts").withObject("baseConfig").putObject("share").put("title", "花".repeat(51));
+        ObjectNode output = createOutput(); output.put("mode", "MODIFY_PAGE").putNull("page");
+        ObjectNode operation = output.withArray("operations").addObject().put("op", "UPDATE_GLOBAL").put("reason", "修改背景色");
+        operation.putObject("target").put("menuKey", "menu_current");
+        operation.put("expectedHash", AiPortfolioProtocol.expectedHash(request.at("/facts/baseConfig/style")));
+        ObjectNode payload = operation.putObject("payload").put("section", "style");
+        payload.putObject("params").put("backgroundColor", "#000000"); payload.putArray("bindings");
+        task.setRequestJson(request.toString()); stubGeneratedOutput(task, output.toString(), false);
+        service.executeClaimed(task, request);
+        verify(repository).succeed(eq(task), anyString(), eq(now), eq(180));
+        assertThat(request.at("/facts/baseConfig/share/title").asText()).isEqualTo("花".repeat(51));
+        verify(repository, never()).retry(any(), anyString(), anyString(), any(), anyInt());
+    }
+
+    /** 初始化标题只用于基准，不能替代模型本次生成名称。 */
+    private AiGenerationTaskEntity createTask(String ownerType, boolean media, int attempts) {
+        AiGenerationTaskEntity task = task(attempts); ObjectNode request = request(task);
+        request.withObject("input").put("mode", "CREATE").put("ownerType", ownerType);
+        request.withObject("facts").withObject("baseConfig").putObject("share").put("title", "默认作品集");
+        request.withObject("facts").withArray("sources").addObject().put("sourceNo", 1).put("kind", "WORK")
+                .put("sourceId", "101").put("mediaType", "IMAGE").put("canBind", true);
+        if (media) { request.withObject("facts").putObject("mediaPlan"); }
+        task.setRequestJson(request.toString()); return task;
+    }
+
+    /** 构建合法正文与名称，边界测试仅移除或清空分享设置。 */
+    private ObjectNode createOutput() {
+        return StrictAiJson.parseObject("""
+                {"schemaVersion":"ai-portfolio-v1","promptVersion":"portfolio-ai-2026-10-10.2","status":"CANDIDATE",
+                 "mode":"CREATE","page":{"menuKey":"menu_current","components":[
+                   {"type":"TEXT_SECTION","sourceNos":[],"params":{"content":"让相逢有回响。"},"bindings":[]}],
+                   "settings":{"share":{"params":{"title":"让相逢有回响"},"bindings":[]}}},
+                 "operations":[],"questions":[],"notes":[]}
+                """, 10000, 16);
+    }
+
+    /** 两条生成路径共用模型结果，媒体场景还需持有有效租约。 */
+    private void stubGeneratedOutput(AiGenerationTaskEntity task, String output, boolean media) {
+        if (media) {
+            when(repository.renewMediaLease(eq(task), eq(90), eq(180))).thenReturn(true);
+            when(mediaExecution.generate(eq(task), any(), any())).thenReturn(output);
+            when(repository.succeedMedia(eq(task), anyString(), any(), anyInt(), anyInt())).thenReturn(true);
+        } else {
+            when(client.generate(eq(task), any(), any())).thenReturn(output);
+            when(repository.succeed(eq(task), anyString(), any(), anyInt())).thenReturn(true);
+        }
+    }
+
     @Test
     void disabledSwitchSkipsClaimingButContinuesRecoveryAndCleanup() {
         AiGenerationTaskEntity expired = task(1); expired.setCreatedAt(now.minusSeconds(181));
@@ -418,13 +581,18 @@ class PortfolioAiExecutionServiceTest {
         }
     }
 
-    @Test
-    void validClarificationCompletesSuccessfullyWithoutRetryAndWithoutSavingPortfolio() {
+    /** 澄清没有候选，首次生成也不能因尚无名称被错误重试。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"CREATE", "MODIFY_PAGE"})
+    void validClarificationCompletesSuccessfullyWithoutRetryAndWithoutSavingPortfolio(String mode) {
         AiGenerationTaskEntity task = task(1);
-        when(client.generate(eq(task), any(), any())).thenReturn("""
+        ObjectNode request = request(task); request.withObject("input").put("mode", mode);
+        task.setRequestJson(request.toString());
+        String output = """
                 {"schemaVersion":"ai-portfolio-v1","promptVersion":"portfolio-ai-2026-10-10.2","status":"NEEDS_CLARIFICATION",
                  "mode":"MODIFY_PAGE","page":null,"operations":[],"questions":[{"id":"q1","prompt":"请选择修改范围","options":[]}],"notes":[]}
-                """);
+                """;
+        when(client.generate(eq(task), any(), any())).thenReturn(output.replace("MODIFY_PAGE", mode));
         when(repository.succeed(any(), anyString(), any(), anyInt())).thenReturn(true);
         service.executeClaimed(task, request(task));
         ArgumentCaptor<String> result = ArgumentCaptor.forClass(String.class);

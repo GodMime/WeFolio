@@ -7,6 +7,9 @@ import com.jxc.wefolio.config.PortfolioAiProperties;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.service.PortfolioConfigValidator;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,6 +52,29 @@ class PortfolioAiGlobalSettingsTest {
         output.put("schemaVersion", AiPortfolioProtocol.CONTRACT_VERSION).put("promptVersion", AiPortfolioProtocol.PROMPT_VERSION)
                 .put("mode", request.path("input").path("mode").asText());
         return output;
+    }
+
+    /** 生成名称通过既有 share.title 编译，个人与团队都不需要新增客户端字段或正文标题组件。 */
+    @ParameterizedTest
+    @CsvSource({"USER,《相逢》", "USER,让相逢有回响", "TEAM,Together · 婚礼团队", "TEAM,共赴一场美好"})
+    void generatedTitleReplacesOnlyTheShareTitle(String ownerType, String title) {
+        ObjectNode request = request("CREATE"); request.withObject("input").put("ownerType", ownerType);
+        ObjectNode base = AiPortfolioProtocol.baseConfig(request).deepCopy();
+        ObjectNode output = output(request);
+        ObjectNode page = output.putObject("page").put("menuKey", AiPortfolioProtocol.MENU_ALIAS);
+        page.putArray("components");
+        ObjectNode share = page.putObject("settings").putObject("share");
+        share.putObject("params").put("title", title); share.putArray("bindings");
+        ObjectNode expected = base.deepCopy(); expected.withObject("share").put("title", title);
+        assertThat(PortfolioAiCompiler.compile(706L, request, output)).isEqualTo(expected);
+        assertThat(AiPortfolioProtocol.baseConfig(request)).isEqualTo(base);
+    }
+
+    /** 新生成长度限制不重新解释升级前已保存的候选，旧客户端仍可采用原名称。 */
+    @ParameterizedTest
+    @ValueSource(strings = {"USER", "TEAM"})
+    void previouslySavedLongTitleCandidateRemainsAdoptable(String ownerType) {
+        generatedTitleReplacesOnlyTheShareTitle(ownerType, "花".repeat(51));
     }
 
     /** 原始用户场景最终生成独立作品集封面和四项正文，所有真实引用由服务端恢复。 */
@@ -132,12 +158,14 @@ class PortfolioAiGlobalSettingsTest {
     void trustedCoverSurvivesRealOrdinaryDraftNormalization() {
         ObjectNode request = request("CREATE"), output = output(request);
         output.set("page", node("{\"menuKey\":\"menu_current\",\"components\":[{\"type\":\"TEXT_SECTION\",\"sourceNos\":[],\"params\":{\"content\":\"让相逢有回响。\"},\"bindings\":[]}],\"settings\":{\"share\":{\"params\":{},\"bindings\":[{\"slot\":\"coverUrl\",\"ref\":\"source_cover_1\"}]}}}"));
+        output.withObject("page").withObject("settings").withObject("share").withObject("params")
+                .put("title", "让相逢有回响");
         ObjectNode candidate = PortfolioAiCompiler.compile(705L, request, output);
         PortfolioAiConfigService validation = new PortfolioAiConfigService(new PortfolioAiProperties(),
                 new PortfolioConfigValidator(mock(WorkEntityMapper.class)), null, null, null, null);
         ObjectNode normalized = validation.validate((ObjectNode) request.path("input"), null, candidate);
         assertThat(normalized.path("share").path("coverUrl").asText()).isEqualTo(COVER_URL);
-        assertThat(normalized.path("share").path("title").asText()).isEqualTo("手动名称");
+        assertThat(normalized.path("share").path("title").asText()).isEqualTo("让相逢有回响");
         assertThat(normalized.path("components")).hasSize(1);
         assertThat(normalized.path("components").get(0).path("componentType").asText()).isEqualTo("TEXT_SECTION");
     }

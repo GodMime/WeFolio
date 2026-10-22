@@ -52,6 +52,7 @@ CREATE 或 INSERT_COMPONENT 新建 TEXT_SECTION 时，远程字体绑定到组�
 - “作品集封面”“分享封面”“列表封面”统一指 share.coverUrl。它用于作品集列表和微信分享卡片，不会自动在正文显示。用户说“1号作品作为作品集封面”时，寻找 resources 中 kind=IMAGE、sourceNo=1、allowedSlots 含 coverUrl 且 reuseOnly=false 的 ref，通过 share.bindings 的 coverUrl 绑定。不直接用 kind=WORK 的 sourceNo 绑定 coverUrl，不复制 sources 中的 URL，不新增 COVER 组件，也不擅自增加首项 SINGLE_WORK。只有用户明确要求“首屏展示”“正文顶部大图”或“封面也在正文展示”时才另加正文组件。
 - resources 中的 sourceNo 仅说明隐藏图片句柄来自哪号已选作品，不是该资源的绑定方式；实际仍使用 ref。图片作品的可用图片、视频等作品的已有静态封面由服务端决定。没有对应 IMAGE ref 时，不能以正文大图代替作品集封面；应澄清可行选择。团队封面仍受团队素材归属约束，没有可用封面 ref 时需要用户手动上传团队封面，不使用成员作品 URL 绕过约束。
 - “作品集名称”“分享标题”指 share.title；个人“分享头像”使用 share.avatarUrl 的 IMAGE ref，可用本人头像句柄或允许 avatarUrl 的已选作品图片句柄，仅当契约和资源同时允许时绑定；团队整体简介用 share.description。分享头像不修改账号资料中的头像；正文标题或主持描述使用文字组件，不能仅写成分享标题或整体简介。
+- CREATE 每次生成候选都必须输出非空作品集名称到 page.settings.share.params.title，供微信分享使用。用户明确指定名称且不超过50个字符时原样使用；用户提出命名风格、关键词、语言或长度等要求时按要求拟名；用户只要求保留名称时在50个字符上限内沿用当前名称。未指定完整名称或长度时，依据用户描述、实际生成内容和可信素材摘要自动总结不超过12个字符的名称，风格或关键词要求不取消这个默认长度；用户明确提出长度要求时遵从，但所有新生成名称最多50个字符。按Unicode码点计数，汉字、英文字母、数字、标点、空格均计入，输出前核对长度；用户要求或指定名称超过50个字符时，保留主题和关键词压缩到50个字符以内，在notes简要说明，不机械截断。名称要简洁、贴切，不依赖 Runtime 默认值或初始化占位名称，不仅使用“个人作品集”“团队作品集”“未命名作品集”等泛称，不为起名虚构事实，也不因未提供名称而澄清。命名属于分享设置，不授权额外增加正文标题组件。MODIFY_PAGE 仅在用户要求改名时通过 UPDATE_GLOBAL 修改 share.title，新名称遵守上述长度规则；否则原样保留已有名称，不为长度规则自动改名。
 - “整体黑底”“页面背景”指 style.backgroundColor="#000000"；“组件间距”指 style.componentSpacingRpx，单位 rpx，仅个人当前契约开放。文字上的背景作品属于该文字组件的 backgroundWorkId，不替代整体底色。黑色背景配合可读文字颜色；不能把整体背景要求误写成文字网格单元格背景或分割线颜色。
 - “背景音乐”指全局 backgroundAudio；启用时绑定已选 AUDIO 作品到 workId 并设置 enabled=true；“关闭音乐”仅设置 enabled=false，保留未要求替换的曲目。displayStyle 的 DISC 为唱片、SLEEVE 为唱片封套、MINI_PLAYER 为迷你播放器；它是播放器外观，不是播放模式。
 - 文字长度按组件核算：TEXT_SECTION 最多 200 个 Unicode 码点；STRUCTURED_TEXT_SECTION 的全部 content 与 LIST.items 合计最多 2000 个，且至少有一个非 SPACER 文字块；TEXT_GRID 的全部 runs.text 合计最多 2000 个。修改时计入保留的文字，不能把单节点上限当作每段独立配额。仅需留白时使用 DIVIDER；超出单组件限制时按用户允许的布局拆分，无法满足原要求时澄清。
@@ -78,7 +79,7 @@ primarySource 只是组件契约的规则描述，不是资源槽位。主作品
 文字使用作品作背景时，sourceNos=[]，params.backgroundEnabled=true，通过 bindings 中 {slot:"backgroundWorkId",sourceNo:已选作品号} 绑定；同时检查该槽位允许的媒体类型。新增选择文艺中文远程字体时，只使用本次 resources 中允许新增绑定的 FONT ref 到该节点声明的 fontId 槽位；已有 FONT 引用仍按 reuseOnly 规则原位保留。不把远程字体名称写入 params.fontFamily，也不虚构 ref。
 背景音乐是全局 backgroundAudio 设置，通过其 bindings 中 {slot:"workId",sourceNo:已选音频作品号} 绑定，params.enabled=true。CREATE 放入 page.settings.backgroundAudio，MODIFY_PAGE 使用 UPDATE_GLOBAL 的 backgroundAudio；不把音频号放入文字、档期或留资组件的 sourceNos。
 SCHEDULE_QUERY 和 CONTACT_FORM 只配置契约允许的展示参数，sourceNos=[]、bindings=[]。留资表单供访客填写，不需要绑定主持人的作品或编造联系方式。
-CREATE 的 settings 可含 share、style、backgroundAudio，每个出现的组为 {params,bindings}；没有设置时用 {}。
+CREATE 的 settings 必须含 share={params:{title:"作品集名称"},bindings:[]}，有分享资源时按契约填写 bindings；style、backgroundAudio 按需提供，每个出现的组为 {params,bindings}。即使没有其它整体设置，也不能省略 share 或使用空 settings。
 operations 每项固定为 {op,target,expectedHash,payload,reason}。target 使用 menuKey 和必要的 componentKey/cellKey/blockKey/runKey 别名。op 与 payload 如下，且仍须列于本次 allowedOps：
 UPDATE_TEXT：{field,value}，只改契约允许的文字字段。
 UPDATE_PARAMS：{params}，合并允许的普通字段，不替换整个 config。
@@ -158,7 +159,7 @@ expectedHash 只原样回传输入提供的 opaque 值，不计算、不猜造�
       }
     ],
     "settings": {
-      "share": {"params": {}, "bindings": [{"slot": "coverUrl", "ref": "source_cover_1"}]},
+      "share": {"params": {"title": "让相逢有回响"}, "bindings": [{"slot": "coverUrl", "ref": "source_cover_1"}]},
       "style": {"params": {"backgroundColor": "#000000"}, "bindings": []},
       "backgroundAudio": {"params": {"enabled": true, "displayStyle": "MINI_PLAYER"}, "bindings": [{"slot": "workId", "sourceNo": 4}]}
     }

@@ -17,6 +17,7 @@ import com.jxc.wefolio.service.portfolioai.PortfolioAiMediaContract;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -343,6 +344,23 @@ class TokenHubPortfolioAiClientTest {
         assertThat(payload.toString()).doesNotContain("test-fake-key", "987654", "原始秘密", "13800138000");
         assertThat(payload.path("messages").get(0).path("content").asText()).contains("协议版本：ai-portfolio-v1", "可信能力契约");
         assertThat(payload.path("messages").get(1).path("content").asText()).contains("精简文字");
+    }
+
+    /** 发给模型的实际契约与提示词限制新名称，共享历史读取契约不被修改。 */
+    @ParameterizedTest
+    @CsvSource({"USER,CREATE,createSettings", "TEAM,CREATE,createSettings", "USER,MODIFY_PAGE,globalFields", "TEAM,MODIFY_PAGE,globalFields"})
+    void actualPayloadLimitsNewTitlesWithoutChangingHistoricalContract(String ownerType, String mode, String section) {
+        ObjectNode request = request(); request.withObject("input").put("ownerType", ownerType).put("mode", mode);
+        String system = new TokenHubPortfolioAiClient(properties()).payload(task(), request)
+                .path("messages").get(0).path("content").asText();
+        String separator = "\n可信能力契约：\n";
+        ObjectNode contract = StrictAiJson.parseObject(system.substring(system.lastIndexOf(separator) + separator.length()),
+                StrictAiJson.RESPONSE_MAX_BYTES, StrictAiJson.MAX_DEPTH);
+        assertThat(contract.path(section).path("share").path("params").path("title").path("maxCodePoints").asInt()).isEqualTo(50);
+        assertThat(contract.path(section).path("share").path("params").path("title").path("description").asText())
+                .contains("12", "50", "Unicode", "标点", "空格");
+        assertThat(AiPortfolioProtocol.contract(request).path(section).path("share").path("params").path("title").path("maxCodePoints").asInt())
+                .isEqualTo(2000);
     }
 
     /** 同一基础提示词共享缓存路由，业务内容、身份隔离与结构重试只改变动态后缀。 */

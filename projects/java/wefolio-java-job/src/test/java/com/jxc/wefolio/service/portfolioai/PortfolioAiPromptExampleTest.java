@@ -100,6 +100,8 @@ class PortfolioAiPromptExampleTest {
         assertThat(AiPortfolioProtocol.validate(request(), example.toString())).isEqualTo(example);
         JsonNode page = example.path("page");
         JsonNode components = page.path("components");
+        assertThat(page.path("settings").path("share").path("params").path("title").asText())
+                .isEqualTo("让相逢有回响");
         assertThat(page.path("settings").path("share").path("bindings").toString())
                 .isEqualTo("[{\"slot\":\"coverUrl\",\"ref\":\"source_cover_1\"}]");
         assertThat(components).hasSize(4);

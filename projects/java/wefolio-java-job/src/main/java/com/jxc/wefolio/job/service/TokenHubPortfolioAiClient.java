@@ -144,7 +144,7 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
         body.putObject("response_format").put("type", "json_object");
         body.put(USER_PARAMETER, requesterHash(task.getRequestedBy()));
         String mode = request.path("input").path("mode").asText();
-        String system = resource("system.txt") + "\n" + resource(mode + ".txt") + "\n可信能力契约：\n" + AiPortfolioProtocol.contract(request);
+        String system = resource("system.txt") + "\n" + resource(mode + ".txt") + "\n可信能力契约：\n" + PortfolioAiTitlePolicy.contract(request);
         // 缓存键对应稳定的基础前缀；媒体附加规则和重试反馈继续追加，但不拆分同一组请求。
         body.put(PROMPT_CACHE_KEY_PARAMETER, promptCacheKey(config.path("model").asText(), GENERATION_CACHE_STAGE, system));
         if (request.path(KEY_FACTS).has(KEY_MEDIA_PLAN)) {

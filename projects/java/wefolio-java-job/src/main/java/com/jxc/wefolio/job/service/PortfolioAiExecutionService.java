@@ -164,6 +164,7 @@ public class PortfolioAiExecutionService {
                 lease.checkHeld();
             } else { raw = modelClient.generate(task, request, remaining); }
             ObjectNode output = AiPortfolioProtocol.validate(request, raw);
+            PortfolioAiTitlePolicy.validate(output);
             ObjectNode result = StrictAiJson.mapper().createObjectNode();
             result.put("kind", "NEEDS_CLARIFICATION".equals(output.path("status").asText()) ? "CLARIFICATION" : "CANDIDATE");
             result.set("output", output);
