@@ -61,8 +61,11 @@ function resolveTeamCreateRoute(teams) {
   return { action: 'SELECT', teamId: null, url: TEAM_SELECT_URL }
 }
 
-async function fetchTeamPortfolioList(requestFn = request) {
-  return normalizeTeamPortfolioList(await requestFn({ url: TEAM_PORTFOLIOS_ENDPOINT }))
+async function fetchTeamPortfolioList(requestFn = request, { publicationStatus = '' } = {}) {
+  return normalizeTeamPortfolioList(await requestFn({
+    url: TEAM_PORTFOLIOS_ENDPOINT,
+    ...(publicationStatus ? { data: { publicationStatus } } : {})
+  }))
 }
 
 async function fetchMaintainableTeams(requestFn = request) {

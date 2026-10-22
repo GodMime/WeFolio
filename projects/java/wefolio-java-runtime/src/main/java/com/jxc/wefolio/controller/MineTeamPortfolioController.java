@@ -76,8 +76,10 @@ public class MineTeamPortfolioController {
      * 查询当前用户所属团队的标准团队作品集。
      */
     @GetMapping("/api/mine/team-portfolios")
-    public Response<List<TeamPortfolioSummaryResponse>> list() {
-        return Response.success(mineTeamPortfolioService.listPortfolios(currentUserId()));
+    public Response<List<TeamPortfolioSummaryResponse>> list(
+            @RequestParam(value = "publicationStatus", required = false) String publicationStatus
+    ) {
+        return Response.success(mineTeamPortfolioService.listPortfolios(currentUserId(), publicationStatus));
     }
 
     /**

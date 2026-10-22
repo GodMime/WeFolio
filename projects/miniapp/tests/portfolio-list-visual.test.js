@@ -43,18 +43,18 @@ test('portfolio skeleton preserves card geometry and contains no interactive or 
   }
 })
 
-test('portfolio loading placeholders and errors never replace an already loaded list', () => {
+test('portfolio filtering shows skeletons while ordinary refresh preserves loaded content', () => {
   const wxml = read('pages/portfolios/portfolios.wxml')
 
-  for (const [loading, loaded, error, refreshing] of [
-    ['loading', 'loaded', 'errorMessage', 'pullDownRefreshing'],
-    ['teamLoading', 'teamLoaded', 'teamErrorMessage', 'teamPullDownRefreshing']
+  for (const [loading, loaded, error, refreshing, filtering] of [
+    ['loading', 'loaded', 'errorMessage', 'pullDownRefreshing', 'filterLoading'],
+    ['teamLoading', 'teamLoaded', 'teamErrorMessage', 'teamPullDownRefreshing', 'teamFilterLoading']
   ]) {
-    assert.match(wxml, new RegExp(`<template wx:if="\\{\\{${loading} && !${loaded}\\}\\}" is="portfolio-loading-skeleton"`))
+    assert.match(wxml, new RegExp(`<template wx:if="\\{\\{${loading} && \\(!${loaded} \\|\\| ${filtering}\\)\\}\\}" is="portfolio-loading-skeleton"`))
     assert.match(wxml, new RegExp(`wx:elif="\\{\\{${error} && !${loaded}\\}\\}" class="inline-state error"`))
     assert.match(wxml, new RegExp(`<view wx:if="\\{\\{${loaded} && ${error}\\}\\}" class="refresh-error"`))
     assert.match(wxml, new RegExp(`wx:if="\\{\\{!${loaded}\\}\\}"[\\s\\S]*?class="summary-skeleton"`))
-    assert.match(wxml, new RegExp(`wx:if="\\{\\{${loading} && !${refreshing}\\}\\}" class="portfolio-loading-spinner summary-refresh-spinner"`))
+    assert.match(wxml, new RegExp(`wx:if="\\{\\{${loading} && !${refreshing} && !${filtering}\\}\\}" class="portfolio-loading-spinner summary-refresh-spinner"`))
   }
 })
 
@@ -74,7 +74,7 @@ test('portfolio list uses compact cards while preserving tabs and creation contr
     const activeSegmentRule = readRule(wxss, '.segment-item.active')
     const segmentIndicatorRule = readRule(wxss, '.segment-indicator')
     const listPanelRule = readRule(wxss, '.portfolio-list-panel')
-    const listTitleRule = readRule(wxss, '.list-title')
+    const listTitleRule = readRule(wxss, '.list-heading .portfolio-filter-trigger')
     const summaryPillRule = readRule(wxss, '.summary-pill')
     const summaryPillBeforeRule = readRule(wxss, '.summary-pill::before')
     const cardRule = readRule(wxss, '.portfolio-item-card')
@@ -101,7 +101,7 @@ test('portfolio list uses compact cards while preserving tabs and creation contr
     assert.match(segmentIndicatorRule, /background:\s*#212529/)
 
     assert.doesNotMatch(listPanelRule, /box-shadow/)
-    assert.match(listTitleRule, /font-weight:\s*700/)
+    assert.match(listTitleRule, /font-weight:\s*600/)
     assert.match(summaryPillRule, /height:\s*48rpx/)
     assert.match(summaryPillRule, /padding:\s*0/)
     assert.doesNotMatch(summaryPillRule, /border|background/)

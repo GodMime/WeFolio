@@ -59,6 +59,7 @@ import com.jxc.wefolio.mapper.TeamEntityMapper;
 import com.jxc.wefolio.mapper.TeamMemberEntityMapper;
 import com.jxc.wefolio.mapper.TeamScheduleQueryRecordEntityMapper;
 import com.jxc.wefolio.mapper.VisitRecordEntityMapper;
+import com.jxc.wefolio.message.PortfolioMessage;
 import com.jxc.wefolio.message.TeamPortfolioMessage;
 import com.jxc.wefolio.service.ContentLimitService;
 import com.jxc.wefolio.service.PointService;
@@ -275,7 +276,19 @@ public class MineTeamPortfolioService {
      * @return 团队作品集摘要
      */
     public List<TeamPortfolioSummaryResponse> listPortfolios(long userId) {
+        return listPortfolios(userId, null);
+    }
+
+    /**
+     * 按可选发布状态查询当前用户可见的团队作品集。
+     *
+     * @param userId 当前用户 ID
+     * @param publicationStatus 可选发布状态
+     * @return 团队作品集摘要
+     */
+    public List<TeamPortfolioSummaryResponse> listPortfolios(long userId, String publicationStatus) {
         requireFeatureEnabled();
+        String statusFilter = normalizePublicationStatusFilter(publicationStatus);
         List<TeamMemberEntity> memberships = joinedMemberships(userId, null);
         if (memberships.isEmpty()) {
             return List.of();
@@ -295,6 +308,7 @@ public class MineTeamPortfolioService {
                                 TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1)
                         .eq(PortfolioEntity::getStatus, PortfolioStatusDict.ACTIVE.getCode())
                         .eq(PortfolioEntity::getDeleted, 0L)
+                        .eq(statusFilter != null, PortfolioEntity::getPublicationStatus, statusFilter)
                         .orderByDesc(PortfolioEntity::getUpdatedAt));
         return safeList(portfolios).stream()
                 .map(portfolio -> buildSummary(portfolio, teams.get(portfolio.getOwnerId()),
@@ -1720,4 +1734,17 @@ public class MineTeamPortfolioService {
             LocalDateTime queriedAt
     ) {
     }
+
+    /** 将空白筛选视为全部，并仅接受已有发布状态代码。 */
+    private String normalizePublicationStatusFilter(String publicationStatus) {
+        if (publicationStatus == null || publicationStatus.isBlank()) {
+            return null;
+        }
+        String normalized = publicationStatus.strip();
+        if (PortfolioPublicationStatusDict.fromCode(normalized) == null) {
+            throw new BusinessException(PortfolioMessage.PUBLICATION_STATUS_FILTER_INVALID_MESSAGE);
+        }
+        return normalized;
+    }
+
 }

@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const path = require('node:path')
 const test = require('node:test')
 
@@ -155,6 +156,35 @@ const loadingScenarios = [
 
 for (const scenario of loadingScenarios) {
   const portfolios = [{ portfolioId: 88, teamId: 7, title: '婚礼作品集', publicationStatus: 'PUBLISHED' }]
+
+  test(`${scenario.name} 点选筛选时轻微移动不能让父层提前销毁菜单`, async () => {
+    const wxml = fs.readFileSync(path.join(__dirname, '../pages/portfolios/portfolios.wxml'), 'utf8')
+    const page = loadPortfolioListPage(async options => options.url.endsWith('/maintainable-teams') ? []
+      : scenario.response(portfolios))
+    const team = scenario.name === 'team'
+    const filterKey = team ? 'teamPublicationFilter' : 'publicationFilter'
+    page.setData({ ownerType: team ? 'TEAM' : 'USER', [scenario.loaded]: true })
+    try {
+      page.handleFilterTap()
+      // 按真实 WXML 的冒泡路径回放 touchmove，再完成选项 tap。
+      for (const className of ['portfolio-filter-option', 'portfolio-filter-menu', 'portfolio-filter-layer', 'page-shell portfolios-page']) {
+        const tag = wxml.match(new RegExp(`<view[^>]*class="${className}(?:[ "][^>]*)?>`))[0]
+        const binding = tag.match(/(catch|bind)touchmove="([^"]+)"/)
+        if (!binding) continue
+        page[binding[2]]({ touches: [{ clientX: 20, clientY: 22 }] })
+        if (binding[1] === 'catch') break
+      }
+      if (page.data.filterMenu) {
+        await page.handleFilterSelect({ currentTarget: { dataset: { value: 'PUBLISHED' } } })
+      }
+      assert.equal(page.data[filterKey], 'PUBLISHED')
+      assert.equal(page.data[scenario.portfolios].length, 1)
+      page.handleFilterTap()
+      const layer = wxml.match(/<view class="portfolio-filter-layer"[^>]*>/)[0]
+      page[layer.match(/catchtap="([^"]+)"/)[1]]()
+      assert.equal(page.data.filterMenu, null, '点击菜单外部仍可收起')
+    } finally { page.cleanup() }
+  })
 
   test(`${scenario.name} first load stays pending until portfolio data arrives`, async () => {
     const response = createDeferred()
@@ -1773,5 +1803,117 @@ test('a previous card measurement cannot replace the newly selected preview targ
     assert.equal(page.data.previewVersionMenu.portfolioId, 99)
     page.closePreviewVersionMenu()
     assert.equal(page.data.previewVersionMenu, null)
+  } finally { page.cleanup() }
+})
+
+for (const scenario of loadingScenarios) {
+  test(`${scenario.name} publication filters keep full counts and refresh with the selected status`, async () => {
+    const all = ['PUBLISHED', 'DRAFT_ONLY', 'OFFLINE'].map((publicationStatus, i) => ({ portfolioId: i + 1, teamId: 7, publicationStatus }))
+    const calls = []
+    let fail = false
+    const page = loadPortfolioListPage(async options => {
+      calls.push(options)
+      if (options.url.endsWith('/maintainable-teams')) return []
+      if (fail) throw new Error('网络暂时不可用')
+      return scenario.response(options.data && options.data.publicationStatus
+        ? all.filter(item => item.publicationStatus === options.data.publicationStatus) : all)
+    })
+    const team = scenario.name === 'team'
+    const filterKey = team ? 'teamPublicationFilter' : 'publicationFilter'
+    const filterLoadingKey = team ? 'teamFilterLoading' : 'filterLoading'
+    page.setData({ ownerType: team ? 'TEAM' : 'USER' })
+    try {
+      await page[scenario.bootstrap]()
+      assert.deepEqual(page.data[scenario.summary], { publishedText: '1 已发布', draftText: '1 草稿' })
+      calls.length = 0
+      const filtering = page.handleFilterSelect({ currentTarget: { dataset: { value: 'DRAFT_ONLY' } } })
+      assert.equal(page.data[filterLoadingKey], true)
+      await flushPromises()
+      assert.equal(page.data[filterLoadingKey], true, '快速响应仍保留短暂骨架过渡')
+      await filtering
+      assert.equal(page.data[filterLoadingKey], false)
+      assert.equal(page.data[filterKey], 'DRAFT_ONLY')
+      assert.deepEqual(page.data[scenario.portfolios].map(item => item.portfolioId), [2])
+      assert.equal(calls.length, 1)
+      assert.equal(calls[0].data.publicationStatus, 'DRAFT_ONLY')
+      assert.deepEqual(page.data[scenario.summary], { publishedText: '1 已发布', draftText: '1 草稿' })
+      calls.length = 0
+      all[1].publicationStatus = 'PUBLISHED'
+      await page[scenario.bootstrap]()
+      assert.equal(page.data[filterLoadingKey], false)
+      assert.equal(page.data[scenario.portfolios].length, 0)
+      assert.equal(page.data[filterKey], 'DRAFT_ONLY')
+      assert.equal(calls.filter(item => item.url === scenario.endpoint).length, 2)
+      assert.deepEqual(page.data[scenario.summary], { publishedText: '2 已发布', draftText: '0 草稿' })
+      fail = true
+      await page.handleFilterSelect({ currentTarget: { dataset: { value: 'PUBLISHED' } } })
+      assert.equal(page.data[filterLoadingKey], false)
+      assert.equal(page.data[filterKey], 'DRAFT_ONLY')
+      assert.equal(page.data[scenario.portfolios].length, 0)
+      assert.ok(page.data[scenario.error])
+    } finally { page.cleanup() }
+  })
+
+  test(`${scenario.name} slow publication responses and failures cannot replace the latest filter`, async () => {
+    const pending = []
+    const page = loadPortfolioListPage(options => {
+      if (options.url.endsWith('/maintainable-teams')) return Promise.resolve([])
+      const deferred = createDeferred()
+      pending.push(deferred)
+      return deferred.promise
+    })
+    const team = scenario.name === 'team'
+    const filterKey = team ? 'teamPublicationFilter' : 'publicationFilter'
+    const filterLoadingKey = team ? 'teamFilterLoading' : 'filterLoading'
+    page.setData({ ownerType: team ? 'TEAM' : 'USER', [scenario.loaded]: true })
+    try {
+      const first = page.handleFilterSelect({ currentTarget: { dataset: { value: 'PUBLISHED' } } })
+      const second = page.handleFilterSelect({ currentTarget: { dataset: { value: 'DRAFT_ONLY' } } })
+      pending[0].reject(new Error('旧请求失败'))
+      await first
+      assert.equal(page.data[filterLoadingKey], true, '旧请求结束不能提前收起新请求的骨架')
+      pending[1].resolve(scenario.response([{ portfolioId: 2, teamId: 7, publicationStatus: 'DRAFT_ONLY' }]))
+      await second
+      assert.equal(page.data[filterLoadingKey], false)
+      assert.equal(page.data[filterKey], 'DRAFT_ONLY')
+      assert.equal(page.data[scenario.portfolios][0].portfolioId, 2)
+      assert.equal(page.data[scenario.error], '')
+      assert.equal(page.data[scenario.loading], false)
+      const third = page.handleFilterSelect({ currentTarget: { dataset: { value: 'PUBLISHED' } } })
+      page.onHide()
+      assert.equal(page.data[filterLoadingKey], false)
+      pending[2].resolve(scenario.response([{ portfolioId: 3, teamId: 7, publicationStatus: 'PUBLISHED' }]))
+      await third
+      assert.equal(page.data[filterKey], 'DRAFT_ONLY')
+    } finally { page.cleanup() }
+  })
+}
+
+test('publication menu closes previews and ignores measurements after changing owner', async () => {
+  const callbacks = []
+  const page = loadPortfolioListPage(async () => ({}), {
+    createSelectorQuery() {
+      return { in() { return this }, select() { return this },
+        boundingClientRect(callback) { callbacks.push(callback); return this }, exec() {} }
+    }
+  })
+  page.setData({ loaded: true, teamLoaded: true, previewVersionMenu: { portfolioId: 1 } })
+  try {
+    page.handleFilterTap()
+    assert.equal(page.data.previewVersionMenu, null)
+    callbacks[0]({ left: 16, bottom: 160 })
+    assert.equal(page.data.filterMenu.ownerType, 'USER')
+    assert.match(page.data.filterMenu.style, /left: 16px; top: 164px;/)
+    page.handleFilterTap()
+    assert.equal(page.data.filterMenu, null)
+    page.handleFilterTap()
+    page.handleOwnerTypeTap({ currentTarget: { dataset: { type: 'TEAM' } } })
+    callbacks[1]({ left: 16, bottom: 160 })
+    assert.equal(page.data.filterMenu, null)
+    page.handleFilterTap()
+    callbacks[2]({ left: 16, bottom: 160 })
+    assert.equal(page.data.filterMenu.ownerType, 'TEAM')
+    page.closePreviewVersionMenu()
+    assert.equal(page.data.filterMenu, null)
   } finally { page.cleanup() }
 })

@@ -107,6 +107,7 @@
   background: transparent;
 }
 
+.portfolio-filter-trigger::after,
 .segment-item::after,
 .create-action::after,
 .portfolio-delete-button::after,
@@ -162,14 +163,23 @@
   gap: 16rpx;
 }
 
-.list-title {
+/* 覆盖微信默认按钮的固定宽度和自动外边距，保持与卡片左缘对齐。 */
+.list-heading .portfolio-filter-trigger {
+  width: auto;
+  flex: none;
   min-width: 0;
-  flex: 1 1 auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
   color: #212529;
-  font-size: 36rpx;
+  font-size: 28rpx;
   white-space: nowrap;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
+  border: 0;
+  background: transparent;
 }
 
 .summary-pills {
@@ -809,6 +819,15 @@
   background: #212529;
 }
 
+.empty-state .small-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 260rpx;
+  margin: 20rpx 0 0;
+  padding: 0;
+}
+
 .create-actions {
   width: 100%;
   max-width: 100%;
@@ -1233,4 +1252,89 @@
   font-size: 11px;
   color: #87919a;
   white-space: nowrap;
+}
+
+/* 筛选浮层使用视口坐标，避免被列表滚动及横向切换容器裁切。 */
+.portfolio-filter-layer {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 120;
+  background: transparent;
+}
+
+.portfolio-filter-menu {
+  position: absolute;
+  padding: 4px;
+  box-sizing: border-box;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 5px 18px rgba(38, 50, 61, 0.11);
+  transform-origin: top left;
+  animation: portfolio-filter-menu-enter 160ms ease-out;
+}
+
+.portfolio-filter-option {
+  height: 48px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 8px;
+  color: #495057;
+  font-size: 13px;
+}
+
+.portfolio-filter-option.selected {
+  background: #f1f3f5;
+  color: #212529;
+  font-weight: 600;
+}
+
+.portfolio-filter-check {
+  margin-left: 12px;
+}
+
+.portfolio-filter-chevron {
+  width: 10rpx;
+  height: 10rpx;
+  margin: 0 2rpx 5rpx 14rpx;
+  border-right: 2rpx solid #868e96;
+  border-bottom: 2rpx solid #868e96;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+/* 筛选加载与结果都在列表区域内过渡，工具栏和底部操作保持稳定。 */
+.portfolio-results-enter {
+  animation: portfolio-results-enter 200ms ease-out;
+}
+
+.portfolio-filter-chevron.open {
+  transform: rotate(225deg);
+}
+
+@keyframes portfolio-results-enter {
+  from { opacity: 0; transform: translateY(10rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes portfolio-filter-menu-enter {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portfolio-results-enter,
+  .portfolio-filter-menu {
+    animation: none;
+  }
+  .portfolio-filter-chevron {
+    transition: none;
+  }
 }

@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
@@ -1740,4 +1742,37 @@ class MinePortfolioServiceTest {
         reference.setIsValid(1);
         return reference;
     }
+    /** 发布状态筛选仅追加原查询条件，空值继续返回原范围。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void publicationFilterPreservesScopeAndBindsExistingStatusCodes() {
+        when(portfolioEntityMapper.selectList(any())).thenReturn(List.of());
+        for (String filter : new String[] {null, "", "  ", PortfolioPublicationStatusDict.PUBLISHED.getCode(),
+                PortfolioPublicationStatusDict.DRAFT_ONLY.getCode(), " " + PortfolioPublicationStatusDict.OFFLINE.getCode() + " "}) {
+            clearInvocations(portfolioEntityMapper);
+            service().listPortfolios(PortfolioOwnerTypeDict.USER.getCode(), filter);
+            ArgumentCaptor<Wrapper<PortfolioEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+            verify(portfolioEntityMapper).selectList(captor.capture());
+            LambdaQueryWrapper<PortfolioEntity> query = (LambdaQueryWrapper<PortfolioEntity>) captor.getValue();
+            assertThat(query.getSqlSegment()).contains("owner_type", "owner_id", "updated_at");
+            if (filter == null || filter.isBlank()) {
+                assertThat(query.getSqlSegment()).doesNotContain("publication_status");
+            } else {
+                assertThat(query.getSqlSegment()).contains("publication_status =");
+                assertThat(query.getParamNameValuePairs().values()).contains(filter.strip());
+            }
+        }
+    }
+
+    /** 无效筛选必须在空列表提前返回前被拒绝。 */
+    @Test
+    void invalidPublicationFilterIsRejectedBeforeQuery() {
+        for (String filter : List.of("ALL", "DRAFT", "published", "PUBLISHED,DRAFT_ONLY")) {
+            assertThatThrownBy(() -> service().listPortfolios(PortfolioOwnerTypeDict.USER.getCode(), filter))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage(PortfolioMessage.PUBLICATION_STATUS_FILTER_INVALID_MESSAGE);
+        }
+        verifyNoInteractions(portfolioEntityMapper);
+    }
+
 }

@@ -41,13 +41,15 @@ public class MinePortfolioController {
      * 查询作品集列表。
      *
      * @param ownerType 归属类型
+     * @param publicationStatus 可选发布状态
      * @return 列表响应
      */
     @GetMapping("/api/mine/portfolios")
     public Response<MinePortfolioListResponse> list(
-            @RequestParam(value = "ownerType", required = false) String ownerType
+            @RequestParam(value = "ownerType", required = false) String ownerType,
+            @RequestParam(value = "publicationStatus", required = false) String publicationStatus
     ) {
-        return Response.success(minePortfolioService.listPortfolios(ownerType));
+        return Response.success(minePortfolioService.listPortfolios(ownerType, publicationStatus));
     }
 
     /**

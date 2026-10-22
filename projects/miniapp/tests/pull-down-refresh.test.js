@@ -189,7 +189,7 @@ test('pulling down on works list keeps current scroll container mounted while re
   }
 })
 
-test('pulling down on portfolio list reloads current owner type and stops refresh indicator', async () => {
+test('pulling down on portfolio list reloads the personal list and stops refresh indicator', async () => {
   const requests = []
   const stops = []
   const page = loadMiniappPage('pages/portfolios/portfolios.js', (options) => {
@@ -197,10 +197,10 @@ test('pulling down on portfolio list reloads current owner type and stops refres
     return Promise.resolve({
       portfolios: [{
         portfolioId: 88,
-        ownerType: 'TEAM',
+        ownerType: 'USER',
         templateType: 'STANDARD',
-        publicationStatus: 'DRAFT',
-        title: '团队作品集'
+        publicationStatus: 'DRAFT_ONLY',
+        title: '个人作品集'
       }]
     })
   }, {
@@ -208,20 +208,20 @@ test('pulling down on portfolio list reloads current owner type and stops refres
       stops.push('stop')
     }
   })
-  page.data.ownerType = 'TEAM'
-  page.data.ownerTitle = '团队作品集'
+  page.data.ownerType = 'USER'
+  page.data.ownerTitle = '个人作品集'
 
   try {
     await page.handlePullDownRefresh()
     await flushPromises()
 
     assert.deepEqual(requests.map((item) => [item.url, item.data]), [
-      ['/api/mine/portfolios', { ownerType: 'TEAM' }]
+      ['/api/mine/portfolios', { ownerType: 'USER' }]
     ])
     assert.equal(stops.length, 1)
     assert.equal(page.data.pullDownRefreshing, false)
     assert.equal(page.data.loading, false)
-    assert.equal(page.data.displayPortfolios[0].title, '团队作品集')
+    assert.equal(page.data.displayPortfolios[0].title, '个人作品集')
   } finally {
     page.cleanup()
   }

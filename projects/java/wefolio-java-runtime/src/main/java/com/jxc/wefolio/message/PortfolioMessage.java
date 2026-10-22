@@ -4,6 +4,9 @@ package com.jxc.wefolio.message;
  * 作品集报错信息 — 统一维护作品集维护端、访客端和联系线索相关提示。
  */
 public interface PortfolioMessage {
+
+    /** 发布状态筛选参数无效提示。 */
+    String PUBLICATION_STATUS_FILTER_INVALID_MESSAGE = "作品集发布状态筛选无效";
     /** 联系组件发布必填。 */
     String CONTACT_INFO_REQUIRED = "请至少填写一项联系信息";
     /** 网格配置结构错误。 */

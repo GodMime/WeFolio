@@ -1,5 +1,6 @@
 package com.jxc.wefolio.service.teamportfolio;
 
+import com.jxc.wefolio.message.PortfolioMessage;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.jxc.wefolio.service.portfoliofont.PortfolioFontService;
@@ -1555,4 +1556,41 @@ class MineTeamPortfolioServiceTest {
             PortfolioPublishTransactionService publishTransactionService
     ) {
     }
+    /** 发布状态筛选仅追加原查询条件，空值继续返回原范围。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void publicationFilterPreservesScopeAndBindsExistingStatusCodes() {
+        TestContext context = context(true);
+        when(context.memberMapper.selectList(any())).thenReturn(List.of(membership(TEAM_ID, TeamRoleDict.OWNER.getCode())));
+        when(context.teamMapper.selectBatchIds(any())).thenReturn(List.of(team(TEAM_ID, "甲团队")));
+        when(context.portfolioMapper.selectList(any())).thenReturn(List.of());
+        for (String filter : new String[] {null, "", "  ", PortfolioPublicationStatusDict.PUBLISHED.getCode(),
+                PortfolioPublicationStatusDict.DRAFT_ONLY.getCode(), " " + PortfolioPublicationStatusDict.OFFLINE.getCode() + " "}) {
+            clearInvocations(context.portfolioMapper);
+            context.service.listPortfolios(USER_ID, filter);
+            ArgumentCaptor<Wrapper<PortfolioEntity>> captor = ArgumentCaptor.forClass(Wrapper.class);
+            verify(context.portfolioMapper).selectList(captor.capture());
+            LambdaQueryWrapper<PortfolioEntity> query = (LambdaQueryWrapper<PortfolioEntity>) captor.getValue();
+            assertThat(query.getSqlSegment()).contains("owner_type", "owner_id", "schema_version", "deleted", "updated_at");
+            if (filter == null || filter.isBlank()) {
+                assertThat(query.getSqlSegment()).doesNotContain("publication_status");
+            } else {
+                assertThat(query.getSqlSegment()).contains("publication_status =");
+                assertThat(query.getParamNameValuePairs().values()).contains(filter.strip());
+            }
+        }
+    }
+
+    /** 无效筛选必须在空列表提前返回前被拒绝。 */
+    @Test
+    void invalidPublicationFilterIsRejectedBeforeQuery() {
+        TestContext context = context(true);
+        for (String filter : List.of("ALL", "DRAFT", "published", "PUBLISHED,DRAFT_ONLY")) {
+            assertThatThrownBy(() -> context.service.listPortfolios(USER_ID, filter))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage(PortfolioMessage.PUBLICATION_STATUS_FILTER_INVALID_MESSAGE);
+        }
+        verifyNoInteractions(context.portfolioMapper);
+    }
+
 }

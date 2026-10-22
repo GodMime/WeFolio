@@ -74,3 +74,14 @@ test('shared team portfolio list utility publishes the selected draft revision',
     /幂等键/
   )
 })
+
+test('team list adds an optional publication filter without changing default callers', async () => {
+  const calls = []
+  const request = async options => { calls.push(options); return [] }
+  await fetchTeamPortfolioList(request)
+  await fetchTeamPortfolioList(request, { publicationStatus: 'DRAFT_ONLY' })
+  assert.deepEqual(calls, [
+    { url: '/api/mine/team-portfolios' },
+    { url: '/api/mine/team-portfolios', data: { publicationStatus: 'DRAFT_ONLY' } }
+  ])
+})

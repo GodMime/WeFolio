@@ -1,5 +1,11 @@
 package com.jxc.wefolio.controller;
 
+import java.util.List;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import com.jxc.wefolio.message.PortfolioMessage;
+import com.jxc.wefolio.exception.GlobalExceptionHandler;
+import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
@@ -27,6 +33,9 @@ import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -336,4 +345,31 @@ class MineTeamPortfolioControllerTest {
                 .findFirst()
                 .orElseThrow();
     }
+    /** 新状态参数可选，旧请求与原响应包装继续兼容。 */
+    @Test
+    void publicationFilterBindsWithoutChangingListResponse() throws Exception {
+        MineTeamPortfolioService mineService = mock(MineTeamPortfolioService.class);
+        MineTeamPortfolioController controller = new MineTeamPortfolioController(mineService,
+                mock(TeamPortfolioAssetService.class), mock(TeamCarouselComponentService.class),
+                mock(TeamVideoCarouselComponentService.class), mock(TeamSingleWorkComponentService.class),
+                mock(TeamMemberPortfolioGridComponentService.class), mock(TeamMemberPortfolioListComponentService.class),
+                mock(TeamMemberPortfolioPreviewService.class));
+        String published = PortfolioPublicationStatusDict.PUBLISHED.getCode();
+        when(mineService.listPortfolios(USER_ID, null)).thenReturn(List.of());
+        when(mineService.listPortfolios(USER_ID, published)).thenReturn(List.of());
+        when(mineService.listPortfolios(USER_ID, "INVALID")).thenThrow(
+                new BusinessException(PortfolioMessage.PUBLICATION_STATUS_FILTER_INVALID_MESSAGE));
+        var mvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
+        mvc.perform(get("/api/mine/team-portfolios"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data").isArray());
+        mvc.perform(get("/api/mine/team-portfolios").param("publicationStatus", published))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data").isArray());
+        mvc.perform(get("/api/mine/team-portfolios").param("publicationStatus", "INVALID"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(PortfolioMessage.PUBLICATION_STATUS_FILTER_INVALID_MESSAGE));
+        verify(mineService).listPortfolios(USER_ID, null);
+        verify(mineService).listPortfolios(USER_ID, published);
+    }
+
 }

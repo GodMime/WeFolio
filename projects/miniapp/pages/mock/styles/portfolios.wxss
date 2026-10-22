@@ -112,6 +112,7 @@
   background: transparent;
 }
 
+.portfolio-filter-trigger::after,
 .segment-item::after,
 .create-action::after,
 .portfolio-delete-button::after,
@@ -166,14 +167,23 @@
   gap: 16rpx;
 }
 
-.list-title {
+/* 覆盖微信默认按钮的固定宽度和自动外边距，保持与卡片左缘对齐。 */
+.list-heading .portfolio-filter-trigger {
+  width: auto;
+  flex: none;
   min-width: 0;
-  flex: 1 1 auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
   color: #212529;
-  font-size: 36rpx;
+  font-size: 28rpx;
   white-space: nowrap;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
+  border: 0;
+  background: transparent;
 }
 
 .summary-pills {
@@ -227,6 +237,170 @@
   display: flex;
   flex-direction: column;
   gap: 16rpx;
+}
+
+/* 骨架保持真实卡片的外尺寸，避免加载完成后列表明显跳动。 */
+.portfolio-loading-skeleton {
+  pointer-events: none;
+}
+
+.portfolio-skeleton-list {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.portfolio-skeleton-row {
+  min-height: 192rpx;
+  padding: 16rpx 20rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  border: 1rpx solid #edf0f2;
+  border-radius: 14px;
+  box-sizing: border-box;
+}
+
+.portfolio-skeleton-row-3 {
+  opacity: 0.7;
+}
+
+.portfolio-skeleton-row-4 {
+  opacity: 0.4;
+}
+
+.portfolio-skeleton-bone {
+  position: relative;
+  overflow: hidden;
+  background: #e9edef;
+}
+
+.portfolio-skeleton-bone::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  content: "";
+  background: linear-gradient(105deg, transparent 18%, #fafbfc 50%, transparent 82%);
+  transform: translateX(-140%);
+  animation: portfolio-skeleton-sweep 2.2s ease-in-out infinite;
+}
+
+.portfolio-skeleton-cover {
+  width: 200rpx;
+  height: 160rpx;
+  flex: none;
+  border-radius: 14px;
+}
+
+.portfolio-skeleton-copy {
+  min-width: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.portfolio-skeleton-title {
+  width: 90%;
+  height: 18rpx;
+  border-radius: 10rpx;
+}
+
+.portfolio-skeleton-row-2 .portfolio-skeleton-title {
+  width: 72%;
+}
+
+.portfolio-skeleton-row-3 .portfolio-skeleton-title {
+  width: 84%;
+}
+
+.portfolio-skeleton-row-4 .portfolio-skeleton-title {
+  width: 64%;
+}
+
+.portfolio-skeleton-meta {
+  width: 72%;
+  height: 12rpx;
+  border-radius: 8rpx;
+}
+
+.portfolio-skeleton-badge {
+  width: 68rpx;
+  height: 20rpx;
+  border-radius: 10rpx;
+  background: #f3f5f6;
+}
+
+.portfolio-skeleton-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.portfolio-skeleton-action {
+  width: 116rpx;
+  height: 64rpx;
+  flex: none;
+  border-radius: 20rpx;
+  background: #f3f5f6;
+}
+
+.portfolio-loading-hint {
+  margin: 46rpx 0 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14rpx;
+  color: #838b92;
+  font-size: 24rpx;
+  line-height: 36rpx;
+}
+
+.portfolio-loading-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  flex: none;
+  border: 3rpx solid #edf0f2;
+  border-top-color: #838b92;
+  border-right-color: #838b92;
+  border-radius: 50%;
+  box-sizing: border-box;
+  animation: portfolio-loading-spin 1s linear infinite;
+}
+
+.summary-refresh-spinner {
+  width: 20rpx;
+  height: 20rpx;
+}
+
+@keyframes portfolio-skeleton-sweep {
+  0%,
+  10% {
+    transform: translateX(-140%);
+  }
+
+  70%,
+  100% {
+    transform: translateX(140%);
+  }
+}
+
+@keyframes portfolio-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portfolio-skeleton-bone::after,
+  .portfolio-loading-spinner {
+    animation: none;
+  }
 }
 
 .portfolio-swipe-row {
@@ -605,6 +779,15 @@
   background: #212529;
 }
 
+.empty-state .small-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 260rpx;
+  margin: 20rpx 0 0;
+  padding: 0;
+}
+
 .create-actions {
   width: 100%;
   max-width: 100%;
@@ -808,4 +991,89 @@
 
 .team-action-hint-slot .inline-hint {
   width: 100%;
+}
+
+/* 筛选浮层使用视口坐标，避免被列表滚动及横向切换容器裁切。 */
+.portfolio-filter-layer {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 120;
+  background: transparent;
+}
+
+.portfolio-filter-menu {
+  position: absolute;
+  padding: 4px;
+  box-sizing: border-box;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 5px 18px rgba(38, 50, 61, 0.11);
+  transform-origin: top left;
+  animation: portfolio-filter-menu-enter 160ms ease-out;
+}
+
+.portfolio-filter-option {
+  height: 48px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 8px;
+  color: #495057;
+  font-size: 13px;
+}
+
+.portfolio-filter-option.selected {
+  background: #f1f3f5;
+  color: #212529;
+  font-weight: 600;
+}
+
+.portfolio-filter-check {
+  margin-left: 12px;
+}
+
+.portfolio-filter-chevron {
+  width: 10rpx;
+  height: 10rpx;
+  margin: 0 2rpx 5rpx 14rpx;
+  border-right: 2rpx solid #868e96;
+  border-bottom: 2rpx solid #868e96;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+/* 筛选加载与结果都在列表区域内过渡，工具栏和底部操作保持稳定。 */
+.portfolio-results-enter {
+  animation: portfolio-results-enter 200ms ease-out;
+}
+
+.portfolio-filter-chevron.open {
+  transform: rotate(225deg);
+}
+
+@keyframes portfolio-results-enter {
+  from { opacity: 0; transform: translateY(10rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes portfolio-filter-menu-enter {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portfolio-results-enter,
+  .portfolio-filter-menu {
+    animation: none;
+  }
+  .portfolio-filter-chevron {
+    transition: none;
+  }
 }

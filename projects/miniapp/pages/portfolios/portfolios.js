@@ -35,6 +35,17 @@ const SWIPE_CLOSE_THRESHOLD = 24
 const SWIPE_VERTICAL_TOLERANCE = 48
 const DELETE_CONFIRM_COLOR = '#a9354f'
 const PUBLICATION_STATUS_PUBLISHED = 'PUBLISHED'
+const PUBLICATION_STATUS_DRAFT = 'DRAFT_ONLY'
+const PUBLICATION_FILTER_OPTIONS = [
+  { value: '', label: '全部作品集' },
+  { value: PUBLICATION_STATUS_PUBLISHED, label: '已发布' },
+  { value: PUBLICATION_STATUS_DRAFT, label: '草稿' }
+]
+const FILTER_MENU_WIDTH = 160
+const FILTER_MENU_HEIGHT = 154
+const FILTER_MENU_MARGIN = 16
+const FILTER_MENU_GAP = 4
+const FILTER_LOADING_MIN_MS = 240
 const PUBLICATION_STATUS_OFFLINE = 'OFFLINE'
 const ACTION_TYPE_SHARE = 'SHARE'
 const ACTION_TYPE_EDIT = 'EDIT'
@@ -130,7 +141,7 @@ function normalizeTeamPortfolioItem(item = {}) {
 
 function buildSummary(portfolios = []) {
   const publishedCount = portfolios.filter((item) => item.publicationStatus === PUBLICATION_STATUS_PUBLISHED).length
-  const draftCount = portfolios.filter((item) => item.publicationStatus !== PUBLICATION_STATUS_PUBLISHED).length
+  const draftCount = portfolios.filter((item) => item.publicationStatus === PUBLICATION_STATUS_DRAFT).length
   return {
     publishedText: `${publishedCount} 已发布`,
     draftText: `${draftCount} 草稿`
@@ -176,8 +187,16 @@ Page({
   data: {
     ownerType: OWNER_TYPE_USER,
     ownerTitle: '个人作品集',
+    publicationFilter: '',
+    teamPublicationFilter: '',
+    filterLabel: PUBLICATION_FILTER_OPTIONS[0].label,
+    teamFilterLabel: PUBLICATION_FILTER_OPTIONS[0].label,
+    filterOptions: PUBLICATION_FILTER_OPTIONS,
+    filterMenu: null,
+    filterLoading: false,
+    teamFilterLoading: false,
     loading: true,
-    // 首次成功后保留列表或空态，后续刷新不再用骨架遮住已有内容。
+    // 普通刷新保留已有内容；切换筛选时重新展示列表骨架。
     loaded: false,
     pullDownRefreshing: false,
     errorMessage: '',
@@ -240,6 +259,7 @@ Page({
   },
 
   onUnload() {
+    this.invalidateListRequests()
     this.closePreviewVersionMenu()
     if (this.ownerSwitchTimer) {
       clearTimeout(this.ownerSwitchTimer)
@@ -248,6 +268,7 @@ Page({
   },
 
   onHide() {
+    this.invalidateListRequests()
     this.closePreviewVersionMenu()
   },
 
@@ -296,76 +317,159 @@ Page({
       })
   },
 
-  bootstrap() {
+  async bootstrap({ publicationStatus = this.data.publicationFilter, filterOnly = false } = {}) {
     this.closePreviewVersionMenu()
     this.resetShareSheetState()
     if (!hasLocalToken()) {
       wx.navigateTo({ url: '/pages/login/login' })
       return
     }
-    this.setData({ loading: true, errorMessage: '', revealedPortfolioId: null })
-    return request({
+    const requestId = this.personalListRequestId = (this.personalListRequestId || 0) + 1
+    this.personalFilterTarget = publicationStatus
+    this.setData({ loading: true, filterLoading: filterOnly, errorMessage: '', revealedPortfolioId: null })
+    // 快速响应也给加载态保留短暂展示时间，避免列表闪烁；请求序号负责拦截过期结果。
+    const loadingTransition = filterOnly ? new Promise(resolve => setTimeout(resolve, FILTER_LOADING_MIN_MS)) : null
+    const fetchList = (status) => request({
       url: PORTFOLIOS_API_URL,
-      data: { ownerType: this.data.ownerType }
-    }).then((response) => {
+      data: { ownerType: OWNER_TYPE_USER, ...(status ? { publicationStatus: status } : {}) }
+    })
+    try {
+      const listRequest = fetchList(publicationStatus)
+      // 筛选响应只更新列表；完整刷新额外获取全部数据，保持统计口径。
+      const summaryRequest = !publicationStatus ? listRequest
+        : filterOnly && this.data.loaded ? Promise.resolve(null) : fetchList('')
+      const [response, complete] = await Promise.all([listRequest, summaryRequest, loadingTransition])
+      if (requestId !== this.personalListRequestId) return
       const portfolios = response && Array.isArray(response.portfolios) ? response.portfolios : []
       this.setData({
         portfolios,
         displayPortfolios: portfolios.map(normalizePortfolioItem),
-        summary: buildSummary(portfolios),
+        summary: complete ? buildSummary(complete.portfolios || []) : this.data.summary,
+        publicationFilter: publicationStatus,
+        filterLabel: PUBLICATION_FILTER_OPTIONS.find(option => option.value === publicationStatus).label,
         loaded: true
       })
-    }).catch((error) => {
+    } catch (error) {
+      await loadingTransition
+      if (requestId !== this.personalListRequestId) return
       if (error.authRequired) {
         handleMaintainerAuthRequired(error.message)
         return
       }
       this.setData({ errorMessage: error.message || '作品集加载失败' })
-    }).finally(() => {
-      this.setData({ loading: false })
-    })
+    } finally {
+      if (requestId === this.personalListRequestId) {
+        this.personalFilterTarget = undefined
+        this.setData({ loading: false, filterLoading: false })
+      }
+    }
   },
 
-  async bootstrapTeam({ onlyIfNeeded = false } = {}) {
+  async bootstrapTeam({ onlyIfNeeded = false, publicationStatus = this.data.teamPublicationFilter, filterOnly = false } = {}) {
     this.closePreviewVersionMenu()
-    if (onlyIfNeeded && (this.data.teamLoaded || this.data.teamLoading)) {
-      return
-    }
+    if (onlyIfNeeded && (this.data.teamLoaded || this.data.teamLoading)) return
+    const requestId = this.teamListRequestId = (this.teamListRequestId || 0) + 1
+    this.teamFilterTarget = publicationStatus
     this.resetShareSheetState()
     this.setData({
       teamLoading: true,
+      teamFilterLoading: filterOnly,
       teamErrorMessage: '',
-      noMaintainableTeam: false,
       revealedTeamPortfolioId: null,
       teamPortfolioTouchStart: null,
       teamSelectSheetVisible: false,
       selectedCreateTeamId: null,
       teamSelectSheetListHeight: 0
     })
+    const loadingTransition = filterOnly ? new Promise(resolve => setTimeout(resolve, FILTER_LOADING_MIN_MS)) : null
     try {
-      const teamResults = await Promise.all([
-        fetchTeamPortfolioList(request),
-        fetchMaintainableTeams(request)
+      const listRequest = fetchTeamPortfolioList(request, { publicationStatus })
+      const summaryRequest = !publicationStatus ? listRequest
+        : filterOnly && this.data.teamLoaded ? Promise.resolve(null) : fetchTeamPortfolioList(request)
+      const [portfolios, complete, maintainableTeams] = await Promise.all([
+        listRequest,
+        summaryRequest,
+        filterOnly && this.data.maintainableTeamsLoaded ? Promise.resolve(this.data.maintainableTeams) : fetchMaintainableTeams(request),
+        loadingTransition
       ])
-      const portfolios = teamResults[0]
-      const maintainableTeams = teamResults[1]
+      if (requestId !== this.teamListRequestId) return
       this.setData({
         teamPortfolios: portfolios,
         teamDisplayPortfolios: portfolios.map(normalizeTeamPortfolioItem),
-        teamSummary: buildSummary(portfolios),
+        teamSummary: complete ? buildSummary(complete) : this.data.teamSummary,
+        teamPublicationFilter: publicationStatus,
+        teamFilterLabel: PUBLICATION_FILTER_OPTIONS.find(option => option.value === publicationStatus).label,
         maintainableTeams,
         maintainableTeamsLoaded: true,
         noMaintainableTeam: maintainableTeams.length === 0,
         teamLoaded: true
       })
     } catch (error) {
-      if (handleTeamMaintainerAuthError(error) || showTeamPortfolioUnavailableToast(error)) {
-        return
-      }
+      await loadingTransition
+      if (requestId !== this.teamListRequestId) return
+      if (handleTeamMaintainerAuthError(error) || showTeamPortfolioUnavailableToast(error)) return
       this.setData({ teamErrorMessage: '团队作品集加载失败，请重试' })
     } finally {
-      this.setData({ teamLoading: false, teamPullDownRefreshing: false })
+      if (requestId === this.teamListRequestId) {
+        this.teamFilterTarget = undefined
+        this.setData({ teamLoading: false, teamFilterLoading: false, teamPullDownRefreshing: false })
+      }
     }
+  },
+
+  /** 页面离开后不再接受旧请求，返回时由原 onShow 重新同步。 */
+  invalidateListRequests() {
+    this.personalListRequestId = (this.personalListRequestId || 0) + 1
+    this.teamListRequestId = (this.teamListRequestId || 0) + 1
+    this.personalFilterTarget = undefined
+    this.teamFilterTarget = undefined
+    this.setData({ loading: false, teamLoading: false, filterLoading: false, teamFilterLoading: false, pullDownRefreshing: false, teamPullDownRefreshing: false })
+  },
+
+  handleFilterTap() {
+    const wasOpen = this.data.filterMenu || this.filterMenuMeasuring
+    this.closePreviewVersionMenu()
+    if (wasOpen) return
+    this.resetShareSheetState()
+    this.setData({ revealedPortfolioId: null, revealedTeamPortfolioId: null, teamSelectSheetVisible: false })
+    const ownerType = this.data.ownerType
+    const token = this.filterMenuToken
+    this.filterMenuMeasuring = true
+    try {
+      const viewport = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync()
+      const selector = ownerType === OWNER_TYPE_TEAM ? '#team-publication-filter' : '#personal-publication-filter'
+      wx.createSelectorQuery().in(this).select(selector).boundingClientRect(rect => {
+        if (token !== this.filterMenuToken) return
+        this.filterMenuMeasuring = false
+        if (!rect || !Number.isFinite(rect.left) || !Number.isFinite(rect.bottom)) return
+        const width = Math.min(FILTER_MENU_WIDTH, viewport.windowWidth - FILTER_MENU_MARGIN * 2)
+        const left = Math.max(FILTER_MENU_MARGIN, Math.min(rect.left, viewport.windowWidth - width - FILTER_MENU_MARGIN))
+        const top = Math.max(FILTER_MENU_MARGIN, Math.min(rect.bottom + FILTER_MENU_GAP, viewport.windowHeight - FILTER_MENU_HEIGHT - FILTER_MENU_MARGIN))
+        this.setData({ filterMenu: {
+          ownerType,
+          selected: ownerType === OWNER_TYPE_TEAM ? this.data.teamPublicationFilter : this.data.publicationFilter,
+          style: `left: ${left}px; top: ${top}px; width: ${width}px;`
+        } })
+      }).exec()
+    } catch (error) { this.closeFilterMenu() }
+  },
+
+  closeFilterMenu() {
+    this.filterMenuToken = (this.filterMenuToken || 0) + 1
+    this.filterMenuMeasuring = false
+    if (this.data.filterMenu) this.setData({ filterMenu: null })
+  },
+
+  handleFilterSelect(event) {
+    const value = event.currentTarget.dataset.value
+    if (!PUBLICATION_FILTER_OPTIONS.some(option => option.value === value)) return
+    const team = this.data.ownerType === OWNER_TYPE_TEAM
+    const pending = team ? this.teamFilterTarget : this.personalFilterTarget
+    const current = team ? this.data.teamPublicationFilter : this.data.publicationFilter
+    this.closeFilterMenu()
+    if (value === (pending === undefined ? current : pending)) return
+    return team ? this.bootstrapTeam({ publicationStatus: value, filterOnly: true })
+      : this.bootstrap({ publicationStatus: value, filterOnly: true })
   },
 
   handleOwnerTypeTap(event) {
@@ -760,6 +864,7 @@ Page({
   },
 
   handleShareTap(event) {
+    this.closeFilterMenu()
     if (this.data.shareActionPending) {
       return
     }
@@ -899,6 +1004,7 @@ Page({
   },
 
   closePreviewVersionMenu() {
+    this.closeFilterMenu()
     this.previewVersionMeasureToken = (this.previewVersionMeasureToken || 0) + 1
     this.previewVersionTarget = null
     if (this.data.previewVersionMenu) this.setData({ previewVersionMenu: null })

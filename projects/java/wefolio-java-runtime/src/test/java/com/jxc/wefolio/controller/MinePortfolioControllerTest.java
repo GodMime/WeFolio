@@ -1,5 +1,11 @@
 package com.jxc.wefolio.controller;
 
+import java.util.List;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import com.jxc.wefolio.message.PortfolioMessage;
+import com.jxc.wefolio.exception.GlobalExceptionHandler;
+import com.jxc.wefolio.exception.BusinessException;
+import com.jxc.wefolio.dict.PortfolioPublicationStatusDict;
 import com.jxc.wefolio.annotation.MaintainerAccess;
 import com.jxc.wefolio.common.Response;
 import com.jxc.wefolio.dto.MinePortfolioAssetUploadTicketRequest;
@@ -29,6 +35,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.Arrays;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -89,7 +98,7 @@ class MinePortfolioControllerTest {
         PortfolioScheduleOptionsResponse scheduleOptionsResponse = new PortfolioScheduleOptionsResponse();
         PortfolioScheduleQueryRequest scheduleQueryRequest = new PortfolioScheduleQueryRequest();
         PortfolioScheduleQueryResponse scheduleQueryResponse = new PortfolioScheduleQueryResponse();
-        when(minePortfolioService.listPortfolios("USER")).thenReturn(listResponse);
+        when(minePortfolioService.listPortfolios("USER", null)).thenReturn(listResponse);
         when(minePortfolioService.getComponentLibrary(3)).thenReturn(libraryResponse);
         when(minePortfolioService.listHyperlinkTargets(88L, 99L)).thenReturn(hyperlinkTargetsResponse);
         when(minePortfolioService.createStandardPersonal(createRequest)).thenReturn(detailResponse);
@@ -104,7 +113,7 @@ class MinePortfolioControllerTest {
         when(minePortfolioService.submitPreviewScheduleQuery(88L, scheduleQueryRequest, "published"))
                 .thenReturn(scheduleQueryResponse);
 
-        Response<MinePortfolioListResponse> listed = controller.list("USER");
+        Response<MinePortfolioListResponse> listed = controller.list("USER", null);
         Response<PortfolioComponentLibraryResponse> library = controller.componentLibrary(3);
         Response<PortfolioHyperlinkTargetResponse> hyperlinkTargets = controller.hyperlinkTargets(88L, 99L);
         Response<MinePortfolioDetailResponse> created = controller.createStandardPersonal(createRequest);
@@ -122,7 +131,7 @@ class MinePortfolioControllerTest {
         Response<Void> deleted = controller.deletePortfolio(88L);
 
         assertThat(MinePortfolioController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
-        assertGetMapping("list", new Class<?>[] {String.class}, "/api/mine/portfolios");
+        assertGetMapping("list", new Class<?>[] {String.class, String.class}, "/api/mine/portfolios");
         assertGetMapping("componentLibrary", new Class<?>[] {Integer.class}, "/api/mine/portfolios/component-library");
         assertGetMapping("hyperlinkTargets", new Class<?>[] {Long.class, Long.class},
                 "/api/mine/portfolios/hyperlink-targets");
@@ -155,7 +164,7 @@ class MinePortfolioControllerTest {
         assertPostMapping("deletePortfolio",
                 new Class<?>[] {Long.class},
                 "/api/mine/portfolios/delete/{portfolioId}");
-        assertThat(MinePortfolioController.class.getMethod("list", String.class)
+        assertThat(MinePortfolioController.class.getMethod("list", String.class, String.class)
                 .getParameters()[0].isAnnotationPresent(RequestParam.class)).isTrue();
         assertThat(MinePortfolioController.class.getMethod("detail", Long.class)
                 .getParameters()[0].isAnnotationPresent(PathVariable.class)).isTrue();
@@ -202,4 +211,28 @@ class MinePortfolioControllerTest {
         assertThat(mapping).isNotNull();
         assertThat(mapping.value()).containsExactly(path);
     }
+    /** 新状态参数可选，旧请求与原响应包装继续兼容。 */
+    @Test
+    void publicationFilterBindsWithoutChangingListResponse() throws Exception {
+        MinePortfolioController controller = new MinePortfolioController(minePortfolioService);
+        MinePortfolioListResponse result = new MinePortfolioListResponse();
+        result.setPortfolios(List.of());
+        String published = PortfolioPublicationStatusDict.PUBLISHED.getCode();
+        when(minePortfolioService.listPortfolios(null, null)).thenReturn(result);
+        when(minePortfolioService.listPortfolios(null, published)).thenReturn(result);
+        when(minePortfolioService.listPortfolios(null, "INVALID")).thenThrow(
+                new BusinessException(PortfolioMessage.PUBLICATION_STATUS_FILTER_INVALID_MESSAGE));
+        var mvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
+        mvc.perform(get("/api/mine/portfolios"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.portfolios").isArray());
+        mvc.perform(get("/api/mine/portfolios").param("publicationStatus", published))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.portfolios").isArray());
+        mvc.perform(get("/api/mine/portfolios").param("publicationStatus", "INVALID"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(PortfolioMessage.PUBLICATION_STATUS_FILTER_INVALID_MESSAGE));
+        verify(minePortfolioService).listPortfolios(null, null);
+        verify(minePortfolioService).listPortfolios(null, published);
+    }
+
 }

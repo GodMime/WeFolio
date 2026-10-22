@@ -738,6 +738,17 @@ Runtime 删除 `PortfolioAiReferenceMediaProbe` 与 `PortfolioAiReferenceStorage
 
 证据：`/tmp/wefolio-unified-order-runtime-full.log`、`/tmp/wefolio-unified-order-miniapp-tests.log`、`/tmp/wefolio-unified-order-runtime-deploy.log`、`/tmp/wefolio-unified-order-postdeploy.json`。本轮未通过生产账号执行真实排序写入。
 
+### 4.36 作品集状态筛选 Runtime 发布（2026-10-22）
+
+按用户“runtime发布下”授权，使用标准 `deploy.sh` 完成 Runtime 双节点滚动发布，退出码 0，耗时 99.688 秒。个人、团队作品集列表增加可选 `publicationStatus` 筛选，不传参数保持原行为，无数据库迁移或环境配置变更。
+
+- 构建版本标识 `4185740`，包含发布时尚未提交的筛选改动；构建时间 `2026-10-22 21:35:21`（上海）。JAR SHA-256 为 `861bef96acead8362c8ce2c0aaa1912db212bbe55bacfc98ccea6cf6af858c46`，双节点与本地一致。
+- 老/新节点 PID 为 `26750` / `14805`，启动时间 `21:36:02` / `21:36:40`。截至 `21:37:26`，两节点 active/running、健康 UP、字体 enabled/ready；正式 HTTPS 健康与版本核验通过，启动后 journal ERROR/FATAL 均为 0。
+- Nginx 语法检查通过，upstream 恢复双节点轮询。两节点旧包均保留于 `/root/java/wefolio-java-runtime.jar.backup`，SHA-256 为 `b14205112386eb7630e2bf88dcb39e362aac2bb51ac7dde7ee5a5927b9f30551`；回退时逐节点摘流、恢复旧包并验收。
+- 发布前已完成 runtime 全量测试：2925 项，0 失败、0 错误、35 项跳过。生产环境未使用真实用户身份执行筛选业务验证。Job 未发布或重启，PID 仍为 `6474`；小程序 1.5.9 尚未发布，本次部署过程未执行 Git 提交。
+
+证据：`/tmp/wefolio-runtime-release-20261022.log`、`/tmp/wefolio-filter-java-full.log`、`docs/portfolio-runtime-release-verification-20261022.json`。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |
@@ -1065,3 +1076,4 @@ Runtime 双节点已完成发布，服务、制品、有效配置和正式入口
 | 2026-10-19 | Codex | 提交 `380de7e` 并发布 AI 字段说明与发起用户唯一码日志；Job 已排空换包，健康与版本核验通过，调度恢复，启动后无 ERROR/FATAL | Job 单节点；两工程契约仅更新说明，Runtime 和小程序未发布，无数据库或环境变更 | 旧包独立保留为 `backup-ai-fields-user-code-20261019-380de7e`，回退先排空再恢复并验收；详见 §4.33 |
 | 2026-10-19 | Codex | 提交 `851f811` 并发布视频默认作品推荐名称；Job 排空后换包，版本、健康、制品、提示词及调度恢复核验通过，启动后无 ERROR/FATAL | Job 单节点；名称更新隔离于已提交摘要，Runtime 和小程序未发布，无数据库或环境变更 | 旧包独立保留为 `backup-video-title-20261019-851f811`，回退先排空再恢复并验收；详见 §4.34 |
 | 2026-10-19 | Codex | 提交 `869cefd` 并发布作品统一排序；Runtime 双节点滚动发布完成，版本、健康、制品、备份及 Nginx 轮询核验通过，启动后无 ERROR/FATAL | Runtime 双节点；兼容旧客户端 TAG 排序，小程序仅提交代码未发布，Job 未重启，无数据库或环境变更 | 两节点固定 `.backup` 保留旧包，回退须逐节点摘流并验收；详见 §4.35 |
+| 2026-10-22 | Codex | 按授权发布作品集状态筛选 Runtime；双节点制品、健康、版本、备份及 Nginx 轮询核验通过，启动后无 ERROR/FATAL | Runtime 双节点；无数据库或环境变更，Job 与小程序未发布，发布时使用工作区代码 | 两节点固定 `.backup` 保留旧包，回退须逐节点摘流并验收；详见 §4.36 |

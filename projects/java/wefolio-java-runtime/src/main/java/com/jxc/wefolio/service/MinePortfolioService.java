@@ -336,9 +336,21 @@ public class MinePortfolioService {
      * @return 作品集列表
      */
     public MinePortfolioListResponse listPortfolios(String ownerType) {
+        return listPortfolios(ownerType, null);
+    }
+
+    /**
+     * 按可选发布状态查询个人作品集，缺省时保持原列表范围。
+     *
+     * @param ownerType 归属类型
+     * @param publicationStatus 可选发布状态
+     * @return 作品集列表
+     */
+    public MinePortfolioListResponse listPortfolios(String ownerType, String publicationStatus) {
         Long userId = AuthContextHolder.requireUserId();
         String normalizedOwnerType = hasText(ownerType) ? ownerType.strip() : PortfolioOwnerTypeDict.USER.getCode();
         if (PortfolioOwnerTypeDict.TEAM.getCode().equals(normalizedOwnerType)) {
+            normalizePublicationStatusFilter(publicationStatus);
             MinePortfolioListResponse response = new MinePortfolioListResponse();
             response.setPortfolios(List.of());
             return response;
@@ -346,10 +358,12 @@ public class MinePortfolioService {
         if (!PortfolioOwnerTypeDict.USER.getCode().equals(normalizedOwnerType)) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_OWNER_TYPE_INVALID_MESSAGE);
         }
+        String statusFilter = normalizePublicationStatusFilter(publicationStatus);
         List<PortfolioEntity> portfolios = portfolioEntityMapper.selectList(
                 Wrappers.lambdaQuery(PortfolioEntity.class)
                         .eq(PortfolioEntity::getOwnerType, normalizedOwnerType)
                         .eq(PortfolioEntity::getOwnerId, userId)
+                        .eq(statusFilter != null, PortfolioEntity::getPublicationStatus, statusFilter)
                         .orderByDesc(PortfolioEntity::getUpdatedAt)
         );
         MinePortfolioListResponse response = new MinePortfolioListResponse();
@@ -2129,4 +2143,17 @@ public class MinePortfolioService {
     private <T> List<T> safeList(List<T> list) {
         return list == null ? List.of() : list;
     }
+
+    /** 将空白筛选视为全部，并仅接受已有发布状态代码。 */
+    private String normalizePublicationStatusFilter(String publicationStatus) {
+        if (publicationStatus == null || publicationStatus.isBlank()) {
+            return null;
+        }
+        String normalized = publicationStatus.strip();
+        if (PortfolioPublicationStatusDict.fromCode(normalized) == null) {
+            throw new BusinessException(PortfolioMessage.PUBLICATION_STATUS_FILTER_INVALID_MESSAGE);
+        }
+        return normalized;
+    }
+
 }

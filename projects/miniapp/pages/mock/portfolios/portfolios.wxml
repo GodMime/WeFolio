@@ -1,11 +1,34 @@
+<template name="portfolio-loading-skeleton">
+  <view class="skeleton-panel portfolio-loading-skeleton portfolio-results-enter" aria-label="作品集正在加载">
+    <view class="portfolio-skeleton-list" aria-hidden="true">
+      <view wx:for="{{[1, 2, 3, 4]}}" wx:key="*this" class="portfolio-skeleton-row portfolio-skeleton-row-{{item}}">
+        <view class="portfolio-skeleton-cover portfolio-skeleton-bone"></view>
+        <view class="portfolio-skeleton-copy">
+          <view class="portfolio-skeleton-title portfolio-skeleton-bone"></view>
+          <view class="portfolio-skeleton-meta portfolio-skeleton-bone"></view>
+          <view class="portfolio-skeleton-badge"></view>
+        </view>
+        <view class="portfolio-skeleton-actions">
+          <view class="portfolio-skeleton-action"></view>
+          <view class="portfolio-skeleton-action"></view>
+        </view>
+      </view>
+    </view>
+    <view class="portfolio-loading-hint">
+      <view class="portfolio-loading-spinner" aria-hidden="true"></view>
+      <text>正在加载作品集</text>
+    </view>
+  </view>
+</template>
+
 <view class="page-shell portfolios-page mock-portfolios-page" bindtouchmove="handleClosePreviewVersionMenu">
   <navigation-bar title="作品集" back="{{false}}" color="#212529" background="rgba(245, 246, 247, 0.94)"></navigation-bar>
 
   <view class="portfolio-segment-shell">
     <view class="segment">
       <view class="segment-indicator {{ownerType === 'TEAM' ? 'team-active' : ''}}"></view>
-      <button class="segment-item {{ownerType === 'USER' ? 'active' : ''}}" data-type="USER" bindtap="handleOwnerTypeTap">个人</button>
-      <button class="segment-item {{ownerType === 'TEAM' ? 'active' : ''}}" data-type="TEAM" bindtap="handleOwnerTypeTap">团队</button>
+      <button class="segment-item {{ownerType === 'USER' ? 'active' : ''}}" data-type="USER" bindtap="handleOwnerTypeTap">个人作品集</button>
+      <button class="segment-item {{ownerType === 'TEAM' ? 'active' : ''}}" data-type="TEAM" bindtap="handleOwnerTypeTap">团队作品集</button>
     </view>
   </view>
 
@@ -14,17 +37,24 @@
       <view class="portfolio-switch-panel">
         <view class="portfolio-content personal-portfolio-content">
           <view class="portfolio-list-panel">
-        <view class="list-heading">
-          <view class="list-title">{{portfolioList.ownerTitle}}</view>
-          <view class="summary-pills">
-            <view class="summary-pill published">{{portfolioList.summary.publishedText}}</view>
-            <view class="summary-pill draft">{{portfolioList.summary.draftText}}</view>
-          </view>
-        </view>
+            <view class="list-heading">
+              <button id="personal-publication-filter" class="portfolio-filter-trigger" bindtap="handleFilterTap" aria-label="筛选作品集" aria-expanded="{{!!filterMenu}}">
+                <text>{{filterLabel}}</text><view class="portfolio-filter-chevron {{filterMenu ? 'open' : ''}}" aria-hidden="true"></view>
+              </button>
+              <view class="summary-pills">
+                <view class="summary-pill published">{{portfolioList.summary.publishedText}}</view>
+                <view class="summary-pill draft">{{portfolioList.summary.draftText}}</view>
+              </view>
+            </view>
 
             <scroll-view class="portfolio-list-scroll personal-portfolio-list-scroll" scroll-y type="list" bindscroll="handleClosePreviewVersionMenu">
-        <view class="portfolio-list">
-          <view wx:for="{{portfolioList.portfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
+              <template wx:if="{{filterLoading}}" is="portfolio-loading-skeleton" />
+              <view wx:elif="{{displayPortfolios.length === 0}}" class="empty-state portfolio-results-enter">
+                <view class="empty-title">{{publicationFilter ? '暂无' + filterLabel + '作品集' : '暂无作品集'}}</view>
+                <button wx:if="{{publicationFilter}}" class="small-button" data-value="" bindtap="handleFilterSelect">查看全部作品集</button>
+              </view>
+              <view wx:else class="portfolio-list portfolio-results-enter">
+          <view wx:for="{{displayPortfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
             <view class="portfolio-delete-pane">
               <button class="portfolio-delete-button" catchtap="handleActionTap" data-action="delete">
                 <view class="portfolio-delete-icon" aria-hidden="true"></view>
@@ -85,7 +115,9 @@
         <view class="portfolio-content team-portfolio-content">
           <view class="portfolio-list-panel">
             <view class="list-heading">
-              <view class="list-title">{{teamPortfolioList.ownerTitle}}</view>
+              <button id="team-publication-filter" class="portfolio-filter-trigger" bindtap="handleFilterTap" aria-label="筛选作品集" aria-expanded="{{!!filterMenu}}">
+                <text>{{teamFilterLabel}}</text><view class="portfolio-filter-chevron {{filterMenu ? 'open' : ''}}" aria-hidden="true"></view>
+              </button>
               <view class="summary-pills">
                 <view class="summary-pill published">{{teamPortfolioList.summary.publishedText}}</view>
                 <view class="summary-pill draft">{{teamPortfolioList.summary.draftText}}</view>
@@ -93,8 +125,13 @@
             </view>
 
             <scroll-view class="portfolio-list-scroll team-portfolio-list-scroll" scroll-y type="list" bindscroll="handleClosePreviewVersionMenu">
-              <view class="portfolio-list">
-                <view wx:for="{{teamPortfolioList.portfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
+              <template wx:if="{{teamFilterLoading}}" is="portfolio-loading-skeleton" />
+              <view wx:elif="{{teamDisplayPortfolios.length === 0}}" class="empty-state portfolio-results-enter">
+                <view class="empty-title">{{teamPublicationFilter ? '暂无' + teamFilterLabel + '作品集' : '暂无团队作品集'}}</view>
+                <button wx:if="{{teamPublicationFilter}}" class="small-button" data-value="" bindtap="handleFilterSelect">查看全部作品集</button>
+              </view>
+              <view wx:else class="portfolio-list portfolio-results-enter">
+                <view wx:for="{{teamDisplayPortfolios}}" wx:key="portfolioId" class="portfolio-swipe-row">
                   <view class="portfolio-delete-pane">
                     <button class="portfolio-delete-button" catchtap="handleTeamActionTap" data-action="delete">
                       <view class="portfolio-delete-icon" aria-hidden="true"></view>
@@ -158,6 +195,18 @@
         <view wx:for="{{previewVersionMenu.options}}" wx:key="scope" class="preview-version-menu__option" data-scope="{{item.scope}}" catchtap="handlePreviewVersionSelect" aria-role="button" aria-label="{{item.label}}，{{item.description}}">
           <text class="preview-version-menu__label">{{item.label}}</text>
           <text class="preview-version-menu__description">{{item.description}}</text>
+        </view>
+      </view>
+    </view>
+  </root-portal>
+
+  <root-portal wx:if="{{filterMenu}}">
+    <view class="portfolio-filter-layer" catchtap="closeFilterMenu" catchtouchmove="closeFilterMenu">
+      <!-- 接住点选时的轻微移动，避免关闭层在 tap 前销毁菜单。 -->
+      <view class="portfolio-filter-menu" style="{{filterMenu.style}}" catchtouchmove="noop">
+        <view wx:for="{{filterOptions}}" wx:key="value" class="portfolio-filter-option {{filterMenu.selected === item.value ? 'selected' : ''}}" data-value="{{item.value}}" catchtap="handleFilterSelect" aria-role="button" aria-label="{{item.label}}" aria-pressed="{{filterMenu.selected === item.value}}">
+          <text>{{item.label}}</text>
+          <text wx:if="{{filterMenu.selected === item.value}}" class="portfolio-filter-check">✓</text>
         </view>
       </view>
     </view>
