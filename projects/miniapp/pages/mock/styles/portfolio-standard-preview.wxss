@@ -143,6 +143,6 @@
 .folio-brand-name {
   color: #a1a9b3;
   font-size: 24rpx;
-  font-weight: 800;
+  font-weight: 400;
   line-height: 1.4;
 }

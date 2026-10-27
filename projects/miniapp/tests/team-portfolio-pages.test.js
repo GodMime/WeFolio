@@ -148,7 +148,7 @@ test('team preview and visitor pages render the personal-style brand footer', ()
     assert.match(wxml, /class="folio-brand-footer"/)
     assert.match(wxml, new RegExp(`class="folio-brand-logo" src="${logoUrl.replace(/\./g, '\\.')}" mode="aspectFit"`))
     assert.match(wxml, new RegExp(`class="folio-brand-logo" src="${darkLogoUrl.replace(/\./g, '\\.')}" mode="aspectFit"`))
-    assert.match(wxml, /class="folio-brand-name">映期Folio<\/view>/)
+    assert.match(wxml, /class="folio-brand-name">映期 FOLIO · 让作品被看见<\/view>/)
     assert.match(readCssRule(wxss, '.folio-brand-footer'), /padding:56rpx0calc\(160rpx\+env\(safe-area-inset-bottom\)\);/)
   }
   assert.equal(fs.existsSync(logoPath), true)

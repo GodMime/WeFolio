@@ -29,7 +29,7 @@
     <view class="folio-brand-footer">
       <image wx:if="{{themeMode === 'dark'}}" class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-dark-50kb.png" mode="aspectFit"></image>
       <image wx:else class="folio-brand-logo" src="/assets/system/folio-logo-stack-bold-small-50kb.png" mode="aspectFit"></image>
-      <view class="folio-brand-name">映期Folio</view>
+      <view class="folio-brand-name">映期 FOLIO · 让作品被看见</view>
     </view>
   </view>
 </scroll-view>

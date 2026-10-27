@@ -240,7 +240,7 @@ test('preview hyperlink reports clipboard write failure', async () => {
 
 test('portfolio preview and visitor pages render miniapp brand footer', () => {
   const logoUrl = '/assets/system/folio-logo-stack-bold-small-50kb.png'
-  const brandName = '映期Folio'
+  const brandName = '映期 FOLIO · 让作品被看见'
   const logoPath = path.join(__dirname, `..${logoUrl}`)
   const previewWxml = fs.readFileSync(
     path.join(__dirname, '../pages/portfolios/standard-preview/portfolio-standard-preview.wxml'),
