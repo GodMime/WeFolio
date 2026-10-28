@@ -12,6 +12,13 @@ function loadUtility(name) {
   return require(modulePath)
 }
 
+// 团队只导航到公开教程；仅排除这条固定导航声明，仍禁止任何跨分包源码引用。
+function withoutPublicTutorialRoute(source, file) {
+  if (path.basename(file) !== 'advanced-ai-page.js') return source
+  assert.match(source, /wx\.navigateTo\(\{ url: TUTORIAL_ROUTE,/)
+  return source.replace(/^const TUTORIAL_ROUTE = '\/pages\/portfolios\/tutorial\/advanced-portfolio-tutorial'$/m, '')
+}
+
 function createImageWxApi(fileSizes, compressedPath) {
   return {
     getFileSystemManager() {
@@ -675,7 +682,7 @@ test('team utility tree only imports approved main-package infrastructure', () =
   for (const file of files) {
     const fullPath = path.join(TEAM_UTILS_ROOT, file)
     const source = fs.readFileSync(fullPath, 'utf8')
-    for (const pattern of forbidden) assert.doesNotMatch(source, pattern, file)
+    for (const pattern of forbidden) assert.doesNotMatch(withoutPublicTutorialRoute(source, file), pattern, file)
     for (const match of source.matchAll(/require\(['"]([^'"]+)['"]\)/g)) {
       const resolved = path.resolve(path.dirname(fullPath), match[1])
       if (resolved.startsWith(path.join(MINIAPP_ROOT, 'utils') + path.sep)) {
@@ -704,7 +711,7 @@ test('recursively rejects personal and cross-component imports in the team packa
       assert.match(source, /\/pages\/portfolios\/portfolios\?ownerType=TEAM/)
       assert.doesNotMatch(source, /require\(/)
     } else {
-      for (const pattern of forbidden) assert.doesNotMatch(source, pattern, relativePath)
+      for (const pattern of forbidden) assert.doesNotMatch(withoutPublicTutorialRoute(source, file), pattern, relativePath)
     }
     if (file.includes(`${path.sep}components${path.sep}`)) {
       const componentsRoot = path.join(packageRoot, 'components')

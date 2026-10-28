@@ -13,11 +13,21 @@
 
       <view class="login-content">
         <view class="panel welcome-panel">
-          <view class="welcome-copy">
-            <view class="welcome-title">欢迎使用映期Folio</view>
-            <view class="welcome-desc">适合分享你的照片与视频，并自由制作属于你的可分享名片。</view>
+          <view class="welcome-top">
+            <view class="welcome-copy">
+              <view class="welcome-title">欢迎使用映期Folio</view>
+              <view class="welcome-desc">适合分享你的照片与视频，并自由制作属于你的可分享名片。</view>
+            </view>
+            <image class="welcome-avatar" src="https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png" mode="aspectFill"></image>
           </view>
-          <image class="welcome-avatar" src="https://cdn2.we-folio.dingchenyong.top/system/folio-logo.png" mode="aspectFill"></image>
+          <button class="tutorial-entry" disabled="{{loading}}" bindtap="handleAiDemoTap" aria-label="观看AI构建演示，无需登录">
+            <view class="tutorial-play"><view class="tutorial-play-triangle"></view></view>
+            <view class="tutorial-copy">
+              <view class="tutorial-title">AI构建演示</view>
+              <view class="tutorial-hint">AI构建支持附件参考</view>
+            </view>
+            <text class="tutorial-arrow">›</text>
+          </button>
         </view>
 
         <view class="panel auth-panel">

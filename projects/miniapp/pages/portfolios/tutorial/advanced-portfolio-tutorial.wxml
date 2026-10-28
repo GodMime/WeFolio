@@ -1,0 +1,28 @@
+<view class="tutorial-page">
+  <video wx:if="{{videoMounted}}" id="advancedPortfolioTutorial" class="tutorial-video" src="{{url}}" title="{{title}}" direction="{{0}}" controls="{{true}}" show-fullscreen-btn="{{true}}" show-play-btn="{{true}}" show-center-play-btn="{{true}}" autoplay="{{true}}" object-fit="contain" bindplay="handleVideoPlay" binderror="handleVideoError" />
+  <view wx:if="{{videoError}}" class="tutorial-error" aria-live="polite">
+    <text>视频加载失败，请重试</text>
+    <button class="tutorial-button" bindtap="handleRetryVideo">重新播放</button>
+  </view>
+  <view class="tutorial-footer">
+    <view class="tutorial-title">{{title}}</view>
+    <view class="tutorial-actions">
+      <button class="tutorial-button tutorial-share" open-type="share">分享给朋友</button>
+      <button class="tutorial-button" disabled="{{codeLoading}}" loading="{{codeLoading}}" bindtap="handleShowCode">教程二维码</button>
+    </view>
+    <view class="tutorial-hint">打开二维码后，长按可保存或转发</view>
+  </view>
+  <view wx:if="{{codeVisible}}" class="tutorial-code-mask" bindtap="handleCloseCode" catchtouchmove="handleCodeCardTap">
+    <view class="tutorial-code-card" catchtap="handleCodeCardTap" aria-role="dialog" aria-label="高级作品集教程二维码">
+      <view class="tutorial-code-title">{{title}}</view>
+      <image wx:if="{{codeImageMounted}}" class="tutorial-code-image" src="{{codeUrl}}" mode="aspectFit" show-menu-by-longpress="{{true}}" bindload="handleCodeLoad" binderror="handleCodeError" aria-label="长按保存或转发教程小程序码"></image>
+      <view wx:if="{{codeError}}" class="tutorial-code-status" aria-live="polite">
+        <text>二维码加载失败，请重试</text>
+        <button class="tutorial-button" bindtap="handleRetryCode">重新加载</button>
+      </view>
+      <view wx:elif="{{codeLoading}}" class="tutorial-code-hint" aria-live="polite">正在加载二维码…</view>
+      <view wx:else class="tutorial-code-hint">长按二维码保存或转发，扫码观看教程</view>
+      <button class="tutorial-button tutorial-code-close" bindtap="handleCloseCode">关闭</button>
+    </view>
+  </view>
+</view>

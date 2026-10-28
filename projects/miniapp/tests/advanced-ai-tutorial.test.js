@@ -4,8 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const ROOT = path.resolve(__dirname, '..')
-const TUTORIAL_URL = 'https://cdn2.we-folio.dingchenyong.top/system/wefolio-ai-portfolio-v11.mp4'
-const TUTORIAL_TITLE = '高级作品集使用教程'
+const TUTORIAL_ROUTE = '/pages/portfolios/tutorial/advanced-portfolio-tutorial'
 const FAILURE_TOAST = { title: '视频打开失败，请重试', icon: 'none' }
 
 function pageFor(folder, step, requests) {
@@ -44,14 +43,13 @@ function readRule(wxss, selector) {
 
 for (const folder of ['portfolios', 'team-portfolios']) {
   for (const step of ['sources', 'prompt']) {
-    test(`${folder} ${step} 教程打开同分包竖屏视频，返回后保留选择和输入且不触发任务`, async t => {
+    test(`${folder} ${step} 教程打开统一独立页面，返回后保留选择和输入且不触发任务`, async t => {
       const requests = []
-      const events = []
       const navigations = []
       withWx(t, {
         navigateTo(options) {
           navigations.push(options.url)
-          options.success({ eventChannel: { emit: (...args) => events.push(args) } })
+          options.success({})
         },
         showToast: () => assert.fail('正常打开教程不应提示错误')
       })
@@ -59,14 +57,11 @@ for (const folder of ['portfolios', 'team-portfolios']) {
       const before = structuredClone(page.data)
       const sourceNumbers = { ...page.sourceNumbers }
 
-      await page.handleOpenTutorial()
+      assert.equal(await page.handleOpenTutorial(), true)
       page.onHide()
       page.onShow()
 
-      assert.deepEqual(navigations, [`/pages/${folder}/video-player/video-player`])
-      assert.deepEqual(events, [['portfolioVideoPlayer', {
-        url: TUTORIAL_URL, title: TUTORIAL_TITLE, poster: '', browserContext: null, contextId: '', portrait: true
-      }]])
+      assert.deepEqual(navigations, [TUTORIAL_ROUTE])
       assert.deepEqual(page.data, before, '观看教程不能重新初始化表单或清空已选内容')
       assert.deepEqual(page.sourceNumbers, sourceNumbers, '来源编号必须沿用当前创建会话')
       assert.deepEqual(requests, [], '观看教程及返回不能生成、取消或重新加载任务')
@@ -82,7 +77,7 @@ for (const folder of ['portfolios', 'team-portfolios']) {
       const page = pageFor(folder, step, requests)
       const before = structuredClone(page.data)
 
-      await page.handleOpenTutorial()
+      assert.equal(await page.handleOpenTutorial(), false)
 
       assert.deepEqual(toasts, [FAILURE_TOAST])
       assert.deepEqual(page.data, before)
@@ -131,7 +126,7 @@ for (const folder of ['portfolios', 'team-portfolios']) {
     assert.match(readRule(wxss, '.tutorial-icon'), /height:\s*32rpx;/)
     assert.ok(fs.existsSync(path.join(ROOT, 'assets/system/video-tutorial.svg')))
     const app = JSON.parse(fs.readFileSync(path.join(ROOT, 'app.json'), 'utf8'))
-    const subpackage = app.subPackages.find(item => item.root === `pages/${folder}`)
-    assert.ok(subpackage.pages.includes('video-player/video-player'), '教程播放必须留在当前已注册分包')
+    const subpackage = app.subPackages.find(item => item.root === 'pages/portfolios')
+    assert.ok(subpackage.pages.includes('tutorial/advanced-portfolio-tutorial'), '个人和团队教程都使用可独立打开的注册页面')
   })
 }

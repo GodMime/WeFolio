@@ -3,7 +3,7 @@ const VIDEO_OPEN_FAILED_MESSAGE = '视频打开失败，请重试'
 const TOAST_ICON_NONE = 'none'
 
 // 资源与访问上下文只通过本次导航的内存通道传递，不生成可分享的播放地址。
-function openVideoPlayer({ url, poster = '', title = '', route, browserContext = null, portrait = false } = {}, wxApi) {
+function openVideoPlayer({ url, poster = '', title = '', route, browserContext = null } = {}, wxApi) {
   const showError = () => {
     if (wxApi && typeof wxApi.showToast === 'function') {
       wxApi.showToast({ title: VIDEO_OPEN_FAILED_MESSAGE, icon: TOAST_ICON_NONE })
@@ -16,8 +16,6 @@ function openVideoPlayer({ url, poster = '', title = '', route, browserContext =
   }
   const payload = { url, poster, title, browserContext,
     contextId: browserContext && browserContext.idempotencyKey || '' }
-  // 教程显式申请竖屏布局，既有视频入口保持原事件载荷与横屏行为。
-  if (portrait === true) payload.portrait = true
   return new Promise((resolve) => {
     const fail = (error) => {
       if (!/cancel/i.test(error && error.errMsg || '')) showError()

@@ -41,6 +41,17 @@
   min-height: 380rpx;
 }
 
+/* 小屏缩短头图，为演示入口和注册表单保留完整的操作空间。 */
+@media (max-height: 700px) {
+  .login-hero.experience-mode {
+    min-height: 456rpx;
+  }
+
+  .login-hero.maintainer-mode {
+    min-height: 310rpx;
+  }
+}
+
 .hero-image,
 .hero-shade {
   position: absolute;
@@ -109,11 +120,18 @@
 
 .welcome-panel {
   display: flex;
+  flex-direction: column;
   min-height: 150rpx;
   padding: 28rpx;
+  box-sizing: border-box;
+  gap: 26rpx;
+}
+
+.welcome-top {
+  display: flex;
+  min-height: 122rpx;
   align-items: center;
   justify-content: space-between;
-  box-sizing: border-box;
   gap: 20rpx;
 }
 
@@ -142,6 +160,79 @@
   overflow: hidden;
   border-radius: 50%;
   background: #eef6f4;
+}
+
+/* 覆盖 WebView 默认按钮的固定宽度和居中边距，保持与卡片内容同宽。 */
+.login-page .tutorial-entry {
+  display: flex;
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  min-height: 110rpx;
+  margin: 0;
+  padding: 18rpx 24rpx;
+  align-items: center;
+  gap: 20rpx;
+  border: 0;
+  border-radius: 30rpx;
+  background: #f5f6f7;
+  color: #343b3f;
+  font-weight: 400;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.login-page .tutorial-entry[disabled] {
+  background: #f5f6f7;
+  color: #868e96;
+  opacity: 0.6;
+}
+
+.tutorial-play {
+  display: flex;
+  width: 56rpx;
+  height: 56rpx;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.tutorial-play-triangle {
+  width: 0;
+  height: 0;
+  margin-left: 4rpx;
+  border-left: 18rpx solid #343b3f;
+  border-top: 11rpx solid transparent;
+  border-bottom: 11rpx solid transparent;
+}
+
+.tutorial-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.tutorial-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.tutorial-hint {
+  color: #8b9297;
+  font-size: 20rpx;
+  line-height: 1.4;
+}
+
+.tutorial-arrow {
+  flex: none;
+  color: #9ca3a8;
+  font-size: 40rpx;
+  line-height: 1;
 }
 
 .auth-panel {

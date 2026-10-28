@@ -10,6 +10,8 @@ const LOGIN_TAB_EXPERIENCE = 'experience'
 const LOGIN_TAB_MAINTAINER = 'maintainer'
 const LOGIN_PAGE_CONFIG_URL = '/api/auth/login-page-config'
 const AUTH_MODE_NONE = 'none'
+const AI_DEMO_PAGE_PATH = '/pages/portfolios/tutorial/advanced-portfolio-tutorial'
+const AI_DEMO_OPEN_FAILED_MESSAGE = '演示打开失败，请重试'
 
 function normalizeReferralCode(value) {
   if (typeof value !== 'string') {
@@ -69,6 +71,7 @@ Page({
   },
 
   onLoad(options = {}) {
+    this._visible = true
     const referralCode = normalizeReferralCode(options.referralCode)
     this._defaultTabLocked = Boolean(referralCode)
     if (referralCode) {
@@ -81,11 +84,17 @@ Page({
     this.runWechatLoginPrecheck()
   },
 
+  onShow() {
+    this._visible = true
+  },
+
   onHide() {
+    this._visible = false
     this._defaultTabLocked = true
   },
 
   onUnload() {
+    this._visible = false
     this._defaultTabLocked = true
   },
 
@@ -131,6 +140,21 @@ Page({
     })
   },
 
+  /** 公开演示不等待账号预检，返回后保留当前标签和推荐码。 */
+  handleAiDemoTap() {
+    // 正在提交登录或注册时，等待其跳转完成，避免两个入口同时导航。
+    if (this.data.loading) {
+      return
+    }
+    this._defaultTabLocked = true
+    wx.navigateTo({
+      url: AI_DEMO_PAGE_PATH,
+      fail() {
+        wx.showToast({ title: AI_DEMO_OPEN_FAILED_MESSAGE, icon: 'none' })
+      }
+    })
+  },
+
   handleReferralInput(event) {
     this._defaultTabLocked = true
     this.setData({
@@ -171,10 +195,13 @@ Page({
         precheckErrorMessage: '账号识别失败，请重试',
         maintainerButtonText: '重新识别'
       })
-      wx.showToast({
-        title: '账号识别失败，请重试',
-        icon: 'none'
-      })
+      // 预检可能在进入演示后才失败，提示只属于当前可见的登录页。
+      if (this._visible !== false) {
+        wx.showToast({
+          title: '账号识别失败，请重试',
+          icon: 'none'
+        })
+      }
     }
   },
 

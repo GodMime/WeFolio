@@ -105,6 +105,33 @@ test('login welcome icon uses product logo image', () => {
   assert.match(avatarRule, /overflow:\s*hidden/)
 })
 
+test('欢迎卡片提供独立 AI 构建演示入口，不绑定登录或手机号授权状态', () => {
+  const welcomeStart = loginWxml.indexOf('class="panel welcome-panel"')
+  const authStart = loginWxml.indexOf('class="panel auth-panel"')
+  assert.ok(welcomeStart >= 0 && authStart > welcomeStart)
+  const welcome = loginWxml.slice(welcomeStart, authStart)
+  const button = welcome.match(/<button\b[^>]*bindtap="handleAiDemoTap"[^>]*>[\s\S]*?<\/button>/)?.[0]
+  assert.ok(button, '演示入口位于欢迎卡片内，两个登录 tab 都可访问')
+  assert.match(button, /AI构建演示/)
+  assert.match(welcome, /AI构建支持附件参考/)
+  assert.doesNotMatch(button, /open-type=|bindgetphonenumber=|loading=/)
+  assert.match(button, /disabled="\{\{loading\}\}"/, '仅实际登录提交期间防止同时跳转')
+  assert.doesNotMatch(welcome, /precheckReady|phoneAuthorizationRequired|prechecking|wx:if=/)
+
+  const entryRule = readRule('.tutorial-entry')
+  const clickHeight = entryRule.match(/(?:min-height|height):\s*(\d+)rpx/)?.[1]
+  assert.ok(Number(clickHeight) >= 88, '演示按钮保持足够点击高度')
+  const background = entryRule.match(/background(?:-color)?:\s*#([\da-f]{6})\s*;/i)?.[1]
+  assert.ok(background, '演示按钮采用浅灰背景')
+  const channels = background.match(/../g).map(value => parseInt(value, 16))
+  assert.ok(Math.min(...channels) >= 220 && Math.max(...channels) - Math.min(...channels) <= 20, '演示入口使用浅灰按钮样式')
+
+  const app = JSON.parse(fs.readFileSync(path.join(__dirname, '../app.json'), 'utf8'))
+  const portfolioPackage = app.subPackages.find(item => item.root === 'pages/portfolios')
+  assert.ok(portfolioPackage.pages.includes('tutorial/advanced-portfolio-tutorial'))
+  assert.doesNotMatch(loginJs, /require\([^)]*(?:portfolios|advanced-portfolio-tutorial)/, '主包只通过路由导航，不能直接导入分包工具')
+})
+
 test('login hero uses configured background image', () => {
   assert.ok(loginWxml.includes(`src="${BACKGROUND_IMAGE_URL}"`))
   assert.match(loginWxml, /class="hero-image"/)

@@ -224,12 +224,11 @@ test('mock 播放页保持独立 webview 原生导航与控件，无底栏、弹
   }
   assert.match(markup, /bindtap="handleBack">返回作品<\/button>/)
   assert.doesNotMatch(markup, /bottom-nav|mock-tabbar|video-modal|catchtouch|catchtap|<scroll-view|<cover-view/)
-  // 体验版只复用默认播放外观；正式端显式启用的竖屏教程样式不属于双方共有能力。
+  // 体验版与正式端保持相同的默认播放外观，业务行为各自独立。
   const styleRules = source => Array.from(source.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g),
     match => ({ selector: match[1].trim(), declarations: match[2].trim() }))
   const formalStyles = fs.readFileSync(path.join(__dirname, '../pages/works/video-player/video-player.wxss'), 'utf8')
   const formalDefaultRules = styleRules(formalStyles)
-    .filter(rule => !rule.selector.includes('.portfolio-video-page-portrait'))
     .map(rule => ({ ...rule, selector: rule.selector.replace(/portfolio-video/g, 'mock-video') }))
   assert.deepEqual(styleRules(read('video-player/video-player.wxss')), formalDefaultRules)
   for (const file of ['video-player/video-player.js', 'utils/mock-video-player.js', 'utils/mock-video-player-page.js']) {

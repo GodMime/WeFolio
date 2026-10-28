@@ -816,6 +816,16 @@ Redis 只保存原码索引、生成锁和限流信息；索引到期后优先�
 - 2026-09-18 的 iPhone 截图报错来自旧后端头像校验；当日排查发现线上两台 JAR 均未包含此前兼容修复。最终方案移除了生成原码对头像 URL、MIME、大小和 ETag 的硬依赖，头像只作为可选展示资料交给前端。此修复需发布 Runtime，接口和环境变量不变；新版生成接口不再产生“头像读取失败”业务错误。前端开启头像后的下载/绘制故障仍须按具体资源排查，不可仅凭终端类型判断原因。
 - 官方依据：[隐私授权开发指引](https://developers.weixin.qq.com/miniprogram/dev/framework/user-privacy/PrivacyAuthorize.html)、[隐私类型与接口对应关系](https://developers.weixin.qq.com/miniprogram/dev/framework/user-privacy/miniprogram-intro.html)。
 
+#### 高级作品集教程独立分享码（2026-10-28，固定 CDN 图片）
+
+独立播放页为 `pages/portfolios/tutorial/advanced-portfolio-tutorial`，个人和团队新建流程的教程按钮统一跳转该页。扫码和微信卡片直接加载固定公开教程视频，不依赖来源页、维护者登录、访客会话或作品集 ID；教程页提供“分享给朋友”和“教程二维码”。二维码直接展示固定 CDN 图片，透明黑色码采用白底卡片，支持长按保存或转发。
+
+固定图片地址为 `https://cdn2.we-folio.dingchenyong.top/system/yingqi-folio-teach-vedio.png`。图片通过微信官方接口一次性生成，由用户上传 COS；当前 HTTPS GET 返回 200、`image/png`，尺寸 800×800、RGBA，227,270 字节，SHA-256 为 `b9d18f8547c2d96e938c97cf4d5ece62fe0981bf45a15af0bab6cc21132bb296`，与本地透明原图一致。生成参数：`env_version=release`、`scene=advanced-portfolio`、`page` 为上述教程页、`is_hyaline=true`；预生成使用 `check_path=false`，不表示教程页已经正式发布。
+
+教程二维码不再调用业务后端，不依赖微信令牌或 Redis；此前新增且未部署的动态生成接口及配套代码已移除，无数据库迁移或后端发布要求。原图及生成参数保留于本地 `design/tutorial-share-code/`，不提交 Git。
+
+正式小程序仍须发布此教程页后才能扫码观看。上线后验收匿名扫码冷启动、卡片/朋友圈独立打开、聊天图片扫码、长按保存/转发，以及个人/团队观看后返回保留原选择和输入；本地自动化测试不替代 iOS/Android 真机验收。
+
 ### 6.2 作品集字体静态素材发布（2026-09-22）
 
 Mock 体验版九份物理字重 WOFF 与六张样张 PNG 已发布至 `https://cdn2.we-folio.dingchenyong.top/demo/portfolio-fonts/{fontId}/{fontVersion}/{sha256}.{woff|png}`。固定语料包括体验版作品集、默认文字组件、内链演示页和选择器样张。各最终 WOFF 使用正式许可校验器复核原版权、OFL 全文及源已有许可链接；发布后逐个 GET 核验 SHA-256、`font/woff` 和 `Access-Control-Allow-Origin: *`；PNG 核验摘要及 `image/png`。本地记录在 `design/portfolio-multi-font/mock-static/publication.json`，素材共 416,635 字节。

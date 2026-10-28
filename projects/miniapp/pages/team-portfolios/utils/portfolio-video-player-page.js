@@ -4,7 +4,6 @@ const VIDEO_ID = 'portfolioVideoPlayer'
 const CONTEXT_WAIT_MS = 1000
 const FULLSCREEN_WAIT_MS = 3000
 const FULLSCREEN_DIRECTION = 90
-const PORTRAIT_FULLSCREEN_DIRECTION = 0
 const FALLBACK_ROUTE = '/pages/index/index'
 const SHARE_MENUS = ['shareAppMessage', 'shareTimeline']
 const VIDEO_UNAVAILABLE = '视频暂不可用'
@@ -27,8 +26,7 @@ function validPayload(payload) {
 function createVideoPlayerPage({ wxApi, setTimer = setTimeout, clearTimer = clearTimeout,
   fullscreenExitFailedMessage = FULLSCREEN_EXIT_FAILED }) {
   return {
-    data: { loadingContext: true, available: false, url: '', poster: '', title: '', playing: false, fullscreen: false,
-      portrait: false, fullscreenDirection: FULLSCREEN_DIRECTION },
+    data: { loadingContext: true, available: false, url: '', poster: '', title: '', playing: false, fullscreen: false },
     onLoad() {
       this._playerAlive = true
       this._playerVisible = false
@@ -58,9 +56,7 @@ function createVideoPlayerPage({ wxApi, setTimer = setTimeout, clearTimer = clea
           }
           context.onRefresh = this._playerRefresh
         }
-        const portrait = payload.portrait === true
-        this.setData({ loadingContext: false, available: true, url: payload.url.trim(), portrait,
-          fullscreenDirection: portrait ? PORTRAIT_FULLSCREEN_DIRECTION : FULLSCREEN_DIRECTION,
+        this.setData({ loadingContext: false, available: true, url: payload.url.trim(),
           poster: typeof payload.poster === 'string' ? payload.poster : '',
           title: typeof payload.title === 'string' ? payload.title : '' }, () => {
           if (this._playerAlive && this._playerVisible && this.isPlayerContextCurrent()) this.acquirePlayerActivity()
@@ -169,7 +165,7 @@ function createVideoPlayerPage({ wxApi, setTimer = setTimeout, clearTimer = clea
         if (this._pendingBack && !this.data.fullscreen) this.navigatePlayerBack()
         else if (this._playerVisible && !this.data.fullscreen) wxApi.showToast({ title: FULLSCREEN_UNAVAILABLE, icon: TOAST_ICON })
       }, FULLSCREEN_WAIT_MS)
-      if (!this.callPlayerVideo('requestFullScreen', { direction: this.data.fullscreenDirection })) {
+      if (!this.callPlayerVideo('requestFullScreen', { direction: FULLSCREEN_DIRECTION })) {
         this.clearFullscreenWait()
         this._fullscreenRequested = false
         wxApi.showToast({ title: FULLSCREEN_UNAVAILABLE, icon: TOAST_ICON })

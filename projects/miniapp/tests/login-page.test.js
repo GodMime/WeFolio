@@ -26,6 +26,7 @@ function loadLoginPage(options = {}) {
   const requestCalls = []
   const toastCalls = []
   const redirectCalls = []
+  const navigateCalls = []
   const dataPatches = []
   const storageReads = []
   const loginCodes = ['wx-submit-code']
@@ -53,8 +54,9 @@ function loadLoginPage(options = {}) {
     pageDefinition = definition
   }
   global.wx = {
-    login({ success }) {
-      success({ code: loginCodes.shift() })
+    login(loginOptions) {
+      if (options.wxLogin) options.wxLogin(loginOptions)
+      else loginOptions.success({ code: loginCodes.shift() })
     },
     pluginLogin({ success }) {
       success({ code: 'plugin-code' })
@@ -68,6 +70,11 @@ function loadLoginPage(options = {}) {
     },
     redirectTo(redirectOptions) {
       redirectCalls.push(redirectOptions)
+    },
+    navigateTo(navigateOptions) {
+      navigateCalls.push(navigateOptions)
+      if (options.navigateTo) options.navigateTo(navigateOptions)
+      else if (navigateOptions.success) navigateOptions.success({})
     },
     showToast(toastOptions) {
       toastCalls.push(toastOptions)
@@ -89,6 +96,7 @@ function loadLoginPage(options = {}) {
     requestCalls,
     toastCalls,
     redirectCalls,
+    navigateCalls,
     dataPatches,
     storageReads,
     async respondConfig(data, statusCode = 200) {
@@ -338,6 +346,121 @@ test('existing-user login omits referral code even when the visible field has a 
     assert.deepEqual(harness.submittedPayloads, [{
       code: 'wx-submit-code'
     }])
+  } finally {
+    harness.cleanup()
+  }
+})
+
+for (const [name, state] of [
+  ['未登录且尚未识别', {}],
+  ['账号预检中', { prechecking: true }],
+  ['账号预检失败', { precheckErrorMessage: '账号识别失败，请重试' }],
+  ['等待手机号授权', { precheckReady: true, phoneAuthorizationRequired: true }]
+]) {
+  test(`AI 构建演示在${name}时可直接打开，保留当前 tab 和推荐码`, () => {
+    const harness = loadLoginPage()
+    try {
+      harness.page.setData({ ...state, activeTab: 'maintainer', referralCode: ' WFREF0001 ' })
+      harness.page.runWechatLoginPrecheck = () => assert.fail('观看演示不能触发身份预检')
+      harness.page.authorizeByWechat = () => assert.fail('观看演示不能触发登录或手机号授权')
+      const before = clone(harness.page.data)
+
+      harness.page.handleAiDemoTap()
+
+      assert.deepEqual(harness.navigateCalls.map(options => options.url), ['/pages/portfolios/tutorial/advanced-portfolio-tutorial'])
+      assert.deepEqual(harness.page.data, before)
+      assert.deepEqual(harness.submittedPayloads, [])
+      assert.deepEqual(harness.requestCalls, [])
+      assert.deepEqual(harness.storageReads, [])
+      assert.deepEqual(harness.redirectCalls, [])
+      assert.deepEqual(harness.toastCalls, [])
+    } finally {
+      harness.cleanup()
+    }
+  })
+}
+
+test('AI 构建演示跳转后，晚到的登录配置不能切换当前 tab', async () => {
+  const harness = loadLoginPage()
+  try {
+    harness.page.runWechatLoginPrecheck = () => {}
+    harness.page.onLoad()
+    const before = clone(harness.page.data)
+
+    harness.page.handleAiDemoTap()
+    await harness.respondConfig({ defaultTab: 'maintainer' })
+
+    assert.deepEqual(harness.page.data, before)
+    assert.equal(harness.navigateCalls.length, 1)
+  } finally {
+    harness.cleanup()
+  }
+})
+
+test('实际登录或注册提交期间暂缓演示导航，避免与登录成功跳转竞争', () => {
+  const harness = loadLoginPage()
+  try {
+    harness.page.setData({ loading: true, activeTab: 'maintainer', referralCode: 'WFREF0001' })
+    const before = clone(harness.page.data)
+    harness.page.handleAiDemoTap()
+    assert.deepEqual(harness.navigateCalls, [])
+    assert.deepEqual(harness.page.data, before)
+    assert.deepEqual(harness.toastCalls, [])
+  } finally {
+    harness.cleanup()
+  }
+})
+
+test('AI 构建演示跳转失败提示重试，再次点击仍可打开且不重置输入', () => {
+  let attempts = 0
+  const harness = loadLoginPage({ navigateTo(options) {
+    attempts += 1
+    if (attempts === 1) options.fail({ errMsg: 'navigateTo:fail page limit' })
+    else if (options.success) options.success({})
+  } })
+  try {
+    harness.page.setData({ activeTab: 'maintainer', referralCode: 'WFREF0001', prechecking: true })
+    const before = clone(harness.page.data)
+    harness.page.handleAiDemoTap()
+    assert.deepEqual(harness.toastCalls, [{ title: '演示打开失败，请重试', icon: 'none' }])
+    assert.deepEqual(harness.page.data, before)
+
+    harness.page.handleAiDemoTap()
+    assert.deepEqual(harness.navigateCalls.map(options => options.url), [
+      '/pages/portfolios/tutorial/advanced-portfolio-tutorial',
+      '/pages/portfolios/tutorial/advanced-portfolio-tutorial'
+    ])
+    assert.deepEqual(harness.page.data, before)
+    assert.equal(harness.toastCalls.length, 1)
+    assert.deepEqual(harness.submittedPayloads, [])
+  } finally {
+    harness.cleanup()
+  }
+})
+
+test('离开登录页后晚到的预检失败只更新登录状态，返回后重试仍正常提示', async () => {
+  const loginAttempts = []
+  const harness = loadLoginPage({ wxLogin: options => loginAttempts.push(options) })
+  try {
+    harness.page.onShow()
+    const firstPrecheck = harness.page.runWechatLoginPrecheck()
+    assert.equal(harness.page.data.prechecking, true)
+    harness.page.onHide()
+    loginAttempts[0].fail({ errMsg: 'login:fail network error' })
+    await firstPrecheck
+
+    assert.equal(harness.page.data.prechecking, false)
+    assert.equal(harness.page.data.precheckReady, false)
+    assert.equal(harness.page.data.phoneAuthorizationRequired, false)
+    assert.equal(harness.page.data.precheckErrorMessage, '账号识别失败，请重试')
+    assert.equal(harness.page.data.maintainerButtonText, '重新识别')
+    assert.deepEqual(harness.toastCalls, [], '登录页预检失败不得打断正在观看的教程')
+
+    harness.page.onShow()
+    const retryPrecheck = harness.page.runWechatLoginPrecheck()
+    loginAttempts[1].fail({ errMsg: 'login:fail network error' })
+    await retryPrecheck
+    assert.deepEqual(harness.toastCalls, [{ title: '账号识别失败，请重试', icon: 'none' }])
   } finally {
     harness.cleanup()
   }

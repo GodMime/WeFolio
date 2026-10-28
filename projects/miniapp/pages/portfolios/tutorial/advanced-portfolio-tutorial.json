@@ -1,0 +1,11 @@
+{
+  "renderer": "webview",
+  "navigationStyle": "default",
+  "navigationBarTitleText": "高级作品集使用教程",
+  "navigationBarBackgroundColor": "#000000",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#000000",
+  "pageOrientation": "portrait",
+  "disableScroll": true,
+  "usingComponents": {}
+}
