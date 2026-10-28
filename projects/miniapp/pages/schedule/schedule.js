@@ -425,6 +425,9 @@ Page({
   },
 
   handleScheduleTap(event) {
+    if (this.scheduleLongPressed) {
+      return
+    }
     const scheduleId = normalizeId(event.currentTarget.dataset.id)
     const schedule = this.data.overview.selectedDate.schedules.find((item) => item.id === scheduleId)
     if (!schedule) {
@@ -442,6 +445,7 @@ Page({
   },
 
   handleScheduleTouchStart(event) {
+    this.scheduleLongPressed = false
     const scheduleId = normalizeId(event.currentTarget.dataset.id)
     const schedule = this.data.overview.selectedDate.schedules.find((item) => item.id === scheduleId)
     if (!schedule) {
@@ -459,6 +463,17 @@ Page({
   },
 
   handleScheduleTouchMove() {},
+
+  handleScheduleLongPress(event) {
+    const scheduleId = normalizeId(event.currentTarget.dataset.id)
+    const schedule = this.data.overview.selectedDate.schedules.find((item) => item.id === scheduleId)
+    if (!schedule) {
+      return
+    }
+    // 长按只展开操作区，清除触点避免松手时被当作轻点收回。
+    this.scheduleLongPressed = true
+    this.setData({ revealedScheduleId: scheduleId, scheduleTouchStart: null })
+  },
 
   handleScheduleTouchEnd(event) {
     this.handleTouchEnd(event, 'scheduleTouchStart', 'revealedScheduleId', 'scheduleId')
@@ -490,6 +505,9 @@ Page({
   },
 
   handleSlotEdit(event) {
+    if (this.slotLongPressed) {
+      return
+    }
     const slotId = normalizeId(event.currentTarget.dataset.id)
     const slot = this.data.overview.slotDefinitions.find((item) => item.id === slotId)
     if (!slot) {
@@ -521,6 +539,7 @@ Page({
   },
 
   handleSlotTouchStart(event) {
+    this.slotLongPressed = false
     const slotId = normalizeId(event.currentTarget.dataset.id)
     const slot = this.data.overview.slotDefinitions.find((item) => item.id === slotId)
     if (!slot || slot.enabled) {
@@ -538,6 +557,17 @@ Page({
   },
 
   handleSlotTouchMove() {},
+
+  handleSlotLongPress(event) {
+    const slotId = normalizeId(event.currentTarget.dataset.id)
+    const slot = this.data.overview.slotDefinitions.find((item) => item.id === slotId)
+    if (!slot || slot.enabled) {
+      return
+    }
+    // 档位沿用停用后才可删除的规则，长按不进入编辑表单。
+    this.slotLongPressed = true
+    this.setData({ revealedSlotId: slotId, slotTouchStart: null })
+  },
 
   handleSlotTouchEnd(event) {
     this.handleTouchEnd(event, 'slotTouchStart', 'revealedSlotId', 'slotId')

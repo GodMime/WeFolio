@@ -47,7 +47,7 @@
               >
                 <view class="slot-delete-pane" wx:if="{{!item.enabled}}">
                   <button
-                    class="mini-action danger"
+                    class="swipe-delete-button"
                     loading="{{deletingSlotId === item.id}}"
                     disabled="{{deletingSlotId === item.id}}"
                     catchtap="handleDeleteSlotDefinition"
@@ -58,6 +58,7 @@
                   class="slot-line"
                   data-id="{{item.id}}"
                   bindtap="handleSlotEdit"
+                  bindlongpress="handleSlotLongPress"
                 >
                   <view class="slot-main">
                     <view class="swatch" style="{{item.colorStyle}}"></view>
@@ -72,6 +73,7 @@
                       loading="{{togglingSlotId === item.id}}"
                       disabled="{{togglingSlotId !== null}}"
                       catchtap="handleToggleSlotStatus"
+                      catchlongpress="noop"
                       data-id="{{item.id}}"
                     >{{item.enabled ? '停用' : '启用'}}</button>
                   </view>
@@ -198,7 +200,7 @@
                 >
                   <view class="schedule-delete-pane">
                     <button
-                      class="mini-action danger"
+                      class="swipe-delete-button"
                       loading="{{deletingScheduleId === item.id}}"
                       disabled="{{deletingScheduleId === item.id}}"
                       catchtap="handleDeleteScheduleItem"
@@ -210,6 +212,7 @@
                     data-id="{{item.id}}"
                     data-date="{{item.scheduleDate}}"
                     bindtap="handleScheduleTap"
+                    bindlongpress="handleScheduleLongPress"
                   >
                     <view class="slot-main">
                       <view class="swatch" style="{{item.colorStyle}}"></view>

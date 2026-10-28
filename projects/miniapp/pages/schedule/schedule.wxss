@@ -48,6 +48,7 @@
 .tab::after,
 .outline-button::after,
 .mini-action::after,
+.swipe-delete-button::after,
 .primary-button::after,
 .secondary-button::after {
   border: 0;
@@ -167,12 +168,6 @@
   background: #fff8ea;
 }
 
-.mini-action.danger {
-  color: #a9354f;
-  border-color: #f3c5cf;
-  background: #fff3f6;
-}
-
 .slot-toggle-action {
   width: 112rpx;
   min-width: 112rpx;
@@ -276,6 +271,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #b55656;
+  border-radius: 14px;
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 120ms ease;
 }
 
 .schedule-delete-pane {
@@ -288,6 +289,38 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #b55656;
+  border-radius: 14px;
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 120ms ease;
+}
+
+.slot-swipe-row.revealed .slot-delete-pane,
+.schedule-swipe-row.revealed .schedule-delete-pane {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.swipe-delete-button {
+  width: 128rpx;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1;
+  border: 0;
+  border-radius: 14px;
+  background: #b55656;
+  box-shadow: none;
+  box-sizing: border-box;
 }
 
 .slot-main {

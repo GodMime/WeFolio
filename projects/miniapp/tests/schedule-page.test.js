@@ -137,6 +137,126 @@ function createSlotTimeChangeEvent(field, value) {
   }
 }
 
+function createTouchEvent(id, x = 160, y = 80) {
+  return Object.assign(createToggleEvent(String(id)), {
+    touches: [{ clientX: x, clientY: y }],
+    changedTouches: [{ clientX: x, clientY: y }]
+  })
+}
+
+function loadGesturePage(context) {
+  const harness = loadSchedulePage(() => {
+    assert.fail('展开删除操作区不应发起请求')
+  })
+  context.after(harness.restore)
+  const { page } = harness
+  page.data.overview.selectedDate.schedules = [
+    { id: 7, slotDefinitionId: 7, scheduleDate: '2026-10-28', status: 'BOOKED' },
+    { id: 8, slotDefinitionId: 8, scheduleDate: '2026-10-28', status: 'TENTATIVE' }
+  ]
+  page.data.overview.slotDefinitions = [
+    { id: 7, name: '午宴档', enabled: false, status: 'DISABLED', color: '#c28f4b' },
+    { id: 8, name: '晚宴档', enabled: false, status: 'DISABLED', color: '#6f8cb5' },
+    { id: 9, name: '全天档', enabled: true, status: 'ACTIVE', color: '#5f999b' }
+  ]
+  return page
+}
+
+const gestureCases = [
+  {
+    name: 'schedule',
+    touchStart: 'handleScheduleTouchStart',
+    touchEnd: 'handleScheduleTouchEnd',
+    longPress: 'handleScheduleLongPress',
+    tap: 'handleScheduleTap',
+    revealed: 'revealedScheduleId',
+    formVisible: 'scheduleFormVisible',
+    editing: 'editingScheduleId'
+  },
+  {
+    name: 'disabled slot',
+    touchStart: 'handleSlotTouchStart',
+    touchEnd: 'handleSlotTouchEnd',
+    longPress: 'handleSlotLongPress',
+    tap: 'handleSlotEdit',
+    revealed: 'revealedSlotId',
+    formVisible: 'slotFormVisible',
+    editing: 'editingSlotId'
+  }
+]
+
+gestureCases.forEach((gesture) => {
+  test(`${gesture.name} long press stays revealed after release without opening the editor`, (context) => {
+    const page = loadGesturePage(context)
+    const event = createTouchEvent(7)
+
+    page[gesture.touchStart](event)
+    page[gesture.longPress](event)
+    assert.equal(page.data[gesture.revealed], 7)
+    page[gesture.touchEnd](event)
+    page[gesture.tap](event)
+
+    assert.equal(page.data[gesture.revealed], 7)
+    assert.equal(page.data[gesture.formVisible], false)
+    assert.equal(page.data[gesture.editing], null)
+
+    page[gesture.touchStart](event)
+    page[gesture.touchEnd](event)
+    page[gesture.tap](event)
+
+    assert.equal(page.data[gesture.formVisible], true)
+    assert.equal(page.data[gesture.editing], 7)
+  })
+
+  test(`${gesture.name} repeated long press keeps one row revealed and ignores missing items`, (context) => {
+    const page = loadGesturePage(context)
+
+    for (const id of [7, 7, 8]) {
+      const event = createTouchEvent(id)
+      page[gesture.touchStart](event)
+      page[gesture.longPress](event)
+      page[gesture.touchEnd](event)
+      assert.equal(page.data[gesture.revealed], id)
+      assert.equal(page.data[gesture.formVisible], false)
+    }
+
+    page[gesture.longPress](createTouchEvent(999))
+    assert.equal(page.data[gesture.revealed], 8)
+  })
+
+  test(`${gesture.name} still opens on a left swipe and closes on a right swipe`, (context) => {
+    const page = loadGesturePage(context)
+
+    page[gesture.touchStart](createTouchEvent(7))
+    page[gesture.touchEnd](createTouchEvent(7, 100))
+    assert.equal(page.data[gesture.revealed], 7)
+
+    page[gesture.touchStart](createTouchEvent(7, 100))
+    page[gesture.touchEnd](createTouchEvent(7))
+    assert.equal(page.data[gesture.revealed], null)
+
+    page[gesture.touchStart](createTouchEvent(7))
+    page[gesture.touchEnd](createTouchEvent(7, 100, 180))
+    assert.equal(page.data[gesture.revealed], null)
+    assert.equal(page.data[gesture.formVisible], false)
+  })
+})
+
+test('enabled slots cannot reveal delete actions by long press or swipe', (context) => {
+  const page = loadGesturePage(context)
+  const event = createTouchEvent(9)
+
+  page.handleSlotTouchStart(event)
+  page.handleSlotLongPress(event)
+  page.handleSlotTouchEnd(event)
+  assert.equal(page.data.revealedSlotId, null)
+
+  page.handleSlotTouchStart(event)
+  page.handleSlotTouchEnd(createTouchEvent(9, 100))
+  assert.equal(page.data.revealedSlotId, null)
+  assert.equal(page.data.slotFormVisible, false)
+})
+
 test('new slot moves end time two hours after a later start time', (context) => {
   const harness = loadSchedulePage(() => Promise.resolve({}))
   context.after(harness.restore)
