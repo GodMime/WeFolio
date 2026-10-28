@@ -32,9 +32,7 @@
         </view>
         <view wx:if="{{!capabilities.enabled}}" class="notice">AI 服务暂未开放，可继续管理内容；已有作品集仍可手动编辑、保存和发布。</view>
         <view wx:if="{{activeTaskId}}" class="notice notice-action"><text>已有等待或执行任务</text><button class="text-button" bindtap="handleCancel">取消该任务</button></view>
-        <view wx:if="{{mode === 'CREATE' && !managingSources}}" class="source-mode-options"><button class="source-mode {{sourceMode === 'SELECTED_SOURCES' ? 'active' : ''}}" data-value="SELECTED_SOURCES" bindtap="handleSourceMode" disabled="{{waiting || submitting || submissionUncertain}}">使用已选内容</button><button wx:if="{{textOnlyAvailable}}" class="source-mode {{sourceMode === 'TEXT_ONLY' ? 'active' : ''}}" data-value="TEXT_ONLY" bindtap="handleSourceMode" disabled="{{waiting || submitting || submissionUncertain}}">仅用文字描述</button></view>
         <view wx:if="{{!v2Available && capabilities.enabled}}" class="notice">当前服务暂不支持此版本生成，可保留草稿并继续手动编辑。</view>
-        <view wx:if="{{sourceMode === 'TEXT_ONLY'}}" class="notice">无需选择作品，请在描述中写出真实经历和日期。不会自动编造履历。</view>
         <block wx:if="{{step === 'sources'}}">
           <view class="selection-heading">
             <view class="selection-title">{{managingSources ? '管理已选内容' : '先选内容，再告诉 AI 怎么排'}}</view>

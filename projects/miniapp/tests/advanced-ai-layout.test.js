@@ -9,6 +9,14 @@ const readRule = (wxss, selector) => wxss.match(new RegExp(`${selector.replace(/
 const readRpx = (rule, property) => Number.parseFloat(rule.match(new RegExp(`(?:^|;)\\s*${property}:\\s*([\\d.]+rpx|0)\\s*;`))?.[1])
 
 for (const folder of ['portfolios', 'team-portfolios']) {
+  test(`${folder} 创建页移除来源模式按钮和纯文字提示，保留选择与下一步`, () => {
+    const wxml = read(folder, 'wxml')
+    assert.doesNotMatch(wxml, /source-mode|handleSourceMode|textOnlyAvailable|TEXT_ONLY|仅用文字描述|无需选择作品/)
+    assert.doesNotMatch(read(folder, 'wxss'), /source-mode/)
+    assert.match(wxml, /bindtap="handleSourceTap"/)
+    assert.match(wxml, /bindtap="handleNext" disabled="\{\{mode === 'CREATE' && !selectedSources.length\}\}"/)
+  })
+
   test(`${folder} 已选内容横向滚动区完整容纳缩略图和编号，避免真机提示文字与下张卡片重叠`, () => {
     const wxml = read(folder, 'wxml')
     const wxss = read(folder, 'wxss')

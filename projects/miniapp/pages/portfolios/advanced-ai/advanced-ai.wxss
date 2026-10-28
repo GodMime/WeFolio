@@ -5,19 +5,19 @@
 .advanced-ai-page button { display: flex; align-items: center; justify-content: center; box-sizing: border-box; margin: 0; padding: 0; border: 0; font-weight: 600; line-height: 1.45; }
 .advanced-ai-page button::after { border: 0; }
 .advanced-ai-page button[disabled] { opacity: .45; }
-.steps { display: flex; align-items: center; justify-content: center; margin-bottom: 28rpx; }
+.steps { display: flex; align-items: center; justify-content: center; margin-bottom: 20rpx; }
 .step { display: flex; align-items: center; color: #a0a7ac; font-size: 22rpx; white-space: nowrap; }
 .step-circle { width: 38rpx; height: 38rpx; margin-right: 12rpx; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #a0a7ac; background: #e8ecef; font-size: 22rpx; }
 .step.active { color: #384634; font-weight: 600; }
 .step.active .step-circle { color: #fff; background: #293628; }
 .step-line { height: 1rpx; width: 40rpx; margin: 0 18rpx; background: #dfe4e7; flex-shrink: 0; }
-.selection-heading { margin: 4rpx 2rpx 24rpx; }
+.selection-heading { margin: 0 2rpx 12rpx; }
 .selection-title { font-size: 36rpx; font-weight: 700; line-height: 1.5; }
 .selection-heading .help-text { margin-top: 8rpx; }
-/* 教程与副标题同排；图标保持轻量，按钮留足独立点击区域。 */
-.selection-subtitle-row { display: flex; align-items: center; justify-content: space-between; min-height: 88rpx; }
+/* 说明行按教程胶囊高度排布，结合文字行高统一上下可见留白，避免透明按钮区域撑高。 */
+.selection-subtitle-row { display: flex; align-items: center; justify-content: space-between; min-height: 56rpx; }
 .selection-heading .selection-subtitle-row .help-text { flex: 1; min-width: 0; margin-top: 0; }
-.advanced-ai-page .tutorial-entry { flex: none; width: auto; min-height: 88rpx; padding: 0 0 0 20rpx; background: transparent; color: #52674a; font-size: 22rpx; }
+.advanced-ai-page .tutorial-entry { flex: none; width: auto; min-height: 56rpx; padding: 0 0 0 20rpx; background: transparent; color: #52674a; font-size: 22rpx; }
 .tutorial-entry-face { display: flex; align-items: center; padding: 10rpx 18rpx; border: 2rpx solid #dee7d8; border-radius: 40rpx; background: #eaf0e6; white-space: nowrap; }
 .tutorial-icon { display: block; flex: none; width: 32rpx; height: 32rpx; margin-right: 10rpx; }
 .help-text { display: block; color: #7c858e; font-size: 22rpx; line-height: 1.65; }
@@ -163,5 +163,3 @@
 
 /* 生成期间完整展示参考重点，保留换行与长文本换行。 */
 .reference-readonly-note { display: block; margin-top: 12rpx; color: #66705f; font-size: 22rpx; line-height: 1.6; white-space: pre-wrap; overflow-wrap: break-word; }
-
-.source-mode-options{display:flex;gap:16rpx;margin:20rpx 0}.source-mode-options .source-mode{flex:1;font-size:24rpx;margin:0;background:#f4f6f7}.source-mode-options .active{background:#e3f2ed;color:#0f766e}

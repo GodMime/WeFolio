@@ -4,9 +4,8 @@ const AI_API_PREFIX = '/api/mine/portfolio-ai'
 const ADVANCED_TEMPLATE = 'ADVANCED'
 const CLIENT_ADVANCED_VERSION = 2
 const AI_CONTRACT_VERSION = 'ai-portfolio-v2'
-const SOURCE_MODES = Object.freeze({ SELECTED: 'SELECTED_SOURCES', TEXT_ONLY: 'TEXT_ONLY' })
+const SOURCE_MODES = Object.freeze({ SELECTED: 'SELECTED_SOURCES' })
 const CLIENT_UPGRADE_MESSAGE = '当前客户端不支持此候选，请升级小程序'
-function effectiveSourceMode(current = {}) { return current.sourceMode === SOURCE_MODES.TEXT_ONLY && current.mode === 'CREATE' ? SOURCE_MODES.TEXT_ONLY : SOURCE_MODES.SELECTED }
 function supportedProtocol(capabilities = {}) { return (capabilities.supportedProtocols || []).find(item => item.aiContractVersion === AI_CONTRACT_VERSION) || null }
 function candidateVersionError(response = {}) {
   const version = response.taskAdvancedVersion === undefined ? 1 : response.taskAdvancedVersion
@@ -65,7 +64,7 @@ function validatePrompt(prompt, raw, unavailable = []) {
 
 function captureBasis(current = {}) {
   return JSON.stringify([current.ownerType, text(current.ownerId), text(current.portfolioId), Number(current.draftRevision) || 0,
-    Number(current.localEditRevision) || 0, CLIENT_ADVANCED_VERSION, AI_CONTRACT_VERSION, effectiveSourceMode(current), current.config || null, normalizeContext(current.aiContext), ...(hasReferenceState(current) ? [referenceBasis(current)] : [])])
+    Number(current.localEditRevision) || 0, CLIENT_ADVANCED_VERSION, AI_CONTRACT_VERSION, SOURCE_MODES.SELECTED, current.config || null, normalizeContext(current.aiContext), ...(hasReferenceState(current) ? [referenceBasis(current)] : [])])
 }
 
 /** 优先使用服务端具体原因，同时兼容旧任务的顶层错误字段与候选提示。 */
@@ -92,7 +91,7 @@ function buildTaskPayload(current, options, idempotencyKey) {
   if (!AI_TASK_MODES.includes(mode)) throw new Error('AI 操作参数无效')
   return {
     ownerType: current.ownerType, ownerId: text(current.ownerId), portfolioId: current.portfolioId || null, mode,
-    clientAdvancedVersion: CLIENT_ADVANCED_VERSION, sourceMode: effectiveSourceMode({ ...current, ...options, mode }),
+    clientAdvancedVersion: CLIENT_ADVANCED_VERSION, sourceMode: SOURCE_MODES.SELECTED,
     targetMenuKey: mode === 'CREATE' ? null : (options.targetMenuKey || ROOT_MENU_KEY),
     baseDraftRevision: Number(current.draftRevision) || 0, baseConfig: mode === 'CREATE' ? null : clone(current.config),
     localEditRevision: Number(current.localEditRevision) || 0,
@@ -112,6 +111,6 @@ function statusMessage(task = {}) {
   return ({ PENDING: '等待生成，可取消', RUNNING: '正在生成，可取消', CANCELLED: '已取消，现有内容已保留', FAILED: TASK_FAILED_MESSAGE })[task.status] || ''
 }
 
-module.exports = { CLIENT_ADVANCED_VERSION, SOURCE_MODES, CLIENT_UPGRADE_MESSAGE, effectiveSourceMode, supportedProtocol, candidateVersionError, ADVANCED_API_PREFIX, ADVANCED_TEMPLATE, AI_API_PREFIX, AI_CONTRACT_VERSION, TASK_FAILED_MESSAGE, PROMPT_MAX_LENGTH, ROOT_MENU_KEY,
+module.exports = { CLIENT_ADVANCED_VERSION, SOURCE_MODES, CLIENT_UPGRADE_MESSAGE, supportedProtocol, candidateVersionError, ADVANCED_API_PREFIX, ADVANCED_TEMPLATE, AI_API_PREFIX, AI_CONTRACT_VERSION, TASK_FAILED_MESSAGE, PROMPT_MAX_LENGTH, ROOT_MENU_KEY,
   ACTIVE_STATUSES, AI_TASK_MODES, clone, text, normalizeContext, addSource, removeSource, validatePrompt, captureBasis, candidateError, taskErrorMessage,
   buildTaskPayload, makeKey, isAdvanced, advancedQuery, advancedEndpoint, statusMessage }

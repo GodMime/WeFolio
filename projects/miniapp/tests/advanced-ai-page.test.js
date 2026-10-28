@@ -15,6 +15,44 @@ function pageFor(requestFn, patch = {}, team = false) {
 }
 
 for (const team of [false, true]) {
+  test(`${team ? '团队' : '个人'}新建不恢复纯文字模式，选择内容后可以进入描述并提交`, async t => {
+    const calls = []
+    const previous = global.wx
+    global.wx = { showToast() {} }
+    t.after(() => { global.wx = previous })
+    const page = pageFor(async options => { calls.push(options); return { taskId: 'created', status: 'PENDING' } }, {}, team)
+    let initialize
+    page.getOpenerEventChannel = () => ({ on(name, handler) { initialize = handler }, emit() {} })
+    page.bootstrap = () => {}
+    page.onLoad({ mode: 'CREATE' })
+    initialize({ mode: 'CREATE', sourceMode: 'TEXT_ONLY', config: null, aiContext: normalizeContext(),
+      sourceOptions: [normalizeSource({ id: '11', title: '婚礼作品', mediaType: 'IMAGE' }, team)] })
+    assert.equal(page.data.sourceMode, 'SELECTED_SOURCES')
+    page.handleSourceTap({ currentTarget: { dataset: { index: 0 } } })
+    page.handleNext()
+    assert.equal(page.data.step, 'prompt')
+    await page.handleGenerate()
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].data.sourceMode, 'SELECTED_SOURCES')
+    assert.deepEqual(calls[0].data.aiContext.sources, [{ sourceNo: 1, kind: 'WORK', sourceId: '11' }])
+  })
+
+  test(`${team ? '团队' : '个人'}新建无可用来源时不能跳过选择或直接生成`, async () => {
+    const previous = global.wx, notices = [], calls = []
+    global.wx = { showToast(value) { notices.push(value.title) } }
+    try {
+      for (const selectedSources of [[], [{ sourceNo: 1, kind: 'WORK', sourceId: '11', available: false }]]) {
+        const page = pageFor(async options => { calls.push(options) }, { mode: 'CREATE', sourceMode: 'TEXT_ONLY',
+          config: null, step: 'sources', selectedSources, aiContext: normalizeContext({ sources: selectedSources }) }, team)
+        page.handleNext()
+        assert.equal(page.data.step, 'sources')
+        await page.handleGenerate()
+      }
+      assert.deepEqual(calls, [])
+      assert.deepEqual(notices, Array(4).fill('请先选择至少一项可用内容'))
+    } finally { global.wx = previous }
+  })
+
   test(`${team ? '团队' : '个人'}历史任务缺省版本按 V1 允许候选，不改候选根元数据`, () => {
     const page = pageFor(async () => {}, {}, team)
     const candidate = { schemaVersion: team ? 'standard-team-v1' : 'standard-personal-v1', components: [] }
@@ -47,7 +85,7 @@ for (const team of [false, true]) {
     assert.equal(page.data.result.candidate, undefined)
     assert.match(page.data.taskError, /升级/)
   })
-  test(`${team ? '团队' : '个人'}TEXT_ONLY 创建采用后首次保存前以无 ID 空来源继续修改`, async () => {
+  test(`${team ? '团队' : '个人'}历史空来源候选采用后首次保存前以无 ID 空来源继续修改`, async () => {
     const previous = global.wx, events = [], calls = []
     global.wx = { showToast() {}, navigateTo(options) { options.success({ eventChannel: { emit(name, value) { events.push({ name, value }) } } }) } }
     try {
@@ -57,7 +95,6 @@ for (const team of [false, true]) {
       { ownerType: team ? 'TEAM' : 'USER', mode: 'CREATE', sourceMode: 'TEXT_ONLY', config: null, portfolioId: null, task: { taskId: 'created' }, canAdopt: true }, team)
       page.taskBasis = captureBasis(page.currentState())
       const api = require(`../pages/${team ? 'team-portfolios' : 'portfolios'}/utils/advanced-portfolios`)
-      const original = api.buildTaskPayload(page.currentState(), { mode: 'CREATE', sourceMode: 'TEXT_ONLY', prompt: '记录2018年入行' }, 'create-key')
       await page.handleAdopt()
       assert.equal(events[0].name, 'advancedInitial')
       assert.equal(events[0].value.sourceMode, 'SELECTED_SOURCES')
@@ -69,8 +106,7 @@ for (const team of [false, true]) {
       assert.equal(modify.portfolioId, null)
       assert.equal(modify.baseDraftRevision, 0)
       assert.deepEqual(modify.aiContext.sources, [])
-      assert.equal(original.sourceMode, 'TEXT_ONLY')
-      assert.notEqual(modify.idempotencyKey, original.idempotencyKey)
+      assert.equal(modify.idempotencyKey, 'modify-key')
       assert.notEqual(captureBasis(current), page.taskBasis)
       assert.equal(calls.every(item => item.method !== 'POST'), true)
     } finally { global.wx = previous }
@@ -478,7 +514,9 @@ test('提交响应丢失后复用同一请求；尚未拿到ID时不创建任何
     calls.push(options)
     if (calls.length === 1) throw new Error('network timeout')
     return { taskId: '7', status: 'PENDING' }
-  }, { mode: 'CREATE', config: null })
+  }, { mode: 'CREATE', config: null,
+    selectedSources: [{ sourceNo: 1, kind: 'WORK', sourceId: '11', available: true }],
+    aiContext: normalizeContext({ sources: [{ sourceNo: 1, kind: 'WORK', sourceId: '11' }] }) })
   await page.handleGenerate()
   assert.equal(page.data.submissionUncertain, true)
   await page.handleGenerate()

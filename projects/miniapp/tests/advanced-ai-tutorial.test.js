@@ -126,7 +126,7 @@ for (const folder of ['portfolios', 'team-portfolios']) {
     }
     assert.match(readRule(wxss, '.selection-subtitle-row'), /display:\s*flex;/)
     const entryRule = readRule(wxss, '.advanced-ai-page .tutorial-entry')
-    assert.ok(Number(entryRule.match(/min-height:\s*([\d.]+)rpx;/)?.[1]) >= 88, '图标虽小，点击高度至少 88rpx')
+    assert.ok(Number(entryRule.match(/min-height:\s*([\d.]+)rpx;/)?.[1]) >= 56, '紧凑布局下点击区域仍须完整覆盖教程胶囊')
     assert.match(readRule(wxss, '.tutorial-icon'), /width:\s*32rpx;/)
     assert.match(readRule(wxss, '.tutorial-icon'), /height:\s*32rpx;/)
     assert.ok(fs.existsSync(path.join(ROOT, 'assets/system/video-tutorial.svg')))

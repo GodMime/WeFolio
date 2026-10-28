@@ -23,6 +23,16 @@ test('高级编辑分包共享同一会话规则且不跨分包引用', () => {
 })
 
 for (const [name, api] of [['个人', personal], ['团队', team]]) {
+  test(`${name}分包不再从会话或生成选项恢复纯文字模式`, () => {
+    const current = { ownerType: name === '团队' ? 'TEAM' : 'USER', ownerId: '1', sourceMode: 'TEXT_ONLY',
+      config: null, aiContext: api.addSource(null, { kind: 'WORK', sourceId: '100' }) }
+    for (const mode of api.AI_TASK_MODES) {
+      const payload = api.buildTaskPayload(current, { mode, sourceMode: 'TEXT_ONLY', prompt: '整理当前内容' }, 'selected-only')
+      assert.equal(payload.sourceMode, 'SELECTED_SOURCES')
+      assert.deepEqual(payload.aiContext, current.aiContext)
+    }
+  })
+
   test(`${name}分包 AI 任务只支持创建和整体修改，提交字段符合现有协议`, () => {
     const current = { ownerType: 'USER', ownerId: '1', config: { components: [] }, aiContext: api.normalizeContext() }
     assert.deepEqual(api.AI_TASK_MODES, ['CREATE', 'MODIFY_PAGE'])
