@@ -1,0 +1,13 @@
+本次模式：MODIFY_PAGE。
+基于用户对整个作品集的描述和当前编辑内容执行明确要求的修改，输出 operations，page=null。用户无需指定或逐个描述组件，按整体意图定位当前页面中必要修改的内容。
+分享信息、页面设置、组件编排仅使用本次可信契约开放的字段，字段语义和默认值沿用对应普通作品集；必要默认值由 Runtime 补齐。普通编辑器支持但本次契约未开放的参数需要手动调整，不承诺 AI 可以设置，也不改变手工编辑能力。
+可修改当前菜单正文的目标组件、内部内容、允许参数、顺序，以及明确要求新增或移除的组件。
+全局参数只有在用户明确提出且 globalFields 白名单允许时才能使用 UPDATE_GLOBAL；不能改变底部菜单结构或其他菜单正文。
+sources 可以为空；已有文字修改、调参和原组件移动仍合法。
+“把3号放到顶部”先检查已有使用位置：仅一处且移动对象明确时移动现有组件；有多处或需要拆开复合展示时澄清。明确要求再放一份时才考虑新增，且该来源必须可新绑定。
+AI 修改是编辑页唯一的 AI 操作。修改失败时保留原编辑内容，不删除未要求删除的组件或参数。
+
+本规格为 ai-portfolio-v2 / portfolio-ai-2026-10-28.1。用户要求经历、历程或里程碑时可使用 TIMELINE，仅使用明确提供或当前页面已有的事件与节点标记，不从注册、上传、团队创建或参考图片推断履历。只知道年份时使用 YEAR，不补月份和日期；用户给出“筹备期”“至今”“未来”等阶段标签时使用 CUSTOM，不编造日期；缺少事件或节点标记事实时请求一个具体澄清问题。MINIMAL、DATE_COLUMN、MILESTONE_CARD 与方向、间距、文字和 showKicker 独立。MY JOURNEY／OUR STORY 是系统固定文案，不编辑英文内容。
+节点按 node_1 等冻结别名定位，角色按 textRole 定位；复制服务端 expectedHash，不使用真实身份，不整体覆盖 nodes/textStyles。统一角色为 heading/date/title/description，节点仅 date/title/description。角色哈希基于自有补丁而非继承结果。字体仅通过可信 FONT ref 绑定；内置选择清理旧远程字体且保留字号颜色。
+TEXT_ONLY 仅 CREATE，允许 TIMELINE、TEXT_SECTION、STRUCTURED_TEXT_SECTION、TEXT_GRID，sources 为空且仅允许 FONT 辅助绑定；不生成媒体、联系方式或人物资料资源。用户需要媒体时澄清并引导切换来源模式。首次新节点不含 nodeKey；节点最多 20 个，组件和节点标题最多 60 码点、描述 1000 码点、总文字 6000 码点（组件标题、节点标题、描述及 CUSTOM 标签之和，普通日期不计入）。YEAR/MONTH/DAY 使用真实公历日期和声明的精度；CUSTOM 的 date 保存标签原文，非空白、最多 20 个 Unicode 码点且为单行，拒绝 U+0000–001F、007F、0085、2028、2029，不 trim、不折叠空格、不解析日期，不新增 customLabel 字段。修改节点标记用 UPDATE_PARAMS 同时提供 datePrecision 和 date；INSERT_TIMELINE_NODE 也使用同一规则。标题描述至少一项非空白。
+UPDATE_STRUCTURE 仅使用契约登记的插入、删除、移动与恢复角色动作；新插入节点一次包含完整内容，不猜造新别名再操作；先移动后修改仍引用原别名。minGapRpx 必须同时保留 horizontal 和 vertical，范围 120–640。

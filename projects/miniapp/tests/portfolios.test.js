@@ -52,7 +52,7 @@ const {
 } = require('../pages/portfolios/utils/portfolio-color')
 
 test('new editor advertises video carousel component title schema revision', () => {
-  assert.equal(EDITOR_SCHEMA_REVISION, 14)
+  assert.equal(EDITOR_SCHEMA_REVISION, 15)
 })
 
 test('personal profile borders default off and keep selected styling when disabled', () => {
@@ -195,7 +195,7 @@ test('normalizes style and bottom navigation without duplicating first menu comp
     }
   })
 
-  assert.equal(config.editorSchemaRevision, 14)
+  assert.equal(config.editorSchemaRevision, 15)
   assert.equal(config.style.backgroundColor, '#1A2B3C')
   assert.equal(config.style.componentSpacingRpx, 32)
   assert.equal(Object.hasOwn(config.bottomNav.items[0], 'components'), false)
@@ -212,7 +212,7 @@ test('个人作品集组件间距兼容旧配置并保留零值和最大值', ()
   for (const value of [0, 1, 32, 96]) {
     const config = normalizePortfolioConfig({ style: { backgroundColor: '#1a2b3c', componentSpacingRpx: value } })
     const saved = JSON.parse(JSON.stringify(buildDraftPayload(config, 1, 'component-spacing'))).config
-    assert.equal(saved.editorSchemaRevision, 14)
+    assert.equal(saved.editorSchemaRevision, 15)
     assert.equal(saved.style.componentSpacingRpx, value)
     assert.equal(saved.style.backgroundColor, '#1A2B3C')
   }
@@ -892,7 +892,7 @@ test('builds draft and publish payloads', () => {
   const config = normalizePortfolioConfig({ components: [createComponent(COMPONENT_TYPES.PROFILE)] })
 
   assert.deepEqual(buildDraftPayload(config, 3, 'draft-1'), {
-    clientCapabilities: { portfolioRemoteFont: 1 },
+    clientCapabilities: { portfolioRemoteFont: 1, portfolioTimeline: 1 },
     config,
     clientRevision: 3,
     idempotencyKey: 'draft-1'
@@ -913,7 +913,7 @@ test('personal grid creation uses gray borders and draft saves retain chosen or 
   created.config.cellBorderColor = '#ABCDEF'
   const config = normalizePortfolioConfig({ editorSchemaRevision: 6, components: [created] })
   const payload = buildDraftPayload(config, 3, 'grid-border-draft')
-  assert.equal(payload.config.editorSchemaRevision, 14)
+  assert.equal(payload.config.editorSchemaRevision, 15)
   assert.equal(payload.config.components[0].config.cellBorder, false)
   assert.equal(payload.config.components[0].config.cellBorderWidthRpx, 8)
   assert.equal(payload.config.components[0].config.cellBorderColor, '#ABCDEF')

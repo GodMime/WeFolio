@@ -5,7 +5,7 @@ import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.PortfolioConfigScopeDict;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
 import com.jxc.wefolio.dict.ReferenceTypeDict;
-import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
+import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.dto.PortfolioScheduleOptionsResponse;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryRequest;
 import com.jxc.wefolio.dto.PortfolioScheduleQueryResponse;
@@ -34,9 +34,9 @@ public class AdvancedTeamMemberPortfolioPreviewService {
     private static final String PUBLISHED_PREVIEW_SCOPE = "published";
 
     /** 下钻已发布普通或高级个人作品集。 */
-    public MinePortfolioDetailResponse preview(long parentId, long childId, String scope) {
+    public JSONObject preview(long parentId, long childId, String scope) {
         validate(parentId, childId, scope);
-        return personal.previewPublishedReferencedPortfolio(childId, true);
+        return AdvancedPortfolioVersionSupport.response(personal.previewPublishedReferencedPortfolio(childId, true));
     }
     /** 已保存成员预览档期。 */
     public PortfolioScheduleOptionsResponse options(long parentId, long childId, String month, String componentKey, String scope) {

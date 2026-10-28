@@ -784,4 +784,20 @@ class TokenHubPortfolioAiClientTest {
         var user = StrictAiJson.parseObject(finalBody.path("messages").get(1).path("content").asText(), 100000, 16);
         assertThat(user.path("sources").findValuesAsText("videoAudioText")).contains(text, "另一作品口播");
     }
+
+    /** 新旧任务的正文和重试模板都取冻结规格，不能因新部署替换旧提示词。 */
+    @Test void v2PromptBundleAndRetryAreSelectedByFrozenRunSpec() {
+        var client = new TokenHubPortfolioAiClient(properties());
+        ObjectNode old = request(); String oldSystem = client.payload(task(), old).path("messages").get(0).path("content").asText();
+        ObjectNode current = request();
+        var spec = com.jxc.wefolio.service.portfolioai.AiPortfolioRunSpecRegistry.forVersion(2);
+        current.put("runSpecId", spec.id()).put("contractVersion", spec.contractVersion()).put("promptVersion", spec.promptVersion());
+        current.withObject("input").put("clientAdvancedVersion", 2).put("sourceMode", "SELECTED_SOURCES");
+        var retry = task(); retry.setErrorCode("INVALID_OUTPUT"); retry.setErrorMessage("时间轴日期不合法");
+        String system = client.payload(retry, current).path("messages").get(0).path("content").asText();
+        assertThat(system).contains("ai-portfolio-v2", "TIMELINE", "同一任务因输出结构错误而重试").doesNotContain("ai-portfolio-v1");
+        assertThat(client.payload(task(), old).path("messages").get(0).path("content").asText()).isEqualTo(oldSystem);
+        assertThat(oldSystem).contains("ai-portfolio-v1").doesNotContain("TIMELINE");
+        current.put("runSpecId", "unknown"); assertThatThrownBy(() -> client.payload(task(), current)).isInstanceOf(AiProtocolException.class);
+    }
 }

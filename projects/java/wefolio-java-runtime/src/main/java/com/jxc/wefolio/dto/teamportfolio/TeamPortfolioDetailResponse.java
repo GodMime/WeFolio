@@ -2,12 +2,19 @@ package com.jxc.wefolio.dto.teamportfolio;
 
 import lombok.Data;
 import com.jxc.wefolio.dto.PortfolioFontManifestDto;
+import com.alibaba.fastjson2.annotation.JSONField;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioVersionSupport;
 
 /**
  * 团队作品集维护详情响应。
  */
 @Data
 public class TeamPortfolioDetailResponse {
+    /** 高级适配器使用同一结果快照的元数据，不在 HTTP 根暴露内部字段。 */
+    @JsonIgnore
+    @JSONField(serialize = false, deserialize = false)
+    private AdvancedPortfolioVersionSupport.Metadata advancedConfigMetadata;
 
     /** 当前配置快照的字体资源，保留原 renderData 空值语义。 */
     private PortfolioFontManifestDto fontAssets;

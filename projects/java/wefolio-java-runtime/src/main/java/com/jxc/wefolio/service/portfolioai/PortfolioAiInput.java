@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jxc.wefolio.config.PortfolioAiProperties;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.message.PortfolioAiMessage;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedVersionRegistry;
 import java.util.Set;
 
 import static com.jxc.wefolio.service.portfolioai.PortfolioAiConstants.*;
@@ -25,7 +26,10 @@ public final class PortfolioAiInput {
 
     /** 验证原始业务请求并返回去掉幂等键的副本。 */
     public static ObjectNode normalize(ObjectNode request, PortfolioAiProperties limits) {
-        request.fieldNames().forEachRemaining(key -> { if (!FIELDS.contains(key)) { throw invalid(); } });
+        int version = AdvancedVersionRegistry.requestVersion(request);
+        request.fieldNames().forEachRemaining(key -> {
+            if (!FIELDS.contains(key) && !(version >= 2 && Set.of(AiPortfolioRunSpecRegistry.CLIENT_VERSION, AiPortfolioRunSpecRegistry.SOURCE_MODE).contains(key))) { throw invalid(); }
+        });
         String owner = text(request, KEY_OWNER_TYPE);
         if (!Set.of(OWNER_USER, OWNER_TEAM).contains(owner)) { throw invalid(); }
         id(request, KEY_OWNER_ID, false);
@@ -41,7 +45,15 @@ public final class PortfolioAiInput {
         }
         String key = text(request, KEY_IDEMPOTENCY_KEY);
         if (!key.matches(IDEMPOTENCY_KEY_PATTERN)) { throw invalid(); }
-        if (!CONTRACT_VERSION.equals(text(request, KEY_AI_CONTRACT_VERSION))) { throw invalid(); }
+        if (!AdvancedVersionRegistry.resolve(version).aiContractVersion().equals(text(request, KEY_AI_CONTRACT_VERSION))) { throw invalid(); }
+        AdvancedVersionRegistry.requireEditor(version, OWNER_TEAM.equals(owner), request.path(KEY_EDITOR_SCHEMA_REVISION).intValue());
+        String sourceMode = AiPortfolioRunSpecRegistry.SELECTED_SOURCES;
+        if (version >= 2 && request.has(AiPortfolioRunSpecRegistry.SOURCE_MODE)) {
+            sourceMode = text(request, AiPortfolioRunSpecRegistry.SOURCE_MODE);
+            if (!Set.of(AiPortfolioRunSpecRegistry.SELECTED_SOURCES, AiPortfolioRunSpecRegistry.TEXT_ONLY).contains(sourceMode)) { throw invalid(); }
+        }
+        if (AiPortfolioRunSpecRegistry.TEXT_ONLY.equals(sourceMode) && (!MODE_CREATE.equals(mode)
+                || !request.path(KEY_AI_CONTEXT).path(KEY_SOURCES).isArray() || !request.path(KEY_AI_CONTEXT).path(KEY_SOURCES).isEmpty())) { throw invalid(); }
         JsonNode config = request.get(KEY_BASE_CONFIG);
         if (config == null || (!config.isNull() && !config.isObject()) || (!MODE_CREATE.equals(mode) && config.isNull())) {
             throw invalid();
@@ -73,6 +85,7 @@ public final class PortfolioAiInput {
         if (!request.path(KEY_AI_CONTEXT).isObject()) { throw invalid(); }
         ObjectNode input = request.deepCopy();
         input.remove(KEY_IDEMPOTENCY_KEY);
+        if (version >= 2) { input.put(AiPortfolioRunSpecRegistry.SOURCE_MODE, sourceMode); }
         return input;
     }
 

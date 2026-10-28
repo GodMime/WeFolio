@@ -17,6 +17,7 @@
     "portfolio-divider": "/pages/portfolios/components/divider/divider",
     "portfolio-hyperlink": "/pages/portfolios/components/hyperlink/hyperlink",
     "portfolio-text-grid": "../components/text-grid/text-grid",
-    "portfolio-contact-info": "../components/contact-info/contact-info"
+    "portfolio-contact-info": "../components/contact-info/contact-info",
+    "portfolio-timeline": "../components/timeline/timeline"
   }
 }

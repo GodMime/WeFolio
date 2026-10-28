@@ -41,7 +41,7 @@ const DEFAULT_VIDEO_RATIO_HEIGHT = 9
 const RENDER_COMPONENT_TYPES = Object.freeze([
   'CAROUSEL', 'VIDEO_CAROUSEL', 'PROFILE', 'WORK_GRID', 'WORK_LIST',
   'SINGLE_WORK', 'SCHEDULE_QUERY', 'QR_CONTACT', 'CONTACT_FORM',
-  'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'CONTACT_INFO', 'DIVIDER', 'HYPERLINK'
+  'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'TIMELINE', 'CONTACT_INFO', 'DIVIDER', 'HYPERLINK'
 ])
 const SINGLE_WORK_MEDIA_WIDTH_RPX = 710
 const DEFAULT_SCHEDULE_DISPLAY_MODE = 'MODAL_CALENDAR'
@@ -346,6 +346,7 @@ function normalizeRenderComponent(raw = {}) {
     textSection: normalizeTextSection(raw.textSection || config),
     structuredTextSection: JSON.parse(JSON.stringify(raw.structuredTextSection || config)),
     textGrid: JSON.parse(JSON.stringify(raw.textGrid || config)),
+    timeline: JSON.parse(JSON.stringify(raw.timeline || config)),
     contactInfo: normalizeContactInfoConfig(raw.contactInfo || config),
     divider: normalizeDivider(raw.divider || config),
     hyperlink: normalizeHyperlink(raw.hyperlink || config)

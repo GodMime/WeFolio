@@ -1,0 +1,1 @@
+{ "component": true, "usingComponents": { "portfolio-timeline": "../timeline/timeline", "text-color-editor": "../text-color-editor/text-color-editor" } }

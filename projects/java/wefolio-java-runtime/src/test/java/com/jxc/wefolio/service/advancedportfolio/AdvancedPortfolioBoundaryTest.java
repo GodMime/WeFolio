@@ -9,6 +9,8 @@ import com.jxc.wefolio.dto.PortfolioConfigDto;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.mapper.WorkEntityMapper;
 import com.jxc.wefolio.service.PortfolioConfigValidator;
+import com.jxc.wefolio.service.PortfolioEditingCapabilities;
+import java.util.List;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentContext;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioConfigValidator;
 import com.jxc.wefolio.service.teamportfolio.component.divider.TeamDividerComponentValidator;
@@ -25,6 +27,101 @@ import static org.mockito.Mockito.mock;
 class AdvancedPortfolioBoundaryTest {
     /** 严格树构造器，生产解析另由同源 StrictAiJson 单元测试覆盖。 */
     private final ObjectMapper mapper = new ObjectMapper();
+
+    /** 时间轴真实统一与节点字体派生在两套普通规范化之后仍完整保真。 */
+    @Test void preservesTimelineFontsAndVersionThroughRealNormalization() throws Exception {
+        for (boolean team : List.of(false, true)) {
+            ObjectNode input = timelineConfig(team);
+            AdvancedPortfolioConfigGuard.validate(input, team, 2);
+            ObjectNode content = AdvancedPortfolioVersionSupport.content(input);
+            Object normalized;
+            if (team) {
+                normalized = new TeamPortfolioConfigValidator(null, null, null, null, null, null, null, null, null, null, null, null)
+                        .normalizeForDraft(JSON.parseObject(content.toString(), TeamPortfolioConfigDto.class), null,
+                                new TeamPortfolioComponentContext(11L, 22L, 1), PortfolioEditingCapabilities.advanced(11, 2, true));
+            } else {
+                normalized = new PortfolioConfigValidator(null).normalizeForDraft(7L,
+                        JSON.parseObject(content.toString(), PortfolioConfigDto.class), null, PortfolioEditingCapabilities.advanced(15, 2, false));
+            }
+            ObjectNode saved = AdvancedPortfolioVersionSupport.restore(mapper.readTree(JSON.toJSONString(normalized)),
+                    AdvancedPortfolioVersionSupport.extract(input, 2));
+            AdvancedPortfolioConfigGuard.assertNormalized(input, saved, team);
+            assertThat(saved.path("advancedPortfolioVersion").intValue()).isEqualTo(2);
+            assertThat(saved.at("/components/0/config/textStyles/heading/fontFamily").asText()).isEqualTo("SYSTEM");
+            assertThat(saved.at("/components/0/config/nodes/0/textStyles/title/fontFamily").asText()).isEqualTo("SYSTEM");
+            assertThat(saved.at("/components/0/config/textStyles/description")).isEmpty();
+            assertThat(saved.at("/components/0/config/title").asText()).isEqualTo(" 保留标题空格 ");
+        }
+    }
+
+    /** 空角色补丁必须保持继承，不能在保真阶段偷加系统字体。 */
+    @Test void rejectsFillingInheritedTimelineStyleWithSystemFont() throws Exception {
+        ObjectNode input = timelineConfig(false);
+        ObjectNode output = input.deepCopy();
+        ((ObjectNode) output.at("/components/0/config/textStyles/description")).put("fontFamily", "SYSTEM");
+        assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.assertNormalized(input, output)).isInstanceOf(BusinessException.class);
+    }
+
+    /** 时间轴只允许真实角色字体兜底派生，不能借节点或伪造路径放宽。 */
+    @Test void rejectsTimelineFontDerivationOutsideRegisteredRole() throws Exception {
+        for (boolean team : List.of(false, true)) {
+            ObjectNode input = timelineConfig(team);
+            ObjectNode node = (ObjectNode) input.at("/components/0/config/nodes/0");
+            node.put("fontId", "ALLURA").put("fontFamily", "WECHAT_SANS_SS");
+            ObjectNode output = input.deepCopy();
+            ((ObjectNode) output.at("/components/0/config/nodes/0")).put("fontFamily", "SYSTEM");
+            assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.validate(input, team, 2)).isInstanceOf(BusinessException.class);
+            assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.assertNormalized(input, output, team)).isInstanceOf(BusinessException.class);
+        }
+    }
+
+    /** 标题、日期、字体身份与元数据不得借普通规范化改变。 */
+    @Test void rejectsTimelineTextOrMetadataChanges() throws Exception {
+        ObjectNode input = timelineConfig(false);
+        for (String field : List.of("title", "date", "fontId", "advancedPortfolioVersion")) {
+            ObjectNode output = input.deepCopy();
+            switch (field) {
+                case "title" -> ((ObjectNode) output.at("/components/0/config")).put("title", "保留标题空格");
+                case "date" -> ((ObjectNode) output.at("/components/0/config/nodes/0")).put("date", "2024-05-21");
+                case "fontId" -> ((ObjectNode) output.at("/components/0/config/textStyles/heading")).put("fontId", "OTHER_FONT");
+                default -> output.put("advancedPortfolioVersion", 1);
+            }
+            assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.assertNormalized(input, output)).as(field).isInstanceOf(BusinessException.class);
+        }
+    }
+
+    /** 节点 heading、非法标量和高级元数据不能在内容 DTO 转换时丢弃。 */
+    @Test void rejectsTimelineUnknownRolesTypesAndInvalidVersionMetadata() throws Exception {
+        for (boolean team : List.of(false, true)) {
+            ObjectNode heading = timelineConfig(team);
+            ((ObjectNode) heading.at("/components/0/config/nodes/0/textStyles")).putObject("heading");
+            assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.validate(heading, team, 2)).isInstanceOf(BusinessException.class);
+            for (String raw : List.of("null", "true", "1.5", "\"2\"", "999")) {
+                ObjectNode invalid = timelineConfig(team);
+                invalid.set("advancedPortfolioVersion", mapper.readTree(raw));
+                assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.validate(invalid, team, 2)).as(raw).isInstanceOf(BusinessException.class);
+            }
+            ObjectNode wrong = timelineConfig(team);
+            ((ObjectNode) wrong.at("/components/0/config")).put("showKicker", "false");
+            assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.validate(wrong, team, 2)).isInstanceOf(BusinessException.class);
+            ObjectNode old = timelineConfig(team); old.remove("advancedPortfolioVersion");
+            assertThatThrownBy(() -> AdvancedPortfolioConfigGuard.validate(old, team, 1)).isInstanceOf(BusinessException.class);
+        }
+    }
+
+    /** 带真实远程选择、节点覆盖及空继承补丁的高级配置。 */
+    private ObjectNode timelineConfig(boolean team) throws Exception {
+        ObjectNode config = (ObjectNode) mapper.readTree("""
+                {"schemaVersion":"standard-personal-v1","editorSchemaRevision":15,"advancedPortfolioVersion":2,
+                 "share":{"title":"高级时间轴"},"fonts":{"ALLURA":{"fontVersion":"v1"}},
+                 "components":[{"componentKey":"journey","componentType":"TIMELINE","sortOrder":1000,"enabled":true,
+                 "config":{"title":" 保留标题空格 ","textStyles":{"heading":{"fontId":"ALLURA","fontFamily":"WECHAT_SANS_SS"},"description":{}},
+                 "nodes":[{"nodeKey":"event","datePrecision":"DAY","date":"2024-05-20","title":"节点标题","description":"节点描述",
+                 "textStyles":{"title":{"fontId":"ALLURA","fontFamily":"WECHAT_SANS_SS"}}}]}}]}
+                """);
+        if (team) { config.put("schemaVersion", "standard-team-v1").put("editorSchemaRevision", 11); }
+        return config;
+    }
 
     /** 当前普通个人编辑器输出全部组件字段能够通过高级结构受理。 */
     @Test

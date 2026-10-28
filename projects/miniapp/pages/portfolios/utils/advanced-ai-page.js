@@ -3,7 +3,7 @@ const { openVideoPlayer } = require('./portfolio-video-player')
 const { normalizeReferenceItems, referenceNextNo, hasReferenceState, referenceUiState } = require('./advanced-reference-attachments')
 const { request: defaultRequest } = require('../../../utils/request.js')
 const { hasLocalToken, handleMaintainerAuthRequired } = require('../../../utils/session.js')
-const { AI_API_PREFIX, ADVANCED_API_PREFIX, ACTIVE_STATUSES, AI_TASK_MODES, PROMPT_MAX_LENGTH, normalizeContext, addSource, removeSource,
+const { CLIENT_ADVANCED_VERSION, AI_CONTRACT_VERSION, SOURCE_MODES, effectiveSourceMode, supportedProtocol, candidateVersionError, AI_API_PREFIX, ADVANCED_API_PREFIX, ACTIVE_STATUSES, AI_TASK_MODES, PROMPT_MAX_LENGTH, normalizeContext, addSource, removeSource,
   captureBasis, candidateError, taskErrorMessage, buildTaskPayload, statusMessage, makeKey, clone, text, validatePrompt } = require('./advanced-portfolios')
 const PAGE_SIZE = 20
 const CAPABILITY_CHECK_FAILED_MESSAGE = '暂时无法检查附件服务，请重试'
@@ -43,7 +43,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       config: null, aiContext: normalizeContext(), aiReferenceAttachments: [], aiReferenceNextNo: 1, prompt: '', promptCount: 0, promptMaxLength: PROMPT_MAX_LENGTH,
       referenceSheet: '', referenceReplacingKey: '', referenceNoteOpen: {}, referenceUi: referenceUiState(), referenceExampleText: referenceExampleText(),
       referenceCapabilityChecking: false, capabilityError: '',
-      mode: 'CREATE', targetMenuKey: null, managingSources: false, step: 'sources', loading: true,
+      mode: 'CREATE', sourceMode: SOURCE_MODES.SELECTED, v2Available: false, textOnlyAvailable: false, targetMenuKey: null, managingSources: false, step: 'sources', loading: true,
       errorMessage: '', sourceLoading: false, sourceError: '', sourceOptions: [], selectedSources: [], keyword: '', tagId: '', tags: [],
       sourceKind: team ? 'WORK' : '', members: [], memberIndex: 0, page: 1, total: 0, hasMore: false, capabilities: null,
       submitting: false, submissionUncertain: false, waiting: false, adopting: false, task: null, statusText: '', result: null, summaryText: '', candidateTitle: '',
@@ -63,7 +63,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
           this.sourceNumbers = {}
           this.setData({ ...state, aiContext: normalizeContext(state.aiContext), aiReferenceAttachments: normalizeReferenceItems(state.aiReferenceAttachments), aiReferenceNextNo: referenceNextNo(state.aiReferenceAttachments, state.aiReferenceNextNo), promptCount: Array.from(state.prompt || '').length,
             step: options.mode === 'MANAGE_SOURCES' || options.mode === 'CREATE' ? 'sources' : 'prompt',
-            mode: options.mode === 'MANAGE_SOURCES' ? 'MODIFY_PAGE' : options.mode, managingSources: options.mode === 'MANAGE_SOURCES', tokenUsageText: '' })
+            mode: options.mode === 'MANAGE_SOURCES' ? 'MODIFY_PAGE' : options.mode, sourceMode: options.mode === 'CREATE' ? effectiveSourceMode(state) : SOURCE_MODES.SELECTED, managingSources: options.mode === 'MANAGE_SOURCES', tokenUsageText: '' })
           this.refreshReferenceUi()
           this.bootstrap()
         })
@@ -100,7 +100,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
           !team && !this.data.ownerId ? request({ url: '/api/auth/session' }) : Promise.resolve(null),
           !team ? request({ url: '/api/mine/works/tags' }) : Promise.resolve([])])
         const capabilities = results[0] || {}
-        this.setData({ capabilities, capabilityError, ownerId: team ? this.data.ownerId : text(results[1] && results[1].userId || this.data.ownerId),
+        this.setData({ capabilities, capabilityError, v2Available: !!supportedProtocol(capabilities), textOnlyAvailable: !!(supportedProtocol(capabilities) || {}).textOnlyCreate && ((supportedProtocol(capabilities) || {}).sourceModes || []).includes(SOURCE_MODES.TEXT_ONLY), ownerId: team ? this.data.ownerId : text(results[1] && results[1].userId || this.data.ownerId),
           tags: Array.isArray(results[2]) ? results[2] : results[2] && results[2].tags || [],
           activeTaskId: capabilities.activeTask && capabilities.activeTask.taskId || '' })
         this.refreshReferenceUi()
@@ -119,7 +119,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       try {
         const capabilities = await request({ url: `${AI_API_PREFIX}/capabilities` }) || {}
         if (this.disposed) return false
-        this.setData({ capabilities, capabilityError: '', activeTaskId: capabilities.activeTask && capabilities.activeTask.taskId || '' })
+        this.setData({ capabilities, capabilityError: '', v2Available: !!supportedProtocol(capabilities), textOnlyAvailable: !!(supportedProtocol(capabilities) || {}).textOnlyCreate && ((supportedProtocol(capabilities) || {}).sourceModes || []).includes(SOURCE_MODES.TEXT_ONLY), activeTaskId: capabilities.activeTask && capabilities.activeTask.taskId || '' })
         this.refreshReferenceUi()
         return true
       } catch (error) {
@@ -132,7 +132,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       } finally { if (!this.disposed) this.setData({ referenceCapabilityChecking: false }) }
     },
     currentState() {
-      return { ownerType: this.data.ownerType, ownerId: this.data.ownerId, portfolioId: this.data.portfolioId,
+      return { clientAdvancedVersion: CLIENT_ADVANCED_VERSION, aiContractVersion: AI_CONTRACT_VERSION, mode: this.data.mode, sourceMode: effectiveSourceMode(this.data), ownerType: this.data.ownerType, ownerId: this.data.ownerId, portfolioId: this.data.portfolioId,
         draftRevision: this.data.draftRevision, localEditRevision: this.data.localEditRevision, config: this.data.config, aiContext: this.data.aiContext, ...(hasReferenceState(this.data) ? { aiReferenceAttachments: this.data.aiReferenceAttachments, aiReferenceNextNo: this.data.aiReferenceNextNo } : {}) }
     },
     emitContext() {
@@ -219,11 +219,13 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
     handleMemberTap(event) { return this.handleMemberChange({ detail: { value: event.currentTarget.dataset.index } }) },
     handleLoadMore() { if (this.data.step === 'sources' && !this.data.sourceLoading && this.data.hasMore) return this.loadSources(true) },
     handleSourceTap(event) {
+      if (this.data.sourceMode === SOURCE_MODES.TEXT_ONLY) return
       if (this.data.waiting || this.data.adopting || this.data.submissionUncertain) return
       const source = this.data.sourceOptions[Number(event.currentTarget.dataset.index)]
       if (!source || source.available === false) return
       const selected = this.data.aiContext.sources.find(item => item.kind === source.kind && item.sourceId === source.sourceId)
-      const max = this.data.capabilities && this.data.capabilities.limits && this.data.capabilities.limits.maxSourceCount
+      const limits = (supportedProtocol(this.data.capabilities || {}) || {}).limits || (this.data.capabilities || {}).limits || {}
+      const max = limits.maxSourceCount
       if (!selected && max && this.data.aiContext.sources.length >= max) { wx.showToast({ title: `最多选择 ${max} 个来源`, icon: 'none' }); return }
       this.invalidateTaskQuery()
       this.rememberSourceNumbers()
@@ -242,8 +244,16 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       this.emitContext()
       wx.showToast({ title: '移除后仍保留页面已有展示', icon: 'none' })
     },
+    handleSourceMode(event) {
+      if (this.data.mode !== 'CREATE' || this.data.submitting || this.data.waiting || this.data.adopting || this.pendingSubmission) return
+      const sourceMode = event.currentTarget.dataset.value
+      if (![SOURCE_MODES.SELECTED, SOURCE_MODES.TEXT_ONLY].includes(sourceMode) || sourceMode === SOURCE_MODES.TEXT_ONLY && !this.data.textOnlyAvailable) return
+      this.invalidateTaskQuery()
+      this.setData({ sourceMode, aiContext: sourceMode === SOURCE_MODES.TEXT_ONLY ? { ...normalizeContext(this.data.aiContext), sources: [] } : this.data.aiContext, localEditRevision: this.data.localEditRevision + 1, result: null, canAdopt: false, taskError: '' })
+      this.refreshSelection()
+    },
     handleNext() {
-      if (this.data.mode === 'CREATE' && !this.data.selectedSources.some(source => source.available !== false)) {
+      if (this.data.mode === 'CREATE' && this.data.sourceMode !== SOURCE_MODES.TEXT_ONLY && !this.data.selectedSources.some(source => source.available !== false)) {
         wx.showToast({ title: '请先选择至少一项可用内容', icon: 'none' }); return
       }
       if (this.data.managingSources) { this.emitContext(); wx.navigateBack(); return }; this.setData({ step: 'prompt' }) },
@@ -268,7 +278,8 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       optionId: event.currentTarget.dataset.option, answerText: event.currentTarget.dataset.value } }) },
     async handleGenerate() {
       if (this.data.submitting || this.data.waiting || this.data.adopting) return
-      if (!this.data.capabilities || !this.data.capabilities.enabled) { wx.showToast({ title: 'AI 服务暂未开放，可继续手动编辑', icon: 'none' }); return }
+      if (!this.pendingSubmission && (!this.data.capabilities || !this.data.capabilities.enabled || !supportedProtocol(this.data.capabilities))) { wx.showToast({ title: '当前服务暂不支持此版本生成，草稿已保留', icon: 'none' }); return }
+      if (!this.pendingSubmission && this.data.sourceMode === SOURCE_MODES.TEXT_ONLY && (!(supportedProtocol(this.data.capabilities) || {}).textOnlyCreate || !((supportedProtocol(this.data.capabilities) || {}).sourceModes || []).includes(SOURCE_MODES.TEXT_ONLY) || this.data.mode !== 'CREATE' || this.data.aiContext.sources.length)) { wx.showToast({ title: '纯文字生成暂不可用，请检查来源模式', icon: 'none' }); return }
       if (this.data.activeTaskId && !this.data.task) { wx.showToast({ title: '已有生成任务，请先取消或等待结束', icon: 'none' }); return }
       const referenceError = this.pendingSubmission ? '' : this.referenceGenerationError()
       if (referenceError) { wx.showToast({ title: referenceError, icon: 'none' }); return }
@@ -318,7 +329,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       this.invalidateTaskQuery()
       const sequence = this.pollSequence
       try {
-        const task = await request({ url: `${AI_API_PREFIX}/tasks/${this.data.task.taskId}` })
+        const task = await request({ url: `${AI_API_PREFIX}/tasks/${this.data.task.taskId}`, data: { clientAdvancedVersion: CLIENT_ADVANCED_VERSION } })
         if (this.disposed || sequence !== this.pollSequence) return
         this.applyTask(task)
         if (this.data.waiting) this.schedulePoll(task.pollAfterMs || Math.min(5000, 2000 + (task.attemptCount || 0) * 1000))
@@ -330,14 +341,15 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
     applyTask(task) {
       this.refreshReferenceTokens(task)
       const referenceError = this.referenceReadyError()
-      const result = task.result || null
+      const versionError = candidateVersionError(task)
+      const result = versionError ? { kind: 'CANDIDATE', available: false, unavailableReason: versionError } : task.result || null
       const summary = result && result.summary
       const summaryText = typeof summary === 'string' ? summary : Array.isArray(summary) ? summary.map(item => typeof item === 'string' ? item : item.description || item.message || '').join('\n') : summary && (summary.description || summary.message || JSON.stringify(summary)) || ''
       this.setData({ task, waiting: ACTIVE_STATUSES.includes(task.status), statusText: statusMessage(task), result,
         candidateTitle: result && result.available === false ? '生成失败' : result && result.hasChanges === false ? '当前内容已满足要求' : this.data.mode === 'CREATE' ? '作品集已生成' : '修改已生成',
         summaryText: result && result.available === false ? '' : result && result.hasChanges === false ? '当前内容已满足要求' : summaryText,
         questions: result && result.questions || [], canAdopt: task.status === 'SUCCEEDED' && !referenceError && !!result && result.kind === 'CANDIDATE' && result.available === true && result.hasChanges === true,
-        taskError: taskErrorMessage(task) || (result && result.kind === 'CANDIDATE' ? referenceError : ''), tokenUsageText: task.status === 'SUCCEEDED' || task.status === 'FAILED' ? normalizeTokenUsage(task.usage) : '' })
+        taskError: versionError || taskErrorMessage(task) || (result && result.kind === 'CANDIDATE' ? referenceError : ''), tokenUsageText: task.status === 'SUCCEEDED' || task.status === 'FAILED' ? normalizeTokenUsage(task.usage) : '' })
     },
     async handleCancel() {
       const id = this.data.task && this.data.task.taskId || this.data.activeTaskId
@@ -354,6 +366,8 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       this.setData({ result: null, canAdopt: false, questions: [], taskError: '', summaryText: '', tokenUsageText: '' })
     },
     handleCandidatePreview() {
+      const versionError = candidateVersionError(this.data.task || {})
+      if (versionError) { wx.showToast({ title: versionError, icon: 'none' }); return }
       const renderData = this.data.result && this.data.result.renderData
       if (!renderData) { wx.showToast({ title: '候选完整效果暂不可用，请重新查询', icon: 'none' }); return }
       const preview = team ? 'team-portfolio-standard-preview' : 'portfolio-standard-preview'
@@ -364,7 +378,7 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
       if (!this.data.canAdopt || this.data.adopting) return
       this.setData({ adopting: true })
       try {
-        const response = await request({ url: `${AI_API_PREFIX}/tasks/${this.data.task.taskId}` })
+        const response = await request({ url: `${AI_API_PREFIX}/tasks/${this.data.task.taskId}`, data: { clientAdvancedVersion: CLIENT_ADVANCED_VERSION } })
         if (this.disposed) return
         this.refreshReferenceTokens(response)
         const referenceError = this.referenceReadyError()
@@ -376,13 +390,13 @@ function createAdvancedAiPage(team = false, { requestFn = defaultRequest } = {})
           const editor = team ? 'team-portfolio-standard-edit' : 'portfolio-standard-edit'
           wx.navigateTo({ url: `/pages/${packageRoot}/standard-edit/${editor}?templateType=ADVANCED&${team ? 'teamId' : 'ownerId'}=${state.ownerId}`,
             success: result => {
-              result.eventChannel.emit('advancedInitial', { ...state, config: response.result.candidate,
+              result.eventChannel.emit('advancedInitial', { ...state, sourceMode: SOURCE_MODES.SELECTED, taskAdvancedVersion: response.taskAdvancedVersion, config: response.result.candidate,
                 renderData: response.result.renderData, prompt: this.data.prompt, sourceItems: this.data.selectedSources, localEditRevision: state.localEditRevision + 1 })
               this.setData({ result: null, canAdopt: false, tokenUsageText: '' })
             } })
         } else {
           this.emitContext()
-          if (this.channel && this.channel.emit) this.channel.emit('adopt', { config: response.result.candidate, renderData: response.result.renderData, basis: this.taskBasis, aiReferenceAttachments: this.data.aiReferenceAttachments, aiReferenceNextNo: this.data.aiReferenceNextNo })
+          if (this.channel && this.channel.emit) this.channel.emit('adopt', { taskAdvancedVersion: response.taskAdvancedVersion, config: response.result.candidate, renderData: response.result.renderData, basis: this.taskBasis, aiReferenceAttachments: this.data.aiReferenceAttachments, aiReferenceNextNo: this.data.aiReferenceNextNo })
           wx.navigateBack()
         }
       } catch (error) { this.setData({ taskError: error.message || '采用前校验失败，当前内容已保留' }) }

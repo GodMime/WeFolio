@@ -1,4 +1,5 @@
 // 个人与团队分包保留同源副本；仅保存页面运行态，不修改作品集配置。
+const { timelineFontDemands, timelineFontSelections } = require('./portfolio-timeline')
 let instanceSequence = 0
 const moduleIdentity = Math.random().toString(36).slice(2, 10)
 const LOAD_TIMEOUT_MS = 10000
@@ -121,14 +122,15 @@ function createRemoteFontSession(api, onChange = () => {}) {
   return { load, context, dispose }
 }
 
-/** 只从正文、结构化块和网格片段收集节点，忽略标题等非适用文字。 */
+/** 按组件枚举实际显示的字体需求，时间轴包括继承样式与格式化日期。 */
 function collectFontNodes(components = []) {
   const result = []
   components.forEach(component => {
     if (!component || component.enabled === false) return
     const type = component.componentType || component.type
-    const rendered = { TEXT_SECTION: 'textSection', STRUCTURED_TEXT_SECTION: 'structuredTextSection', TEXT_GRID: 'textGrid' }
+    const rendered = { TEXT_SECTION: 'textSection', STRUCTURED_TEXT_SECTION: 'structuredTextSection', TEXT_GRID: 'textGrid', TIMELINE: 'timeline' }
     const config = component[rendered[type]] || component.config || component.data || {}
+    if (type === 'TIMELINE') result.push(...timelineFontDemands(config))
     if (type === 'TEXT_SECTION') result.push(config)
     if (type === 'STRUCTURED_TEXT_SECTION') (config.blocks || []).forEach(block => {
       if (block.type !== 'SPACER') result.push(block)
@@ -138,4 +140,10 @@ function collectFontNodes(components = []) {
   return result
 }
 
-module.exports = { createRemoteFontSession, collectFontNodes }
+/** 时间轴原始选择也包括隐藏组件，避免重新启用时丢失字体版本。 */
+function collectFontSelections(components = []) {
+  const result = collectFontNodes(components.filter(item => item && (item.componentType || item.type) !== 'TIMELINE'))
+  components.forEach(item => { if (item && (item.componentType || item.type) === 'TIMELINE') result.push(...timelineFontSelections(item.timeline || item.config || item.data || {})) })
+  return result
+}
+module.exports = { createRemoteFontSession, collectFontNodes, collectFontSelections }

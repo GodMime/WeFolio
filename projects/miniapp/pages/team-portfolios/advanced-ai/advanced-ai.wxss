@@ -163,3 +163,5 @@
 
 /* 生成期间完整展示参考重点，保留换行与长文本换行。 */
 .reference-readonly-note { display: block; margin-top: 12rpx; color: #66705f; font-size: 22rpx; line-height: 1.6; white-space: pre-wrap; overflow-wrap: break-word; }
+
+.source-mode-options{display:flex;gap:16rpx;margin:20rpx 0}.source-mode-options .source-mode{flex:1;font-size:24rpx;margin:0;background:#f4f6f7}.source-mode-options .active{background:#e3f2ed;color:#0f766e}

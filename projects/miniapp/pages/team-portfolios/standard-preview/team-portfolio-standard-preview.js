@@ -32,7 +32,7 @@ const TYPE_BUCKETS = Object.freeze({
   MEMBER_PORTFOLIO_GRID: 'grid',
   MEMBER_PORTFOLIO_LIST: 'list',
   TEXT_SECTION: 'text',
-  STRUCTURED_TEXT_SECTION: 'structuredText', TEXT_GRID: 'textGrid', CONTACT_INFO: 'contactInfo',
+  STRUCTURED_TEXT_SECTION: 'structuredText', TEXT_GRID: 'textGrid', TIMELINE: 'timeline', CONTACT_INFO: 'contactInfo',
   SCHEDULE_QUERY: 'schedule',
   CONTACT_FORM: 'contact',
   QR_CONTACT: 'qr'
@@ -47,7 +47,7 @@ const ADVANCED_PREVIEW_QUERY_FAILED_MESSAGE = '档期预览查询失败，请重
 function buckets(items) {
   const value = {
     teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [],
-    list: [], text: [], structuredText: [], textGrid: [], contactInfo: [], schedule: [], contact: [], qr: []
+    list: [], text: [], structuredText: [], textGrid: [], timeline: [], contactInfo: [], schedule: [], contact: [], qr: []
   }
   ;(Array.isArray(items) ? items : []).forEach((item) => {
     const key = TYPE_BUCKETS[item.componentType]

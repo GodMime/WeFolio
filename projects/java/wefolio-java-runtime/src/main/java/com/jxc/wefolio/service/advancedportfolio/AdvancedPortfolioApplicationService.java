@@ -43,7 +43,7 @@ public class AdvancedPortfolioApplicationService {
     /** 团队维护角色。 */
     private static final Set<String> ROLES = Set.of(TeamRoleDict.OWNER.getCode(), TeamRoleDict.MANAGER.getCode());
     /** 高级保存受理字段。 */
-    private static final Set<String> SAVE_KEYS = Set.of("config", "clientRevision", "idempotencyKey", "clientCapabilities", "aiContext", "aiPrompt", "aiReferenceAttachments", "aiReferenceNextNo");
+    private static final Set<String> SAVE_KEYS = Set.of("config", "clientRevision", "idempotencyKey", "clientCapabilities", "aiContext", "aiPrompt", "aiReferenceAttachments", "aiReferenceNextNo", AdvancedVersionRegistry.CLIENT_VERSION);
     /** 高级原始请求资源限额，配置仍沿完整普通手动编辑能力。 */
     private static final int REQUEST_MAX_BYTES = 2 * 1024 * 1024;
     /** 附件维护字段。 */
@@ -69,13 +69,14 @@ public class AdvancedPortfolioApplicationService {
 
     /** 创建可见高级基础草稿，不扣发布积分，不接受 AI 配置直接写入。 */
     public JSONObject create(String raw) {
-        JSONObject request = parse(raw, Set.of("ownerType", "ownerId"));
+        JSONObject request = parse(raw, Set.of("ownerType", "ownerId", AdvancedVersionRegistry.CLIENT_VERSION));
         String ownerType = requireText(request, "ownerType");
         Long ownerId = positiveId(request.get("ownerId"));
         requireOwner(ownerType, ownerId);
+        int clientVersion = AdvancedVersionRegistry.requestVersion(request);
         Object detail = PortfolioOwnerTypeDict.USER.getCode().equals(ownerType)
-                ? personal.createStandardPersonal(new MinePortfolioCreateRequest(), ADVANCED)
-                : team.createStandard(ownerId, new TeamPortfolioCreateRequest(), actor(), ADVANCED);
+                ? personal.createStandardPersonal(new MinePortfolioCreateRequest(), ADVANCED, clientVersion)
+                : team.createStandard(ownerId, new TeamPortfolioCreateRequest(), actor(), ADVANCED, clientVersion);
         return maintenanceDetail(detail, requireMaintainerPortfolio(idOf(detail)));
     }
 
@@ -90,7 +91,7 @@ public class AdvancedPortfolioApplicationService {
     public JSONObject saveDraft(Long id, String raw) {
         PortfolioEntity portfolio = requireMaintainerPortfolio(id);
         JSONObject request = parse(raw, SAVE_KEYS);
-        validateConfig(request, isTeam(portfolio));
+        int clientVersion = validateConfig(request, isTeam(portfolio), false);
         boolean contextPresent = request.containsKey("aiContext");
         boolean promptPresent = request.containsKey("aiPrompt");
         if (contextPresent && !(request.get("aiContext") instanceof JSONObject)) { throw invalid(); }
@@ -115,10 +116,12 @@ public class AdvancedPortfolioApplicationService {
         }
         AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(context, contextPresent,
                 prompt, promptPresent, JSON.toJSONString(fingerprint, JSONWriter.Feature.MapSortField, JSONWriter.Feature.WriteMapNullValue),
-                referenceItems, referencesPresent, referenceNext);
+                referenceItems, referencesPresent, referenceNext, clientVersion,
+                AdvancedPortfolioVersionSupport.stored(AdvancedPortfolioVersionSupport.tree(configJson(request.getJSONObject("config")))));
+        JSONObject contentRequest = ordinaryRequest(request);
         Object detail = isTeam(portfolio)
-                ? team.saveDraft(id, request.toJavaObject(TeamPortfolioDraftSaveRequest.class), actor(), ADVANCED, metadata)
-                : personal.saveDraft(id, request.toJavaObject(MinePortfolioDraftSaveRequest.class), ADVANCED, metadata);
+                ? team.saveDraft(id, convert(contentRequest, TeamPortfolioDraftSaveRequest.class), actor(), ADVANCED, metadata)
+                : personal.saveDraft(id, convert(contentRequest, MinePortfolioDraftSaveRequest.class), ADVANCED, metadata);
         PortfolioEntity saved = requireMaintainerPortfolio(id);
         if (referencesPresent) {
             references.cleanupRemoved(portfolio.getOwnerType(), portfolio.getOwnerId(),
@@ -133,15 +136,18 @@ public class AdvancedPortfolioApplicationService {
         JSONObject request = parse(raw, Set.of("draftRevision", "idempotencyKey"));
         if (request.containsKey("draftRevision") && !(request.get("draftRevision") instanceof Integer)) { throw invalid(); }
         if (request.containsKey("idempotencyKey")) { requireString(request.get("idempotencyKey")); }
-        return isTeam(portfolio) ? team.publish(id, request.toJavaObject(TeamPortfolioPublishRequest.class), actor(), ADVANCED)
+        Object detail = isTeam(portfolio) ? team.publish(id, request.toJavaObject(TeamPortfolioPublishRequest.class), actor(), ADVANCED)
                 : personal.publish(id, request.toJavaObject(MinePortfolioPublishRequest.class), ADVANCED);
+        return AdvancedPortfolioVersionSupport.response(detail);
     }
 
     /** 高级草稿/发布版预览允许有效团队成员，响应不包含维护 AI 数据。 */
     public Object preview(Long id, boolean published) {
         PortfolioEntity portfolio = requireVisiblePortfolio(id);
-        if (isTeam(portfolio)) { return published ? team.previewPublished(id, actor(), ADVANCED) : team.preview(id, actor(), ADVANCED); }
-        return published ? personal.previewPublished(id, ADVANCED) : personal.preview(id, ADVANCED);
+        Object detail = isTeam(portfolio)
+                ? (published ? team.previewPublished(id, actor(), ADVANCED) : team.preview(id, actor(), ADVANCED))
+                : (published ? personal.previewPublished(id, ADVANCED) : personal.preview(id, ADVANCED));
+        return AdvancedPortfolioVersionSupport.response(detail);
     }
 
     /** 删除只允许当前维护者，沿普通资产及引用清理顺序。 */
@@ -173,9 +179,10 @@ public class AdvancedPortfolioApplicationService {
     public PortfolioFontManifestDto prepareFonts(Long id, String raw) {
         PortfolioEntity portfolio = requireMaintainerPortfolio(id);
         JSONObject request = parse(raw, SAVE_KEYS);
-        validateConfig(request, isTeam(portfolio));
-        return isTeam(portfolio) ? team.prepareFonts(id, request.toJavaObject(TeamPortfolioDraftSaveRequest.class), actor(), ADVANCED)
-                : personal.prepareFonts(id, request.toJavaObject(MinePortfolioDraftSaveRequest.class), ADVANCED);
+        int clientVersion = validateConfig(request, isTeam(portfolio), true);
+        JSONObject contentRequest = ordinaryRequest(request);
+        return isTeam(portfolio) ? team.prepareFonts(id, convert(contentRequest, TeamPortfolioDraftSaveRequest.class), actor(), ADVANCED, clientVersion)
+                : personal.prepareFonts(id, convert(contentRequest, MinePortfolioDraftSaveRequest.class), ADVANCED, clientVersion);
     }
 
     /** 成员分享已发布版本，不读取维护上下文。 */
@@ -246,10 +253,13 @@ public class AdvancedPortfolioApplicationService {
     }
 
     /** 先用 Jackson 原始树检查类型，再用原普通 DTO 进入存储算法。 */
-    private void validateConfig(JSONObject request, boolean teamConfig) {
+    private int validateConfig(JSONObject request, boolean teamConfig, boolean validateContent) {
         try {
+            int clientVersion = AdvancedVersionRegistry.requestVersion(request);
             if (!(request.get("config") instanceof JSONObject config)) { throw invalid(); }
-            AdvancedPortfolioConfigGuard.validate(StrictAiJson.parseObject(config.toJSONString(), REQUEST_MAX_BYTES, 20), teamConfig);
+            if (validateContent) {
+                AdvancedPortfolioConfigGuard.validate(StrictAiJson.parseObject(configJson(config), REQUEST_MAX_BYTES, 20), teamConfig, clientVersion);
+            }
             if (request.containsKey("clientRevision") && !(request.get("clientRevision") instanceof Integer)) { throw invalid(); }
             if (request.containsKey("idempotencyKey")) { requireString(request.get("idempotencyKey")); }
             Object capabilities = request.get("clientCapabilities");
@@ -257,8 +267,29 @@ public class AdvancedPortfolioApplicationService {
                 if (!(capabilities instanceof JSONObject object) || !Set.of("portfolioRemoteFont").containsAll(object.keySet())
                         || object.values().stream().anyMatch(value -> !(value instanceof Integer))) { throw invalid(); }
             }
+            return clientVersion;
         } catch (BusinessException exception) { throw exception; }
         catch (Exception exception) { throw invalid(); }
+    }
+
+    /** 普通 DTO 仅接收内容副本，原请求及幂等摘要中的缺省表示保持原样。 */
+    private JSONObject ordinaryRequest(JSONObject request) {
+        JSONObject result = new JSONObject(request);
+        result.remove(AdvancedVersionRegistry.CLIENT_VERSION);
+        result.put("config", JSON.parseObject(AdvancedPortfolioVersionSupport.content(
+                AdvancedPortfolioVersionSupport.tree(configJson(request.getJSONObject("config")))).toString()));
+        return result;
+    }
+
+    /** 严格配置转接保留显式 null，不能吞掉非法版本声明、时间轴字段或字体清除选择。 */
+    private String configJson(JSONObject config) {
+        return JSON.toJSONString(config, JSONWriter.Feature.WriteMapNullValue);
+    }
+
+    /** DTO 解析失败保留受控业务错误，不把客户端非法类型暴露为服务器异常。 */
+    private <T> T convert(JSONObject request, Class<T> type) {
+        try { return request.toJavaObject(type); }
+        catch (RuntimeException exception) { throw invalid(); }
     }
 
     /** 独立解析入口拒绝重复键、尾随数据、过深容器与额外字段。 */
@@ -279,7 +310,7 @@ public class AdvancedPortfolioApplicationService {
 
     /** 保存事务成功后允许延后附件展示刷新，客户端保留原清单；详情读取仍完整校验。 */
     private JSONObject maintenanceDetail(Object detail, PortfolioEntity portfolio, boolean savedDraft) {
-        JSONObject result = JSON.parseObject(JSON.toJSONString(detail));
+        JSONObject result = AdvancedPortfolioVersionSupport.response(detail);
         result.put("aiContext", portfolio.getAiContextJson() == null ? null : JSON.parseObject(portfolio.getAiContextJson()));
         result.put("aiPrompt", portfolio.getAiPrompt());
         if (portfolio.getAiReferenceAttachmentsJson() == null) {

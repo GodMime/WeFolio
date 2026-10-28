@@ -7,6 +7,8 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.service.PortfolioContactInfoConfigSupport;
 import com.jxc.wefolio.service.PortfolioTextGridConfigNormalizer;
+import com.jxc.wefolio.service.PortfolioTimelineConfigSupport;
+import com.jxc.wefolio.service.PortfolioEditingCapabilities;
 import com.jxc.wefolio.constant.TeamPortfolioConstants;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
@@ -137,7 +139,7 @@ public class TeamPortfolioConfigValidator {
             int revision
     ) {
         TeamPortfolioComponentContext context = new TeamPortfolioComponentContext(teamId, portfolioId, revision);
-        return normalizeForDraft(parseConfig(json), null, context);
+        return normalizeForDraft(parseConfig(json), null, context, PortfolioEditingCapabilities.stored());
     }
 
     /**
@@ -153,6 +155,14 @@ public class TeamPortfolioConfigValidator {
             TeamPortfolioConfigDto existingDraftConfig,
             TeamPortfolioComponentContext context
     ) {
+        return normalizeForDraft(incomingConfig, existingDraftConfig, context, PortfolioEditingCapabilities.standard(
+                incomingConfig == null ? null : incomingConfig.getEditorSchemaRevision(), null, true));
+    }
+
+    /** 团队与个人共享显式能力上下文。 */
+    public TeamPortfolioConfigDto normalizeForDraft(TeamPortfolioConfigDto incomingConfig,
+            TeamPortfolioConfigDto existingDraftConfig, TeamPortfolioComponentContext context,
+            PortfolioEditingCapabilities capabilities) {
         validateContext(context);
         if (incomingConfig == null) {
             throw new BusinessException(CONFIG_REQUIRED_MESSAGE);
@@ -162,7 +172,8 @@ public class TeamPortfolioConfigValidator {
             validateEditorSchemaRevision(existingDraftConfig.getEditorSchemaRevision());
         }
 
-        TeamPortfolioConfigDto config = mergeCompatibleConfig(incomingConfig, existingDraftConfig);
+        capabilities.requireAllowed(incomingConfig, existingDraftConfig);
+        TeamPortfolioConfigDto config = TeamPortfolioConfigMerger.merge(incomingConfig, existingDraftConfig, capabilities);
         validateEditorSchemaRevision(config.getEditorSchemaRevision());
         validateSchema(config);
         TeamPortfolioConfigDto normalized = new TeamPortfolioConfigDto();
@@ -226,7 +237,7 @@ public class TeamPortfolioConfigValidator {
             TeamPortfolioConfigDto normalizedDraftConfig,
             TeamPortfolioComponentContext context
     ) {
-        TeamPortfolioConfigDto validated = normalizeForDraft(normalizedDraftConfig, null, context);
+        TeamPortfolioConfigDto validated = normalizeForDraft(normalizedDraftConfig, null, context, PortfolioEditingCapabilities.stored());
         PortfolioBackgroundAudioSupport.validateForPublish(validated.getBackgroundAudio());
         for (var location : TeamPortfolioComponentTraversal.listComponentLocations(validated)) {
             var component = location.component();
@@ -475,6 +486,7 @@ public class TeamPortfolioConfigValidator {
     ) {
         JSONObject config = componentConfig == null ? new JSONObject() : componentConfig;
         return switch (componentType) {
+            case TIMELINE -> new JSONObject(PortfolioTimelineConfigSupport.normalize(config));
             case TEXT_GRID -> new JSONObject(PortfolioTextGridConfigNormalizer.normalize(config));
             case CONTACT_INFO -> new JSONObject(PortfolioContactInfoConfigSupport.normalize(config));
             case TEAM_PROFILE -> teamProfileValidator.normalizeAndValidate(config, context);

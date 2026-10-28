@@ -21,6 +21,8 @@ public final class PortfolioAiCompiler {
     private static final Set<String> SINGLE_SOURCE = Set.of(COMPONENT_SINGLE_WORK, COMPONENT_HYPERLINK);
     /** 普通成员作品集整体入口组件。 */
     private static final Set<String> MEMBER_SOURCES = Set.of(COMPONENT_MEMBER_PORTFOLIO_LIST, COMPONENT_MEMBER_PORTFOLIO_GRID);
+    /** 时间轴组件交由专用处理器执行的操作集合。 */
+    private static final Set<String> TIMELINE_OPERATIONS = Set.of(OP_UPDATE_TEXT, OP_UPDATE_PARAMS, OP_BIND_RESOURCES, "UPDATE_STRUCTURE");
     /** 普通作品组的默认稳定键与名称。 */
     private static final String DEFAULT_GROUP_KEY = "g_all", DEFAULT_GROUP_NAME = "全部作品";
     /** 普通文字网格默认行高。 */
@@ -56,6 +58,11 @@ public final class PortfolioAiCompiler {
                 JsonNode payload = operation.path(KEY_PAYLOAD);
                 String op = operation.path(KEY_OP).asText();
                 ObjectNode component = target.has(KEY_COMPONENT_KEY) ? locateComponent(request, current, target.path(KEY_COMPONENT_KEY).asText()) : null;
+                if (component != null && AiTimelineProtocol.matches(component)
+                        && TIMELINE_OPERATIONS.contains(op)) {
+                    AiTimelineProtocol.apply(request, component, operation, AI_NODE_KEY_PREFIX + taskId + STABLE_KEY_SEPARATOR + (++proposalIndex));
+                    continue;
+                }
                 ObjectNode node = component == null ? null : locateNode(component, target);
                 switch (op) {
                     case OP_UPDATE_TEXT -> {
@@ -104,6 +111,7 @@ public final class PortfolioAiCompiler {
         merge(config, params);
         structuredFontBindings(type, config, request);
         if (COMPONENT_TEXT_GRID.equals(type)) { gridDefaults(config); }
+        if (AiTimelineProtocol.TYPE.equals(type)) { AiTimelineProtocol.compileStyles(config, request); }
         primary(type, config, proposal.path(KEY_SOURCE_NOS), request);
         // 生成组件的字体依赖在后续完整配置集合时统一合并。
         bindings(config, proposal.path(KEY_BINDINGS), request, null);
@@ -350,10 +358,10 @@ public final class PortfolioAiCompiler {
     }
     /** 为模型新生成的文字节点分配稳定 key，不把 key 分配责任交给模型。 */
     private static void nodeKeys(ObjectNode node, String prefix, int[] sequence) {
-        for (String array : List.of(KEY_CELLS, KEY_BLOCKS, KEY_RUNS)) {
+        for (String array : List.of(KEY_CELLS, KEY_BLOCKS, KEY_RUNS, AiTimelineProtocol.NODES)) {
             for (JsonNode raw : node.path(array)) {
                 ObjectNode child = (ObjectNode) raw;
-                String key = switch (array) { case KEY_CELLS -> KEY_CELL_KEY; case KEY_BLOCKS -> KEY_BLOCK_KEY; default -> KEY_RUN_KEY; };
+                String key = switch (array) { case KEY_CELLS -> KEY_CELL_KEY; case KEY_BLOCKS -> KEY_BLOCK_KEY; case AiTimelineProtocol.NODES -> AiTimelineProtocol.NODE_KEY; default -> KEY_RUN_KEY; };
                 child.put(key, prefix + STABLE_KEY_SEPARATOR + (++sequence[0])); nodeKeys(child, prefix, sequence);
             }
         }

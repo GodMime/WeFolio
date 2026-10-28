@@ -16,10 +16,13 @@ import com.jxc.wefolio.mapper.AiGenerationTaskEntityMapper;
 import com.jxc.wefolio.message.PortfolioAiMessage;
 import com.jxc.wefolio.message.PortfolioAiTaskMessage;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedVersionRegistry;
+import com.jxc.wefolio.message.AdvancedPortfolioMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +85,20 @@ public class PortfolioAiApplicationService {
         limits.put(KEY_MAX_CONTEXT_BYTES, properties.getMaxContextBytes());
         limits.put(KEY_MAX_JSON_DEPTH, properties.getMaxJsonDepth());
         result.put(KEY_LIMITS, limits);
+        // 已部署协议直接开放，所有版本的新任务统一受既有 AI 总开关控制。
+        List<Map<String, Object>> supported = new ArrayList<>();
+        for (int version : List.of(AdvancedVersionRegistry.LEGACY_VERSION, AdvancedVersionRegistry.TIMELINE_VERSION)) {
+            var spec = AiPortfolioRunSpecRegistry.forVersion(version);
+            boolean textOnly = version >= AdvancedVersionRegistry.TIMELINE_VERSION;
+            Map<String, Object> protocol = new LinkedHashMap<>();
+            protocol.put(KEY_AI_CONTRACT_VERSION, spec.contractVersion()); protocol.put(KEY_PROMPT_VERSION, spec.promptVersion());
+            protocol.put("timeline", version >= AdvancedVersionRegistry.TIMELINE_VERSION); protocol.put("textOnlyCreate", textOnly);
+            protocol.put("sourceModes", textOnly ? List.of(AiPortfolioRunSpecRegistry.SELECTED_SOURCES, AiPortfolioRunSpecRegistry.TEXT_ONLY) : List.of(AiPortfolioRunSpecRegistry.SELECTED_SOURCES));
+            Map<String, Object> versionLimits = new LinkedHashMap<>(limits);
+            versionLimits.putAll(JSON.parseObject(spec.rules().path(KEY_LIMITS).toString())); protocol.put(KEY_LIMITS, versionLimits);
+            supported.add(protocol);
+        }
+        result.put("supportedProtocols", supported);
         List<AiGenerationTaskEntity> active = tasks.selectList(Wrappers.<AiGenerationTaskEntity>lambdaQuery()
                 .eq(AiGenerationTaskEntity::getRequestedBy, requester).in(AiGenerationTaskEntity::getStatus, PortfolioAiTaskTransactionService.ACTIVE));
         result.put(KEY_ACTIVE_TASK, active.isEmpty() ? null : status(active.getFirst()));
@@ -113,6 +130,8 @@ public class PortfolioAiApplicationService {
             return status(replay);
         }
         if (!properties.isEnabled()) { throw new BusinessException(PortfolioAiMessage.DISABLED); }
+        int clientVersion = AdvancedVersionRegistry.requestVersion(input);
+        boolean textOnly = AiPortfolioRunSpecRegistry.TEXT_ONLY.equals(input.path(AiPortfolioRunSpecRegistry.SOURCE_MODE).asText());
         if (!referenceProjection.isEmpty() && (!properties.isReferenceEnabled() || properties.getMaxActiveTasks() < 2)) {
             throw new BusinessException(PortfolioAiMessage.DISABLED);
         }
@@ -121,21 +140,23 @@ public class PortfolioAiApplicationService {
         JsonNode context = input.path(KEY_AI_CONTEXT);
         StrictAiJson.parseObject(context.toString(), properties.getMaxContextBytes(), properties.getMaxJsonDepth());
         AdvancedPortfolioSaveMetadata.validateContext(JSON.parseObject(context.toString()), portfolio == null ? null : portfolio.getAiContextJson());
-        if (context.path(KEY_SOURCES).size() > AiPortfolioProtocol.limits().path(KEY_MAX_SOURCE_COUNT).intValue()) { throw new BusinessException(PortfolioAiMessage.INVALID_INPUT); }
-        if (MODE_CREATE.equals(input.path(KEY_MODE).asText()) && context.path(KEY_SOURCES).isEmpty()) { throw new BusinessException(PortfolioAiMessage.SOURCE_UNAVAILABLE); }
+        if (context.path(KEY_SOURCES).size() > AiPortfolioRunSpecRegistry.forVersion(clientVersion).limit(KEY_MAX_SOURCE_COUNT)) { throw new BusinessException(PortfolioAiMessage.INVALID_INPUT); }
+        if (MODE_CREATE.equals(input.path(KEY_MODE).asText()) && !textOnly && context.path(KEY_SOURCES).isEmpty()) { throw new BusinessException(PortfolioAiMessage.SOURCE_UNAVAILABLE); }
         ObjectNode base = input.path(KEY_BASE_CONFIG).isObject() ? (ObjectNode) input.path(KEY_BASE_CONFIG) : configs.initialConfig(input);
         ObjectNode normalized = configs.validate(input, portfolio, base);
         ObjectNode frozen = NODES.objectNode();
         frozen.set(KEY_INPUT, input);
         ObjectNode frozenFacts = facts.freeze(input, normalized);
-        if (properties.isMediaEnabled()) { mediaPlans.freeze(input, frozenFacts); }
-        if (MODE_CREATE.equals(input.path(KEY_MODE).asText())) {
+        if (properties.isMediaEnabled() && !textOnly) { mediaPlans.freeze(input, frozenFacts); }
+        if (MODE_CREATE.equals(input.path(KEY_MODE).asText()) && !textOnly) {
             boolean anyAvailable = false;
             for (JsonNode source : frozenFacts.path(KEY_SOURCES)) { anyAvailable |= source.path(KEY_CAN_BIND).asBoolean(true); }
             if (!anyAvailable) { throw new BusinessException(PortfolioAiMessage.SOURCE_UNAVAILABLE); }
         }
         frozen.set(KEY_FACTS, frozenFacts);
-        frozen.put(KEY_CONTRACT_VERSION, AiPortfolioProtocol.CONTRACT_VERSION).put(KEY_PROMPT_VERSION, AiPortfolioProtocol.PROMPT_VERSION);
+        var runSpec = AiPortfolioRunSpecRegistry.forVersion(clientVersion);
+        frozen.put(AiPortfolioRunSpecRegistry.RUN_SPEC_ID, runSpec.id()).put(AiPortfolioRunSpecRegistry.RULES_HASH, runSpec.rulesHash());
+        frozen.put(KEY_CONTRACT_VERSION, runSpec.contractVersion()).put(KEY_PROMPT_VERSION, runSpec.promptVersion());
         frozen.putObject(KEY_MODEL_CONFIG).put(KEY_PROVIDER, PROVIDER_TOKENHUB).put(KEY_MODEL, properties.getModel())
                 .put(KEY_BASE_URL, properties.getBaseUrl()).put(KEY_TEMPERATURE, properties.getTemperature())
                 .put(FROZEN_MEDIA_ENABLED, properties.isMediaEnabled())
@@ -150,7 +171,15 @@ public class PortfolioAiApplicationService {
     }
 
     /** 查询成功任务每次重编译、重验，状态 SUCCEEDED 不代表永久可采用。 */
-    public Map<String, Object> query(Long taskId) {
+    public Map<String, Object> query(Long taskId) { return query(taskId, null); }
+
+    /** 查询参数保留原始字符串，显式非法值不能由 HTTP 转换为缺省 V1。 */
+    public Map<String, Object> query(Long taskId, String clientAdvancedVersion) {
+        int queryVersion = 1;
+        if (clientAdvancedVersion != null) {
+            if (!clientAdvancedVersion.matches("[1-9][0-9]{0,8}")) { throw new BusinessException(PortfolioAiMessage.INVALID_INPUT); }
+            queryVersion = AdvancedVersionRegistry.resolve(Integer.parseInt(clientAdvancedVersion)).version();
+        }
         Long requester = AuthContextHolder.requireUserId();
         expire(requester);
         AiGenerationTaskEntity task = requireTask(taskId, requester);
@@ -173,6 +202,17 @@ public class PortfolioAiApplicationService {
             return response;
         }
         ObjectNode input = (ObjectNode) request.path(KEY_INPUT);
+        int taskVersion;
+        try { taskVersion = AiPortfolioRunSpecRegistry.frozenVersion(input); }
+        catch (AiProtocolException exception) {
+            rejectCandidate(response, PortfolioAiMessage.CONTRACT_UNAVAILABLE, PortfolioAiFailureDetails.Stage.PROTOCOL, exception); return response;
+        }
+        response.put("taskAdvancedVersion", taskVersion);
+        if (queryVersion < taskVersion) {
+            Map<String, Object> unavailable = unavailableCandidate(response);
+            unavailable.put(KEY_UNAVAILABLE_REASON, AdvancedPortfolioMessage.CLIENT_UPGRADE_REQUIRED);
+            return response;
+        }
         response.put(KEY_BASE_DRAFT_REVISION, input.path(KEY_BASE_DRAFT_REVISION).intValue());
         response.put(KEY_LOCAL_EDIT_REVISION, input.path(KEY_LOCAL_EDIT_REVISION).intValue());
         if (!AiTaskStatusDict.SUCCEEDED.getCode().equals(task.getStatus())) { return response; }
@@ -200,7 +240,7 @@ public class PortfolioAiApplicationService {
             stage = PortfolioAiFailureDetails.Stage.COMPILATION;
             ObjectNode candidate = PortfolioAiCompiler.compile(task.getId(), request, output);
             stage = PortfolioAiFailureDetails.Stage.CONFIG;
-            ObjectNode normalized = configs.validate(input, portfolio, candidate);
+            ObjectNode normalized = configs.validateCandidate(request, portfolio, candidate);
             // 冻结基准已规范化；第二次规范化不能制造未授权变化。
             stage = PortfolioAiFailureDetails.Stage.NORMALIZATION;
             PortfolioAiConfigService.requireExplicitValuesPreserved(candidate, normalized, "");
@@ -213,7 +253,7 @@ public class PortfolioAiApplicationService {
                 stage = PortfolioAiFailureDetails.Stage.COMPILATION;
                 candidate = PortfolioAiCompiler.compile(task.getId(), effectiveRequest, output);
                 stage = PortfolioAiFailureDetails.Stage.CONFIG;
-                normalized = configs.validate(input, portfolio, candidate);
+                normalized = configs.validateCandidate(request, portfolio, candidate);
                 stage = PortfolioAiFailureDetails.Stage.NORMALIZATION;
                 PortfolioAiConfigService.requireExplicitValuesPreserved(candidate, normalized, "");
                 stage = PortfolioAiFailureDetails.Stage.RENDER;

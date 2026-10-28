@@ -90,7 +90,7 @@ test('normalizes team theme and menu components while keeping private data opaqu
     }
   })
   assert.equal(config.share.title, '团队')
-  assert.equal(config.editorSchemaRevision, 10)
+  assert.equal(config.editorSchemaRevision, 11)
   assert.deepEqual(config.style, { backgroundColor: '#1A2B3C' })
   assert.deepEqual(config.components.map((item) => item.componentKey), ['a', 'b'])
   assert.equal(config.components[1].config, privateConfig)
@@ -239,8 +239,8 @@ test('team text sections keep current revision, unknown fields, and new defaults
     }]
   })
 
-  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 10)
-  assert.equal(normalized.editorSchemaRevision, 10)
+  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 11)
+  assert.equal(normalized.editorSchemaRevision, 11)
   assert.equal(normalized.components[0].config, futureConfig)
 
   const added = addTeamComponent(normalized, 'TEXT_SECTION')
@@ -261,7 +261,7 @@ test('team video carousel defaults normalize ordered items and enforce publish c
     validateTeamPortfolioForPublish
   } = loadUtility('team-portfolios.js')
   const added = addTeamComponent({ components: [] }, 'VIDEO_CAROUSEL')
-  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 10)
+  assert.equal(TEAM_EDITOR_SCHEMA_REVISION, 11)
   assert.deepEqual(getTeamMenuComponentList(added)[0].config, {
     title: '视频作品',
     items: [],
@@ -323,7 +323,7 @@ test('team component library request advertises current revision', async () => {
   })
   assert.deepEqual(calls, [{
     url: '/api/mine/team-portfolios/component-library',
-    data: { editorSchemaRevision: 10 }
+    data: { editorSchemaRevision: 11, portfolioTimeline: 1 }
   }])
 })
 
@@ -334,7 +334,7 @@ test('team divider draft and publish validation preserve custom and legacy color
       componentKey: 'divider-color', componentType: 'DIVIDER', enabled: true,
       config: { color, heightPx: 24 }
     }] })
-    assert.equal(config.editorSchemaRevision, 10)
+    assert.equal(config.editorSchemaRevision, 11)
     assert.equal(validateTeamPortfolioForPublish(config).valid, true)
     let saved
     await saveTeamPortfolioDraft(async (options) => { saved = options.data.config }, 9, config, 1, 'divider-color-draft')
@@ -381,7 +381,7 @@ test('team publish validation returns the first local menu and component error',
   const { validateTeamPortfolioForPublish } = loadUtility('team-portfolios.js')
   const duplicate = {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 10,
+    editorSchemaRevision: 11,
     style: { backgroundColor: '#FFFFFF' },
     components: [{ componentKey: 'same', componentType: 'DIVIDER', enabled: true, config: {} }],
     bottomNav: {
@@ -418,7 +418,7 @@ test('team publish validation rejects raw navigation errors before normalization
   } = loadUtility('team-portfolios.js')
   const config = {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 10,
+    editorSchemaRevision: 11,
     style: { backgroundColor: '#FFFFFF' },
     components: [{ componentKey: 'home', componentType: 'DIVIDER', enabled: true, config: {} }],
     bottomNav: {
@@ -478,10 +478,10 @@ test('team publish validation rejects raw navigation errors before normalization
   })
 
   const unsupportedRevision = JSON.parse(JSON.stringify(config))
-  unsupportedRevision.editorSchemaRevision = 11
+  unsupportedRevision.editorSchemaRevision = 12
   const normalizedUnsupportedRevision =
     normalizeTeamPortfolioConfig(unsupportedRevision)
-  assert.equal(normalizedUnsupportedRevision.editorSchemaRevision, 11)
+  assert.equal(normalizedUnsupportedRevision.editorSchemaRevision, 12)
   assert.deepEqual(validateTeamPortfolioForPublish(normalizedUnsupportedRevision), {
     valid: false,
     menuKey: '',
@@ -500,7 +500,7 @@ test('creates a standard team portfolio only through the explicit team endpoint'
   assert.deepEqual(calls, [{
     url: '/api/mine/teams/8/portfolios/standard',
     method: 'POST',
-    data: { config: { schemaVersion: 'standard-team-v1' }, clientCapabilities: { portfolioRemoteFont: 1 } }
+    data: { config: { schemaVersion: 'standard-team-v1' }, clientCapabilities: { portfolioRemoteFont: 1, portfolioTimeline: 1 } }
   }])
 })
 
@@ -730,7 +730,7 @@ test('team grid creation uses gray borders and normalization keeps selected and 
   assert.equal(grid.cellBorderColor, '#D7DADD')
   grid.cellBorder = false; grid.cellBorderWidthRpx = 8; grid.cellBorderColor = '#abcdef'
   const normalized = normalizeTeamPortfolioConfig({ ...created, editorSchemaRevision: 5 })
-  assert.equal(normalized.editorSchemaRevision, 10)
+  assert.equal(normalized.editorSchemaRevision, 11)
   assert.equal(normalized.components[0].config.cellBorder, false)
   assert.equal(normalized.components[0].config.cellBorderWidthRpx, 8)
   assert.equal(normalized.components[0].config.cellBorderColor, '#ABCDEF')

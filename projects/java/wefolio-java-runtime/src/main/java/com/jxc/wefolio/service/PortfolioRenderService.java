@@ -436,6 +436,7 @@ public class PortfolioRenderService {
             return render;
         }
         switch (componentType) {
+            case TIMELINE -> render.setTimeline(PortfolioTimelineConfigSupport.normalize(componentConfig));
             case TEXT_GRID -> render.setTextGrid(PortfolioTextGridConfigNormalizer.normalize(componentConfig));
             case CONTACT_INFO -> render.setContactInfo(PortfolioContactInfoConfigSupport.normalize(componentConfig));
             case CAROUSEL -> render.setWorks(buildWorks(

@@ -37,6 +37,9 @@ class TeamPortfolioDependencyBoundaryTest {
             "com.jxc.wefolio.common.PortfolioBackgroundAudioSupport",
             "com.jxc.wefolio.service.PortfolioContactInfoConfigSupport",
             "com.jxc.wefolio.service.PortfolioTextGridConfigNormalizer",
+            // 时间轴只开放共享纯规则与已解析能力，仍禁止依赖个人业务 Service。
+            "com.jxc.wefolio.service.PortfolioTimelineConfigSupport",
+            "com.jxc.wefolio.service.PortfolioEditingCapabilities",
             "com.jxc.wefolio.service.portfoliofont.PortfolioFontConfigSupport",
             "com.jxc.wefolio.service.PortfolioBackgroundAudioService",
             "com.jxc.wefolio.constant.TeamPortfolioConstants",

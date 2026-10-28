@@ -2,11 +2,14 @@ package com.jxc.wefolio.service.teamportfolio;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONWriter;
 import com.jxc.wefolio.common.PortfolioDividerColorSupport;
 import com.jxc.wefolio.dict.TeamPortfolioComponentTypeDict;
 import com.jxc.wefolio.dto.BackgroundAudioConfigDto;
 import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.service.PortfolioComponentDisplayOptionsSupport;
+import com.jxc.wefolio.service.PortfolioEditingCapabilities;
+import com.jxc.wefolio.service.PortfolioProtectedNavigationSupport;
 import com.jxc.wefolio.service.PortfolioContactInfoConfigSupport;
 import com.jxc.wefolio.service.PortfolioTextGridConfigNormalizer;
 import com.jxc.wefolio.common.PortfolioTextLineHeightSupport;
@@ -64,6 +67,13 @@ public final class TeamPortfolioConfigMerger {
             TeamPortfolioConfigDto incomingConfig,
             TeamPortfolioConfigDto existingDraftConfig
     ) {
+        return merge(incomingConfig, existingDraftConfig, PortfolioEditingCapabilities.standard(
+                incomingConfig == null ? null : incomingConfig.getEditorSchemaRevision(), null, true));
+    }
+
+    /** 标准能力声明独立于团队可能回传的服务端 revision。 */
+    public static TeamPortfolioConfigDto merge(TeamPortfolioConfigDto incomingConfig, TeamPortfolioConfigDto existingDraftConfig,
+            PortfolioEditingCapabilities capabilities) {
         TeamPortfolioConfigDto merged = deepCopy(incomingConfig, TeamPortfolioConfigDto.class);
         if (existingDraftConfig == null) {
             return merged;
@@ -86,15 +96,26 @@ public final class TeamPortfolioConfigMerger {
 
         int effectiveRevision = incomingRevision == null
                 ? LEGACY_COMPONENT_REVISION : Math.max(LEGACY_COMPONENT_REVISION, incomingRevision);
+        if (!capabilities.supportsTimeline()) { effectiveRevision = Math.min(effectiveRevision, PortfolioEditingCapabilities.TEAM_TIMELINE_REVISION - 1); }
         protectComponentFields(merged, existingDraftConfig, effectiveRevision);
         Set<String> protectedKeys = collectProtectedKeys(existingDraftConfig, effectiveRevision);
         if (protectedKeys.isEmpty()) {
             return merged;
         }
-        removeProtectedKeys(merged, protectedKeys);
-        merged.setComponents(mergeComponentList(
-                merged.getComponents(), existingDraftConfig.getComponents(), effectiveRevision));
-        mergeNavigationLists(merged, existingDraftConfig, effectiveRevision);
+        final int revision = effectiveRevision;
+        var currentNav = merged.getBottomNav();
+        var previousNav = existingDraftConfig.getBottomNav();
+        var result = PortfolioProtectedNavigationSupport.merge(merged.getComponents(),
+                currentNav == null ? null : currentNav.getItems(), currentNav != null && Boolean.TRUE.equals(currentNav.getEnabled()),
+                existingDraftConfig.getComponents(), previousNav == null ? null : previousNav.getItems(),
+                previousNav != null && Boolean.TRUE.equals(previousNav.getEnabled()),
+                TeamPortfolioConfigDto.BottomNavItem::getKey, TeamPortfolioConfigDto.BottomNavItem::getComponents,
+                TeamPortfolioConfigDto.BottomNavItem::setComponents, item -> deepCopy(item, TeamPortfolioConfigDto.BottomNavItem.class),
+                TeamPortfolioConfigDto.ComponentEnvelope::getComponentKey, component -> isProtected(component, revision),
+                (incoming, existing) -> mergeComponentList(incoming, existing, revision));
+        merged.setComponents(result.components());
+        if (result.restoreNavigation()) { currentNav = deepCopy(previousNav, TeamPortfolioConfigDto.BottomNav.class); currentNav.setEnabled(true); merged.setBottomNav(currentNav); }
+        if (currentNav != null) { currentNav.setItems(result.items()); }
         return merged;
     }
 
@@ -118,55 +139,6 @@ public final class TeamPortfolioConfigMerger {
                     PortfolioDividerColorSupport.protectHexColor(component.getConfig(), saved.getConfig(), revision,
                             PortfolioDividerColorSupport.TEAM_HEX_COLOR_REVISION);
                 }
-            }
-        }
-    }
-
-    /** 合并各底部导航菜单中的受保护组件。 */
-    private static void mergeNavigationLists(
-            TeamPortfolioConfigDto merged,
-            TeamPortfolioConfigDto existing,
-            int incomingRevision
-    ) {
-        TeamPortfolioConfigDto.BottomNav mergedNav = merged.getBottomNav();
-        TeamPortfolioConfigDto.BottomNav existingNav = existing.getBottomNav();
-        if (mergedNav == null || !Boolean.TRUE.equals(mergedNav.getEnabled())
-                || existingNav == null || existingNav.getItems() == null) {
-            return;
-        }
-        List<TeamPortfolioConfigDto.BottomNavItem> mergedItems = mutableList(mergedNav.getItems());
-        List<TeamPortfolioConfigDto.BottomNavItem> existingItems = existingNav.getItems();
-        for (int existingIndex = 1; existingIndex < existingItems.size(); existingIndex++) {
-            TeamPortfolioConfigDto.BottomNavItem existingItem = existingItems.get(existingIndex);
-            if (existingItem == null || !hasProtectedComponent(existingItem.getComponents(), incomingRevision)) {
-                continue;
-            }
-            int mergedIndex = indexOfMenu(mergedItems, existingItem.getKey());
-            if (mergedIndex >= 0) {
-                TeamPortfolioConfigDto.BottomNavItem mergedItem = mergedItems.get(mergedIndex);
-                mergedItem.setComponents(mergeComponentList(
-                        mergedItem.getComponents(), existingItem.getComponents(), incomingRevision));
-                continue;
-            }
-            TeamPortfolioConfigDto.BottomNavItem preservedMenu = deepCopy(
-                    existingItem, TeamPortfolioConfigDto.BottomNavItem.class);
-            preservedMenu.setComponents(mergeComponentList(
-                    List.of(), existingItem.getComponents(), incomingRevision));
-            mergedItems.add(Math.min(existingIndex, mergedItems.size()), preservedMenu);
-        }
-        mergedNav.setItems(mergedItems);
-    }
-
-    /** 从请求全部列表移除受保护键，避免组件被旧客户端移动到其它菜单。 */
-    private static void removeProtectedKeys(TeamPortfolioConfigDto config, Set<String> protectedKeys) {
-        config.setComponents(withoutKeys(config.getComponents(), protectedKeys));
-        TeamPortfolioConfigDto.BottomNav bottomNav = config.getBottomNav();
-        if (bottomNav == null || bottomNav.getItems() == null) {
-            return;
-        }
-        for (TeamPortfolioConfigDto.BottomNavItem item : bottomNav.getItems()) {
-            if (item != null && item.getComponents() != null) {
-                item.setComponents(withoutKeys(item.getComponents(), protectedKeys));
             }
         }
     }
@@ -313,14 +285,6 @@ public final class TeamPortfolioConfigMerger {
         }
     }
 
-    /** 判断列表是否包含受保护组件。 */
-    private static boolean hasProtectedComponent(
-            List<TeamPortfolioConfigDto.ComponentEnvelope> components,
-            int incomingRevision
-    ) {
-        return safeList(components).stream().anyMatch(component -> isProtected(component, incomingRevision));
-    }
-
     /** 判断组件是否高于请求编辑器识别版本。 */
     private static boolean isProtected(
             TeamPortfolioConfigDto.ComponentEnvelope component,
@@ -353,17 +317,6 @@ public final class TeamPortfolioConfigMerger {
         return ordered;
     }
 
-    /** 删除指定组件键。 */
-    private static List<TeamPortfolioConfigDto.ComponentEnvelope> withoutKeys(
-            List<TeamPortfolioConfigDto.ComponentEnvelope> components,
-            Set<String> keys
-    ) {
-        return safeList(components).stream()
-                .filter(Objects::nonNull)
-                .filter(component -> !keys.contains(component.getComponentKey()))
-                .toList();
-    }
-
     /** 按组件键查找索引。 */
     private static int indexOfComponent(
             List<TeamPortfolioConfigDto.ComponentEnvelope> components,
@@ -380,27 +333,11 @@ public final class TeamPortfolioConfigMerger {
         return -1;
     }
 
-    /** 按稳定菜单键查找索引。 */
-    private static int indexOfMenu(List<TeamPortfolioConfigDto.BottomNavItem> items, String key) {
-        for (int index = 0; index < items.size(); index++) {
-            TeamPortfolioConfigDto.BottomNavItem item = items.get(index);
-            if (item != null && Objects.equals(key, item.getKey())) {
-                return index;
-            }
-        }
-        return -1;
-    }
-
     /** 重建组件排序值。 */
     private static void rebuildSortOrders(List<TeamPortfolioConfigDto.ComponentEnvelope> components) {
         for (int index = 0; index < components.size(); index++) {
             components.get(index).setSortOrder((index + 1) * SORT_ORDER_STEP);
         }
-    }
-
-    /** 转成可修改列表。 */
-    private static <T> List<T> mutableList(List<T> values) {
-        return values == null ? new ArrayList<>() : new ArrayList<>(values);
     }
 
     /** 空列表兜底。 */
@@ -422,6 +359,9 @@ public final class TeamPortfolioConfigMerger {
                 var original = sources.get(index).component();
                 var copied = copies.get(index).component();
                 if (original == null || copied == null || original.getConfig() == null) { continue; }
+                if (TeamPortfolioComponentTypeDict.TIMELINE.getCode().equals(original.getComponentType())) {
+                    copied.setConfig(JSON.parseObject(JSON.toJSONString(original.getConfig(), JSONWriter.Feature.WriteMapNullValue)));
+                }
                 PortfolioTextLineHeightSupport.restoreExplicitNulls(copied.getConfig(), original.getConfig(), original.getComponentType());
                 if (TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode().equals(original.getComponentType())) {
                     for (String field : PortfolioContactInfoConfigSupport.APPEARANCE_FIELDS) {

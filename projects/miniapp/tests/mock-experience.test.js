@@ -650,7 +650,7 @@ test('mock portfolio draft helpers add, remove, and reorder components locally',
   )
 })
 
-test('mock portfolio add component sheet exposes every production standard component type', () => {
+test('mock portfolio add component sheet preserves the original component catalog without timeline', () => {
   const mock = loadMockExperience()
   const expectedTypes = [
     'CAROUSEL',
@@ -680,8 +680,9 @@ test('mock portfolio add component sheet exposes every production standard compo
     assert.equal(match[1], match[2])
     return match[2]
   })
-  assert.equal(formalTypes.length, 15)
-  assert.deepEqual([...expectedTypes].sort(), formalTypes.sort())
+  assert.equal(formalTypes.length, 16)
+  assert.equal(mock.MOCK_COMPONENT_OPTIONS.some(item => item.componentType === 'TIMELINE'), false)
+  assert.deepEqual([...expectedTypes].sort(), formalTypes.filter(type => type !== 'TIMELINE').sort())
   expectedTypes.forEach((componentType) => {
     assert.equal(mock.COMPONENT_TYPES[componentType], componentType)
     const added = mock.addMockComponent(mock.MOCK_STANDARD_PORTFOLIO, componentType)

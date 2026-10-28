@@ -18,11 +18,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-/** Runtime 与 Job 同源的固定 AI 协议、可信能力目录及安全模型投影。 */
+/** 本工程复用的 AI 协议引擎，按冻结本地规格生成契约、投影并校验输出。 */
 public final class AiPortfolioProtocol {
-    /** 唯一支持的中间协议。 */
+    /** 旧客户端和历史任务保留的 V1 中间协议。 */
     public static final String CONTRACT_VERSION = "ai-portfolio-v1";
-    /** 唯一支持的提示词。 */
+    /** V1 长期保留的提示词标识。 */
     public static final String PROMPT_VERSION = "portfolio-ai-2026-10-10.2";
     /** 模型只看到当前菜单别名。 */
     public static final String MENU_ALIAS = "menu_current";
@@ -38,6 +38,8 @@ public final class AiPortfolioProtocol {
     private static final String RESOURCE = "/portfolioai/contract-v1.json";
     /** 用户可见文案不得展示协议别名。 */
     private static final Pattern INTERNAL_ALIAS = Pattern.compile("(?:cmp_\\d+|menu_current|cell_\\d+|block_\\d+|run_\\d+|member_\\d+)");
+    /** 时间轴内部别名只属于 V2 可见文案边界，保持 V1 原语义。 */
+    private static final Pattern TIMELINE_ALIAS = Pattern.compile("node_\\d+");
     /** 原始地址不能由模型文案产生资源绑定。 */
     private static final Pattern RAW_URL = Pattern.compile("(?i)(?:https?://|javascript:|data:|file://|www\\.)");
     /** 作品和成员作品集拥有独立业务编号空间。 */
@@ -96,9 +98,7 @@ public final class AiPortfolioProtocol {
 
     /** 验证冻结版本，版本不匹配不能改用新规则解释。 */
     public static void checkVersion(ObjectNode request) {
-        require(CONTRACT_VERSION.equals(request.path("contractVersion").asText())
-                && PROMPT_VERSION.equals(request.path("promptVersion").asText()),
-                "CONTRACT_UNAVAILABLE", "当前 AI 契约不可用，请重新生成");
+        AiPortfolioRunSpecRegistry.resolve(request);
         require(MODES.contains(request.path("input").path("mode").asText()), "INVALID_OUTPUT", "任务模式不支持");
     }
 
@@ -106,31 +106,44 @@ public final class AiPortfolioProtocol {
     public static ObjectNode contract(ObjectNode request) {
         checkVersion(request);
         String mode = request.path("input").path("mode").asText();
+        var spec = AiPortfolioRunSpecRegistry.resolve(request);
+        ObjectNode rules = spec.rules();
         ObjectNode result = object();
-        result.put("schemaVersion", CONTRACT_VERSION).put("promptVersion", PROMPT_VERSION).put("mode", mode);
+        result.put("schemaVersion", spec.contractVersion()).put("promptVersion", spec.promptVersion()).put("mode", mode);
         ArrayNode ops = result.putArray("allowedOps");
         if ("MODIFY_PAGE".equals(mode)) {
             ops.add("UPDATE_TEXT").add("UPDATE_PARAMS").add("BIND_RESOURCES")
                     .add("MOVE_COMPONENT").add("INSERT_COMPONENT").add("REMOVE_COMPONENT").add("UPDATE_GLOBAL");
         }
-        ObjectNode catalog = RULES.withObject("componentCatalog").deepCopy();
+        ObjectNode catalog = rules.withObject("componentCatalog").deepCopy();
         if ("TEAM".equals(request.path("input").path("ownerType").asText())) {
             catalog.remove(Set.of("PROFILE", "WORK_GRID", "WORK_LIST", "HYPERLINK"));
         } else { catalog.remove(Set.of("TEAM_PROFILE", "MEMBER_PORTFOLIO_GRID", "MEMBER_PORTFOLIO_LIST")); }
+        boolean textOnly = AiPortfolioRunSpecRegistry.TEXT_ONLY.equals(request.path("input").path(AiPortfolioRunSpecRegistry.SOURCE_MODE).asText());
+        if (textOnly) {
+            require(spec.advancedVersion() >= 2 && CREATE_MODE.equals(mode) && request.path("facts").path("sources").isArray() && request.path("facts").path("sources").isEmpty(), "INVALID_OUTPUT", "纯文字模式仅支持新建");
+            catalog.retain("TIMELINE", "TEXT_SECTION", "STRUCTURED_TEXT_SECTION", "TEXT_GRID");
+            catalog.forEach(component -> ((ObjectNode) component.path("bindingSlots")).retain("fontId"));
+        }
         result.set("componentCatalog", catalog);
-        ObjectNode settings = RULES.withObject("settings").deepCopy();
+        ObjectNode settings = rules.withObject("settings").deepCopy();
         if ("TEAM".equals(request.path("input").path("ownerType").asText())) {
             ((ObjectNode) settings.path("style").path("params")).remove("componentSpacingRpx");
             ((ObjectNode) settings.path("share").path("bindingSlots")).remove("avatarUrl");
             ((ObjectNode) settings.path("share").path("params")).set("description", object().put("type", "string").put("maxCodePoints", 2000)
                     .put("description", "团队作品集的整体简介；不替代正文中的团队介绍或文字组件。"));
         }
+        if (textOnly) {
+            settings.remove("backgroundAudio");
+            settings.forEach(setting -> ((ObjectNode) setting.path("bindingSlots")).removeAll());
+        }
         result.set("createSettings", "CREATE".equals(mode) ? settings.deepCopy() : object());
         result.set("globalFields", "MODIFY_PAGE".equals(mode) ? settings.deepCopy() : object());
         // 未实现的结构动作不进入模型契约，避免模型许诺不可落地的修改。
-        result.set("structureActions", object());
-        result.set("nodeParams", RULES.path("nodeParams").deepCopy());
-        result.set("limits", RULES.path("limits").deepCopy());
+        result.set("structureActions", rules.path("structureActions").isObject() ? rules.path("structureActions").deepCopy() : object());
+        if (spec.advancedVersion() >= 2 && "MODIFY_PAGE".equals(mode)) { ops.add("UPDATE_STRUCTURE"); }
+        result.set("nodeParams", rules.path("nodeParams").deepCopy());
+        result.set("limits", rules.path("limits").deepCopy());
         return result;
     }
 
@@ -170,6 +183,7 @@ public final class AiPortfolioProtocol {
     /** 解析文字内部节点，调用方仅修改该节点且保留其它结构。 */
     public static ObjectNode resolveNode(ObjectNode request, ObjectNode target) {
         ObjectNode component = resolveComponent(request, target.path("componentKey").asText());
+        if (AiTimelineProtocol.matches(component)) { return AiTimelineProtocol.resolve(request, target); }
         ObjectNode node = (ObjectNode) component.path("config");
         if (target.has("cellKey")) { node = indexed(node.path("cells"), target.path("cellKey").asText(), "cell_"); }
         if (target.has("blockKey")) { node = indexed(node.path("blocks"), target.path("blockKey").asText(), "block_"); }
@@ -192,9 +206,10 @@ public final class AiPortfolioProtocol {
     public static ObjectNode project(ObjectNode request) {
         ObjectNode rule = contract(request);
         ObjectNode input = (ObjectNode) request.path("input");
-        limitedArray(request.path("facts").path("sources"), limit("maxSourceCount"));
+        limitedArray(request.path("facts").path("sources"), limit(request, "maxSourceCount"));
         ObjectNode result = object();
-        result.put("schemaVersion", CONTRACT_VERSION).put("promptVersion", PROMPT_VERSION);
+        result.put("schemaVersion", rule.path("schemaVersion").asText()).put("promptVersion", rule.path("promptVersion").asText());
+        if (AiPortfolioRunSpecRegistry.resolve(request).advancedVersion() >= 2) { result.put(AiPortfolioRunSpecRegistry.SOURCE_MODE, input.path(AiPortfolioRunSpecRegistry.SOURCE_MODE).asText(AiPortfolioRunSpecRegistry.SELECTED_SOURCES)); }
         result.put("mode", input.path("mode").asText()).put("ownerType", "TEAM".equals(input.path("ownerType").asText()) ? "TEAM" : "PERSONAL");
         result.put("userIntent", safeText(request.path("facts").path("safePrompt").asText(input.path("prompt").asText())));
         result.putObject("target").put("menuKey", MENU_ALIAS);
@@ -211,7 +226,7 @@ public final class AiPortfolioProtocol {
             JsonNode schema = rule.path("componentCatalog").path(original.path("componentType").asText()).path("params");
             ObjectNode params = projected.putObject("params");
             original.path("config").fields().forEachRemaining(field -> {
-                if (schema.has(field.getKey()) && !Set.of("blocks", "cells").contains(field.getKey())) {
+                if (schema.has(field.getKey()) && !Set.of("blocks", "cells", "nodes", "textStyles").contains(field.getKey())) {
                     params.set(field.getKey(), scrub(field.getValue()));
                 }
             });
@@ -221,12 +236,13 @@ public final class AiPortfolioProtocol {
             if ("TEAM_PROFILE".equals(original.path("componentType").asText()) && original.path("config").path("team").path("intro").isTextual()) {
                 params.put("intro", safeText(original.path("config").path("team").path("intro").asText()));
             }
-            projectNodes(original.path("config"), params);
+            projectNodes(original.path("config"), params, rule.path("nodeParams"));
+            if (AiTimelineProtocol.matches(original)) { AiTimelineProtocol.project(original.path("config"), params); AiTimelineProtocol.projectBindings(request, original, params); }
             projected.set("sourceNos", existingSourceNos(original, request.path("facts").path("sources"),
                     "TEAM".equals(input.path("ownerType").asText())));
             ArrayNode bindings = projected.putArray("bindings");
             for (JsonNode binding : request.path("facts").path("bindings")) {
-                if (original.path("componentKey").asText().equals(binding.path("componentKey").asText())) {
+                if (!AiTimelineProtocol.matches(original) && original.path("componentKey").asText().equals(binding.path("componentKey").asText())) {
                     for (JsonNode slot : binding.path("allowedSlots")) {
                         bindings.add(object().put("slot", slot.asText()).put("ref", binding.path("ref").asText())
                                 .put("reuseOnly", binding.path("reuseOnly").asBoolean()));
@@ -261,6 +277,8 @@ public final class AiPortfolioProtocol {
         }
         ArrayNode resources = result.putArray("resources");
         for (JsonNode binding : request.path("facts").path("bindings")) {
+            if (AiPortfolioRunSpecRegistry.TEXT_ONLY.equals(input.path(AiPortfolioRunSpecRegistry.SOURCE_MODE).asText())
+                    && !FONT_KIND.equals(binding.path("kind").asText())) { continue; }
             ObjectNode safe = object();
             for (String field : Set.of("ref", "kind", "allowedSlots", "reuseOnly", "label", "sourceNo")) {
                 if (binding.has(field)) { safe.set(field, scrub(binding.get(field))); }
@@ -270,7 +288,7 @@ public final class AiPortfolioProtocol {
         ArrayNode facts = result.putArray("facts");
         JsonNode profile = request.path("facts").path("profile");
         for (String field : Set.of("nickname", "nickName", "displayName", "bio", "intro", "profession", "city", "teamName")) {
-            if (profile.path(field).isTextual()) { facts.add(object().put("kind", "PROFILE_TEXT").put("field", field).put("displayText", safeText(profile.path(field).asText()))); }
+            if (!AiPortfolioRunSpecRegistry.TEXT_ONLY.equals(input.path(AiPortfolioRunSpecRegistry.SOURCE_MODE).asText()) && profile.path(field).isTextual()) { facts.add(object().put("kind", "PROFILE_TEXT").put("field", field).put("displayText", safeText(profile.path(field).asText()))); }
         }
         ObjectNode globals = result.putObject("globalState");
         for (String section : Set.of("share", "style", "backgroundAudio")) {
@@ -305,7 +323,7 @@ public final class AiPortfolioProtocol {
     }
 
     /** 为已存在文字节点生成稳定别名与节点原始基准，不暴露持久 key。 */
-    private static void projectNodes(JsonNode original, ObjectNode projected) {
+    private static void projectNodes(JsonNode original, ObjectNode projected, JsonNode nodeParams) {
         for (String field : Set.of("cells", "blocks", "runs")) {
             if (!original.path(field).isArray()) { continue; }
             ArrayNode nodes = projected.putArray(field);
@@ -317,12 +335,12 @@ public final class AiPortfolioProtocol {
                 String type = switch (field) { case "cells" -> "GRID_CELL"; case "runs" -> "GRID_RUN";
                     default -> raw.has("runs") ? "GRID_BLOCK" : "STRUCTURED_BLOCK"; };
                 raw.fields().forEachRemaining(entry -> {
-                    if (RULES.path("nodeParams").path(type).has(entry.getKey())
+                    if (nodeParams.path(type).has(entry.getKey())
                             && !Set.of("cells", "blocks", "runs").contains(entry.getKey())) {
                         safe.set(entry.getKey(), scrub(entry.getValue()));
                     }
                 });
-                projectNodes(raw, safe); nodes.add(safe);
+                projectNodes(raw, safe, nodeParams); nodes.add(safe);
             }
         }
     }
@@ -377,17 +395,17 @@ public final class AiPortfolioProtocol {
         ObjectNode contract = contract(request);
         ObjectNode projected = project(request);
         exact(output, Set.of("schemaVersion", "promptVersion", "status", "mode", "page", "operations", "questions", "notes"), Set.of());
-        require(CONTRACT_VERSION.equals(text(output.get("schemaVersion"))) && PROMPT_VERSION.equals(text(output.get("promptVersion")))
+        require(contract.path("schemaVersion").asText().equals(text(output.get("schemaVersion"))) && contract.path("promptVersion").asText().equals(text(output.get("promptVersion")))
                 && request.path("input").path("mode").asText().equals(text(output.get("mode"))), "INVALID_OUTPUT", "输出版本或模式不匹配");
         String status = text(output.get("status")); String mode = text(output.get("mode"));
-        limitedArray(output.get("operations"), limit("maxOperations"));
-        limitedArray(output.get("questions"), limit("maxQuestions"));
-        limitedArray(output.get("notes"), limit("maxNotes"));
-        output.get("notes").forEach(note -> visible(note, limit("maxNoteCodePoints")));
+        limitedArray(output.get("operations"), limit(request, "maxOperations"));
+        limitedArray(output.get("questions"), limit(request, "maxQuestions"));
+        limitedArray(output.get("notes"), limit(request, "maxNotes"));
+        output.get("notes").forEach(note -> visible(note, limit(request, "maxNoteCodePoints"), request));
         if ("NEEDS_CLARIFICATION".equals(status)) {
             require(output.get("page").isNull() && output.get("operations").isEmpty() && output.get("questions").size() == 1,
                     "INVALID_OUTPUT", "澄清必须只有一个问题且不得附候选");
-            questions(output.get("questions")); return output;
+            questions(output.get("questions"), request); return output;
         }
         require("CANDIDATE".equals(status) && output.get("questions").isEmpty(), "INVALID_OUTPUT", "候选状态或问题互斥规则不合法");
         if ("CREATE".equals(mode)) {
@@ -401,17 +419,17 @@ public final class AiPortfolioProtocol {
     }
 
     /** 校验澄清问题及纯文本选项，选项不携带动作。 */
-    private static void questions(JsonNode questions) {
+    private static void questions(JsonNode questions, ObjectNode request) {
         for (JsonNode question : questions) {
             exact(question, Set.of("id", "prompt", "options"), Set.of());
-            identifier(question.get("id")); visible(question.get("prompt"), limit("maxQuestionCodePoints"));
-            limitedArray(question.get("options"), limit("maxOptions"));
+            identifier(question.get("id")); visible(question.get("prompt"), limit(request, "maxQuestionCodePoints"), request);
+            limitedArray(question.get("options"), limit(request, "maxOptions"));
             Set<String> ids = new HashSet<>();
             for (JsonNode option : question.get("options")) {
                 exact(option, Set.of("id", "label", "answerText"), Set.of()); identifier(option.get("id"));
                 require(ids.add(option.get("id").asText()), "INVALID_OUTPUT", "问题选项标识不能重复");
-                visible(option.get("label"), limit("maxOptionLabelCodePoints"));
-                visible(option.get("answerText"), limit("maxOptionAnswerCodePoints"));
+                visible(option.get("label"), limit(request, "maxOptionLabelCodePoints"), request);
+                visible(option.get("answerText"), limit(request, "maxOptionAnswerCodePoints"), request);
             }
         }
     }
@@ -420,14 +438,14 @@ public final class AiPortfolioProtocol {
     private static void page(JsonNode page, ObjectNode request, ObjectNode contract, ObjectNode projected) {
         exact(page, Set.of("menuKey", "components", "settings"), Set.of());
         require(MENU_ALIAS.equals(text(page.get("menuKey"))), "INVALID_OUTPUT", "不能生成其它菜单");
-        limitedArray(page.get("components"), limit("maxComponents"));
+        limitedArray(page.get("components"), limit(request, "maxComponents"));
         for (int index = 0; index < page.get("components").size(); index++) {
             proposal(page.get("components").get(index), request, contract, index, false);
         }
         exact(page.get("settings"), Set.of(), fieldSet(contract.path("createSettings")));
         page.get("settings").fields().forEachRemaining(entry -> group(entry.getValue(), contract.path("createSettings").path(entry.getKey()), request, null,
                 new BindingContext(PortfolioAiBindingMessage.CREATE_SETTING.formatted(entry.getKey()), CREATE_SETTING_PATH + entry.getKey())));
-        require(totalComponents(baseConfig(request)) - currentComponents(request).size() + page.get("components").size() <= limit("maxComponents"),
+        require(totalComponents(baseConfig(request)) - currentComponents(request).size() + page.get("components").size() <= limit(request, "maxComponents"),
                 "INVALID_OUTPUT", "全部菜单组件数超过上限");
     }
 
@@ -446,6 +464,7 @@ public final class AiPortfolioProtocol {
         primaryWithFeedback(component.get("sourceNos"), definition.path("primarySource"), request, false, definition.path("bindingSlots"), context);
         bindings(component.get("bindings"), definition.path("bindingSlots"), request, null, null, context);
         structures(component.get("params"), type);
+        if (AiTimelineProtocol.TYPE.equals(type)) { AiTimelineProtocol.validateProposal(request, component.path("params")); }
         structuredFontBindings(component.get("params"), type, request, context);
     }
 
@@ -473,15 +492,18 @@ public final class AiPortfolioProtocol {
     private static void operations(JsonNode operations, ObjectNode request, ObjectNode contract, ObjectNode projected) {
         Set<String> written = new HashSet<>(), removed = new HashSet<>(), moved = new HashSet<>(), insertionPoints = new HashSet<>();
         Set<String> componentWrites = new HashSet<>();
+        Map<String, ObjectNode> timelines = new LinkedHashMap<>();
         int count = totalComponents(baseConfig(request));
         for (int operationIndex = 0; operationIndex < operations.size(); operationIndex++) {
             JsonNode operation = operations.get(operationIndex);
             exact(operation, Set.of("op", "target", "expectedHash", "payload", "reason"), Set.of());
             String op = text(operation.get("op"));
             require(contains(contract.path("allowedOps"), op), "INVALID_OUTPUT", "该模式不支持操作");
-            visible(operation.get("reason"), limit("maxReasonCodePoints"));
+            visible(operation.get("reason"), limit(request, "maxReasonCodePoints"), request);
             JsonNode rawTarget = operation.get("target");
-            exact(rawTarget, Set.of("menuKey"), Set.of("componentKey", "cellKey", "blockKey", "runKey"));
+            exact(rawTarget, Set.of("menuKey"), AiPortfolioRunSpecRegistry.resolve(request).advancedVersion() >= 2
+                    ? Set.of("componentKey", "cellKey", "blockKey", "runKey", "nodeKey", "textRole")
+                    : Set.of("componentKey", "cellKey", "blockKey", "runKey"));
             ObjectNode target = (ObjectNode) rawTarget;
             require(MENU_ALIAS.equals(text(target.get("menuKey"))), "INVALID_OUTPUT", "操作不能越出当前菜单");
             boolean pageTarget = Set.of("INSERT_COMPONENT", "UPDATE_GLOBAL").contains(op);
@@ -491,15 +513,25 @@ public final class AiPortfolioProtocol {
             String alias = target.path("componentKey").asText();
             require(!removed.contains(alias), "INVALID_OUTPUT", "不能继续操作已移除组件");
             JsonNode payload = operation.get("payload");
-            JsonNode hashBase = pageTarget ? currentComponents(request) : target.size() == 2 ? component : resolveNode(request, target);
+            require(component == null || AiTimelineProtocol.matches(component) || !target.has("nodeKey") && !target.has("textRole"), "INVALID_OUTPUT", "非时间轴不接受时间轴目标");
+            JsonNode hashBase = pageTarget ? currentComponents(request) : target.size() == 2 ? component
+                    : AiTimelineProtocol.matches(component) ? AiTimelineProtocol.hashBase(request, target) : resolveNode(request, target);
             if ("UPDATE_GLOBAL".equals(op)) { hashBase = baseConfig(request).path(payload.path("section").asText()); }
             require(expectedHash(hashBase).equals(text(operation.get("expectedHash"))), "INVALID_OUTPUT", "操作基准不匹配");
             JsonNode definition = component == null ? null : contract.path("componentCatalog").path(component.path("componentType").asText());
             String targetId = StrictAiJson.canonical(target);
+            if (component != null && AiTimelineProtocol.matches(component)
+                    && Set.of("UPDATE_TEXT", "UPDATE_PARAMS", "BIND_RESOURCES", "UPDATE_STRUCTURE").contains(op)) {
+                require(AiPortfolioRunSpecRegistry.resolve(request).advancedVersion() >= 2, "INVALID_OUTPUT", "当前版本不支持时间轴");
+                ObjectNode timeline = timelines.computeIfAbsent(alias, ignored -> component.deepCopy());
+                AiTimelineProtocol.apply(request, timeline, (ObjectNode) operation, "ai_check_" + operationIndex);
+                componentWrites.add(alias);
+                continue;
+            }
             switch (op) {
                 case "UPDATE_TEXT" -> {
                     exact(payload, Set.of("field", "value"), Set.of()); String field = text(payload.get("field"));
-                    JsonNode schema = nodeSchemas(component, target, definition).get(field);
+                    JsonNode schema = nodeSchemas(request, component, target, definition).get(field);
                     if (schema == null && target.size() == 2) { schema = definition.path("textFields").get(field); }
                     require(TEXT_FIELDS.contains(field) && schema != null, "INVALID_OUTPUT", "目标没有开放该文字字段");
                     value(payload.get("value"), schema);
@@ -511,7 +543,7 @@ public final class AiPortfolioProtocol {
                 }
                 case "UPDATE_PARAMS" -> {
                     exact(payload, Set.of("params"), Set.of());
-                    JsonNode schema = nodeSchemas(component, target, definition);
+                    JsonNode schema = nodeSchemas(request, component, target, definition);
                     params(payload.get("params"), schema, false);
                     if (target.size() == 2) { structures(payload.get("params"), component.path("componentType").asText()); }
                     payload.get("params").fieldNames().forEachRemaining(field -> {
@@ -564,22 +596,24 @@ public final class AiPortfolioProtocol {
                 default -> throw reject("尚未实现该结构动作");
             }
             if (!pageTarget) { componentWrites.add(alias); }
-            require(count <= limit("maxComponents"), "INVALID_OUTPUT", "全部菜单组件数超过上限");
+            require(count <= limit(request, "maxComponents"), "INVALID_OUTPUT", "全部菜单组件数超过上限");
         }
+        timelines.values().forEach(component -> AiTimelineProtocol.validateContent(component.path("config"), true));
     }
 
     /** 根据内部层级选定封闭字段集，结构数组不能用 UPDATE_PARAMS 重建。 */
-    private static JsonNode nodeSchemas(ObjectNode component, ObjectNode target, JsonNode definition) {
-        if (target.has("runKey")) { return RULES.path("nodeParams").path("GRID_RUN"); }
+    private static JsonNode nodeSchemas(ObjectNode request, ObjectNode component, ObjectNode target, JsonNode definition) {
+        ObjectNode rules = AiPortfolioRunSpecRegistry.resolve(request).rules();
+        if (target.has("runKey")) { return rules.path("nodeParams").path("GRID_RUN"); }
         if (target.has("blockKey")) {
-            if (target.has("cellKey")) { return RULES.path("nodeParams").path("GRID_BLOCK"); }
-            ObjectNode schema = RULES.withObject("nodeParams").withObject("STRUCTURED_BLOCK").deepCopy();
+            if (target.has("cellKey")) { return rules.path("nodeParams").path("GRID_BLOCK"); }
+            ObjectNode schema = rules.withObject("nodeParams").withObject("STRUCTURED_BLOCK").deepCopy();
             String type = indexed(component.path("config").path("blocks"), target.path("blockKey").asText(), "block_").path("type").asText();
             if ("SPACER".equals(type)) { schema.retain("heightRpx", "marginTopRpx", "marginBottomRpx"); }
             else { schema.remove("heightRpx"); schema.remove("LIST".equals(type) ? "content" : "items"); }
             return schema;
         }
-        if (target.has("cellKey")) { return RULES.path("nodeParams").path("GRID_CELL"); }
+        if (target.has("cellKey")) { return rules.path("nodeParams").path("GRID_CELL"); }
         return definition.path("params");
     }
 
@@ -626,7 +660,7 @@ public final class AiPortfolioProtocol {
 
     /** 检查主来源数量、媒体类型、去重与已选可新增状态。 */
     private static void primary(JsonNode sourceNos, JsonNode rule, ObjectNode request, boolean mayKeep) {
-        limitedArray(sourceNos, limit("maxSourceCount"));
+        limitedArray(sourceNos, limit(request, "maxSourceCount"));
         if (sourceNos.isEmpty() && mayKeep) { return; }
         if (rule == null || rule.isNull() || rule.isMissingNode()) { require(sourceNos.isEmpty(), "INVALID_OUTPUT", "该节点没有主素材槽位"); return; }
         require(sourceNos.size() >= rule.path("min").asInt() && sourceNos.size() <= rule.path("max").asInt(), "INVALID_OUTPUT", "素材数量不符合组件要求");
@@ -705,7 +739,7 @@ public final class AiPortfolioProtocol {
     }
 
     /** 按已注册具体字段逐层检查类型，不把非法值交给普通默认值修复。 */
-    private static void params(JsonNode params, JsonNode schema, boolean structureAllowed) {
+    static void params(JsonNode params, JsonNode schema, boolean structureAllowed) {
         exact(params, Set.of(), fieldSet(schema));
         params.fields().forEachRemaining(entry -> {
             require(structureAllowed || !STRUCTURES.contains(entry.getKey())
@@ -716,7 +750,7 @@ public final class AiPortfolioProtocol {
     }
 
     /** 递归检查固定 schema；数组始终具有数量上限，对象始终具有封闭字段集。 */
-    private static void value(JsonNode value, JsonNode schema) {
+    static void value(JsonNode value, JsonNode schema) {
         String type = schema.path("type").asText();
         boolean valid = switch (type) {
             case "string" -> value.isTextual(); case "boolean" -> value.isBoolean();
@@ -847,11 +881,17 @@ public final class AiPortfolioProtocol {
     /** 返回协议数量预算；两工程及提示词使用相同资源。 */
     public static int limit(String key) { return RULES.path("limits").path(key).intValue(); }
 
+    /** 实际任务的限制取冻结规格，不读当前默认目录。 */
+    private static int limit(ObjectNode request, String key) { return AiPortfolioRunSpecRegistry.resolve(request).limit(key); }
+
     /** 返回独立的协议预算副本，供服务能力响应使用。 */
     public static ObjectNode limits() { return RULES.withObject("limits").deepCopy(); }
 
+    /** 冻结任务的完整限制，不使用当前默认规格。 */
+    public static ObjectNode limits(ObjectNode request) { return AiPortfolioRunSpecRegistry.resolve(request).rules().withObject("limits").deepCopy(); }
+
     /** 封闭对象键检查；在任何 DTO 转换前执行。 */
-    private static void exact(JsonNode node, Set<String> required, Set<String> optional) {
+    static void exact(JsonNode node, Set<String> required, Set<String> optional) {
         require(node != null && node.isObject(), "INVALID_OUTPUT", "协议字段必须为对象");
         require(fieldSet(node).containsAll(required), "INVALID_OUTPUT", "缺少协议必需字段");
         Set<String> allowed = new HashSet<>(required); allowed.addAll(optional);
@@ -874,10 +914,12 @@ public final class AiPortfolioProtocol {
     }
 
     /** 校验纯文本预算，禁止内部别名或模型输入中的资源地址进入可见输出。 */
-    private static void visible(JsonNode node, int maximum) {
+    private static void visible(JsonNode node, int maximum, ObjectNode request) {
         String value = text(node);
         require(codePoints(node) <= maximum && !INTERNAL_ALIAS.matcher(value).find(), "INVALID_OUTPUT", "用户可见文字超过上限或包含内部别名");
         require(!RAW_URL.matcher(value).find(), "INVALID_OUTPUT", "用户可见文字不得包含资源地址");
+        require(AiPortfolioRunSpecRegistry.resolve(request).advancedVersion() < 2 || !TIMELINE_ALIAS.matcher(value).find(),
+                "INVALID_OUTPUT", "用户可见文字不得包含时间轴内部别名");
     }
 
     /** 问题和选项的稳定标识为有限纯文本。 */
@@ -900,7 +942,7 @@ public final class AiPortfolioProtocol {
     }
 
     /** 递归复制安全显示内容，结构身份只由投影显式生成。 */
-    private static JsonNode scrub(JsonNode node) {
+    static JsonNode scrub(JsonNode node) {
         if (node.isTextual()) { return StrictAiJson.mapper().getNodeFactory().textNode(safeText(node.textValue())); }
         if (node.isArray()) { ArrayNode result = array(); node.forEach(item -> result.add(scrub(item))); return result; }
         if (node.isObject()) { ObjectNode result = object(); node.fields().forEachRemaining(field -> result.set(field.getKey(), scrub(field.getValue()))); return result; }

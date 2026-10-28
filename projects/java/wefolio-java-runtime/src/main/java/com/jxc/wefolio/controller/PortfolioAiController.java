@@ -23,7 +23,10 @@ public class PortfolioAiController {
     public Response<Map<String, Object>> submit(@RequestBody String request) { return Response.success(service.submit(request)); }
     /** 查询动态复验后的候选或安全任务状态。 */
     @GetMapping("/tasks/{id}")
-    public Response<Map<String, Object>> query(@PathVariable Long id) { return Response.success(service.query(id)); }
+    public Response<Map<String, Object>> query(@PathVariable Long id,
+            @RequestParam(required = false) String clientAdvancedVersion) { return Response.success(service.query(id, clientAdvancedVersion)); }
+    /** 保留已有 Java 调用入口，HTTP 路由使用包含可选声明的适配方法。 */
+    public Response<Map<String, Object>> query(Long id) { return Response.success(service.query(id)); }
     /** 取消当前活动任务。 */
     @PostMapping("/tasks/{id}/cancel")
     public Response<Map<String, Object>> cancel(@PathVariable Long id) { return Response.success(service.cancel(id)); }

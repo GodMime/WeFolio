@@ -10,7 +10,6 @@ import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiStoredVideoSummary;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiFrameSelection;
-import com.jxc.wefolio.service.portfolioai.AiPortfolioProtocol;
 import com.jxc.wefolio.service.portfolioai.AiProtocolException;
 import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +32,8 @@ import java.util.Comparator;
 @Service
 @Slf4j
 public class PortfolioAiMediaExecutionService {
+    /** 媒体计划独立的固定来源上限，沿用已部署媒体合同，不跟随页面提示词切换。 */
+    private static final int MAX_MEDIA_SOURCES = 50;
     /** 固定业务时区，与原任务总期限一致。 */
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
     /** 每次模型最大输出上限。 */
@@ -94,7 +95,7 @@ public class PortfolioAiMediaExecutionService {
         List<JsonNode> referenceItems = PortfolioAiReferenceContract.items(task.getReferenceAttachmentsJson(), false);
         List<List<JsonNode>> referenceGroups = PortfolioAiReferenceContract.groups(referenceItems);
         if (!referenceItems.isEmpty() && references == null) { throw failed(ERROR_CONTRACT_UNAVAILABLE, "参考附件模块不可用"); }
-        if (!entries.isArray() || entries.size() > AiPortfolioProtocol.limits().path(KEY_MAX_SOURCE_COUNT).asInt()) { throw failed(ERROR_MEDIA_INVALID, "媒体输入计划不合法"); }
+        if (!entries.isArray() || entries.size() > MAX_MEDIA_SOURCES) { throw failed(ERROR_MEDIA_INVALID, "媒体输入计划不合法"); }
         if (hasWorkPlan) { validateSelectedSources(request, entries); }
         validateRoutes(task, entries, STORED_SUMMARY_PLAN_VERSION.equals(planVersion));
         try { PortfolioAiVideoAudioContext.validateAndNormalize(entries, !LEGACY_PLAN_VERSION.equals(planVersion)); }

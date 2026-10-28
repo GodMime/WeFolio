@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const { createAdvancedAiPage } = require('../pages/portfolios/utils/advanced-ai-page')
 const { createAdvancedAiPage: createTeamPage } = require('../pages/team-portfolios/utils/advanced-ai-page')
 
-const CAPS = { enabled: true, referenceAttachments: { enabled: true } }
+const CAPS = { enabled: true, supportedProtocols: [{ aiContractVersion: 'ai-portfolio-v2', sourceModes: ['SELECTED_SOURCES'] }], referenceAttachments: { enabled: true } }
 const reference = (patch = {}) => ({ localKey: 'one', attachmentId: 'a'.repeat(32), attachmentToken: 'receipt',
   referenceNo: 'A1', status: 'READY', mediaType: 'IMAGE', sizeBytes: 3200000, note: '只参考留白', ...patch })
 const eventFor = key => ({ currentTarget: { dataset: { key } } })

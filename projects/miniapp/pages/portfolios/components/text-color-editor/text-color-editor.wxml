@@ -17,16 +17,16 @@
     <button class="text-color-copy" catchtap="handleCopyHex" disabled="{{!pickerVisible || !active}}" aria-label="复制{{label}}色值">复制</button>
   </view>
   <view class="text-color-error">{{errorMessage}}</view>
-  <view class="text-color-preview-bar">
+  <view class="text-color-preview-bar" style="background-color: {{previewBackground}};">
     <view class="text-color-preview-chip" style="background-color: {{draftColor}};"></view>
-    <view class="text-color-preview-text">预览 {{draftColor}}</view>
+    <view class="text-color-preview-text" style="color: {{draftColor}};">预览 {{draftColor}}</view>
   </view>
   <view class="text-color-actions">
     <button class="text-color-cancel" catchtap="handleCancelCustom">{{inline ? '取消自定义' : '取消'}}</button>
     <button class="text-color-confirm" catchtap="handleConfirmCustom" disabled="{{!!errorMessage || !pickerVisible || !active}}">确定</button>
   </view>
 </template>
-<view class="text-color-options {{active ? '' : 'is-inactive'}}">
+<view class="text-color-options text-color-theme-{{themeMode === 'dark' ? 'dark' : 'light'}} {{active ? '' : 'is-inactive'}}">
   <view wx:for="{{presets}}" wx:key="color" class="text-color-option {{selectedColor === item.color ? 'selected' : ''}}" data-color="{{item.color}}" catchtap="handlePreset" aria-role="button" aria-label="{{item.label}}">{{item.label}}</view>
   <view class="text-color-option text-color-custom {{customSelected ? 'selected' : ''}}" catchtap="handleOpenCustom" aria-role="button" aria-label="自定义{{label}}">
     <view wx:if="{{customSelected}}" class="text-color-swatch" style="background-color: {{selectedColor}};"></view>
@@ -34,17 +34,17 @@
   </view>
 </view>
 <!-- 内联配置随父层滚动，常驻节点通过高度和透明度展开、收起。 -->
-<view wx:if="{{inline}}" class="text-color-inline {{pickerVisible && active ? 'is-visible' : ''}}">
+<view wx:if="{{inline}}" class="text-color-inline text-color-theme-{{themeMode === 'dark' ? 'dark' : 'light'}} {{pickerVisible && active ? 'is-visible' : ''}}">
   <view class="text-color-inline-body">
-    <template is="colorPickerContent" data="{{draftColor, hueColor, padDotStyle, colorHsv, pickerVisible, active, huePosition, hexInput, errorMessage, inline, label}}" />
+    <template is="colorPickerContent" data="{{draftColor, hueColor, padDotStyle, colorHsv, pickerVisible, active, huePosition, hexInput, errorMessage, inline, label, previewBackground}}" />
   </view>
 </view>
 <!-- 其他入口保留根节点弹层，避免父编辑器的滚动和位移裁切。 -->
 <root-portal wx:else>
-  <view class="text-color-mask {{pickerMounted && active ? 'is-mounted' : ''}} {{pickerVisible && active ? 'is-visible' : ''}}" catchtap="handleCancelCustom" catchtouchmove="noop">
+  <view class="text-color-mask text-color-theme-{{themeMode === 'dark' ? 'dark' : 'light'}} {{pickerMounted && active ? 'is-mounted' : ''}} {{pickerVisible && active ? 'is-visible' : ''}}" catchtap="handleCancelCustom" catchtouchmove="noop">
     <view class="text-color-panel" catchtap="noop">
       <view class="text-color-grabber"></view>
-      <template is="colorPickerContent" data="{{draftColor, hueColor, padDotStyle, colorHsv, pickerVisible, active, huePosition, hexInput, errorMessage, inline, label}}" />
+      <template is="colorPickerContent" data="{{draftColor, hueColor, padDotStyle, colorHsv, pickerVisible, active, huePosition, hexInput, errorMessage, inline, label, previewBackground}}" />
     </view>
   </view>
 </root-portal>

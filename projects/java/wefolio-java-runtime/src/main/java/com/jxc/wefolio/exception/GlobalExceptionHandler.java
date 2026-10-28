@@ -132,6 +132,10 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Response<Void> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
         log.warn("Request body not readable: {}", e.getMessage());
+        // 仅恢复能力声明的专用错误，不扩大其它 DTO 绑定异常的对外提示范围。
+        if (e.getMostSpecificCause() instanceof InvalidPortfolioCapabilityException capabilityException) {
+            return Response.fail(capabilityException.getMessage());
+        }
         return Response.fail(GlobalExceptionMessage.REQUEST_BODY_FORMAT_ERROR_MESSAGE);
     }
 

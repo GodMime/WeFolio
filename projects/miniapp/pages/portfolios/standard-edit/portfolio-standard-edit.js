@@ -1,3 +1,4 @@
+const { createTimeline, normalizeTimeline, validateTimeline, timelineSummary, timelineTheme } = require('../utils/portfolio-timeline')
 const { advancedEditorPageMethods, editorRequest, installAdvancedEditor, loadAdvancedMetadata, markAdvancedSaved, SAVE_INCOMPLETE_MESSAGE, confirmAdvancedPortfolioPublish } = require('../utils/advanced-editor-page')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { buildPreviewVersionOptions, calculatePreviewVersionMenuLayout } = require('../utils/preview-version-menu')
@@ -368,6 +369,7 @@ function isEditableComponentType(componentType) {
     componentType === COMPONENT_TYPES.CONTACT_FORM ||
     componentType === COMPONENT_TYPES.TEXT_SECTION ||
     componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION ||
+    componentType === COMPONENT_TYPES.TIMELINE ||
     componentType === COMPONENT_TYPES.TEXT_GRID ||
     componentType === COMPONENT_TYPES.CONTACT_INFO ||
     componentType === COMPONENT_TYPES.DIVIDER ||
@@ -1441,6 +1443,7 @@ Page({
   },
 
   applyEditorConfig(config, requestedMenuKey = this.data.activeMenuKey, extraState = {}) {
+    this.setData({ timelineThemeMode: timelineTheme('', (config.style || {}).backgroundColor) })
     const menuState = buildEditorMenuState(config, requestedMenuKey)
     this.setData(Object.assign({}, menuState, {
       componentOptions: buildComponentOptions(this.data.componentOptions, menuState.activeComponents)
@@ -1980,7 +1983,7 @@ Page({
   loadComponentOptions() {
     this.advancedRequest({
       url: COMPONENT_LIBRARY_API_URL,
-      data: { editorSchemaRevision: EDITOR_SCHEMA_REVISION }
+      data: { editorSchemaRevision: EDITOR_SCHEMA_REVISION, portfolioTimeline: 1 }
     })
       .then((response) => {
         if (response && Array.isArray(response.components) && response.components.length > 0) {
@@ -2006,7 +2009,7 @@ Page({
     if (!componentType || disabled || profileAdded) {
       return
     }
-    if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) { this.setData({ componentSheetVisible: false }); return this.openNewComponentSheet(componentType) }
+    if (['TEXT_GRID', 'TIMELINE', 'CONTACT_INFO'].includes(componentType)) { this.setData({ componentSheetVisible: false }); return this.openNewComponentSheet(componentType) }
     if (componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
       this.setData({ componentSheetVisible: false })
       return this.openStructuredTextSheet()
@@ -2185,7 +2188,7 @@ Page({
     if (componentType === COMPONENT_TYPES.TEXT_SECTION) {
       return this.openTextSectionSheet(componentKey)
     }
-    if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) return this.openNewComponentSheet(componentType, componentKey)
+    if (['TEXT_GRID', 'TIMELINE', 'CONTACT_INFO'].includes(componentType)) return this.openNewComponentSheet(componentType, componentKey)
     if (componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
       return this.openStructuredTextSheet(componentKey)
     }
@@ -2435,13 +2438,13 @@ Page({
     if (componentKey && (!component || component.componentType !== componentType)) return
     this.newComponentMenuKey = this.data.activeMenuKey
     this.setData({ newComponentSheetVisible: true, newComponentType: componentType, newComponentKey: componentKey,
-      newComponentConfig: componentType === 'TEXT_GRID' ? normalizeTextGrid(component ? component.config : {}) : normalizeContactInfo(component ? component.config : {}) })
+      newComponentConfig: componentType === 'TIMELINE' ? (component ? normalizeTimeline(component.config) : createTimeline('USER')) : componentType === 'TEXT_GRID' ? normalizeTextGrid(component ? component.config : {}) : normalizeContactInfo(component ? component.config : {}) })
   },
   handleCancelNewComponent() { this.setData({ newComponentSheetVisible: false, newComponentKey: '', newComponentConfig: {} }) },
   handleConfirmNewComponent(event) {
     if (!this.data.newComponentSheetVisible) return
     const type = this.data.newComponentType, value = event.detail
-    const error = type === 'TEXT_GRID' ? validateTextGrid(value, { requireText: true }) : validateContactInfo(value, true)
+    const error = type === 'TIMELINE' ? validateTimeline(value) : type === 'TEXT_GRID' ? validateTextGrid(value, { requireText: true }) : validateContactInfo(value, true)
     if (error) return wx.showToast({ title: error, icon: 'none' })
     const menuKey = this.newComponentMenuKey || ''
     let config = this.data.config, key = this.data.newComponentKey
@@ -4205,6 +4208,7 @@ Page({
       // 成功仅确认已发送的快照；期间产生的新编辑仍留在本页，由用户再次保存后才返回列表。
       this.advancedReferencesSaved(pending.payload)
       const editorChanged = stableEditorConfigJson(buildDraftPayload(this.data.config).config) !== stableEditorConfigJson(pending.payload.config) || this.advancedDraftChanged(pending.payload)
+      this.applyAdvancedSavedMetadata(response)
       if (!editorChanged) {
         this.setData({ fontAssets: response.fontAssets || null })
         markAdvancedSaved(this)
@@ -4425,9 +4429,10 @@ Page({
   validateTextComponentsBeforeSave() {
     for (const location of visitPortfolioComponents(this.data.config)) {
       const component = location.component
-      if (component.enabled === false && !['TEXT_GRID', 'CONTACT_INFO'].includes(component.componentType)) continue
+      if (component.enabled === false && !['TEXT_GRID', 'TIMELINE', 'CONTACT_INFO'].includes(component.componentType)) continue
       let message = ''
-      if (component.componentType === COMPONENT_TYPES.TEXT_GRID) { message = validateTextGrid(component.config)
+      if (component.componentType === COMPONENT_TYPES.TIMELINE) { message = validateTimeline(component.config)
+      } else if (component.componentType === COMPONENT_TYPES.TEXT_GRID) { message = validateTextGrid(component.config)
       } else if (component.componentType === COMPONENT_TYPES.CONTACT_INFO) { message = validateContactInfo(component.config)
       } else if (component.componentType === COMPONENT_TYPES.STRUCTURED_TEXT_SECTION) {
         message = validateStructuredTextConfig(component.config || {})

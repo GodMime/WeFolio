@@ -11,6 +11,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.lenient;
 import com.alibaba.fastjson2.JSON;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioVersionSupport;
+import com.jxc.wefolio.message.AdvancedPortfolioMessage;
+import com.jxc.wefolio.service.PortfolioEditingCapabilities;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
@@ -98,6 +101,60 @@ class MineTeamPortfolioServiceTest {
     private static final long USER_ID = 7L;
     private static final long TEAM_ID = 11L;
     private static final long PORTFOLIO_ID = 13L;
+
+    /** 团队无正文变化保存完成升版，幂等结果保留原配置版本，撤权后不能读取历史结果。 */
+    @Test void advancedUpgradeKeepsSnapshotVersionAndRequiresCurrentPermissionForReplay() {
+        TestContext context = context(true);
+        PortfolioEntity portfolio = portfolio(TEAM_ID); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        TeamPortfolioConfigDto config = config(); config.setEditorSchemaRevision(11);
+        String original = JSON.toJSONString(config);
+        portfolio.setDraftConfigJson(original); portfolio.setPublishedConfigJson(original);
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode()))
+                .thenReturn(access(portfolio, TeamRoleDict.MANAGER.getCode()));
+        doReturn(portfolio).when(context.portfolioMapper).lockById(PORTFOLIO_ID);
+        when(context.validator.normalizeForDraft(any(), any(), any(), eq(new PortfolioEditingCapabilities(true, false))))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
+        TeamPortfolioDraftSaveRequest request = draftRequest(config, 0, "advanced-upgrade");
+        JSONObject raw = JSON.parseObject(JSON.toJSONString(request)); raw.put("clientAdvancedVersion", 2);
+        AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(null, false, null, false,
+                raw.toJSONString(), null, false, null, 2, new AdvancedPortfolioVersionSupport.Metadata(false, 1));
+        var response = context.service.saveDraft(PORTFOLIO_ID, request, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(AdvancedPortfolioVersionSupport.response(response).getJSONObject("config").getInteger("advancedPortfolioVersion")).isEqualTo(2);
+        assertThat(portfolio.getPublishedConfigJson()).isEqualTo(original);
+        ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(context.historyMapper).insert(history.capture());
+        assertThat(JSON.parseObject(history.getValue().getSnapshotJson()).getJSONObject("config")
+                .getInteger("advancedPortfolioVersion")).isEqualTo(2);
+        when(context.historyMapper.selectList(any())).thenReturn(List.of(history.getValue()));
+        var replay = context.service.saveDraft(PORTFOLIO_ID, request, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata);
+        assertThat(replay.getDraftRevision()).isEqualTo(1);
+        verify(context.portfolioMapper, times(1)).updateById(any(PortfolioEntity.class));
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode()))
+                .thenThrow(new BusinessException(TeamPortfolioMessage.NO_MAINTAIN_PERMISSION));
+        assertThatThrownBy(() -> context.service.saveDraft(PORTFOLIO_ID, request, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata))
+                .hasMessage(TeamPortfolioMessage.NO_MAINTAIN_PERMISSION);
+        verify(context.historyMapper, times(1)).insert(any(PortfolioHistoryEntity.class));
+    }
+
+    /** 团队低版本必须先于字体、内容和历史写入被拒绝，回传高revision也不能提高能力。 */
+    @Test void legacyTeamAdvancedSaveRejectsPersistedV2WithoutWrites() {
+        TestContext context = context(true);
+        PortfolioEntity portfolio = portfolio(TEAM_ID); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        portfolio.setDraftConfigJson("{\"advancedPortfolioVersion\":2}");
+        when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode()))
+                .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
+        doReturn(portfolio).when(context.portfolioMapper).lockById(PORTFOLIO_ID);
+        TeamPortfolioConfigDto config = config(); config.setEditorSchemaRevision(11);
+        TeamPortfolioDraftSaveRequest request = draftRequest(config, 0, "old-client");
+        AdvancedPortfolioSaveMetadata metadata = new AdvancedPortfolioSaveMetadata(null, false, null, false, JSON.toJSONString(request));
+        assertThatThrownBy(() -> context.service.saveDraft(PORTFOLIO_ID, request, USER_ID, PortfolioTemplateTypeDict.ADVANCED.getCode(), metadata))
+                .hasMessage(AdvancedPortfolioMessage.CLIENT_UPGRADE_REQUIRED);
+        verify(context.portfolioMapper, never()).updateById(any(PortfolioEntity.class));
+        verify(context.historyMapper, never()).insert(any(PortfolioHistoryEntity.class));
+        verifyNoInteractions(context.validator, context.referenceService, context.assetService);
+    }
 
     @BeforeAll
     static void initializeTableInfo() {
@@ -241,7 +298,7 @@ class MineTeamPortfolioServiceTest {
         request.setConfig(configured);
         when(context.access.requireTeamRole(eq(TEAM_ID), eq(USER_ID), any())).thenReturn(access(null, TeamRoleDict.MANAGER.getCode()));
         when(context.validator.normalizeForDraft(
-                any(), isNull(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1))))
+                any(), isNull(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1)), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(configured);
         when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
@@ -316,7 +373,7 @@ class MineTeamPortfolioServiceTest {
         when(context.access.requireTeamRole(eq(TEAM_ID), eq(USER_ID), any()))
                 .thenReturn(access(null, TeamRoleDict.OWNER.getCode()));
         when(context.validator.normalizeForDraft(
-                any(), isNull(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1))))
+                any(), isNull(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1)), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(config());
         doAnswer(invocation -> {
             ((PortfolioEntity) invocation.getArgument(0)).setId(PORTFOLIO_ID);
@@ -346,7 +403,7 @@ class MineTeamPortfolioServiceTest {
             return 1;
         }).when(context.portfolioMapper).insert(any(PortfolioEntity.class));
         when(context.validator.normalizeForDraft(
-                any(), isNull(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1))))
+                any(), isNull(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1)), any(PortfolioEditingCapabilities.class)))
                 .thenThrow(new BusinessException("配置失败"));
 
         assertThatThrownBy(() -> context.service.createStandard(
@@ -398,7 +455,7 @@ class MineTeamPortfolioServiceTest {
                 .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
         doReturn(portfolio).when(context.portfolioMapper).lockById(PORTFOLIO_ID);
         TeamPortfolioConfigDto config = config();
-        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class))).thenReturn(config);
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class), any(PortfolioEditingCapabilities.class))).thenReturn(config);
         when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
         TeamPortfolioDraftSaveRequest request = new TeamPortfolioDraftSaveRequest(); request.setConfig(config);
@@ -427,7 +484,7 @@ class MineTeamPortfolioServiceTest {
                 .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
         doReturn(portfolio).when(context.portfolioMapper).lockById(PORTFOLIO_ID);
         TeamPortfolioConfigDto config = config();
-        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class))).thenReturn(config);
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class), any(PortfolioEditingCapabilities.class))).thenReturn(config);
         when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
         TeamPortfolioDraftSaveRequest request = new TeamPortfolioDraftSaveRequest(); request.setConfig(config);
@@ -472,7 +529,7 @@ class MineTeamPortfolioServiceTest {
         when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
                 .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
         when(context.validator.normalizeForDraft(
-                any(), any(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 3))))
+                any(), any(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 3)), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(newDraft);
         when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
@@ -501,7 +558,7 @@ class MineTeamPortfolioServiceTest {
         verify(context.validator).normalizeForDraft(
                 eq(newDraft),
                 eq(configWithTitle("旧草稿")),
-                eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 3)));
+                eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 3)), any(PortfolioEditingCapabilities.class));
         assertCleanupStates(context, "旧草稿", "当前发布", "新草稿", "当前发布");
     }
 
@@ -534,7 +591,7 @@ class MineTeamPortfolioServiceTest {
         when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
                 .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
         when(context.validator.normalizeForDraft(
-                any(), any(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 3))))
+                any(), any(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 3)), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(config());
         org.mockito.Mockito.doThrow(new BusinessException("团队作品集图片未完成上传或不可用"))
                 .when(context.assetService).validateUploadedImageUrl(
@@ -558,7 +615,7 @@ class MineTeamPortfolioServiceTest {
         portfolio.setCurrentRevision(4);
         when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
                 .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
-        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class)))
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(config());
         when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(context.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
@@ -578,7 +635,7 @@ class MineTeamPortfolioServiceTest {
         clearInvocations(context.portfolioMapper, context.historyMapper, context.validator,
                 context.assetService, context.referenceService);
         when(context.historyMapper.selectList(any())).thenReturn(List.of(persistedHistory));
-        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class)))
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class), any(PortfolioEditingCapabilities.class)))
                 .thenThrow(new AssertionError("幂等命中不得重新校验配置"));
         doThrow(new AssertionError("幂等命中不得访问素材服务"))
                 .when(context.assetService).validateUploadedImageUrl(anyLong(), anyLong(), any());
@@ -615,7 +672,7 @@ class MineTeamPortfolioServiceTest {
             portfolio.setDraftRevision(7);
             when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
                     .thenReturn(access(portfolio, TeamRoleDict.OWNER.getCode()));
-            when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class)))
+            when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class), any(PortfolioEditingCapabilities.class)))
                     .thenAnswer(invocation -> JSON.parseObject(JSON.toJSONString(request.getConfig()), TeamPortfolioConfigDto.class));
             when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
             when(context.historyMapper.selectList(any())).thenReturn(List.of());
@@ -647,7 +704,7 @@ class MineTeamPortfolioServiceTest {
         portfolio.setDraftFontAssetsJson(assets);
         var access = access(portfolio, TeamRoleDict.OWNER.getCode()); access.team().setUniqueCode("TMTEAM02");
         when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID)).thenReturn(access);
-        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class))).thenAnswer(call -> config());
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class), any(PortfolioEditingCapabilities.class))).thenAnswer(call -> config());
         when(context.validator.validateForPublish(any(), any())).thenAnswer(call -> config());
         when(context.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(context.portfolioMapper.update(any(PortfolioEntity.class), any())).thenReturn(1);
@@ -686,7 +743,7 @@ class MineTeamPortfolioServiceTest {
         TeamPortfolioAccessService.TeamPortfolioAccess access = access(portfolio, TeamRoleDict.OWNER.getCode());
         access.team().setUniqueCode("TEAM_FONT_TEST");
         when(context.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID)).thenReturn(access);
-        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class)))
+        when(context.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class), any(PortfolioEditingCapabilities.class)))
                 .thenAnswer(invocation -> config());
         when(context.historyMapper.selectList(any())).thenReturn(List.of());
         when(fonts.prepare(any(), any(), eq("TEAM_FONT_TEST/others/fonts/" + PORTFOLIO_ID + "/"))).thenReturn(prepared);
@@ -895,7 +952,7 @@ class MineTeamPortfolioServiceTest {
         savePortfolio.setCurrentRevision(4);
         when(save.access.requireMaintainablePortfolio(PORTFOLIO_ID, USER_ID))
                 .thenReturn(access(savePortfolio, TeamRoleDict.OWNER.getCode()));
-        when(save.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class)))
+        when(save.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(config());
         when(save.portfolioMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(save.historyMapper.insert(any(PortfolioHistoryEntity.class))).thenReturn(1);
@@ -906,7 +963,7 @@ class MineTeamPortfolioServiceTest {
         clearInvocations(save.portfolioMapper, save.historyMapper, save.validator,
                 save.assetService, save.referenceService);
         when(save.historyMapper.selectList(any())).thenReturn(List.of(saveHistory.getValue()));
-        when(save.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class)))
+        when(save.validator.normalizeForDraft(any(), any(), any(TeamPortfolioComponentContext.class), any(PortfolioEditingCapabilities.class)))
                 .thenThrow(new AssertionError("冲突判断不得重新校验配置"));
         doThrow(new AssertionError("冲突判断不得访问素材服务"))
                 .when(save.assetService).validateUploadedImageUrl(anyLong(), anyLong(), any());
@@ -1281,7 +1338,7 @@ class MineTeamPortfolioServiceTest {
         when(context.access.requireTeamRole(eq(TEAM_ID), eq(USER_ID), any()))
                 .thenReturn(access(null, TeamRoleDict.OWNER.getCode()));
         when(context.validator.normalizeForDraft(
-                any(), isNull(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1))))
+                any(), isNull(), eq(new TeamPortfolioComponentContext(TEAM_ID, PORTFOLIO_ID, 1)), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(config());
         doAnswer(invocation -> {
             ((PortfolioEntity) invocation.getArgument(0)).setId(PORTFOLIO_ID);

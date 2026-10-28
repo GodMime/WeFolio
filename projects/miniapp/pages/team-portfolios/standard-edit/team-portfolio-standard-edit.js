@@ -1,3 +1,4 @@
+const { createTimeline, normalizeTimeline, validateTimeline, timelineSummary, timelineTheme } = require('../utils/portfolio-timeline')
 const { advancedEditorPageMethods, editorRequest, installAdvancedEditor, loadAdvancedMetadata, markAdvancedSaved, SAVE_INCOMPLETE_MESSAGE, confirmAdvancedPortfolioPublish } = require('../utils/advanced-editor-page')
 const { installRemoteFontPage } = require('../utils/portfolio-remote-font-page')
 const { buildPreviewVersionOptions, calculatePreviewVersionMenuLayout } = require('../utils/preview-version-menu')
@@ -69,9 +70,9 @@ const {
   loadPortfolioFonts
 } = require('../../../utils/portfolio-font-loader.js')
 
-const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', VIDEO_CAROUSEL: 'videoCarousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', STRUCTURED_TEXT_SECTION: 'structuredText', TEXT_GRID: 'textGrid', CONTACT_INFO: 'contactInfo', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
-const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', VIDEO_CAROUSEL: '视频轮播', SINGLE_WORK: '单个作品', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', STRUCTURED_TEXT_SECTION: '结构化文字说明', TEXT_GRID: '文字网格', CONTACT_INFO: '联系信息', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
-const COMPONENT_DESCRIPTIONS = Object.freeze({ TEAM_PROFILE: '展示团队头像、名称和简介', CAROUSEL: '轮播展示成员的图片作品', VIDEO_CAROUSEL: '叠放循环展示视频作品，访客左右滑动浏览、点击播放', SINGLE_WORK: '展示一个成员图片、视频或动图作品', DIVIDER: '分隔不同内容区块', MEMBER_PORTFOLIO_GRID: '双列展示成员已发布作品集', MEMBER_PORTFOLIO_LIST: '单列展示成员已发布作品集', TEXT_SECTION: '添加团队服务说明文字', STRUCTURED_TEXT_SECTION: '按区块自由组合文字样式、列表与间距', TEXT_GRID: '自由设置行列、合并拆分与同格文字样式', CONTACT_INFO: '直接展示联系手机、微信并支持复制', SCHEDULE_QUERY: '开放访客查询团队档期', CONTACT_FORM: '收集访客预留联系信息', QR_CONTACT: '展示团队二维码联系方式' })
+const TYPE_BUCKETS = Object.freeze({ TEAM_PROFILE: 'teamProfile', CAROUSEL: 'carousel', VIDEO_CAROUSEL: 'videoCarousel', SINGLE_WORK: 'singleWork', DIVIDER: 'divider', MEMBER_PORTFOLIO_GRID: 'grid', MEMBER_PORTFOLIO_LIST: 'list', TEXT_SECTION: 'text', STRUCTURED_TEXT_SECTION: 'structuredText', TEXT_GRID: 'textGrid', TIMELINE: 'timeline', CONTACT_INFO: 'contactInfo', SCHEDULE_QUERY: 'schedule', CONTACT_FORM: 'contact', QR_CONTACT: 'qr' })
+const COMPONENT_NAMES = Object.freeze({ TEAM_PROFILE: '团队资料', CAROUSEL: '轮播图', VIDEO_CAROUSEL: '视频轮播', SINGLE_WORK: '单个作品', DIVIDER: '分割线', MEMBER_PORTFOLIO_GRID: '双列作品集', MEMBER_PORTFOLIO_LIST: '单列作品集', TEXT_SECTION: '文字说明', STRUCTURED_TEXT_SECTION: '结构化文字说明', TEXT_GRID: '文字网格', TIMELINE: '时间轴', CONTACT_INFO: '联系信息', SCHEDULE_QUERY: '档期查询', CONTACT_FORM: '预留联系信息', QR_CONTACT: '二维码联系' })
+const COMPONENT_DESCRIPTIONS = Object.freeze({ TEAM_PROFILE: '展示团队头像、名称和简介', CAROUSEL: '轮播展示成员的图片作品', VIDEO_CAROUSEL: '叠放循环展示视频作品，访客左右滑动浏览、点击播放', SINGLE_WORK: '展示一个成员图片、视频或动图作品', DIVIDER: '分隔不同内容区块', MEMBER_PORTFOLIO_GRID: '双列展示成员已发布作品集', MEMBER_PORTFOLIO_LIST: '单列展示成员已发布作品集', TEXT_SECTION: '添加团队服务说明文字', STRUCTURED_TEXT_SECTION: '按区块自由组合文字样式、列表与间距', TEXT_GRID: '自由设置行列、合并拆分与同格文字样式', TIMELINE: '展示个人经历或团队里程碑', CONTACT_INFO: '直接展示联系手机、微信并支持复制', SCHEDULE_QUERY: '开放访客查询团队档期', CONTACT_FORM: '收集访客预留联系信息', QR_CONTACT: '展示团队二维码联系方式' })
 const COMPONENT_TYPES = Object.keys(COMPONENT_NAMES)
 const PORTFOLIO_REQUIRED_COMPONENT_TYPES = Object.freeze(['CAROUSEL', 'VIDEO_CAROUSEL', 'MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST'])
 const MEMBER_PORTFOLIO_COMPONENT_TYPES = Object.freeze(['MEMBER_PORTFOLIO_GRID', 'MEMBER_PORTFOLIO_LIST'])
@@ -200,7 +201,8 @@ function resolveSingleWorkRowSummary(component = {}, summaryMap = {}) {
 function buildComponentList(components = [], singleWorkRowSummaryMap = {}) {
   return (Array.isArray(components) ? components : []).map((item) => Object.assign({}, item, {
     displayName: COMPONENT_NAMES[item.componentType] || item.componentType || '页面组件'
-  }, item.componentType === 'SINGLE_WORK'
+  }, item.componentType === 'TIMELINE'
+    ? { showSummary: true, summaryText: timelineSummary(item.config || {}) } : item.componentType === 'SINGLE_WORK'
     ? { showSummary: true, summaryText: resolveSingleWorkRowSummary(item, singleWorkRowSummaryMap) }
     : {}))
 }
@@ -547,7 +549,7 @@ function resolveTeamCoverPreviewPath(filePath) {
   }))
 }
 function buckets(components) {
-  const value = { teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], structuredText: [], textGrid: [], contactInfo: [], schedule: [], contact: [], qr: [] }
+  const value = { teamProfile: [], carousel: [], videoCarousel: [], singleWork: [], divider: [], grid: [], list: [], text: [], structuredText: [], textGrid: [], timeline: [], contactInfo: [], schedule: [], contact: [], qr: [] }
   ;(Array.isArray(components) ? components : []).forEach((component) => { const key = TYPE_BUCKETS[component.componentType]; if (key) value[key].push(component) })
   return value
 }
@@ -658,6 +660,7 @@ Page({
   },
   handleRetry() { this.bootstrap() },
   updateConfig(config) {
+    this.setData({ timelineThemeMode: timelineTheme('', (config.style || {}).backgroundColor) })
     const normalized = normalizeTeamPortfolioConfig(config)
     const navigationItems = normalized.bottomNav.enabled
       ? normalized.bottomNav.items.map((item) => Object.assign({}, item, {
@@ -766,8 +769,8 @@ Page({
   syncActiveComponent(config = this.data.config, componentKey = this.data.activeComponentKey) { const location = findTeamPortfolioComponent(config, componentKey); const activeComponent = location ? location.component : { config: {} }; this.setData({ activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {} }) },
   handleOpenComponentSheet() { if (!this.data.canMaintain) return; const allComponents = visitTeamPortfolioComponents(this.data.config).map((item) => item.component); this.setData({ componentSheetVisible: true, revealedComponentKey: '', componentOptions: buildComponentOptions(allComponents) }) },
   handleCloseComponentSheet() { this.setData({ componentSheetVisible: false }) },
-  handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) { this.setData({ componentSheetVisible: false }); return this.openNewComponentSheet(componentType) }; if (componentType === 'STRUCTURED_TEXT_SECTION') { this.setData({ componentSheetVisible: false }); return this.openStructuredTextSheet() }; const componentKey = this.addComponent(componentType); this.setData({ componentSheetVisible: false }); if (componentType === 'VIDEO_CAROUSEL' && componentKey) return this.openTeamVideoCarouselSheet(componentKey, true) },
-  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'VIDEO_CAROUSEL') return this.openTeamVideoCarouselSheet(componentKey); if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (['TEXT_GRID', 'CONTACT_INFO'].includes(componentType)) return this.openNewComponentSheet(componentType, componentKey); if (componentType === 'STRUCTURED_TEXT_SECTION') return this.openStructuredTextSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, componentEditorLayoutType: componentType, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: !this.data.advancedEditing && PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType), ...(componentType === 'CAROUSEL' ? buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) : {}) }) },
+  handleSelectComponent(event) { if (event.currentTarget.dataset.disabled) return; const componentType = event.currentTarget.dataset.type; if (!componentType) return; if (['TEXT_GRID', 'TIMELINE', 'CONTACT_INFO'].includes(componentType)) { this.setData({ componentSheetVisible: false }); return this.openNewComponentSheet(componentType) }; if (componentType === 'STRUCTURED_TEXT_SECTION') { this.setData({ componentSheetVisible: false }); return this.openStructuredTextSheet() }; const componentKey = this.addComponent(componentType); this.setData({ componentSheetVisible: false }); if (componentType === 'VIDEO_CAROUSEL' && componentKey) return this.openTeamVideoCarouselSheet(componentKey, true) },
+  handleComponentTap(event) { const componentKey = event.currentTarget.dataset.key || ''; const componentType = event.currentTarget.dataset.type || ''; if (this.data.revealedComponentKey === componentKey) return this.setData({ revealedComponentKey: '' }); const location = findTeamPortfolioComponent(this.data.config, componentKey); const activeComponent = location && location.component; if (!activeComponent) return; if (componentType === 'VIDEO_CAROUSEL') return this.openTeamVideoCarouselSheet(componentKey); if (componentType === 'TEXT_SECTION') return this.openTextSectionSheet(componentKey); if (['TEXT_GRID', 'TIMELINE', 'CONTACT_INFO'].includes(componentType)) return this.openNewComponentSheet(componentType, componentKey); if (componentType === 'STRUCTURED_TEXT_SECTION') return this.openStructuredTextSheet(componentKey); if (componentType === 'CONTACT_FORM') return this.openContactFormSheet(componentKey); if (componentType === 'SCHEDULE_QUERY') return this.openScheduleQuerySheet(componentKey); if (componentType === 'DIVIDER') return this.openDividerSheet(componentKey); this.setData({ componentEditorVisible: true, componentEditorLayoutType: componentType, activeComponentKey: componentKey, activeComponentType: componentType, activeComponentName: COMPONENT_NAMES[componentType] || '页面组件', activeComponent, activeComponentSource: this.data.componentSources[componentKey] || {}, activeComponentNeedsPortfolio: !this.data.advancedEditing && PORTFOLIO_REQUIRED_COMPONENT_TYPES.includes(componentType), ...(componentType === 'CAROUSEL' ? buildCarouselEditorLayoutState(CAROUSEL_EDITOR_SCROLL_MIN_HEIGHT_RPX) : {}) }) },
   resetTeamVideoEditorState() {
     this.setData({
       teamVideoTitle: '视频作品',
@@ -1028,13 +1031,13 @@ Page({
     if (componentKey && (!location || location.component.componentType !== componentType)) return
     this.newComponentMenuKey = this.data.activeMenuKey
     this.setData({ newComponentSheetVisible: true, newComponentType: componentType, newComponentKey: componentKey,
-      newComponentConfig: componentType === 'TEXT_GRID' ? normalizeTextGrid(location ? location.component.config : {}) : normalizeContactInfo(location ? location.component.config : {}) })
+      newComponentConfig: componentType === 'TIMELINE' ? (location ? normalizeTimeline(location.component.config) : createTimeline('TEAM')) : componentType === 'TEXT_GRID' ? normalizeTextGrid(location ? location.component.config : {}) : normalizeContactInfo(location ? location.component.config : {}) })
   },
   handleCancelNewComponent() { this.setData({ newComponentSheetVisible: false, newComponentKey: '', newComponentConfig: {} }) },
   handleConfirmNewComponent(event) {
     if (!this.data.newComponentSheetVisible) return
     const type = this.data.newComponentType, value = event.detail
-    const error = type === 'TEXT_GRID' ? validateTextGrid(value, { requireText: true }) : validateContactInfo(value, true)
+    const error = type === 'TIMELINE' ? validateTimeline(value) : type === 'TEXT_GRID' ? validateTextGrid(value, { requireText: true }) : validateContactInfo(value, true)
     if (error) return wx.showToast({ title: error, icon: 'none' })
     const menuKey = this.newComponentMenuKey || '', componentKey = this.data.newComponentKey || makeKey()
     const navigation = this.data.config.bottomNav || {}
@@ -1844,7 +1847,7 @@ Page({
     if (!componentType) { this.setData({ openingLibrary: false }); return '' }
     this.clearPending()
     const componentKey = makeKey()
-    const componentConfig = componentType === 'TEAM_PROFILE'
+    const componentConfig = componentType === 'TIMELINE' ? createTimeline('TEAM') : componentType === 'TEAM_PROFILE'
       ? { team: Object.assign({}, this.data.teamSnapshot) }
       : componentType === 'SINGLE_WORK'
         ? { memberUserId: null, workId: null, showTitle: true, showDescription: false }
@@ -2197,7 +2200,7 @@ Page({
   async saveDraft(forPublish = false) {
     for (const location of visitTeamPortfolioComponents(this.data.config)) {
       const component = location.component
-      const message = component.componentType === 'TEXT_GRID' ? validateTextGrid(component.config)
+      const message = component.componentType === 'TIMELINE' ? validateTimeline(component.config) : component.componentType === 'TEXT_GRID' ? validateTextGrid(component.config)
         : component.componentType === 'CONTACT_INFO' ? validateContactInfo(component.config) : ''
       if (message) { wx.showToast({ title: message, icon: 'none' }); return null }
     }
@@ -2259,9 +2262,11 @@ Page({
       this.setData(Object.assign({ portfolioId, draftRevision, publicationStatus, pendingDraftKey: '' }, buildPublicationState(publicationStatus)))
       if (!editorChanged) {
         this.updateConfig(config)
+        this.applyAdvancedSavedMetadata(result)
         this.setData({ fontAssets: result.fontAssets || null })
         markAdvancedSaved(this)
       } else {
+        this.applyAdvancedSavedMetadata(result)
         wx.showToast({ title: this.advancedSaveMessage(UNSAVED_EDITOR_CHANGES_MESSAGE), icon: 'none' })
       }
       return Object.assign({}, result, { editorChanged })

@@ -81,7 +81,7 @@ function teamPortfolioEndpoint(portfolioId, suffix = '') {
 function createStandardTeamPortfolio(requestFn = request, teamId, config) {
   const id = normalizeId(teamId)
   if (!id) return Promise.reject(new Error('请选择可维护团队'))
-  return requestFn({ url: `/api/mine/teams/${id}/portfolios/standard`, method: 'POST', data: { config: config || null, clientCapabilities: { portfolioRemoteFont: 1 } } })
+  return requestFn({ url: `/api/mine/teams/${id}/portfolios/standard`, method: 'POST', data: { config: config || null, clientCapabilities: { portfolioRemoteFont: 1, ...(config ? { portfolioTimeline: 1 } : {}) } } })
 }
 
 function deleteTeamPortfolio(requestFn = request, portfolioId) {

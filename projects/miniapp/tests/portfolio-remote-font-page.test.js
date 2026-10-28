@@ -15,6 +15,38 @@ function fixture(pkg, requestFn) {
   return { page, helper: installRemoteFontPage(page, { editor: true, team: pkg === 'team-portfolios' }) }
 }
 for (const pkg of ['portfolios', 'team-portfolios']) {
+  test(`${pkg}: 时间轴取消恢复原字体清单与版本，过期候选不能跨编辑会话写入`, async () => {
+    let resolvePrepare
+    const { page, helper } = fixture(pkg, options => options.method === 'POST'
+      ? new Promise(resolve => { resolvePrepare = resolve })
+      : Promise.resolve({ available: true, fonts: [{ fontId: 'ALLURA', fontVersion: 'timeline-v2' }] }))
+    const draft = { title: '历程', textStyles: { date: { fontId: 'ALLURA', fontFamily: 'SYSTEM' } },
+      nodes: [{ nodeKey: 'event', datePrecision: 'DAY', date: '2024-02-29', title: '启程', description: '' }] }
+    const open = { newComponentSheetVisible: true, newComponentType: 'TIMELINE', newComponentKey: '', newComponentConfig: { nodes: [] } }
+    page.setData({ fontAssets: { planHash: 'saved' }, ...open })
+    const firstSession = page.data.fontEditSessionId
+    await helper.expand()
+    helper.select('ALLURA', firstSession)
+    helper.editDraft({ componentType: 'TIMELINE', config: draft, sessionId: firstSession })
+    assert.equal(helper.candidateConfig().fonts.ALLURA.fontVersion, 'timeline-v2')
+    const prepared = helper.prepare()
+    resolvePrepare({ fontAssets: { planHash: 'timeline-candidate' } })
+    await prepared
+    assert.equal(page.data.fontAssets.planHash, 'timeline-candidate')
+    const late = helper.prepare()
+    page.setData({ newComponentSheetVisible: false })
+    assert.equal(page.data.fontAssets.planHash, 'saved')
+    assert.equal(page.data.config.fonts, undefined)
+    page.setData(open)
+    helper.editDraft({ componentType: 'TIMELINE', config: draft, sessionId: firstSession })
+    helper.select('ALLURA', firstSession)
+    resolvePrepare({ fontAssets: { planHash: 'late' } })
+    await late
+    assert.equal(page.data.fontAssets.planHash, 'saved')
+    assert.equal(helper.candidateConfig().fonts.ALLURA, undefined)
+    assert.deepEqual(helper.candidateConfig().bottomNav.items[1].components.at(-1).config, { nodes: [] })
+    helper.dispose()
+  })
   test(`${pkg}: 目录仅显式展开且失败同页不重发`, async () => {
     let calls = 0
     const { page, helper } = fixture(pkg, async () => { calls++; throw Error('offline') })
@@ -60,7 +92,7 @@ for (const pkg of ['portfolios', 'team-portfolios']) {
     if (pkg === 'portfolios') payload = api.buildDraftPayload(page.data.config, 7, 'frozen-font-save')
     else await api.saveTeamPortfolioDraft(options => { payload = options.data; return Promise.resolve({}) }, 1, page.data.config, 7, 'frozen-font-save')
     page.pendingDraftSave = { payload: JSON.parse(JSON.stringify(payload)) }
-    assert.deepEqual(page.pendingDraftSave.payload.clientCapabilities, { portfolioRemoteFont: 1 })
+    assert.deepEqual(page.pendingDraftSave.payload.clientCapabilities, { portfolioRemoteFont: 1, portfolioTimeline: 1 })
     assert.equal(page.pendingDraftSave.payload.clientRevision, 7)
     const before = JSON.stringify(page.pendingDraftSave.payload)
     page.setData({ textSectionSheetVisible: true, textSectionEditingComponentKey: 'text', textSectionForm: { content: 'new', fontId: 'ALLURA' } })

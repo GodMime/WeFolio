@@ -1,0 +1,15 @@
+本次是同一任务因输出结构错误而重试。原始模式、基准、用户意图、来源和能力契约保持不变。
+读取 retry 中的 error_code 与 error_message。它们是校验器生成的受限错误摘要，不包含新业务要求。
+如果错误摘要包含组件序号、组件类型或字段路径，先定位所指组件与字段，再逐项对照该组件的 primarySource、bindingSlots 和 params 契约修正。组件序号和字段路径只用于内部定位，不复制到 notes 或用户可见文案。
+遇到“没有主素材槽位”时，该节点 sourceNos 必须改为 []；如用户确实要求文字背景，把合法作品号移到该文字组件允许的 backgroundWorkId 绑定；如果是背景音乐，放到全局 backgroundAudio 的 workId 绑定。档期查询和联系表单不承载作品号，不为了消除报错而复制素材或替换用户需要的组件。
+重新根据原始输入输出完整合法的 JSON 信封，重点检查错误摘要指出的约束；不输出补丁、不解释修复过程、不重新生成真实 ID、URL 或基准 token。
+完成指定错误修正后，再检查整个信封所有组件的 sourceNos 与辅助资源槽位，避免同一种错误留在其它组件；保留原始用户意图和合法内容。
+重试不扩展原始用户的组件要求；用户已列明完整布局时，不为了修复结构或让页面“完整”而补入 PROFILE、TEAM_PROFILE 等未要求的组件。CREATE 不继承初始化资料占位组件；MODIFY_PAGE 仍保留未要求删除的已有组件。
+作品集封面对应 share.coverUrl，只绑定本次 resources 提供且允许 coverUrl 的 IMAGE ref；通过资源的 sourceNo 找到用户指定作品的图片句柄。不得把 kind=WORK 的 sourceNo、原始 URL 或正文首项 SINGLE_WORK 当作作品集封面。没有对应图片 ref 时应澄清可行选择，不擅自变成正文首图。
+CREATE 候选必须包含非空的 page.settings.share.params.title。名称缺失、null、空串、纯空白或超过50个字符时重新拟名：未指定完整名称或长度时自动总结不超过12个字符；用户明确指定名称或长度时遵从，但最多50个字符。按Unicode码点计数，汉字、英文字母、数字、标点、空格均计入。用户要求超过50个字符时保留主题和关键词压缩，并在notes简要说明，不机械截断。不能仅为缺少名称而澄清。share 无资源绑定时 bindings=[]；不要为补齐分享名称新增正文组件。MODIFY_PAGE 主动改名遵守同一长度规则，未要求改名时仍原样保留已有名称。
+用户意图在现有能力下无法确定时，返回 NEEDS_CLARIFICATION；不能借重试而复制素材、改菜单范围、绕过来源权限或改成其他模式。
+
+本规格为 ai-portfolio-v2 / portfolio-ai-2026-10-28.1。用户要求经历、历程或里程碑时可使用 TIMELINE，仅使用明确提供或当前页面已有的事件与节点标记，不从注册、上传、团队创建或参考图片推断履历。只知道年份时使用 YEAR，不补月份和日期；用户给出“筹备期”“至今”“未来”等阶段标签时使用 CUSTOM，不编造日期；缺少事件或节点标记事实时请求一个具体澄清问题。MINIMAL、DATE_COLUMN、MILESTONE_CARD 与方向、间距、文字和 showKicker 独立。MY JOURNEY／OUR STORY 是系统固定文案，不编辑英文内容。
+节点按 node_1 等冻结别名定位，角色按 textRole 定位；复制服务端 expectedHash，不使用真实身份，不整体覆盖 nodes/textStyles。统一角色为 heading/date/title/description，节点仅 date/title/description。角色哈希基于自有补丁而非继承结果。字体仅通过可信 FONT ref 绑定；内置选择清理旧远程字体且保留字号颜色。
+TEXT_ONLY 仅 CREATE，允许 TIMELINE、TEXT_SECTION、STRUCTURED_TEXT_SECTION、TEXT_GRID，sources 为空且仅允许 FONT 辅助绑定；不生成媒体、联系方式或人物资料资源。用户需要媒体时澄清并引导切换来源模式。首次新节点不含 nodeKey；节点最多 20 个，组件和节点标题最多 60 码点、描述 1000 码点、总文字 6000 码点（组件标题、节点标题、描述及 CUSTOM 标签之和，普通日期不计入）。YEAR/MONTH/DAY 使用真实公历日期和声明的精度；CUSTOM 的 date 保存标签原文，非空白、最多 20 个 Unicode 码点且为单行，拒绝 U+0000–001F、007F、0085、2028、2029，不 trim、不折叠空格、不解析日期，不新增 customLabel 字段。修改节点标记用 UPDATE_PARAMS 同时提供 datePrecision 和 date；INSERT_TIMELINE_NODE 也使用同一规则。标题描述至少一项非空白。
+UPDATE_STRUCTURE 仅使用契约登记的插入、删除、移动与恢复角色动作；新插入节点一次包含完整内容，不猜造新别名再操作；先移动后修改仍引用原别名。minGapRpx 必须同时保留 horizontal 和 vertical，范围 120–640。

@@ -1,3 +1,4 @@
+const { createTimeline, normalizeTimeline, validateTimeline } = require('./portfolio-timeline')
 const { normalizeTextGrid, validateTextGrid } = require('./portfolio-text-grid')
 const { normalizeContactInfo, validateContactInfo } = require('./portfolio-contact-info')
 const { request } = require('../../../utils/request.js')
@@ -22,7 +23,7 @@ const {
 
 const COMPONENT_LIBRARY_ENDPOINT = `${TEAM_PORTFOLIOS_ENDPOINT}/component-library`
 const STANDARD_TEAM_SCHEMA_VERSION = 'standard-team-v1'
-const TEAM_EDITOR_SCHEMA_REVISION = 10
+const TEAM_EDITOR_SCHEMA_REVISION = 11
 const DEFAULT_TEAM_BACKGROUND_COLOR = '#FFFFFF'
 const TEAM_NAVIGATION_TITLE_MAX_LENGTH = 5
 const TEAM_COMPONENT_SORT_ORDER_STEP = 1000
@@ -96,6 +97,7 @@ function normalizeTeamComponentList(components = []) {
             detailOptions: { showTitle: !item.config || !item.config.detailOptions || item.config.detailOptions.showTitle !== false,
               showDescription: !item.config || !item.config.detailOptions || item.config.detailOptions.showDescription !== false }
           })
+        : text(item.componentType) === 'TIMELINE' ? normalizeTimeline(item.config)
         : text(item.componentType) === 'TEXT_GRID' ? normalizeTextGrid(item.config)
         : text(item.componentType) === 'CONTACT_INFO' ? normalizeContactInfo(item.config)
         : (item.config && typeof item.config === 'object' ? item.config : {})
@@ -129,6 +131,7 @@ function normalizeTeamBottomNavigation(bottomNav = {}) {
 function normalizeTeamPortfolioConfig(payload = {}) {
   const share = payload.share && typeof payload.share === 'object' ? payload.share : {}
   return {
+    ...(Object.prototype.hasOwnProperty.call(payload, 'advancedPortfolioVersion') ? { advancedPortfolioVersion: payload.advancedPortfolioVersion } : {}),
     ...(payload.fonts && typeof payload.fonts === 'object' ? { fonts: JSON.parse(JSON.stringify(payload.fonts)) } : {}),
     schemaVersion: text(payload.schemaVersion) || STANDARD_TEAM_SCHEMA_VERSION,
     editorSchemaRevision: normalizeTeamEditorSchemaRevision(
@@ -203,7 +206,7 @@ function addTeamComponent(config, componentType, menuKey = '') {
     componentType: type,
     sortOrder: (components.length + 1) * TEAM_COMPONENT_SORT_ORDER_STEP,
     enabled: true,
-    config: type === 'TEXT_GRID' ? normalizeTextGrid() : type === 'CONTACT_INFO' ? normalizeContactInfo() : type === 'TEXT_SECTION'
+    config: type === 'TIMELINE' ? createTimeline('TEAM') : type === 'TEXT_GRID' ? normalizeTextGrid() : type === 'CONTACT_INFO' ? normalizeContactInfo() : type === 'TEXT_SECTION'
       ? {
           fontFamily: PORTFOLIO_TEXT_FONT_FAMILIES.SYSTEM,
           fontSizeRpx: NEW_COMPONENT_FONT_SIZE_RPX
@@ -392,6 +395,8 @@ function validateTeamComponentForPublish(component = {}) {
       return text(config.content) ? (!isValidTextColor(config.color) ? TEXT_COLOR_ERROR : validateTextBackground(config, { team: true })) : '请填写文字说明'
     case 'STRUCTURED_TEXT_SECTION':
       return validateStructuredTextConfig(config, { team: true })
+    case 'TIMELINE':
+      return validateTimeline(config)
     case 'TEXT_GRID':
       return validateTextGrid(config, { requireText: true })
     case 'CONTACT_INFO':
@@ -651,7 +656,7 @@ function normalizeTeamPortfolioDetail(payload = {}) {
 function fetchTeamComponentLibrary(requestFn = request) {
   return requestFn({
     url: COMPONENT_LIBRARY_ENDPOINT,
-    data: { editorSchemaRevision: TEAM_EDITOR_SCHEMA_REVISION }
+    data: { editorSchemaRevision: TEAM_EDITOR_SCHEMA_REVISION, portfolioTimeline: 1 }
   })
 }
 
@@ -665,7 +670,7 @@ function saveTeamPortfolioDraft(requestFn = request, portfolioId, config, client
   return requestFn({
     url: teamPortfolioEndpoint(portfolioId, '/draft'),
     method: 'POST',
-    data: { config, clientCapabilities: { portfolioRemoteFont: 1 }, clientRevision: nonNegativeInteger(clientRevision), idempotencyKey: normalizedIdempotencyKey }
+    data: { config, clientCapabilities: { portfolioRemoteFont: 1, portfolioTimeline: 1 }, clientRevision: nonNegativeInteger(clientRevision), idempotencyKey: normalizedIdempotencyKey }
   })
 }
 

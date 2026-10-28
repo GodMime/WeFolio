@@ -36,7 +36,9 @@ public enum TeamPortfolioComponentTypeDict {
     /** 自由合并的文字网格。 */
     TEXT_GRID("TEXT_GRID", "文字网格", 5),
     /** 独立联系资料快照。 */
-    CONTACT_INFO("CONTACT_INFO", "联系信息", 5);
+    CONTACT_INFO("CONTACT_INFO", "联系信息", 5),
+    /** 个人经历或团队里程碑。 */
+    TIMELINE("TIMELINE", "时间轴", 11);
 
     /** 组件编码 */
     private final String code;

@@ -5,6 +5,8 @@ import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.JSONObject;
 import com.jxc.wefolio.entity.PortfolioEntity;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.message.AdvancedPortfolioMessage;
@@ -18,7 +20,17 @@ import java.util.Set;
 /** 高级保存专有元数据；在普通最终保存短事务内校验并与配置一致写入。 */
 public record AdvancedPortfolioSaveMetadata(JSONObject context, boolean contextPresent,
                                             String prompt, boolean promptPresent, String fingerprint,
-                                            ArrayNode referenceAttachments, boolean referencesPresent, Integer referenceNextNo) {
+                                            ArrayNode referenceAttachments, boolean referencesPresent, Integer referenceNextNo,
+                                            int clientAdvancedVersion,
+                                            AdvancedPortfolioVersionSupport.Metadata configVersion) {
+    /** 旧内部调用继续按 V1 解释，不改写既有指纹。 */
+    public AdvancedPortfolioSaveMetadata(JSONObject context, boolean contextPresent, String prompt,
+            boolean promptPresent, String fingerprint, ArrayNode referenceAttachments,
+            boolean referencesPresent, Integer referenceNextNo) {
+        this(context, contextPresent, prompt, promptPresent, fingerprint, referenceAttachments,
+                referencesPresent, referenceNextNo, AdvancedVersionRegistry.LEGACY_VERSION,
+                new AdvancedPortfolioVersionSupport.Metadata(false, AdvancedVersionRegistry.LEGACY_VERSION));
+    }
     /** 兼容不携带附件的既有保存调用。 */
     public AdvancedPortfolioSaveMetadata(JSONObject context, boolean contextPresent, String prompt,
             boolean promptPresent, String fingerprint) {
@@ -34,6 +46,27 @@ public record AdvancedPortfolioSaveMetadata(JSONObject context, boolean contextP
     private static final Set<String> SOURCE_KEYS = Set.of("sourceNo", "kind", "sourceId");
     /** 支持的来源类型。 */
     private static final Set<String> SOURCE_KINDS = Set.of("WORK", "MEMBER_PORTFOLIO");
+
+    /** 最终事务以已锁定的数据库草稿判断，客户端元数据无法绕过此门槛。 */
+    public void requireWritable(PortfolioEntity portfolio) {
+        AdvancedPortfolioVersionSupport.requireCanWrite(clientAdvancedVersion, portfolio.getDraftConfigJson());
+    }
+
+    /** 幂等、修订与版本门槛之后校验原始内容，DTO 的宽松转换不能掩盖非法输入。 */
+    public void validateConfig(boolean team) {
+        AdvancedPortfolioConfigGuard.validate(
+                StrictAiJson.parseObject(fingerprint, 2 * 1024 * 1024, 20).withObject("config"), team, clientAdvancedVersion);
+    }
+
+    /** 保真预期和规范化结果同时恢复本次保存版本，不能先写版本后另存内容。 */
+    public void assertNormalized(Object normalized, boolean team) {
+        ObjectNode incoming = StrictAiJson.parseObject(fingerprint, 2 * 1024 * 1024, 20).withObject("config");
+        AdvancedPortfolioVersionSupport.extract(incoming, clientAdvancedVersion);
+        AdvancedPortfolioConfigGuard.assertNormalized(
+                AdvancedPortfolioVersionSupport.saved(incoming, clientAdvancedVersion),
+                AdvancedPortfolioVersionSupport.saved(AdvancedPortfolioVersionSupport.tree(JSON.toJSONString(normalized)),
+                        clientAdvancedVersion), team);
+    }
 
     /** 校验高水位和旧映射，在锁内重新读取的实体上应用明确提交的可选字段。 */
     public void apply(PortfolioEntity portfolio) {

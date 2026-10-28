@@ -1,5 +1,7 @@
 package com.jxc.wefolio.service.advancedportfolio;
 
+import com.jxc.wefolio.dto.MinePortfolioDetailResponse;
+
 import com.jxc.wefolio.common.auth.AuthContext;
 import com.jxc.wefolio.common.auth.AuthContextHolder;
 import com.jxc.wefolio.dict.PortfolioTemplateTypeDict;
@@ -53,6 +55,7 @@ class AdvancedTeamMemberPortfolioPreviewServiceTest {
     /** 仅当前有效来源可沿高级显式策略预览发布版，且不产生真实访问。 */
     @Test void validCurrentReferenceUsesPublishedReadOnlyAlgorithm() {
         when(references.selectCount(any())).thenReturn(1L);
+        when(personal.previewPublishedReferencedPortfolio(21L, true)).thenReturn(new MinePortfolioDetailResponse());
         service.preview(11L, 21L, "published");
         verify(sources).requireMemberPortfolio(31L, 21L); verify(personal).previewPublishedReferencedPortfolio(21L, true);
     }

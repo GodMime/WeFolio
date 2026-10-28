@@ -68,6 +68,21 @@ const touch = (clientX, clientY) => ({ touches: [{ clientX, clientY }] })
 const rect = { left: 10, top: 20, width: 100, height: 200 }
 
 for (const directory of ['portfolios', 'team-portfolios']) {
+  test(`${directory} 当前背景同步试色预览，切主题与取消不改已选色`, () => {
+    const harness = editor(directory, '#ABCDEF', { backgroundColor: '#202328', themeMode: 'dark' })
+    assert.equal(harness.instance.data.previewBackground, '#202328')
+    harness.instance.handleOpenCustom(); harness.tick()
+    harness.instance.handleHexInput(input('#123456'))
+    harness.property('backgroundColor', '#ffffff')
+    assert.equal(harness.instance.data.previewBackground, '#FFFFFF')
+    assert.equal(harness.instance.data.hexInput, '#123456')
+    assert.equal(harness.instance.data.selectedColor, '#ABCDEF')
+    harness.property('backgroundColor', 'bad')
+    assert.equal(harness.instance.data.previewBackground, '#FFFFFF')
+    harness.instance.handleCancelCustom(); harness.tick()
+    assert.deepEqual(harness.instance.events, [])
+    assert.equal(harness.instance.data.selectedColor, '#ABCDEF')
+  })
   test(`${directory} 弹层与内联复用可编辑色值和同行复制按钮，窄面板允许输入框缩小`, () => {
     const base = path.join(__dirname, `../pages/${directory}/components/text-color-editor/text-color-editor`)
     const template = fs.readFileSync(base + '.wxml', 'utf8')

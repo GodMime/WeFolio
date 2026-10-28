@@ -8,10 +8,73 @@ const { installAdvancedEditor, markAdvancedSaved, advancedEditorPageMethods } = 
 function pageFor(requestFn, patch = {}, team = false) {
   const definition = (team ? createTeamAdvancedAiPage : createAdvancedAiPage)(team, { requestFn })
   const page = { ...definition, data: JSON.parse(JSON.stringify(definition.data)), setData(value) { Object.assign(this.data, value) } }
-  Object.assign(page.data, { ownerId: '101', prompt: '精简已有文字', capabilities: { enabled: true, limits: { maxSourceCount: 10 } }, mode: 'MODIFY_PAGE',
+  Object.assign(page.data, { ownerId: '101', prompt: '精简已有文字', capabilities: { enabled: true, supportedProtocols: [{ aiContractVersion: 'ai-portfolio-v2', textOnlyCreate: true, sourceModes: ['SELECTED_SOURCES', 'TEXT_ONLY'] }], limits: { maxSourceCount: 10 } }, mode: 'MODIFY_PAGE',
     config: { schemaVersion: 'standard-personal-v1', components: [] }, aiContext: normalizeContext(), ...patch })
   page.schedulePoll = () => {}
   return page
+}
+
+for (const team of [false, true]) {
+  test(`${team ? '团队' : '个人'}历史任务缺省版本按 V1 允许候选，不改候选根元数据`, () => {
+    const page = pageFor(async () => {}, {}, team)
+    const candidate = { schemaVersion: team ? 'standard-team-v1' : 'standard-personal-v1', components: [] }
+    page.applyTask({ taskId: 'historical', status: 'SUCCEEDED', result: { kind: 'CANDIDATE', available: true, hasChanges: true, candidate, renderData: {} } })
+    assert.equal(page.data.canAdopt, true)
+    assert.equal(page.data.taskError, '')
+    assert.equal(page.data.result.candidate.advancedPortfolioVersion, undefined)
+    assert.deepEqual(page.data.result.candidate, candidate)
+  })
+  test(`${team ? '团队' : '个人'}旧服务缺少 V2 时保留本地草稿且不降级提交`, async () => {
+    const previous = global.wx, notices = [], calls = []
+    global.wx = { showToast(value) { notices.push(value.title) } }
+    try {
+      const page = pageFor(async options => { calls.push(options) }, { capabilities: { enabled: true, aiContractVersion: 'ai-portfolio-v1' } }, team)
+      const before = JSON.stringify(page.data.config)
+      await page.handleGenerate()
+      assert.equal(calls.length, 0)
+      assert.match(notices[0], /不支持此版本/)
+      assert.equal(JSON.stringify(page.data.config), before)
+    } finally { global.wx = previous }
+  })
+  test(`${team ? '团队' : '个人'}查询固定发送 C，高版本任务保持成功但禁用候选与预览`, async () => {
+    const calls = []
+    const page = pageFor(async options => { calls.push(options); return { taskId: 'v3', status: 'SUCCEEDED', taskAdvancedVersion: 3,
+      result: { kind: 'CANDIDATE', available: true, hasChanges: true, candidate: { advancedPortfolioVersion: 1 }, renderData: {} } } }, { task: { taskId: 'v3' } }, team)
+    await page.queryTask()
+    assert.deepEqual(calls[0].data, { clientAdvancedVersion: 2 })
+    assert.equal(page.data.task.status, 'SUCCEEDED')
+    assert.equal(page.data.canAdopt, false)
+    assert.equal(page.data.result.candidate, undefined)
+    assert.match(page.data.taskError, /升级/)
+  })
+  test(`${team ? '团队' : '个人'}TEXT_ONLY 创建采用后首次保存前以无 ID 空来源继续修改`, async () => {
+    const previous = global.wx, events = [], calls = []
+    global.wx = { showToast() {}, navigateTo(options) { options.success({ eventChannel: { emit(name, value) { events.push({ name, value }) } } }) } }
+    try {
+      const candidate = { schemaVersion: team ? 'standard-team-v1' : 'standard-personal-v1', advancedPortfolioVersion: 2, components: [] }
+      const page = pageFor(async options => { calls.push(options); return { taskId: 'created', status: 'SUCCEEDED', taskAdvancedVersion: 2,
+        baseDraftRevision: 0, localEditRevision: 0, result: { kind: 'CANDIDATE', available: true, hasChanges: true, candidate, renderData: {} } } },
+      { ownerType: team ? 'TEAM' : 'USER', mode: 'CREATE', sourceMode: 'TEXT_ONLY', config: null, portfolioId: null, task: { taskId: 'created' }, canAdopt: true }, team)
+      page.taskBasis = captureBasis(page.currentState())
+      const api = require(`../pages/${team ? 'team-portfolios' : 'portfolios'}/utils/advanced-portfolios`)
+      const original = api.buildTaskPayload(page.currentState(), { mode: 'CREATE', sourceMode: 'TEXT_ONLY', prompt: '记录2018年入行' }, 'create-key')
+      await page.handleAdopt()
+      assert.equal(events[0].name, 'advancedInitial')
+      assert.equal(events[0].value.sourceMode, 'SELECTED_SOURCES')
+      assert.equal(events[0].value.portfolioId, null)
+      const current = { ...events[0].value, mode: 'MODIFY_PAGE' }
+      const modify = api.buildTaskPayload(current, { mode: 'MODIFY_PAGE', prompt: '增加留白' }, 'modify-key')
+      assert.equal(modify.sourceMode, 'SELECTED_SOURCES')
+      assert.equal(modify.baseConfig.advancedPortfolioVersion, 2)
+      assert.equal(modify.portfolioId, null)
+      assert.equal(modify.baseDraftRevision, 0)
+      assert.deepEqual(modify.aiContext.sources, [])
+      assert.equal(original.sourceMode, 'TEXT_ONLY')
+      assert.notEqual(modify.idempotencyKey, original.idempotencyKey)
+      assert.notEqual(captureBasis(current), page.taskBasis)
+      assert.equal(calls.every(item => item.method !== 'POST'), true)
+    } finally { global.wx = previous }
+  })
 }
 
 for (const team of [false, true]) {

@@ -1,4 +1,4 @@
-const { createRemoteFontSession, collectFontNodes } = require('./portfolio-remote-font-session')
+const { createRemoteFontSession, collectFontNodes, collectFontSelections } = require('./portfolio-remote-font-session')
 const { createPortfolioOpening } = require('./portfolio-opening')
 const { request } = require('../../../utils/request.js')
 const { PORTFOLIO_TEXT_SELECTION_OPTIONS, buildPortfolioTextTypography, LEGACY_PERSONAL_FONT_SIZE_RPX, LEGACY_TEAM_FONT_SIZE_RPX } = require('../../../utils/portfolio-text-typography.js')
@@ -26,8 +26,8 @@ function installRemoteFontPage(page, { editor = false, team = false } = {}) {
       ? ['TEXT_SECTION', data.textSectionEditingComponentKey, data.activeMenuKey]
       : data.structuredTextSheetVisible
         ? ['STRUCTURED_TEXT_SECTION', data.structuredTextEditingComponentKey, page.structuredTextMenuKey || data.structuredTextEditingMenuKey || data.activeMenuKey]
-        : data.newComponentSheetVisible && data.newComponentType === 'TEXT_GRID'
-          ? ['TEXT_GRID', data.newComponentKey, page.newComponentMenuKey || data.activeMenuKey] : null
+        : data.newComponentSheetVisible && ['TEXT_GRID', 'TIMELINE'].includes(data.newComponentType)
+          ? [data.newComponentType, data.newComponentKey, page.newComponentMenuKey || data.activeMenuKey] : null
     const identity = descriptor && JSON.stringify(descriptor)
     if (identity === (edit && edit.identity)) return
     if (edit && !edit.committed && edit.prepared) originalSetData({ fontAssets: edit.assets || null })
@@ -41,7 +41,7 @@ function installRemoteFontPage(page, { editor = false, team = false } = {}) {
     const config = clone(page.data.config || {})
     if (!edit) return config
     const value = edit.type === 'TEXT_SECTION' ? page.data.textSectionForm
-      : editingDraft ? editingDraft.config : edit.type === 'TEXT_GRID' ? page.data.newComponentConfig : page.data.structuredTextConfig
+      : editingDraft ? editingDraft.config : ['TEXT_GRID', 'TIMELINE'].includes(edit.type) ? page.data.newComponentConfig : page.data.structuredTextConfig
     const items = (config.bottomNav || {}).items || []
     const index = items.findIndex(item => item.key === edit.menuKey)
     if (edit.menuKey && index < 0) return config
@@ -78,7 +78,7 @@ function installRemoteFontPage(page, { editor = false, team = false } = {}) {
   function allNodes(config) {
     const components = [...(config.components || [])]
     ;((config.bottomNav || {}).items || []).slice(1).forEach(item => components.push(...(item.components || [])))
-    return collectFontNodes(components)
+    return collectFontSelections(components)
   }
   function activeComponents(config) {
     const items = (config.bottomNav || {}).items || []
@@ -187,7 +187,7 @@ function installRemoteFontPage(page, { editor = false, team = false } = {}) {
     page.setData({ fontPreparing: true, fontMessage: '' })
     try {
       const response = await (page.advancedRequest ? options => page.advancedRequest(options) : request)({ url: `/api/mine/${team ? 'team-portfolios' : 'portfolios'}/${page.data.portfolioId}/fonts/prepare`,
-        method: 'POST', data: { config, clientCapabilities: { portfolioRemoteFont: 1 } } })
+        method: 'POST', data: { config, clientCapabilities: { portfolioRemoteFont: 1, portfolioTimeline: 1 } } })
       if (isCurrent()) {
         if (edit) edit.prepared = true
         page.setData({ fontAssets: response.fontAssets || null,

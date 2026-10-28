@@ -15,7 +15,7 @@ import java.util.List;
 public class TeamPortfolioConfigDto {
 
     /** 当前团队编辑器配置能力版本 */
-    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 10;
+    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 11;
 
     /** 默认页面背景色 */
     public static final String DEFAULT_BACKGROUND_COLOR = "#FFFFFF";
@@ -131,7 +131,7 @@ public class TeamPortfolioConfigDto {
         /** 是否启用 */
         private Boolean enabled;
 
-        /** 组件私有配置 */
+        /** 组件私有配置；时间轴节点的 date 为规范日期，datePrecision=CUSTOM 时为自定义标记原文。 */
         private JSONObject config;
     }
 }

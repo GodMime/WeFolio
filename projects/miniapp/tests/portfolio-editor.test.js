@@ -383,8 +383,8 @@ test('personal text patches preserve typography and unknown fields under the cur
     alignment: 'RIGHT'
   })
 
-  assert.equal(EDITOR_SCHEMA_REVISION, 14)
-  assert.equal(updated.editorSchemaRevision, 14)
+  assert.equal(EDITOR_SCHEMA_REVISION, 15)
+  assert.equal(updated.editorSchemaRevision, 15)
   assert.equal(updated.components[0].config.fontFamily, 'WECHAT_SANS_SS')
   assert.equal(updated.components[0].config.fontSizeRpx, 30)
   assert.equal(updated.components[0].config.futureField, 'kept')
@@ -628,7 +628,7 @@ test('standard portfolio keeps profile option disabled after component library l
 
   const profileOption = page.data.componentOptions.find((item) => item.componentType === COMPONENT_TYPES.PROFILE)
   assert.equal(profileOption.disabled, true)
-  assert.deepEqual(requests[0].data, { editorSchemaRevision: 14 })
+  assert.deepEqual(requests[0].data, { editorSchemaRevision: 15, portfolioTimeline: 1 })
 })
 
 test('personal video carousel opens immediately and keeps ordered selections across tag filters', async () => {

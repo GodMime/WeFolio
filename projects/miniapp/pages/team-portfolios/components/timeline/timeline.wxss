@@ -1,0 +1,36 @@
+.timeline-root{position:relative;padding:28rpx 32rpx;box-sizing:border-box;--timeline-date:#7B6A54;--timeline-muted:#687078;--timeline-line:#CFC6BA;--timeline-card:#F5F3EF;--timeline-border:#E4E3DE}
+.timeline-theme-dark{--timeline-date:#D4C0A1;--timeline-muted:#C1C7CE;--timeline-line:#9B8D7A;--timeline-card:#2A2D31;--timeline-border:#51565E}
+.timeline-kicker,.timeline-heading,.timeline-hint,.timeline-title,.timeline-description,.timeline-month-day{display:block;white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere}
+.timeline-kicker{font-size:18rpx;line-height:1.5;color:var(--timeline-date);letter-spacing:4rpx;margin-bottom:14rpx}.timeline-heading{margin-bottom:32rpx}.timeline-hint{font-size:18rpx;line-height:1.5;color:var(--timeline-muted);margin-top:24rpx}
+.timeline-scroll{width:100%}.timeline-frame{position:relative;min-height:1rpx}.timeline-node{position:absolute;box-sizing:border-box}.timeline-date{white-space:nowrap;flex-shrink:0}.timeline-body{box-sizing:content-box;min-width:0;white-space:normal}.timeline-title+.timeline-description{margin-top:12rpx}
+.timeline-dot{position:absolute;width:12rpx;height:12rpx;left:0;border-radius:50%;background:var(--timeline-date);transform:translateY(-50%);z-index:1}.timeline-line{position:absolute;left:6rpx;background:var(--timeline-line)}.timeline-horizontal .timeline-line{height:2rpx}.timeline-vertical .timeline-line{width:2rpx}.timeline-horizontal .timeline-body{margin-top:48rpx}.timeline-vertical .timeline-node{padding-left:32rpx}.timeline-vertical .timeline-body{margin-top:12rpx}
+.timeline-MILESTONE_CARD .timeline-body{padding:20rpx;border:1rpx solid var(--timeline-border);border-radius:16rpx;background:var(--timeline-card)}
+.timeline-vertical.timeline-DATE_COLUMN .timeline-node,.timeline-vertical.timeline-DATE_COLUMN .timeline-probe-node{display:flex;gap:24rpx}.timeline-vertical.timeline-DATE_COLUMN .timeline-body{margin-top:0}.timeline-vertical.timeline-DATE_COLUMN.timeline-compact .timeline-node,.timeline-vertical.timeline-DATE_COLUMN.timeline-compact .timeline-probe-node{display:block}.timeline-compact.timeline-DATE_COLUMN .timeline-body{margin-top:12rpx}
+.timeline-probes{position:fixed;left:-20000px;top:0;opacity:0;pointer-events:none}.timeline-probe-node{box-sizing:border-box}.timeline-vertical .timeline-probe-node{padding-left:32rpx}.timeline-horizontal .timeline-probe-body{margin-top:48rpx}.timeline-probe-date{display:inline-block}
+/* 测量不可用时按顺序自然展开，普通容器随长文本增高，不依赖滚动视口的自动高度。 */
+.timeline-natural.timeline-horizontal .timeline-frame{display:block}.timeline-natural.timeline-horizontal .timeline-node{position:relative;min-width:0;width:100%;margin-bottom:32rpx}.timeline-natural.timeline-horizontal .timeline-date{min-height:80rpx}.timeline-natural.timeline-horizontal .timeline-dot{top:96rpx}.timeline-natural.timeline-horizontal .timeline-line{top:96rpx;width:100%}.timeline-natural.timeline-horizontal .timeline-body{width:100%;box-sizing:border-box;margin-top:48rpx}
+.timeline-natural.timeline-vertical .timeline-frame{display:block}.timeline-natural.timeline-vertical .timeline-node{position:relative;width:100%;min-height:200rpx;margin-bottom:32rpx}.timeline-natural.timeline-vertical .timeline-dot{top:20rpx}.timeline-natural.timeline-vertical .timeline-line{top:20rpx;height:100%}.timeline-natural .timeline-node:last-child .timeline-line{display:none}
+
+.timeline-vertical.timeline-DATE_COLUMN:not(.timeline-compact) .timeline-node,.timeline-vertical.timeline-DATE_COLUMN:not(.timeline-compact) .timeline-probe-node{padding-left:0;gap:40rpx}.timeline-MILESTONE_CARD .timeline-dot{border-radius:3rpx}.timeline-dot{box-shadow:0 0 0 2rpx var(--timeline-date);border:2rpx solid var(--timeline-card);box-sizing:border-box}
+
+/* 实测不可用时日期完整换行，正文按内容增高，不依赖固定轴线基线。 */
+.timeline-natural .timeline-date{white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere}
+.timeline-natural.timeline-horizontal .timeline-dot{position:relative;top:auto;transform:none;margin-top:16rpx}
+.timeline-natural.timeline-horizontal .timeline-body{margin-top:16rpx}
+.timeline-natural.timeline-horizontal .timeline-line{display:none}
+
+/* 自定义文字不按年月拆分，连续空格保留；纵向按实际列宽完整换行。 */
+.timeline-horizontal .timeline-custom-date{white-space:pre}.timeline-vertical .timeline-date.timeline-custom-date{white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere;min-width:0}
+.timeline-natural.timeline-horizontal .timeline-custom-date{white-space:pre-wrap}
+
+/* 短划线按整条尾线的透明度曲线绘制，间隔透明，不再拼接固定透明度的大段。 */
+.timeline-tail{position:absolute;left:6rpx;pointer-events:none}
+.timeline-tail-dash{position:absolute;box-sizing:border-box}
+.timeline-horizontal .timeline-tail{height:2rpx}
+.timeline-horizontal .timeline-tail-dash{top:0;height:2rpx}
+.timeline-vertical .timeline-tail{width:2rpx}
+.timeline-vertical .timeline-tail-dash{left:0;width:2rpx}
+/* 自然回退的圆点随文字移动；横向尾线跟随圆心，纵向为末段保留完整留白。 */
+.timeline-natural.timeline-horizontal .timeline-tail{position:relative;top:auto;width:calc(100% - 6rpx);margin-top:-6rpx;margin-bottom:4rpx}
+.timeline-natural.timeline-vertical .timeline-node:last-child{padding-bottom:80rpx}
+.timeline-natural.timeline-vertical .timeline-tail{top:20rpx;height:calc(100% - 20rpx)}

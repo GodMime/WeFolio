@@ -163,6 +163,9 @@ public class PortfolioRenderDto {
 
         /** 完整文字网格配置，保留所有片段样式。 */
         private Map<String, Object> textGrid;
+
+        /** 时间轴的完整逻辑配置，日期与 CUSTOM 自定义标记均保留在 date 中，不包含布局测量结果。 */
+        private Map<String, Object> timeline;
         /** 独立联系资料快照。 */
         private Map<String, Object> contactInfo;
         /** 视频轮播展示样式。 */

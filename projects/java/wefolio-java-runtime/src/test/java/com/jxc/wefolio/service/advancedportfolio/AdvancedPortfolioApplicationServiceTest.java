@@ -151,7 +151,7 @@ class AdvancedPortfolioApplicationServiceTest {
                 .isInstanceOf(BusinessException.class).hasMessage(PortfolioAiReferenceMessage.STORAGE);
     }
 
-    /** 维护详情追加 AI 信息，预览继续只返回原 DTO。 */
+    /** 维护详情追加 AI 信息，预览只恢复配置元数据且不暴露维护上下文。 */
     @Test void maintenanceDetailContainsContextButPreviewDoesNot() {
         PortfolioEntity portfolio = arrangePersonal(); portfolio.setAiPrompt("仅维护者可读");
         portfolio.setAiContextJson("{\"version\":1,\"nextSourceNo\":1,\"sources\":[]}");
@@ -159,7 +159,9 @@ class AdvancedPortfolioApplicationServiceTest {
         when(personal.getDetail(PORTFOLIO_ID, ADVANCED)).thenReturn(detail);
         when(personal.preview(PORTFOLIO_ID, ADVANCED)).thenReturn(detail);
         assertThat(service().getDetail(PORTFOLIO_ID).getString("aiPrompt")).isEqualTo("仅维护者可读");
-        assertThat(service().preview(PORTFOLIO_ID, false)).isSameAs(detail);
+        JSONObject preview = (JSONObject) service().preview(PORTFOLIO_ID, false);
+        assertThat(preview.getLong("portfolioId")).isEqualTo(PORTFOLIO_ID);
+        assertThat(preview).doesNotContainKeys("aiContext", "aiPrompt", "advancedConfigMetadata");
         assertThat(JSONObject.parseObject(JSONObject.toJSONString(detail))).doesNotContainKeys("aiContext", "aiPrompt");
     }
 
@@ -196,6 +198,82 @@ class AdvancedPortfolioApplicationServiceTest {
         assertThat(metadata.getValue().referenceAttachments().get(0).path("attachmentToken").asText()).isEqualTo("receipt-two");
         assertThat(metadata.getValue().referencesPresent()).isTrue();
         assertThat(metadata.getValue().referenceNextNo()).isEqualTo(4);
+    }
+
+    /** 字体准备直接读取原文，显式 null 版本和时间轴文字不能被转成缺省值。 */
+    @Test void prepareRejectsNullVersionAndNullTimelineTextFromRawRequest() {
+        arrangePersonal();
+        for (String config : new String[]{
+                "{\"schemaVersion\":\"standard-personal-v1\",\"editorSchemaRevision\":15,\"advancedPortfolioVersion\":null,\"components\":[]}",
+                timelineConfigWithNullTitle()}) {
+            assertThatThrownBy(() -> service().prepareFonts(PORTFOLIO_ID,
+                    "{\"clientAdvancedVersion\":2,\"config\":" + config + "}"))
+                    .isInstanceOf(BusinessException.class);
+        }
+        verify(personal, never()).prepareFonts(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    /** 保存入口的元数据提取必须看到显式 null，不能让它在普通 DTO 转换前消失。 */
+    @Test void saveRejectsNullVersionFromRawRequestBeforeDelegation() {
+        arrangePersonal();
+        assertThatThrownBy(() -> service().saveDraft(PORTFOLIO_ID,
+                "{\"clientAdvancedVersion\":2,\"config\":{\"editorSchemaRevision\":15,\"advancedPortfolioVersion\":null,\"components\":[]}}"))
+                .isInstanceOf(BusinessException.class);
+        verify(personal, never()).saveDraft(any(), any(), any(), any());
+    }
+
+    /** 保存仍在幂等判断后的事务守卫拒绝非法时间轴，原文与委派配置均保留该 null。 */
+    @Test void saveCarriesNullTimelineTextToTheTransactionGuard() {
+        arrangePersonal();
+        when(personal.saveDraft(eq(PORTFOLIO_ID), any(), eq(ADVANCED), any())).thenAnswer(invocation -> {
+            MinePortfolioDraftSaveRequest request = invocation.getArgument(1);
+            AdvancedPortfolioSaveMetadata metadata = invocation.getArgument(3);
+            assertThat(request.getConfig().getComponents().getFirst().getConfig()).containsEntry("title", null);
+            metadata.validateConfig(false);
+            return new MinePortfolioDetailResponse();
+        });
+        assertThatThrownBy(() -> service().saveDraft(PORTFOLIO_ID,
+                "{\"clientAdvancedVersion\":2,\"config\":" + timelineConfigWithNullTitle() + "}"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    /** 合法旧文字组件的字体清除在原文保存和准备路径中完整委派，不能退回省略语义。 */
+    @Test void saveAndPreparePreserveLegacyExplicitFontNulls() {
+        arrangePersonal();
+        when(personal.saveDraft(eq(PORTFOLIO_ID), any(), eq(ADVANCED), any())).thenAnswer(invocation -> {
+            AdvancedPortfolioSaveMetadata metadata = invocation.getArgument(3);
+            metadata.validateConfig(false);
+            MinePortfolioDetailResponse detail = new MinePortfolioDetailResponse();
+            detail.setPortfolioId(PORTFOLIO_ID);
+            return detail;
+        });
+        String raw = """
+                {"clientCapabilities":{"portfolioRemoteFont":1},"config":{
+                  "schemaVersion":"standard-personal-v1","editorSchemaRevision":14,"fonts":null,
+                  "components":[{"componentKey":"text","componentType":"TEXT_SECTION","enabled":true,
+                    "config":{"content":"保留字体清除","fontId":null}}]}}
+                """;
+        service().saveDraft(PORTFOLIO_ID, raw);
+        service().prepareFonts(PORTFOLIO_ID, raw);
+        ArgumentCaptor<MinePortfolioDraftSaveRequest> saved = ArgumentCaptor.forClass(MinePortfolioDraftSaveRequest.class);
+        ArgumentCaptor<MinePortfolioDraftSaveRequest> prepared = ArgumentCaptor.forClass(MinePortfolioDraftSaveRequest.class);
+        verify(personal).saveDraft(eq(PORTFOLIO_ID), saved.capture(), eq(ADVANCED), any());
+        verify(personal).prepareFonts(eq(PORTFOLIO_ID), prepared.capture(), eq(ADVANCED), eq(1));
+        for (MinePortfolioDraftSaveRequest request : new MinePortfolioDraftSaveRequest[]{saved.getValue(), prepared.getValue()}) {
+            assertThat(request.getConfig().isFontsProvided()).isTrue();
+            assertThat(request.getConfig().getFonts()).isNull();
+            assertThat(request.getConfig().getComponents().getFirst().getConfig()).containsEntry("fontId", null);
+        }
+    }
+
+    /** 日期节点合法，仅组件标题显式为空，用于区分非法 null 与合法省略。 */
+    private String timelineConfigWithNullTitle() {
+        return """
+                {"schemaVersion":"standard-personal-v1","editorSchemaRevision":15,"advancedPortfolioVersion":2,
+                 "components":[{"componentKey":"timeline","componentType":"TIMELINE","enabled":true,
+                   "config":{"title":null,"nodes":[{"nodeKey":"event","datePrecision":"YEAR","date":"2020",
+                     "title":"开始","description":""}]}}]}
+                """;
     }
 
     /** 安排存在且属于当前人的高级实体。 */

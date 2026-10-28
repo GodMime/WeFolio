@@ -103,8 +103,8 @@ class MineTeamPortfolioControllerTest {
     }
 
     @Test
-    void endpointParametersKeepExactPathBodyAndQueryBindings() {
-        Method library = method("componentLibrary");
+    void endpointParametersKeepExactPathBodyAndQueryBindings() throws NoSuchMethodException {
+        Method library = MineTeamPortfolioController.class.getMethod("componentLibrary", Integer.class, String.class, String.class, String.class);
         assertRequestParam(
                 library,
                 0,

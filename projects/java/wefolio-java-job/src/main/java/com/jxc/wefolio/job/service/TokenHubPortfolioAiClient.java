@@ -6,6 +6,7 @@ import com.jxc.wefolio.job.config.PortfolioAiProperties;
 import com.jxc.wefolio.job.entity.AiGenerationTaskEntity;
 import com.jxc.wefolio.message.PortfolioAiTaskMessage;
 import com.jxc.wefolio.service.portfolioai.AiPortfolioProtocol;
+import com.jxc.wefolio.service.portfolioai.AiPortfolioRunSpecRegistry;
 import com.jxc.wefolio.service.portfolioai.StrictAiJson;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiVideoAudioContext;
 import lombok.RequiredArgsConstructor;
@@ -14,8 +15,6 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
@@ -144,7 +143,8 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
         body.putObject("response_format").put("type", "json_object");
         body.put(USER_PARAMETER, requesterHash(task.getRequestedBy()));
         String mode = request.path("input").path("mode").asText();
-        String system = resource("system.txt") + "\n" + resource(mode + ".txt") + "\n可信能力契约：\n" + PortfolioAiTitlePolicy.contract(request);
+        var runSpec = AiPortfolioRunSpecRegistry.resolve(request);
+        String system = runSpec.prompt("system.txt") + "\n" + runSpec.prompt(mode + ".txt") + "\n可信能力契约：\n" + PortfolioAiTitlePolicy.contract(request);
         // 缓存键对应稳定的基础前缀；媒体附加规则和重试反馈继续追加，但不拆分同一组请求。
         body.put(PROMPT_CACHE_KEY_PARAMETER, promptCacheKey(config.path("model").asText(), GENERATION_CACHE_STAGE, system));
         if (request.path(KEY_FACTS).has(KEY_MEDIA_PLAN)) {
@@ -166,7 +166,7 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
             user.set(PortfolioAiReferenceContract.SUMMARIES, request.path(KEY_FACTS).path(PortfolioAiReferenceContract.SUMMARIES).deepCopy());
         }
         if ("INVALID_OUTPUT".equals(task.getErrorCode())) {
-            system += "\n" + resource("retry.txt");
+            system += "\n" + runSpec.prompt("retry.txt");
             user.putObject("retry").put("error_code", task.getErrorCode()).put("error_message", PortfolioAiFailureHistory.latestMessage(task.getErrorMessage()));
         }
         var messages = body.putArray("messages");
@@ -238,14 +238,6 @@ public class TokenHubPortfolioAiClient implements PortfolioAiModelClient {
         String type = media.getFirst().type();
         if (TYPE_VIDEO_URL.equals(type)) { return media.size() == 1; }
         return TYPE_IMAGE_URL.equals(type) && media.stream().allMatch(item -> type.equals(item.type()));
-    }
-
-    /** 从静态生产资源读取明确版本模板，业务内容从不拼进 system。 */
-    private String resource(String name) {
-        try (InputStream input = getClass().getResourceAsStream("/portfolioai/" + name)) {
-            if (input == null) { throw failed("CONTRACT_UNAVAILABLE", "AI 提示词版本不可用", false); }
-            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException exception) { throw failed("CONTRACT_UNAVAILABLE", "AI 提示词版本不可用", false); }
     }
 
     /** 按模型、调用阶段及静态前缀生成可跨任务复用的键；内容更新自动切换分组。 */

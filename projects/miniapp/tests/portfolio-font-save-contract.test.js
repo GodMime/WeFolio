@@ -19,7 +19,7 @@ for (const pkg of ['portfolios', 'team-portfolios']) {
       if (pkg === 'portfolios') request = api.buildDraftPayload(config, 7, 'font-contract')
       else await api.saveTeamPortfolioDraft(options => { request = options.data; return Promise.resolve({}) }, 1, config, 7, 'font-contract')
       const body = JSON.parse(JSON.stringify(request))
-      assert.deepEqual(body.clientCapabilities, { portfolioRemoteFont: 1 })
+      assert.deepEqual(body.clientCapabilities, { portfolioRemoteFont: 1, portfolioTimeline: 1 })
       assert.deepEqual(body.config.fonts, { ALLURA: { fontVersion: 'fixed-old-version' } })
       const nodes = collectFontNodes(body.config.components)
       assert.equal(nodes.length, 3)

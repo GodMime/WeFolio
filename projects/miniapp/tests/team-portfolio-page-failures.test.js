@@ -13,7 +13,7 @@ function flush() { return new Promise((resolve) => setImmediate(resolve)) }
 function validTeamEditorConfig() {
   return {
     schemaVersion: 'standard-team-v1',
-    editorSchemaRevision: 10,
+    editorSchemaRevision: 11,
     share: { title: '测试团队作品集' },
     components: [{
       componentKey: 'valid-divider',

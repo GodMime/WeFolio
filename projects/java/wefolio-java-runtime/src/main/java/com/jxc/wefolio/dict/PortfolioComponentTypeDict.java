@@ -26,7 +26,9 @@ public enum PortfolioComponentTypeDict {
     /** 自由合并的文字网格。 */
     TEXT_GRID("TEXT_GRID", "文字网格", 6),
     /** 独立联系资料快照。 */
-    CONTACT_INFO("CONTACT_INFO", "联系信息", 6);
+    CONTACT_INFO("CONTACT_INFO", "联系信息", 6),
+    /** 个人经历或团队里程碑。 */
+    TIMELINE("TIMELINE", "时间轴", 15);
 
     private final String code;
     private final String displayName;

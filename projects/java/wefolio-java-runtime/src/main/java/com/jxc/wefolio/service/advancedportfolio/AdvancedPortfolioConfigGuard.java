@@ -8,6 +8,7 @@ import com.jxc.wefolio.dict.PortfolioTextFontFamilyDict;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.message.AdvancedPortfolioMessage;
 import com.jxc.wefolio.service.PortfolioTextBackgroundConfigSupport;
+import com.jxc.wefolio.service.PortfolioTimelineConfigSupport;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
@@ -19,6 +20,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /** 高级独立入口的原始配置结构守卫；先拒绝未知键及类型强转，再进入普通业务校验。 */
@@ -31,6 +33,8 @@ public final class AdvancedPortfolioConfigGuard {
     private static final String INTERNAL_PORTFOLIO_ACTION = "INTERNAL_PORTFOLIO";
     /** 普通超链接的外链模式。 */
     private static final String EXTERNAL_LINK_ACTION = "EXTERNAL_LINK";
+    /** 保真递归中的可信结构位置，不能靠任意字符串路径扩大字体派生范围。 */
+    private enum Position { COMPONENT, CONFIG, STYLES, NODES, NODE, NODE_STYLES, STYLE }
     /** 布尔型组件参数。 */
     private static final Set<String> BOOLEAN_KEYS = Set.of(ENABLED, "showMemberName", "showTitle", "showDescription", "showComponentTitle", "showSwipeHint", "showClickIcon", "profileBorder", "contactBorder", "cellBorder", "backgroundEnabled");
     /** 整数型组件参数。 */
@@ -61,12 +65,22 @@ public final class AdvancedPortfolioConfigGuard {
     private AdvancedPortfolioConfigGuard() { }
     /** 按真实归属检查普通配置对象，个人与团队结构分别受理。 */
     public static void validate(ObjectNode config, boolean team) {
+        validate(config, team, AdvancedVersionRegistry.LEGACY_VERSION);
+    }
+
+    /** 高级元数据先提取；普通 DTO 白名单只检查内容，能力始终取请求版本。 */
+    public static void validate(JsonNode input, boolean team, int clientVersion) {
+        AdvancedPortfolioVersionSupport.extract(input, clientVersion);
+        ObjectNode config = AdvancedPortfolioVersionSupport.content(input);
         if (config == null) { throw invalid(); }
         bean(config, team ? TeamPortfolioConfigDto.class : PortfolioConfigDto.class);
-        components(config.get("components"), team);
+        JsonNode revision = config.get("editorSchemaRevision");
+        AdvancedVersionRegistry.requireEditor(clientVersion, team,
+                revision != null && revision.isIntegralNumber() ? revision.intValue() : null);
+        components(config.get("components"), team, clientVersion);
         JsonNode nav = config.get("bottomNav");
         if (nav != null && nav.isObject() && nav.has("items") && nav.get("items").isArray()) {
-            for (JsonNode item : nav.get("items")) { components(item.get("components"), team); }
+            for (JsonNode item : nav.get("items")) { components(item.get("components"), team, clientVersion); }
         }
         JsonNode fonts = config.get("fonts");
         if (fonts != null && !fonts.isNull()) {
@@ -81,6 +95,8 @@ public final class AdvancedPortfolioConfigGuard {
 
     /** 按真实个人或团队校验器的组件启用默认值检查规范化，避免高级入口改变旧字段语义。 */
     public static void assertNormalized(ObjectNode incoming, ObjectNode normalized, boolean team) {
+        if (!Objects.equals(incoming.get(AdvancedPortfolioVersionSupport.FIELD),
+                normalized.get(AdvancedPortfolioVersionSupport.FIELD))) { throw invalid(); }
         ObjectNode expected = incoming.deepCopy();
         JsonNode fonts = expected.get("fonts");
         if (fonts != null && fonts.isObject()) {
@@ -92,11 +108,12 @@ public final class AdvancedPortfolioConfigGuard {
             retained.remove(removed);
             expected.set("fonts", retained);
         }
-        preserved(expected, normalized, "", team);
+        preserved(expected, normalized, "", team, null, null);
     }
 
     /** 递归比较明确字段，精确登记组件名称、排序及最终字体引用的派生值。 */
-    private static void preserved(JsonNode before, JsonNode after, String path, boolean team) {
+    private static void preserved(JsonNode before, JsonNode after, String path, boolean team,
+                                  String componentType, Position position) {
         String field = path.substring(path.lastIndexOf('.') + 1);
         if (path.endsWith(".component.name")) { return; }
         if (field.equals("fonts")) { preservedFonts(before, after); return; }
@@ -108,8 +125,9 @@ public final class AdvancedPortfolioConfigGuard {
         if (before.isObject()) {
             if (!after.isObject()) { throw invalid(); }
             ObjectNode expected = ((ObjectNode) before).deepCopy();
-            deriveConfig(expected, after, path);
-            expected.fields().forEachRemaining(entry -> preserved(entry.getValue(), after.get(entry.getKey()), path + "." + entry.getKey(), team));
+            deriveConfig(expected, after, path, componentType, position);
+            expected.fields().forEachRemaining(entry -> preserved(entry.getValue(), after.get(entry.getKey()),
+                    path + "." + entry.getKey(), team, componentType, childPosition(position, entry.getKey())));
             return;
         }
         if (before.isArray()) {
@@ -134,11 +152,16 @@ public final class AdvancedPortfolioConfigGuard {
                         expected.put(ENABLED, true);
                     }
                     if (!expected.path(id).equals(after.get(index).path(id))) { throw invalid(); }
-                    preserved(expected, after.get(index), path + (field.equals("components") ? ".component" : ".group"), team);
+                    preserved(expected, after.get(index), path + (field.equals("components") ? ".component" : ".group"), team,
+                            field.equals("components") ? expected.path("componentType").asText() : componentType,
+                            field.equals("components") ? Position.COMPONENT : null);
                 }
             } else {
                 if (before.size() != after.size()) { throw invalid(); }
-                for (int index = 0; index < before.size(); index++) { preserved(before.get(index), after.get(index), path + ".item", team); }
+                for (int index = 0; index < before.size(); index++) {
+                    preserved(before.get(index), after.get(index), path + ".item", team,
+                            componentType, position == Position.NODES ? Position.NODE : null);
+                }
             }
             return;
         }
@@ -146,18 +169,30 @@ public final class AdvancedPortfolioConfigGuard {
         if (before.isTextual() && after.isTextual()) {
             String expected = before.textValue(); String actual = after.textValue();
             if ((field.toLowerCase(Locale.ROOT).contains("color") || field.equals("backgroundColor")) && expected.equalsIgnoreCase(actual)) { return; }
-            if (Set.of("title", "contactPhone", "contactWechat", "name", "groupKey").contains(field) && expected.strip().equals(actual)) { return; }
+            if (!PortfolioTimelineConfigSupport.COMPONENT_TYPE.equals(componentType)
+                    && Set.of("title", "contactPhone", "contactWechat", "name", "groupKey").contains(field)
+                    && expected.strip().equals(actual)) { return; }
         }
         if (!before.equals(after)) { throw invalid(); }
     }
 
     /** 仅登记普通选择器明确清理的非活动字段和远程字体的历史字体派生值。 */
-    private static void deriveConfig(ObjectNode expected, JsonNode after, String path) {
-        if (!path.endsWith(".component.config") && !path.endsWith(".block") && !path.endsWith(".item")) { return; }
-        if (expected.has("fontId") && expected.get("fontId").isTextual()
-                && expected.get("fontId").equals(after.get("fontId")) && expected.has("fontFamily")) {
-            expected.put("fontFamily", PortfolioTextFontFamilyDict.SYSTEM.getCode());
+    private static void deriveConfig(ObjectNode expected, JsonNode after, String path,
+                                     String componentType, Position position) {
+        if (PortfolioTimelineConfigSupport.COMPONENT_TYPE.equals(componentType)) {
+            if (position == Position.STYLE) {
+                // 空补丁必须继续继承；唯一允许新增的字段是同一远程字体的 SYSTEM 兜底。
+                after.fieldNames().forEachRemaining(key -> {
+                    if (!expected.has(key) && !("fontFamily".equals(key) && expected.hasNonNull("fontId")
+                            && expected.get("fontId").isTextual() && expected.get("fontId").equals(after.get("fontId"))
+                            && PortfolioTextFontFamilyDict.SYSTEM.getCode().equals(after.path(key).asText()))) { throw invalid(); }
+                });
+                deriveFontFamily(expected, after);
+            }
+            return;
         }
+        if (!path.endsWith(".component.config") && !path.endsWith(".block") && !path.endsWith(".item")) { return; }
+        deriveFontFamily(expected, after);
         if (expected.has(PortfolioTextBackgroundConfigSupport.ENABLED)
                 && expected.get(PortfolioTextBackgroundConfigSupport.ENABLED).isBoolean()
                 && !expected.get(PortfolioTextBackgroundConfigSupport.ENABLED).booleanValue()) {
@@ -170,6 +205,25 @@ public final class AdvancedPortfolioConfigGuard {
             } else if (EXTERNAL_LINK_ACTION.equals(expected.path("actionType").asText())) {
                 expected.remove("targetPortfolioId");
             }
+        }
+    }
+
+    /** 只认可真实组件配置及其统一、节点文字角色，不按任意路径后缀授权。 */
+    private static Position childPosition(Position position, String key) {
+        if (position == Position.COMPONENT && "config".equals(key)) { return Position.CONFIG; }
+        if (position == Position.CONFIG && "textStyles".equals(key)) { return Position.STYLES; }
+        if (position == Position.CONFIG && "nodes".equals(key)) { return Position.NODES; }
+        if (position == Position.NODE && "textStyles".equals(key)) { return Position.NODE_STYLES; }
+        if (position == Position.STYLES && PortfolioTimelineConfigSupport.ROLES.contains(key)
+                || position == Position.NODE_STYLES && PortfolioTimelineConfigSupport.NODE_ROLES.contains(key)) { return Position.STYLE; }
+        return null;
+    }
+
+    /** 相同远程字体只允许规范化兜底字体，不允许产生或替换字体选择。 */
+    private static void deriveFontFamily(ObjectNode expected, JsonNode after) {
+        if (expected.has("fontId") && expected.get("fontId").isTextual()
+                && expected.get("fontId").equals(after.get("fontId")) && expected.has("fontFamily")) {
+            expected.put("fontFamily", PortfolioTextFontFamilyDict.SYSTEM.getCode());
         }
     }
 
@@ -231,12 +285,17 @@ public final class AdvancedPortfolioConfigGuard {
                 && raw != boolean.class && raw != Object.class && !Map.class.isAssignableFrom(raw)) { bean(node, raw); }
     }
     /** 检查全部菜单组件，禁止个人与团队互相借用组件类型。 */
-    private static void components(JsonNode array, boolean team) {
+    private static void components(JsonNode array, boolean team, int clientVersion) {
         if (array == null || array.isNull()) { return; }
         if (!array.isArray()) { throw invalid(); }
         for (JsonNode component : array) {
             fields(component, COMPONENT_KEYS, false);
             JsonNode type = component.get("componentType");
+            if (type != null && PortfolioTimelineConfigSupport.COMPONENT_TYPE.equals(type.asText())) {
+                if (clientVersion < AdvancedVersionRegistry.TIMELINE_VERSION) { throw invalid(); }
+                PortfolioTimelineConfigSupport.validate(component.get("config"));
+                continue;
+            }
             if (type == null || !type.isTextual() || !CONFIG_KEYS.containsKey(type.textValue())) { throw invalid(); }
             String name = type.textValue();
             if (team && Set.of("PROFILE", "WORK_GRID", "WORK_LIST", "HYPERLINK").contains(name)

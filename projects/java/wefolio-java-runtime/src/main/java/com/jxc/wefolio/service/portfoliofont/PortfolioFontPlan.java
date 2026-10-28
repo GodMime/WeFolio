@@ -38,11 +38,11 @@ public record PortfolioFontPlan(String hash, Object versions, List<Group> groups
 
     /** 从个人作品集收集全部菜单需求。 */
     public static PortfolioFontPlan from(PortfolioConfigDto config) {
-        return collect(PortfolioFontConfigSupport.nodes(config), config == null ? null : config.getFonts());
+        return collect(PortfolioFontConfigSupport.demandNodes(config), config == null ? null : config.getFonts());
     }
     /** 从团队作品集收集全部菜单需求。 */
     public static PortfolioFontPlan from(TeamPortfolioConfigDto config) {
-        return collect(PortfolioFontConfigSupport.nodes(config), config == null ? null : config.getFonts());
+        return collect(PortfolioFontConfigSupport.demandNodes(config), config == null ? null : config.getFonts());
     }
     /** 对确定的 UTF-8 字符串计算摘要。 */
     public static String digest(String value) {

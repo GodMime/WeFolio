@@ -169,7 +169,9 @@ public class PortfolioAiFactsService {
             }
         }
         for (JsonNode component : allComponents(baseConfig)) {
-            freezeResources(component.path(KEY_CONFIG), component.path(KEY_COMPONENT_KEY).asText(), bindings, baseConfig);
+            if (AiTimelineProtocol.matches(component)) {
+                freezeTimelineResources(component.path(KEY_CONFIG), component.path(KEY_COMPONENT_KEY).asText(), null, bindings, baseConfig);
+            } else { freezeResources(component.path(KEY_CONFIG), component.path(KEY_COMPONENT_KEY).asText(), bindings, baseConfig); }
         }
         explicitInputBindings(input.path(KEY_PROMPT).asText(), bindings);
         if (input.path(KEY_CLARIFICATION_ANSWER).path(KEY_ANSWER_TEXT).isTextual()) {
@@ -225,6 +227,24 @@ public class PortfolioAiFactsService {
         if (!wechat.isBlank()) {
             addBinding(bindings, PROFILE_CONTACT_WECHAT_REF, RESOURCE_KIND_CONTACT_WECHAT,
                     KEY_CONTACT_WECHAT, NODES.textNode(wechat), false, null);
+        }
+    }
+
+    /** 时间轴字体携带组件、稳定节点和角色位置，不能从叶子补丁猜测父身份。 */
+    private static void freezeTimelineResources(JsonNode node, String componentKey, String nodeKey, ArrayNode bindings, ObjectNode base) {
+        node.path(AiTimelineProtocol.STYLES).fields().forEachRemaining(entry -> {
+            JsonNode patch = entry.getValue();
+            if (!patch.path(KEY_FONT_ID).isTextual() || patch.path(KEY_FONT_ID).asText().isBlank()) { return; }
+            String id = patch.path(KEY_FONT_ID).asText();
+            ObjectNode value = NODES.objectNode().put(KEY_FONT_ID, id);
+            value.set(KEY_REFERENCE, base.path(KEY_FONTS).path(id).deepCopy());
+            ObjectNode binding = addBinding(bindings, EXISTING_REF_PREFIX + (bindings.size() + 1), RESOURCE_KIND_FONT,
+                    KEY_FONT_ID, value, true, componentKey);
+            if (nodeKey != null) { binding.put(KEY_NODE_KEY, nodeKey); }
+            binding.put(AiTimelineProtocol.TEXT_ROLE, entry.getKey());
+        });
+        for (JsonNode child : node.path(AiTimelineProtocol.NODES)) {
+            freezeTimelineResources(child, componentKey, child.path(KEY_NODE_KEY).asText(), bindings, base);
         }
     }
 

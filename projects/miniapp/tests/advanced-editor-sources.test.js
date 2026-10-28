@@ -46,8 +46,8 @@ for (const team of [false, true]) {
       page.handleAdvancedAi({ currentTarget: { dataset: { mode: 'MODIFY_PAGE' } } })
       assert.match(navigation.url, /mode=MODIFY_PAGE$/)
       assert.equal(initialized.mode, 'MODIFY_PAGE')
-      assert.deepEqual(Object.keys(initialized).sort(), ['aiContext', 'config', 'draftRevision', 'localEditRevision', 'mode',
-        'ownerId', 'ownerType', 'portfolioId', 'prompt', 'sourceItems', 'targetMenuKey'])
+      assert.deepEqual(Object.keys(initialized).sort(), ['aiContext', 'aiContractVersion', 'clientAdvancedVersion', 'config', 'draftRevision', 'localEditRevision', 'mode',
+        'ownerId', 'ownerType', 'portfolioId', 'prompt', 'sourceItems', 'sourceMode', 'targetMenuKey'])
       assert.equal(initialized.targetMenuKey, 'home')
       assert.equal(initialized.prompt, '整体简洁，作品放在介绍前')
       assert.deepEqual(initialized.config, page.data.config)

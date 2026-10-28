@@ -17,7 +17,7 @@ public class PortfolioConfigDto {
     public static final String SCHEMA_VERSION_STANDARD_PERSONAL_V1 = "standard-personal-v1";
 
     /** 当前编辑器配置能力版本 */
-    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 14;
+    public static final int EDITOR_SCHEMA_REVISION_CURRENT = 15;
 
     /** 默认页面背景色 */
     public static final String DEFAULT_BACKGROUND_COLOR = "#FFFFFF";
@@ -145,7 +145,7 @@ public class PortfolioConfigDto {
         /** 是否启用 */
         private Boolean enabled;
 
-        /** 组件私有配置 */
+        /** 组件私有配置；时间轴节点的 date 为规范日期，datePrecision=CUSTOM 时为自定义标记原文。 */
         private Map<String, Object> config;
     }
 }

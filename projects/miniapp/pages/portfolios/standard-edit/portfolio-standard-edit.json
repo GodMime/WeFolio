@@ -8,6 +8,7 @@
     "single-work-picker": "/pages/portfolios/components/single-work-picker/single-work-picker",
     "text-grid-editor": "../components/text-grid-editor/text-grid-editor",
     "contact-info-editor": "../components/contact-info-editor/contact-info-editor",
-    "advanced-ai-notice": "../components/advanced-ai-notice/advanced-ai-notice"
+    "advanced-ai-notice": "../components/advanced-ai-notice/advanced-ai-notice",
+    "timeline-editor": "../components/timeline-editor/timeline-editor"
   }
 }

@@ -223,6 +223,7 @@
                 <view class="component-drag-line"></view>
                 <view class="component-drag-line"></view>
               </view>
+              <view wx:if="{{item.componentType === 'TIMELINE'}}" class="component-summary">{{componentRows.resolveTimelineSummary(item.config)}}</view>
               <view class="component-row-arrow {{componentRows.isEditable(item.componentType) ? '' : 'placeholder'}}">
                 <view wx:if="{{componentRows.isEditable(item.componentType)}}" class="component-row-arrow-icon"></view>
               </view>
@@ -1279,6 +1280,7 @@
   </view>
 
   <text-grid-editor font-options="{{textSectionFontOptions}}" font-context="{{fontContext}}" remote-font-available="{{remoteFontAvailable}}" more-fonts-expanded="{{moreFontsExpanded}}" font-edit-session-id="{{fontEditSessionId}}" font-message="{{fontMessage}}" bindfontexpand="handleExpandFonts" bindfontselect="handleRemoteFontSelect" bindfontdraft="handleRemoteFontDraft" background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'TEXT_GRID'}}" config="{{newComponentConfig}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
+  <timeline-editor font-options="{{textSectionFontOptions}}" font-context="{{fontContext}}" remote-font-available="{{remoteFontAvailable}}" more-fonts-expanded="{{moreFontsExpanded}}" font-edit-session-id="{{fontEditSessionId}}" font-message="{{fontMessage}}" bindfontexpand="handleExpandFonts" bindfontselect="handleRemoteFontSelect" bindfontdraft="handleRemoteFontDraft" owner-type="USER" theme-mode="{{timelineThemeMode}}" background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'TIMELINE'}}" config="{{newComponentConfig}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
   <contact-info-editor background-color="{{config.style.backgroundColor}}" visible="{{newComponentSheetVisible && newComponentType === 'CONTACT_INFO'}}" config="{{newComponentConfig}}" is-new="{{!newComponentKey}}" bindconfirm="handleConfirmNewComponent" bindcancel="handleCancelNewComponent" />
   <structured-text-editor font-context="{{fontContext}}" font-options="{{textSectionFontOptions}}" remote-font-available="{{remoteFontAvailable}}" more-fonts-expanded="{{moreFontsExpanded}}" font-edit-session-id="{{fontEditSessionId}}" font-message="{{fontMessage}}" bindfontexpand="handleExpandFonts" bindfontselect="handleRemoteFontSelect" bindfontdraft="handleRemoteFontDraft" visible="{{structuredTextSheetVisible}}" config="{{structuredTextConfig}}" is-new="{{structuredTextIsNew}}" background-options="{{textBackgroundOptions}}" background-loading="{{textBackgroundLoading}}" background-error="{{textBackgroundError}}" background-has-more="{{textBackgroundHasMore}}" background-selection="{{textBackgroundSelection}}" bindconfirm="handleConfirmStructuredText" bindcancel="handleCancelStructuredText" bindbackgroundrequest="handleTextBackgroundRequest" bindbackgroundchange="handleStructuredTextBackgroundChange" />
 

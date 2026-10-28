@@ -32,7 +32,7 @@ class PortfolioAiControllerTest {
         assertThat(PortfolioAiController.class.getMethod("capabilities").getAnnotation(GetMapping.class).value()).containsExactly("/capabilities");
         assertThat(PortfolioAiController.class.getMethod("submit", String.class).getAnnotation(PostMapping.class).value()).containsExactly("/tasks");
         assertThat(PortfolioAiController.class.getMethod("submit", String.class).getParameters()[0].isAnnotationPresent(RequestBody.class)).isTrue();
-        assertThat(PortfolioAiController.class.getMethod("query", Long.class).getAnnotation(GetMapping.class).value()).containsExactly("/tasks/{id}");
+        assertThat(PortfolioAiController.class.getMethod("query", Long.class, String.class).getAnnotation(GetMapping.class).value()).containsExactly("/tasks/{id}");
         assertThat(PortfolioAiController.class.getMethod("cancel", Long.class).getAnnotation(PostMapping.class).value()).containsExactly("/tasks/{id}/cancel");
     }
 }

@@ -95,7 +95,17 @@ public class MineTeamPortfolioController {
      */
     @GetMapping("/api/mine/team-portfolios/component-library")
     public Response<List<MineTeamPortfolioService.ComponentLibraryItem>> componentLibrary(
-            @RequestParam(value = "editorSchemaRevision", required = false) Integer editorSchemaRevision
+            @RequestParam(value = "editorSchemaRevision", required = false) Integer editorSchemaRevision,
+            @RequestParam(value = "templateType", required = false) String templateType,
+            @RequestParam(value = "portfolioTimeline", required = false) String portfolioTimeline,
+            @RequestParam(value = "clientAdvancedVersion", required = false) String clientAdvancedVersion
+    ) {
+        return Response.success(mineTeamPortfolioService.getComponentLibrary(editorSchemaRevision, templateType,
+                portfolioTimeline, clientAdvancedVersion));
+    }
+
+    /** 保留现有内部调用的参数委派。 */
+    public Response<List<MineTeamPortfolioService.ComponentLibraryItem>> componentLibrary(Integer editorSchemaRevision
     ) {
         return Response.success(mineTeamPortfolioService.getComponentLibrary(editorSchemaRevision));
     }

@@ -132,7 +132,7 @@ class MinePortfolioControllerTest {
 
         assertThat(MinePortfolioController.class.isAnnotationPresent(MaintainerAccess.class)).isTrue();
         assertGetMapping("list", new Class<?>[] {String.class, String.class}, "/api/mine/portfolios");
-        assertGetMapping("componentLibrary", new Class<?>[] {Integer.class}, "/api/mine/portfolios/component-library");
+        assertGetMapping("componentLibrary", new Class<?>[] {Integer.class, String.class, String.class, String.class}, "/api/mine/portfolios/component-library");
         assertGetMapping("hyperlinkTargets", new Class<?>[] {Long.class, Long.class},
                 "/api/mine/portfolios/hyperlink-targets");
         assertPostMapping("createStandardPersonal",

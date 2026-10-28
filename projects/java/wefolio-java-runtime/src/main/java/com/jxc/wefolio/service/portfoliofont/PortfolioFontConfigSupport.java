@@ -13,8 +13,11 @@ import com.jxc.wefolio.dto.teamportfolio.TeamPortfolioConfigDto;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.message.PortfolioFontMessage;
 import com.jxc.wefolio.service.PortfolioComponentTraversal;
+import com.jxc.wefolio.service.PortfolioTimelineConfigSupport;
 import com.jxc.wefolio.service.teamportfolio.TeamPortfolioComponentTraversal;
 import java.util.ArrayList;
+import java.util.AbstractMap;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +59,18 @@ public final class PortfolioFontConfigSupport {
     private static final Pattern VERSION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,95}");
     /** 根表结构容量保护，不是可选字体数量限制。 */
     private static final int MAX_ENTRIES = 256;
+
+    /** 原始时间轴补丁的内存视图；通过类型识别，避免用户 key 影响字体分支。 */
+    private static final class TimelineStyleNode extends AbstractMap<String, Object> {
+        /** 实际持久补丁对象。 */
+        private final Map<String, Object> delegate;
+        /** 包装现有补丁，不拷贝或补全继承属性。 */
+        private TimelineStyleNode(Map<String, Object> delegate) { this.delegate = delegate; }
+        /** 保留原对象的可修改条目视图。 */
+        @Override public Set<Entry<String, Object>> entrySet() { return delegate.entrySet(); }
+        /** 字体选择写入仍落在原始补丁对象中。 */
+        @Override public Object put(String key, Object value) { return delegate.put(key, value); }
+    }
 
     /** 工具类不允许实例化。 */
     private PortfolioFontConfigSupport() { }
@@ -111,7 +126,15 @@ public final class PortfolioFontConfigSupport {
         boolean fontsProvided = request instanceof MinePortfolioDraftSaveRequest personal
                 ? personal.getConfig().isFontsProvided()
                 : request instanceof TeamPortfolioDraftSaveRequest team && team.getConfig().isFontsProvided();
-        return FINGERPRINT_DOMAIN + fontsProvided + ":" + JSON.toJSONString(request,
+        JSONObject projection = JSON.parseObject(JSON.toJSONString(request,
+                JSONWriter.Feature.WriteMapNullValue, JSONWriter.Feature.MapSortField));
+        var capabilities = request instanceof MinePortfolioDraftSaveRequest personal ? personal.getClientCapabilities()
+                : request instanceof TeamPortfolioDraftSaveRequest team ? team.getClientCapabilities() : null;
+        if (capabilities != null && !capabilities.hasTimelineIntent()) {
+            JSONObject declared = projection.getJSONObject(CLIENT_CAPABILITIES);
+            if (declared != null) { declared.remove("portfolioTimeline"); }
+        }
+        return FINGERPRINT_DOMAIN + fontsProvided + ":" + JSON.toJSONString(projection,
                 JSONWriter.Feature.WriteMapNullValue, JSONWriter.Feature.MapSortField);
     }
 
@@ -133,6 +156,46 @@ public final class PortfolioFontConfigSupport {
             if (component != null) { addNodes(result, component.getComponentKey(), component.getComponentType(), component.getConfig()); }
         }
         return result;
+    }
+
+    /** 个人字体计划使用实际文字需求，不把时间轴原始补丁当成空文字。 */
+    public static Map<String, Map<String, Object>> demandNodes(PortfolioConfigDto config) {
+        Map<String, Map<String, Object>> result = legacyDemandNodes(nodes(config));
+        for (var location : PortfolioComponentTraversal.listComponentLocations(config)) {
+            var component = location.component();
+            if (component != null && PortfolioTimelineConfigSupport.COMPONENT_TYPE.equals(component.getComponentType())) {
+                addTimelineDemands(result, component.getComponentKey(), component.getConfig());
+            }
+        }
+        return result;
+    }
+
+    /** 团队复用相同的有效文字与字重计算。 */
+    public static Map<String, Map<String, Object>> demandNodes(TeamPortfolioConfigDto config) {
+        Map<String, Map<String, Object>> result = legacyDemandNodes(nodes(config));
+        for (var location : TeamPortfolioComponentTraversal.listComponentLocations(config)) {
+            var component = location.component();
+            if (component != null && PortfolioTimelineConfigSupport.COMPONENT_TYPE.equals(component.getComponentType())) {
+                addTimelineDemands(result, component.getComponentKey(), component.getConfig());
+            }
+        }
+        return result;
+    }
+
+    /** 旧组件原始文字节点和顺序保持不变，确保旧字体摘要不变。 */
+    private static Map<String, Map<String, Object>> legacyDemandNodes(Map<String, Map<String, Object>> nodes) {
+        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+        nodes.forEach((key, value) -> { if (!(value instanceof TimelineStyleNode)) { result.put(key, value); } });
+        return result;
+    }
+
+    /** 临时需求身份只用于容器去重，不进入字体摘要。 */
+    private static void addTimelineDemands(Map<String, Map<String, Object>> target, String key, Map<String, Object> config) {
+        if (config == null) { return; }
+        int index = 0;
+        for (Map<String, Object> demand : PortfolioTimelineConfigSupport.fontDemandNodes(config)) {
+            target.put(key + ":" + PortfolioTimelineConfigSupport.COMPONENT_TYPE + ":" + index++, demand);
+        }
     }
 
     /** 从已校验版本表取固定版本，不自动采用目录最新版。 */
@@ -160,6 +223,17 @@ public final class PortfolioFontConfigSupport {
             Map<String, Object> target = entry.getValue();
             Map<String, Object> request = input.get(entry.getKey());
             Map<String, Object> saved = old.get(entry.getKey());
+            // 时间轴补丁已完成原子字体选择规范化；删除覆盖与内置选择不得恢复旧 fontId。
+            if (target instanceof TimelineStyleNode) {
+                Object selected = target.get(FONT_ID);
+                if (selected instanceof String id) {
+                    if (!ID.matcher(id).matches()) { throw invalid(); }
+                    String selectedVersion = capable ? version(fonts, id) : null;
+                    if (selectedVersion == null) { selectedVersion = version(oldFonts, id); }
+                    if (selectedVersion != null) { versions.put(id, Map.of(FONT_VERSION, selectedVersion)); }
+                }
+                continue;
+            }
             Object selection = null;
             if (capable && request != null && request.containsKey(FONT_ID)) {
                 selection = request.get(FONT_ID);
@@ -191,7 +265,9 @@ public final class PortfolioFontConfigSupport {
     private static void addNodes(Map<String, Map<String, Object>> result, String key, String type, Map<String, Object> config) {
         if (config == null) { return; }
         String prefix = key + ":" + type + ":";
-        if (PortfolioComponentTypeDict.TEXT_SECTION.getCode().equals(type)) { result.put(prefix, config); }
+        if (PortfolioTimelineConfigSupport.COMPONENT_TYPE.equals(type)) {
+            PortfolioTimelineConfigSupport.rawStyleNodes(config).forEach((identity, patch) -> result.put(prefix + identity, new TimelineStyleNode(patch)));
+        } else if (PortfolioComponentTypeDict.TEXT_SECTION.getCode().equals(type)) { result.put(prefix, config); }
         else if (PortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode().equals(type)) {
             for (var block : maps(config.get(BLOCKS))) {
                 if (!PortfolioTextBlockTypeDict.SPACER.getCode().equals(block.get(TYPE))) { result.put(prefix + block.get(BLOCK_KEY), block); }

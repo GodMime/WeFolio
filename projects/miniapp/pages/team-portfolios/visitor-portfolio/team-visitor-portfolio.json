@@ -17,6 +17,7 @@
     "team-qr-contact": "../components/qr-contact/qr-contact",
     "team-video-carousel": "/pages/team-portfolios/components/video-carousel/video-carousel",
     "portfolio-text-grid": "../components/text-grid/text-grid",
-    "portfolio-contact-info": "../components/contact-info/contact-info"
+    "portfolio-contact-info": "../components/contact-info/contact-info",
+    "portfolio-timeline": "../components/timeline/timeline"
   }
 }

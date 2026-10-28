@@ -1,3 +1,4 @@
+const { createTimeline, normalizeTimeline, validateTimeline } = require('./portfolio-timeline')
 const { normalizeHexColor } = require('./portfolio-color')
 const { normalizeBackgroundAudio } = require('./portfolio-background-audio')
 const { normalizeTextColor, isValidTextColor, TEXT_COLOR_ERROR } = require('./portfolio-text-color')
@@ -12,7 +13,7 @@ const {
 } = require('../../../utils/portfolio-text-typography.js')
 
 const SCHEMA_VERSION = 'standard-personal-v1'
-const EDITOR_SCHEMA_REVISION = 14
+const EDITOR_SCHEMA_REVISION = 15
 const COMPONENT_SPACING_DEFAULT_RPX = 32
 const COMPONENT_SPACING_MIN_RPX = 0
 const COMPONENT_SPACING_MAX_RPX = 96
@@ -66,7 +67,7 @@ const COMPONENT_TYPES = {
   CONTACT_FORM: 'CONTACT_FORM',
   TEXT_SECTION: 'TEXT_SECTION',
   STRUCTURED_TEXT_SECTION: 'STRUCTURED_TEXT_SECTION',
-  TEXT_GRID: 'TEXT_GRID', CONTACT_INFO: 'CONTACT_INFO',
+  TIMELINE: 'TIMELINE', TEXT_GRID: 'TEXT_GRID', CONTACT_INFO: 'CONTACT_INFO',
   DIVIDER: 'DIVIDER',
   HYPERLINK: 'HYPERLINK'
 }
@@ -83,7 +84,7 @@ const COMPONENT_NAMES = {
   CONTACT_FORM: '预留联系信息',
   TEXT_SECTION: '文字说明',
   STRUCTURED_TEXT_SECTION: '结构化文字说明',
-  TEXT_GRID: '文字网格', CONTACT_INFO: '联系信息',
+  TIMELINE: '时间轴', TEXT_GRID: '文字网格', CONTACT_INFO: '联系信息',
   DIVIDER: '分割线',
   HYPERLINK: '超链接'
 }
@@ -551,6 +552,7 @@ function createComponent(componentType, options = {}) {
         rowSpan: 1, columnSpan: 1, verticalAlignment: 'CENTER', blocks: [{ blockKey: `block_${i}`, alignment: 'CENTER',
           marginTopRpx: 0, marginBottomRpx: 12, runs: [{ runKey: `run_${i}`, text: '', fontFamily: 'SYSTEM', fontSizeRpx: 28, fontWeight: 'NORMAL', color: 'AUTO' }] }] })) })
   }
+  if (componentType === COMPONENT_TYPES.TIMELINE) Object.assign(config, Object.keys(config).length ? normalizeTimeline(config) : createTimeline())
   return {
     componentKey: trimText(options.componentKey) || `c_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
     componentType,
@@ -639,6 +641,7 @@ function normalizeBottomNavConfig(raw = {}) {
 
 function normalizePortfolioConfig(raw = {}) {
   return {
+    ...(Object.prototype.hasOwnProperty.call(raw, 'advancedPortfolioVersion') ? { advancedPortfolioVersion: raw.advancedPortfolioVersion } : {}),
     ...(raw.fonts && typeof raw.fonts === 'object' ? { fonts: JSON.parse(JSON.stringify(raw.fonts)) } : {}),
     schemaVersion: trimText(raw.schemaVersion) || SCHEMA_VERSION,
     editorSchemaRevision: EDITOR_SCHEMA_REVISION,
@@ -923,6 +926,8 @@ function validatePortfolioComponentForPublish(component = {}) {
         ? '提示语长度必须为1至30个字符'
         : ''
     }
+    case COMPONENT_TYPES.TIMELINE:
+      return validateTimeline(config)
     case COMPONENT_TYPES.TEXT_GRID:
       return Array.isArray(config.cells) && config.cells.some(cell => (cell.blocks || []).some(block => (block.runs || []).some(run => trimText(run.text)))) ? '' : '请至少添加一处文字'
     case COMPONENT_TYPES.CONTACT_INFO:
@@ -1334,7 +1339,7 @@ function reorderComponent(config, fromIndex, toIndex, menuKey = '') {
 
 function buildDraftPayload(config, clientRevision, idempotencyKey) {
   return {
-    clientCapabilities: { portfolioRemoteFont: 1 },
+    clientCapabilities: { portfolioRemoteFont: 1, portfolioTimeline: 1 },
     config,
     clientRevision,
     idempotencyKey

@@ -5,7 +5,7 @@ var EDIT_LABELS = {
   QR_CONTACT: '编辑二维码联系',
   SCHEDULE_QUERY: '编辑档期查询',
   CONTACT_FORM: '编辑预留联系信息',
-  TEXT_SECTION: '编辑文字说明',
+  TIMELINE: '编辑时间轴', TEXT_SECTION: '编辑文字说明',
   STRUCTURED_TEXT_SECTION: '编辑结构化文字说明', TEXT_GRID: '编辑文字网格', CONTACT_INFO: '编辑联系信息',
   DIVIDER: '编辑分割线',
   WORK_GRID: '编辑作品集展示标签',
@@ -74,7 +74,13 @@ function resolveHyperlinkSummary(component, summaries) {
   return workSummary + ' · 请选择点击行为'
 }
 
+function resolveTimelineSummary(config) {
+  config = config || {}
+  var names = { MINIMAL: '极简线轴', DATE_COLUMN: '日期分栏', MILESTONE_CARD: '里程碑卡片' }
+  return (names[config.variant] || names.MINIMAL) + ' · ' + (config.direction === 'VERTICAL' ? '纵向' : '横向') + ' · ' + (config.nodes || []).length + ' 个节点'
+}
 module.exports = {
+  resolveTimelineSummary: resolveTimelineSummary,
   isEditable: isEditable,
   resolveAriaRole: resolveAriaRole,
   resolveAriaLabel: resolveAriaLabel,

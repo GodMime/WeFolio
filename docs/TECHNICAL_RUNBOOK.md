@@ -749,6 +749,32 @@ Runtime 删除 `PortfolioAiReferenceMediaProbe` 与 `PortfolioAiReferenceStorage
 
 证据：`/tmp/wefolio-runtime-release-20261022.log`、`/tmp/wefolio-filter-java-full.log`、`docs/portfolio-runtime-release-verification-20261022.json`。
 
+### 4.37 最新 Job / Runtime 与高级作品集 V2 发布（2026-10-28）
+
+按用户“发布最新的job和runtime”授权，发布当前工作区代码（含尚未提交的 V2／时间轴改动），先完成 Job 升级，再使用 Runtime 标准 `deploy.sh` 滚动发布双节点。版本标识均为 `bdc2f01`，该标识仅代表构建时 HEAD，精确制品以 SHA-256 为准；本次未执行 Git 提交或发布小程序。
+
+- 发布前 Runtime 全量 2,980 项，0 失败／错误、35 项条件跳过；Job 全量 1,236 项，0 失败／错误、5 项条件跳过；小程序全量 3,083 项、分包专项 16 项通过。Job 首轮受沙箱本地 HTTP／FFmpeg 限制，获自动审批后全量重跑通过。Runtime 滚动发布脚本测试通过。
+- Job 构建时间 `2026-10-28 12:14:57`，SHA-256 `160e1be59397c44eef6756503edec00e1e8f108783bbf9c7f29c8e87c7e3cf27`。上传包校验与独立备份后，停用接口首次返回 `DISABLED / activeTaskCount=0`，再原子换包并重启。新 PID `29826`，启动时间 `12:16:44`；截至 `12:20:14` 已记录 15 次调度完成，未出现停用回调。
+- Runtime 构建时间 `2026-10-28 12:17:28`，SHA-256 `1ede46da6a148546e1e8771707eb7aea26db50bd8ae8515689fb5eaec6e4ec9e`。滚动发布退出码 0，耗时 101.832 秒。老／新节点 PID 为 `30364`／`17942`，启动时间 `12:18:10`／`12:18:50`；两节点实际制品与本地相同。
+- 独立核验通过：三个服务 active/running、健康 UP，Runtime 字体 enabled/ready，正式 HTTPS 健康和版本一致；Nginx 配置有效并恢复双节点轮询。各服务本次启动后的 journal/application ERROR/FATAL 均为 0。两个实际 JAR 的 V1/V2 冻结规格、历史 V1 缺省解析、非法规格拒绝及 Job 八份提示词加载冒烟通过，两端契约摘要一致。
+- 全部 68 份 Flyway 脚本与发布前线上包逐份摘要一致，无数据库迁移和环境配置变更。未主动创建收费模型任务或执行真实用户业务写入，以上为发布与协议冒烟验收，不代表完整 AI 生成、采用、保存、发布业务链验收。
+- Job 旧包保留于 `/root/java/job/wefolio-java-job.jar.backup-v2-timeline-20261028-121643`，SHA-256 `a1a033fc04a2f8cb04a3185d0693252decdbbbcac93d0a5c3706464d60e65a1f`；两个 Runtime 旧包均位于 `/root/java/wefolio-java-runtime.jar.backup`，SHA-256 `861bef96acead8362c8ce2c0aaa1912db212bbe55bacfc98ccea6cf6af858c46`。Runtime 已具备 V2 接单能力，回退前须先停止 V2 接单并排空已接收任务，不能直接回退旧 Job；已有 V2 配置也需先核对旧 Runtime 兼容性。
+
+证据：`docs/job-runtime-release-verification-20261028.json`、`/tmp/wefolio-runtime-release-tests-20261028.log`、`/tmp/wefolio-job-release-tests-20261028-approved.log`、`/tmp/wefolio-miniapp-release-tests-20261028.log`、`/tmp/wefolio-job-release-deploy-20261028.log`、`/tmp/wefolio-runtime-release-deploy-20261028.log`、`/tmp/wefolio-v2-artifact-smoke-20261028.json`。Job 服务器发布记录：`/root/java/job/release-v2-timeline-20261028.json`。
+
+### 4.38 审核修复与时间轴 CUSTOM 新运行规格发布（2026-10-28）
+
+用户先要求发布 Runtime；预检发现当前 CUSTOM 规则与线上旧 V2 的摘要不同但冻结标识相同，随后明确授权同步修正并发布 Job、Runtime，并确认线上没有旧 V2 数据。本次将内部运行规格更新为 `portfolio-v2-2026-10-28.1`、提示词版本更新为 `portfolio-ai-2026-10-28.1`，对外仍使用 `ai-portfolio-v2` 和 `clientAdvancedVersion=2`。V1 缺省解析保持兼容，未登记的旧 V2 标识明确拒绝，不增加旧 V2 资源或数据迁移。
+
+- 发布前 Runtime 全量 3,002 项（35 项条件跳过）、Job 全量 1,247 项（5 项条件跳过），均 0 失败／错误；小程序全量 3,147 项通过。两模块先以回归测试复现旧冻结标识误用，再验证新规格、提示词、V1 历史请求及非法规格拒绝。滚动脚本测试通过；两个实际发布 JAR 的 V1/V2 协议冒烟和跨模块摘要核对通过。
+- Runtime 构建时间 `2026-10-28 13:46:37`（上海），SHA-256 `49bc48621504db244d496ef65970c5f2cd4e4dc28839aa314eef499a4c32f5dc`。Job 构建时间 `2026-10-28 13:46:49`，SHA-256 `3a63071f7f8991af04c44289d787fa243b2ebdbe20f828625278a284f2459e9b`。两者版本标识仍为 `bdc2f01`，包含当前工作区未提交改动，精确制品以摘要和构建时间区分。
+- Job 上传校验并备份后，停用接口首次返回 `DISABLED / activeTaskCount=0`，随后原子换包重启。新 PID `19768`，启动时间 `13:48:59`。Runtime 复用已通过包内验证的制品，执行原 `deploy.sh` 的预检、备份、切流及滚动发布流程，不再次构建；退出码 0，耗时 84.481 秒。老／新节点 PID 为 `20126`／`6075`，启动时间 `13:49:45`／`13:50:23`。
+- 截至 `13:51:25`，三个服务 active/running、健康 UP；Runtime 字体 enabled/ready，Job 已记录 10 次调度完成且新实例无停用回调。双节点制品与本地一致，正式 HTTPS 健康及版本核验通过；Nginx 配置有效、恢复双节点轮询，各服务本次启动后 journal/application ERROR/FATAL 均为 0。
+- 新 V2 规则摘要为 `945e246191eacce60b285ee446fab53c44568bcb77df25d85596e042efe52310`，两端契约文件 SHA-256 为 `17e9054f591c7df6ccedffc65b7db4c0d0f160e301cc7fdb47a3ab7c76190415`。两个 Runtime 实际 JAR 的全部 68 份 Flyway 脚本与各自发布前备份逐份相同；未修改环境配置、未发布小程序、未执行 Git 提交，也未主动调用收费模型或执行真实用户业务写入。
+- Job 旧包保留于 `/root/java/job/wefolio-java-job.jar.backup-v2-timeline-20261028-review-fixes-134858`，SHA-256 `160e1be59397c44eef6756503edec00e1e8f108783bbf9c7f29c8e87c7e3cf27`。两个 Runtime 旧包位于 `/root/java/wefolio-java-runtime.jar.backup`，SHA-256 `1ede46da6a148546e1e8771707eb7aea26db50bd8ae8515689fb5eaec6e4ec9e`。新 V2 接单后不能直接恢复旧消费者；回退前须停止新 V2 接单、排空在途任务并核对已保存 CUSTOM 配置的兼容性。
+
+证据：`docs/job-runtime-release-verification-20261028-review-fixes.json`、`/tmp/wefolio-release-review-fixes-runtime-tests.log`、`/tmp/wefolio-release-review-fixes-job-tests.log`、`/tmp/wefolio-release-review-fixes-miniapp.log`、`/tmp/wefolio-release-review-fixes-job-deploy.log`、`/tmp/wefolio-release-review-fixes-runtime-deploy.log`、`/tmp/wefolio-v2-artifact-smoke-20261028-review-fixes.json`。Job 服务器发布记录：`/root/java/job/release-v2-timeline-20261028-review-fixes.json`。
+
 ## 5. 域名、CDN 与证书
 
 | 环境 | 域名 | DNS 服务商 | CDN 服务商 | 源站 | 证书到期日 | 自动续期 | 备注 |
@@ -1077,3 +1103,13 @@ Runtime 双节点已完成发布，服务、制品、有效配置和正式入口
 | 2026-10-19 | Codex | 提交 `851f811` 并发布视频默认作品推荐名称；Job 排空后换包，版本、健康、制品、提示词及调度恢复核验通过，启动后无 ERROR/FATAL | Job 单节点；名称更新隔离于已提交摘要，Runtime 和小程序未发布，无数据库或环境变更 | 旧包独立保留为 `backup-video-title-20261019-851f811`，回退先排空再恢复并验收；详见 §4.34 |
 | 2026-10-19 | Codex | 提交 `869cefd` 并发布作品统一排序；Runtime 双节点滚动发布完成，版本、健康、制品、备份及 Nginx 轮询核验通过，启动后无 ERROR/FATAL | Runtime 双节点；兼容旧客户端 TAG 排序，小程序仅提交代码未发布，Job 未重启，无数据库或环境变更 | 两节点固定 `.backup` 保留旧包，回退须逐节点摘流并验收；详见 §4.35 |
 | 2026-10-22 | Codex | 按授权发布作品集状态筛选 Runtime；双节点制品、健康、版本、备份及 Nginx 轮询核验通过，启动后无 ERROR/FATAL | Runtime 双节点；无数据库或环境变更，Job 与小程序未发布，发布时使用工作区代码 | 两节点固定 `.backup` 保留旧包，回退须逐节点摘流并验收；详见 §4.36 |
+
+### 7.5 高级作品集 V2 与时间轴接单配置（2026-10-28，后端已部署）
+
+高级版本由前端固定声明；旧请求缺省按 V1，历史配置缺省版本按 V1 读取。版本只存现有配置 JSON 根的 `advancedPortfolioVersion`，无需数据库迁移或回填。保存低于当前数据库草稿版本的请求返回升级提示；标准旧端继续保护已有时间轴和必要导航。
+
+本次不新增环境变量。Runtime 默认声明 V1、V2 及 V2 的 `TEXT_ONLY` 创建能力，新任务统一受既有 `WEFOLIO_AI_ENABLED` 总开关控制；总开关开启时无需额外配置即可使用 V2 与纯文字创建。
+
+关闭原 AI 总开关不阻断已冻结任务的执行、重试、查询及既有幂等重放，也不关闭已部署的 V2 手动编辑、保存和发布能力。Job 使用任务冻结的 `runSpecId` 及规则／提示词，不读取 Runtime 的接单开关。旧任务缺少规格时仅按登记的契约与提示词版本对解析，不选当前最新版。
+
+发布顺序：全部 Job 升级至支持 V1/V2 → Runtime 升级并直接提供 V2／纯文字接单 → 核对两端冻结规格并完成 V1/V2 冒烟 → V2 小程序。先完成 Job 升级，避免旧消费者收到 V2 任务。两个 Java 工程仍独立构建和发布。后端首次发布见 §4.37，当前 CUSTOM 规格发布及实际 JAR 协议冒烟见 §4.38；运行规格为 `portfolio-v2-2026-10-28.1`，提示词版本为 `portfolio-ai-2026-10-28.1`。生产 AI 总开关为 true，未新增或修改环境配置，未发布小程序或主动调用收费模型。

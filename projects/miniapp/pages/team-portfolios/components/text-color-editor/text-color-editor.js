@@ -43,6 +43,8 @@ function pickerState(hsv) {
 
 Component({
   properties: {
+    themeMode: { type: String, value: 'light' },
+    backgroundColor: { type: String, value: WHITE_COLOR },
     color: { type: String, value: AUTO_COLOR },
     active: { type: Boolean, value: true },
     inline: { type: Boolean, value: false },
@@ -51,11 +53,12 @@ Component({
     label: { type: String, value: '文字颜色' }
   },
   data: {
-    presets: PRESETS, selectedColor: AUTO_COLOR, customSelected: false,
+    previewBackground: WHITE_COLOR, presets: PRESETS, selectedColor: AUTO_COLOR, customSelected: false,
     pickerMounted: false, pickerVisible: false,
     ...pickerState(hexToHsv(BLACK_COLOR))
   },
   observers: {
+    backgroundColor(value) { this.updateBackground(value) },
     color(value) {
       const color = normalizeColor(value)
       if (this.data.pickerMounted && color !== this.data.selectedColor) this.resetPicker()
@@ -74,6 +77,7 @@ Component({
   lifetimes: {
     attached() {
       this._detached = false
+      this.updateBackground(this.properties.backgroundColor)
       this.updateSelection(normalizeColor(this.properties.color))
       if (!this.properties.active) this.resetPicker()
     },
@@ -83,6 +87,8 @@ Component({
     }
   },
   methods: {
+    /** 预览背景只用于当前试色，不修改已选颜色或正在编辑的 HEX。 */
+    updateBackground(value) { const color = normalizeColor(value); this.setData({ previewBackground: color === AUTO_COLOR ? WHITE_COLOR : color }) },
     /** 选中态与属性回传同步，不让正在试色的草稿影响外部颜色。 */
     updateSelection(color) {
       // 旧主题色继续保留，但不作为新选项或无效的自定义 HEX 展示。

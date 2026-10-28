@@ -1,6 +1,7 @@
 package com.jxc.wefolio.service.teamportfolio;
 
 import com.jxc.wefolio.service.PortfolioBackgroundAudioService;
+import com.jxc.wefolio.service.PortfolioTimelineConfigSupport;
 import static org.mockito.Mockito.mock;
 
 import com.alibaba.fastjson2.JSON;
@@ -66,6 +67,21 @@ class TeamPortfolioRenderServiceTest {
     @Mock private TeamContactFormComponentRenderer contactRenderer;
     @Mock private TeamQrContactComponentRenderer qrRenderer;
     @Mock private TeamVideoCarouselComponentRenderer videoCarouselRenderer;
+
+    /** 团队访客渲染保留自定义节点原文与数组顺序，不将标点解释为日期。 */
+    @Test void rendersCustomTimelineLabelsWithoutDateConversion() {
+        String customLabel = " 筹备 - v1.0 ";
+        var timeline = component("journey", TeamPortfolioComponentTypeDict.TIMELINE.getCode(), 1000, true);
+        timeline.setConfig(JSONObject.of("nodes", List.of(
+                JSONObject.of("nodeKey", "custom", "datePrecision", PortfolioTimelineConfigSupport.CUSTOM, "date", customLabel, "title", "筹备"),
+                JSONObject.of("nodeKey", "day", "datePrecision", PortfolioTimelineConfigSupport.DAY, "date", "2024-05-20", "title", "纪念"))));
+        var rendered = service().render(JSON.toJSONString(config(List.of(timeline))), new TeamPortfolioComponentContext(11L, 22L, 1))
+                .getComponents().getFirst().getData().getJSONArray("nodes");
+        assertThat(rendered.getJSONObject(0)).containsEntry("datePrecision", PortfolioTimelineConfigSupport.CUSTOM)
+                .containsEntry("date", customLabel).doesNotContainKey("customLabel");
+        assertThat(rendered.getJSONObject(1)).containsEntry("datePrecision", PortfolioTimelineConfigSupport.DAY)
+                .containsEntry("date", "2024-05-20");
+    }
 
     /** 团队联系信息展示补历史无边框默认值，开启和关闭时均透传完整外观配置。 */
     @Test
@@ -155,6 +171,7 @@ class TeamPortfolioRenderServiceTest {
         assertThat(render.getTitle()).isEqualTo("团队作品集");
         assertThat(render.getComponents()).extracting(TeamPortfolioRenderDto.Component::getComponentType)
                 .containsExactly(
+                        TeamPortfolioComponentTypeDict.TIMELINE.getCode(),
                         TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode(),
                         TeamPortfolioComponentTypeDict.TEXT_GRID.getCode(),
                         TeamPortfolioComponentTypeDict.STRUCTURED_TEXT_SECTION.getCode(),
@@ -171,7 +188,10 @@ class TeamPortfolioRenderServiceTest {
                         TeamPortfolioComponentTypeDict.TEAM_PROFILE.getCode());
         assertThat(render.getComponents()).allSatisfy(component ->
                 {
-                    if (TeamPortfolioComponentTypeDict.TEXT_GRID.getCode().equals(component.getComponentType())) {
+                    if (TeamPortfolioComponentTypeDict.TIMELINE.getCode().equals(component.getComponentType())) {
+                        assertThat(component.getData().getJSONArray("nodes")).hasSize(1);
+                        assertThat(component.getData().getString("variant")).isEqualTo("MINIMAL");
+                    } else if (TeamPortfolioComponentTypeDict.TEXT_GRID.getCode().equals(component.getComponentType())) {
                         assertThat(component.getData().getJSONArray("cells")).hasSize(4);
                     } else if (TeamPortfolioComponentTypeDict.CONTACT_INFO.getCode().equals(component.getComponentType())) {
                         assertThat(component.getData()).containsKeys("contactPhone", "contactWechat");
@@ -543,6 +563,10 @@ class TeamPortfolioRenderServiceTest {
         component.setSortOrder(sortOrder);
         component.setEnabled(enabled);
         component.setConfig(new JSONObject());
+        if (TeamPortfolioComponentTypeDict.TIMELINE.getCode().equals(type)) {
+            component.setConfig(JSONObject.of("nodes", List.of(JSONObject.of("nodeKey", "event_1",
+                    "datePrecision", "YEAR", "date", "2018", "title", "团队成立"))));
+        }
         return component;
     }
 

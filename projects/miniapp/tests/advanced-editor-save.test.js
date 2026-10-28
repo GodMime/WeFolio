@@ -4,6 +4,49 @@ const path = require('node:path')
 const { normalizeContext, addSource } = require('../pages/portfolios/utils/advanced-portfolios')
 const { confirmAdvancedPortfolioPublish } = require('../pages/portfolios/utils/advanced-editor-page')
 
+for (const team of [false, true]) {
+  test(`${team ? '团队' : '个人'}无内容修改仍保存升级，并回填服务端高级版本`, async () => {
+    const calls = []
+    const page = loadEditor(team, async options => {
+      calls.push(JSON.parse(JSON.stringify(options)))
+      return { portfolioId: '90', draftRevision: 8, config: { ...options.data.config, advancedPortfolioVersion: 2 } }
+    })
+    try {
+      page.setData({ portfolioId: '90', draftRevision: 7, advancedDirty: false, config: { ...page.data.config, advancedPortfolioVersion: 1 } })
+      const before = JSON.parse(JSON.stringify(page.data.config.components))
+      const saved = team ? await page.saveDraft() : await page.saveDraftForPortfolio('90', undefined, { returnToList: false })
+      assert.equal(calls.length, 1)
+      assert.equal(calls[0].data.clientAdvancedVersion, 2)
+      assert.equal(calls[0].data.config.advancedPortfolioVersion, 1)
+      assert.deepEqual(calls[0].data.clientCapabilities, { portfolioRemoteFont: 1 })
+      assert.equal(page.data.config.advancedPortfolioVersion, 2)
+      assert.equal(page.data.savedAdvancedVersion, 2)
+      assert.equal(page.data.draftRevision, 8)
+      assert.equal(saved.editorChanged, false)
+      assert.deepEqual(page.data.config.components, before)
+    } finally { page.cleanup() }
+  })
+  test(`${team ? '团队' : '个人'}保存期间新正文不被响应覆盖，高级版本和修订仍回填`, async () => {
+    let respond, request
+    const page = loadEditor(team, options => { request = JSON.parse(JSON.stringify(options)); return new Promise(resolve => { respond = resolve }) })
+    try {
+      page.setData({ portfolioId: '90', draftRevision: 7, config: { ...page.data.config, advancedPortfolioVersion: 1 }, advancedDirty: true })
+      const saving = team ? page.saveDraft() : page.saveDraftForPortfolio('90', undefined, { returnToList: false })
+      for (let index = 0; index < 30 && !respond; index++) await Promise.resolve()
+      assert.ok(respond)
+      const config = JSON.parse(JSON.stringify(page.data.config)); config.components[0].config.content = '保存期间的新文字'
+      if (team) page.updateConfig(config); else page.applyEditorConfig(config)
+      respond({ portfolioId: '90', draftRevision: 8, config: { ...request.data.config, advancedPortfolioVersion: 2 } })
+      const saved = await saving
+      assert.equal(saved.editorChanged, true)
+      assert.equal(page.data.config.components[0].config.content, '保存期间的新文字')
+      assert.equal(page.data.config.advancedPortfolioVersion, 2)
+      assert.equal(page.data.draftRevision, 8)
+      assert.equal(page.data.advancedDirty, true)
+    } finally { page.cleanup() }
+  })
+}
+
 function loadEditor(team, requestFn) {
   const requestKey = require.resolve('../utils/request.js')
   const oldRequest = require.cache[requestKey]
@@ -47,10 +90,10 @@ for (const team of [false, true]) {
       assert.equal(calls.length, 2)
       assert.equal(calls[0].url, '/api/mine/advanced-portfolios')
       assert.equal(calls[0].method, 'POST')
-      assert.deepEqual(calls[0].data, { ownerType: team ? 'TEAM' : 'USER', ownerId: team ? '3' : '1' })
+      assert.deepEqual(calls[0].data, { ownerType: team ? 'TEAM' : 'USER', ownerId: team ? '3' : '1', clientAdvancedVersion: 2 })
       assert.equal(calls[1].url, '/api/mine/advanced-portfolios/90/draft')
       assert.equal(calls[1].method, 'PUT')
-      assert.deepEqual(Object.keys(calls[1].data).sort(), ['aiContext', 'aiPrompt', 'clientCapabilities', 'clientRevision', 'config', 'idempotencyKey'])
+      assert.deepEqual(Object.keys(calls[1].data).sort(), ['aiContext', 'aiPrompt', 'clientAdvancedVersion', 'clientCapabilities', 'clientRevision', 'config', 'idempotencyKey'])
       assert.deepEqual(calls[1].data.clientCapabilities, { portfolioRemoteFont: 1 })
       assert.equal(calls[1].data.clientRevision, 4)
       assert.equal(calls[1].data.aiPrompt, '精简文字')

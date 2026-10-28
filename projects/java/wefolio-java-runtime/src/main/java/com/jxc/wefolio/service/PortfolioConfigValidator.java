@@ -382,6 +382,13 @@ public class PortfolioConfigValidator {
             PortfolioConfigDto incomingConfig,
             PortfolioConfigDto existingDraftConfig
     ) {
+        return normalizeForDraft(userId, incomingConfig, existingDraftConfig, PortfolioEditingCapabilities.standard(
+                incomingConfig == null ? null : incomingConfig.getEditorSchemaRevision(), null, false));
+    }
+
+    /** 使用入口已解析的能力校验和规范化，不从草稿版本推断客户端。 */
+    public PortfolioConfigDto normalizeForDraft(Long userId, PortfolioConfigDto incomingConfig,
+            PortfolioConfigDto existingDraftConfig, PortfolioEditingCapabilities capabilities) {
         if (userId == null) {
             throw new BusinessException(PortfolioMessage.USER_REQUIRED_MESSAGE);
         }
@@ -393,7 +400,8 @@ public class PortfolioConfigValidator {
             throw new BusinessException(PortfolioMessage.EDITOR_SCHEMA_REVISION_UNSUPPORTED_MESSAGE);
         }
 
-        PortfolioConfigDto config = mergeCompatibleConfig(incomingConfig, existingDraftConfig);
+        capabilities.requireAllowed(incomingConfig, existingDraftConfig);
+        PortfolioConfigDto config = mergeCompatibleConfig(incomingConfig, existingDraftConfig, capabilities);
         if (!PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1.equals(config.getSchemaVersion())) {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_CONFIG_VERSION_UNSUPPORTED_MESSAGE);
         }
@@ -469,7 +477,7 @@ public class PortfolioConfigValidator {
      * @param normalizedDraftConfig 已规范化草稿配置
      */
     public void validateForPublish(Long userId, PortfolioConfigDto normalizedDraftConfig) {
-        PortfolioConfigDto validated = normalizeForDraft(userId, normalizedDraftConfig, null);
+        PortfolioConfigDto validated = normalizeForDraft(userId, normalizedDraftConfig, null, PortfolioEditingCapabilities.stored());
         PortfolioBackgroundAudioSupport.validateForPublish(validated.getBackgroundAudio());
         for (var location : PortfolioComponentTraversal.listComponentLocations(validated)) {
             var component = location.component();
@@ -510,6 +518,7 @@ public class PortfolioConfigValidator {
     private PortfolioConfigDto mergeCompatibleConfig(
             PortfolioConfigDto incomingConfig,
             PortfolioConfigDto existingDraftConfig
+            , PortfolioEditingCapabilities capabilities
     ) {
         PortfolioConfigDto merged = new PortfolioConfigDto();
         merged.setSchemaVersion(incomingConfig.getSchemaVersion());
@@ -547,7 +556,7 @@ public class PortfolioConfigValidator {
                 ? existingDraftConfig.getBackgroundAudio() : incomingConfig.getBackgroundAudio());
         Integer persistedRevision = merged.getEditorSchemaRevision();
         merged.setEditorSchemaRevision(incomingRevision);
-        merged = PortfolioComponentCompatibilityMerger.merge(merged, existingDraftConfig);
+        merged = PortfolioComponentCompatibilityMerger.merge(merged, existingDraftConfig, capabilities);
         merged.setEditorSchemaRevision(persistedRevision);
         return merged;
     }
@@ -831,6 +840,7 @@ public class PortfolioConfigValidator {
         switch (componentType) {
             case PROFILE -> component.setConfig(PortfolioProfileConfigSupport.normalize(component.getConfig()));
             case CONTACT_INFO -> component.setConfig(PortfolioContactInfoConfigSupport.normalize(component.getConfig()));
+            case TIMELINE -> component.setConfig(PortfolioTimelineConfigSupport.normalize(component.getConfig()));
             case TEXT_GRID -> component.setConfig(PortfolioTextGridConfigNormalizer.normalize(component.getConfig()));
             case CAROUSEL -> validateCarousel(userId, component);
             case VIDEO_CAROUSEL -> validateVideoCarousel(userId, component);

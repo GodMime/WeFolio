@@ -2,6 +2,8 @@ package com.jxc.wefolio.service;
 
 import com.jxc.wefolio.dto.PortfolioFontManifestDto;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioVersionSupport;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedVersionRegistry;
 import com.jxc.wefolio.service.portfolioai.PortfolioAiReferenceService;
 import java.util.function.Supplier;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioConfigGuard;
@@ -127,6 +129,7 @@ public class MinePortfolioService {
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.CONTACT_FORM, "收集访客预留联系信息"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.QR_CONTACT, "展示微信二维码联系方式"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.TEXT_GRID, "自定义行列、合并单元格和混合文字样式"),
+            new ComponentLibraryDefinition(PortfolioComponentTypeDict.TIMELINE, "展示个人经历或团队里程碑"),
             new ComponentLibraryDefinition(PortfolioComponentTypeDict.CONTACT_INFO, "展示并复制联系手机和联系微信")
     );
 
@@ -378,11 +381,20 @@ public class MinePortfolioService {
      * @return 组件库响应
      */
     public PortfolioComponentLibraryResponse getComponentLibrary(Integer editorSchemaRevision) {
+        return getComponentLibrary(editorSchemaRevision, null, null, null);
+    }
+
+    /** 目录按本次入口能力过滤，旧请求即使回传高修订也不自动开放时间轴。 */
+    public PortfolioComponentLibraryResponse getComponentLibrary(Integer editorSchemaRevision, String templateType,
+                                                                  String portfolioTimeline, String clientAdvancedVersion) {
+        PortfolioEditingCapabilities capabilities = PortfolioComponentLibraryRequest.capabilities(
+                editorSchemaRevision, templateType, portfolioTimeline, clientAdvancedVersion, false);
         PortfolioComponentLibraryResponse response = new PortfolioComponentLibraryResponse();
         int effectiveRevision = editorSchemaRevision == null
                 ? COMPONENT_LIBRARY_LEGACY_REVISION : editorSchemaRevision;
         List<PortfolioComponentLibraryResponse.ComponentItem> components = COMPONENT_LIBRARY_DEFINITIONS.stream()
                 .filter(definition -> definition.type().getIntroducedAtRevision() <= effectiveRevision)
+                .filter(definition -> definition.type() != PortfolioComponentTypeDict.TIMELINE || capabilities.supportsTimeline())
                 .map(definition -> componentLibraryItem(definition.type(), definition.description()))
                 .toList();
         response.setComponents(components);
@@ -425,10 +437,17 @@ public class MinePortfolioService {
     /** 高级独立入口按显式模板复用相同业务算法。 */
     @Transactional(rollbackFor = Exception.class)
     public MinePortfolioDetailResponse createStandardPersonal(MinePortfolioCreateRequest request, String templateType) {
+        return createStandardPersonal(request, templateType, AdvancedVersionRegistry.LEGACY_VERSION);
+    }
+
+    /** 首次持久化高级草稿时写入本次前端版本，创建流程和容量校验保持原有事务。 */
+    @Transactional(rollbackFor = Exception.class)
+    public MinePortfolioDetailResponse createStandardPersonal(MinePortfolioCreateRequest request, String templateType,
+                                                               int clientAdvancedVersion) {
         Long userId = AuthContextHolder.requireUserId();
         contentLimitService.ensurePersonalPortfolioCapacity(userId);
         PortfolioConfigDto initialConfig = defaultConfig();
-        String configJson = toJson(initialConfig);
+        String configJson = AdvancedPortfolioVersionSupport.serializeSaved(initialConfig, templateType, clientAdvancedVersion);
         LocalDateTime now = LocalDateTime.now();
         PortfolioEntity portfolio = new PortfolioEntity();
         portfolio.setShareCode(generateShareCode());
@@ -518,6 +537,12 @@ public class MinePortfolioService {
 
     /** 高级独立入口按显式模板复用相同业务算法。 */
     public PortfolioFontManifestDto prepareFonts(Long portfolioId, MinePortfolioDraftSaveRequest request, String templateType) {
+        return prepareFonts(portfolioId, request, templateType, AdvancedVersionRegistry.LEGACY_VERSION);
+    }
+
+    /** 字体准备使用请求能力校验内容，但不写草稿版本。 */
+    public PortfolioFontManifestDto prepareFonts(Long portfolioId, MinePortfolioDraftSaveRequest request,
+                                                 String templateType, int clientAdvancedVersion) {
         PortfolioFontWrite write = portfolioPublishTransactionService.execute(() -> {
             PortfolioEntity portfolio = requireOwnedPersonal(portfolioId, templateType);
             if (request == null || request.getConfig() == null) {
@@ -525,7 +550,8 @@ public class MinePortfolioService {
             }
             PortfolioConfigDto previous = parseConfig(portfolio.getDraftConfigJson());
             PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(
-                    AuthContextHolder.requireUserId(), request.getConfig(), previous);
+                    AuthContextHolder.requireUserId(), request.getConfig(), previous,
+                    editingCapabilities(request, templateType, clientAdvancedVersion));
             PortfolioFontConfigSupport.merge(normalized, request.getConfig(), previous,
                     request.getClientCapabilities() != null && request.getClientCapabilities().supportsRemoteFonts());
             PortfolioFontWrite context = new PortfolioFontWrite();
@@ -593,6 +619,9 @@ public class MinePortfolioService {
                 ? sha256(PortfolioFontConfigSupport.hasFontIntent(request)
                         ? PortfolioFontConfigSupport.fingerprint(request)
                         : toJson(sortJsonKeys(PortfolioFontConfigSupport.legacyRequest(request)))) : null;
+        if (requestHash != null && request.getClientCapabilities() != null && request.getClientCapabilities().hasTimelineIntent()) {
+            requestHash = sha256(PortfolioTimelineRequestFingerprint.include(requestHash, request.getClientCapabilities()));
+        }
         if (metadata != null && requestHash != null) { requestHash = sha256(requestHash + metadata.fingerprint()); }
         if (restoreSavedDraft(portfolio, request, requestHash)) {
             return buildDetail(portfolio, parseConfig(portfolio.getDraftConfigJson()));
@@ -604,12 +633,18 @@ public class MinePortfolioService {
                 write.prepared.revision(), portfolio.getCurrentRevision())) {
             throw new BusinessException(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
         }
+        int clientAdvancedVersion = metadata == null ? AdvancedVersionRegistry.LEGACY_VERSION : metadata.clientAdvancedVersion();
+        if (PortfolioTemplateTypeDict.ADVANCED.getCode().equals(templateType)) {
+            AdvancedPortfolioVersionSupport.requireCanWrite(clientAdvancedVersion, portfolio.getDraftConfigJson());
+        }
+        if (metadata != null) { metadata.validateConfig(false); }
         PortfolioConfigDto oldDraftConfig = parseConfig(portfolio.getDraftConfigJson());
         PortfolioConfigDto publishedConfig = parseConfig(portfolio.getPublishedConfigJson());
         PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(
                 userId,
                 request.getConfig(),
-                oldDraftConfig
+                oldDraftConfig,
+                editingCapabilities(request, templateType, clientAdvancedVersion)
         );
         PortfolioFontConfigSupport.merge(normalized, request.getConfig(), oldDraftConfig,
                 request.getClientCapabilities() != null && request.getClientCapabilities().supportsRemoteFonts());
@@ -627,9 +662,7 @@ public class MinePortfolioService {
         );
         PortfolioFontPlan fontPlan = PortfolioFontPlan.from(normalized);
         if (metadata != null) {
-            AdvancedPortfolioConfigGuard.assertNormalized(
-                    StrictAiJson.parseObject(metadata.fingerprint(), 2 * 1024 * 1024, 20).withObject("config"),
-                    StrictAiJson.parseObject(JSON.toJSONString(normalized), 2 * 1024 * 1024, 20));
+            metadata.assertNormalized(normalized, false);
         }
         if (metadata != null && metadata.contextPresent()) {
             AdvancedPortfolioSaveMetadata.validateContext(metadata.context(), portfolio.getAiContextJson());
@@ -653,7 +686,7 @@ public class MinePortfolioService {
         );
         int nextDraftRevision = safeInt(portfolio.getDraftRevision()) + 1;
         int nextHistoryRevision = nextHistoryRevision(portfolio);
-        String configJson = toJson(normalized);
+        String configJson = AdvancedPortfolioVersionSupport.serializeSaved(normalized, templateType, clientAdvancedVersion);
         String hash = sha256(configJson);
         LocalDateTime now = LocalDateTime.now();
 
@@ -679,6 +712,14 @@ public class MinePortfolioService {
                 hasDraftIdempotencyKey(request) ? request.getIdempotencyKey() : null, requestHash);
         deleteUnreferencedAssetsAfterCommit(portfolio.getId(), deletedObjectKeys);
         return buildDetail(portfolio, normalized);
+    }
+
+    /** 请求能力由入口构造，标准声明不能被高级请求缺省字段误判。 */
+    private PortfolioEditingCapabilities editingCapabilities(MinePortfolioDraftSaveRequest request,
+                                                              String templateType, int clientAdvancedVersion) {
+        return PortfolioTemplateTypeDict.ADVANCED.getCode().equals(templateType)
+                ? PortfolioEditingCapabilities.advanced(request.getConfig().getEditorSchemaRevision(), clientAdvancedVersion, false)
+                : PortfolioEditingCapabilities.standard(request.getConfig().getEditorSchemaRevision(), request.getClientCapabilities(), false);
     }
 
     /**
@@ -718,7 +759,7 @@ public class MinePortfolioService {
             throw new BusinessException(PortfolioMessage.PORTFOLIO_UNAVAILABLE_MESSAGE);
         }
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
-        MinePortfolioDetailResponse response = buildDetail(portfolio, config);
+        MinePortfolioDetailResponse response = buildDetail(portfolio, config, portfolio.getPublishedConfigJson());
         response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
         response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config), portfolio.getPublishedFontAssetsJson()));
         response.getRenderData().setFonts(response.getFontAssets());
@@ -739,7 +780,7 @@ public class MinePortfolioService {
     public MinePortfolioDetailResponse previewPublishedReferencedPortfolio(Long portfolioId, boolean allowAdvanced) {
         PortfolioEntity portfolio = requirePublishedPersonal(portfolioId, allowAdvanced);
         PortfolioConfigDto config = parseConfig(portfolio.getPublishedConfigJson());
-        MinePortfolioDetailResponse response = buildDetail(portfolio, config);
+        MinePortfolioDetailResponse response = buildDetail(portfolio, config, portfolio.getPublishedConfigJson());
         response.setRenderData(portfolioRenderService.render(portfolio, config, true, false, null, null));
         response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config), portfolio.getPublishedFontAssetsJson()));
         response.getRenderData().setFonts(response.getFontAssets());
@@ -911,7 +952,8 @@ public class MinePortfolioService {
         String draftConfigJson = portfolio.getDraftConfigJson();
         PortfolioConfigDto currentDraftConfig = parseConfig(draftConfigJson);
         PortfolioConfigDto oldPublishedConfig = parseConfig(portfolio.getPublishedConfigJson());
-        PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(userId, currentDraftConfig, null);
+        PortfolioConfigDto normalized = portfolioConfigValidator.normalizeForDraft(userId, currentDraftConfig, null,
+                PortfolioEditingCapabilities.stored());
         portfolioConfigValidator.validateForPublish(userId, normalized);
         List<PortfolioReferenceEntity> publishedReferences = portfolioConfigValidator.buildReferences(
                 portfolio.getId(),
@@ -935,7 +977,7 @@ public class MinePortfolioService {
         );
         int nextPublishedRevision = safeInt(portfolio.getPublishedRevision()) + 1;
         int nextHistoryRevision = nextHistoryRevision(portfolio);
-        String configJson = toJson(normalized);
+        String configJson = AdvancedPortfolioVersionSupport.serializePreserved(normalized, templateType, draftConfigJson);
         String hash = sha256(configJson);
         LocalDateTime now = LocalDateTime.now();
         if (portfolio.getDraftFontAssetsJson() != null || portfolio.getPublishedFontAssetsJson() != null
@@ -1214,6 +1256,9 @@ public class MinePortfolioService {
         snapshot.put(HISTORY_KEY_ACTION, actionType);
         snapshot.put(HISTORY_KEY_CONFIG, config);
         if (PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType())) {
+            snapshot.put(HISTORY_KEY_CONFIG, JSON.parseObject(AdvancedPortfolioVersionSupport.serializePreserved(
+                    config, portfolio.getTemplateType(), HISTORY_ACTION_PUBLISH.equals(actionType)
+                            ? portfolio.getPublishedConfigJson() : portfolio.getDraftConfigJson())));
             snapshot.put("aiContext", JSON.parse(portfolio.getAiContextJson()));
         }
         if (idempotencyKey != null) {
@@ -1304,6 +1349,11 @@ public class MinePortfolioService {
      * @return 详情响应
      */
     private MinePortfolioDetailResponse buildDetail(PortfolioEntity portfolio, PortfolioConfigDto config) {
+        return buildDetail(portfolio, config, portfolio.getDraftConfigJson());
+    }
+
+    /** 保留本次返回配置对应的版本，不从事务后的最新实体推断结果。 */
+    private MinePortfolioDetailResponse buildDetail(PortfolioEntity portfolio, PortfolioConfigDto config, String sourceJson) {
         MinePortfolioDetailResponse response = new MinePortfolioDetailResponse();
         response.setPortfolioId(portfolio.getId());
         response.setShareCode(portfolio.getShareCode());
@@ -1315,6 +1365,9 @@ public class MinePortfolioService {
         response.setDraftRevision(safeInt(portfolio.getDraftRevision()));
         response.setPublishedRevision(safeInt(portfolio.getPublishedRevision()));
         response.setConfig(config);
+        if (PortfolioTemplateTypeDict.ADVANCED.getCode().equals(portfolio.getTemplateType())) {
+            response.setAdvancedConfigMetadata(AdvancedPortfolioVersionSupport.stored(sourceJson));
+        }
         response.setFontAssets(PortfolioFontManifests.project(PortfolioFontPlan.from(config),
                 portfolio.getDraftFontAssetsJson(), portfolio.getPublishedFontAssetsJson()));
         return response;

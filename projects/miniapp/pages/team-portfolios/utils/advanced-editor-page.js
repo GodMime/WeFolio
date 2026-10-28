@@ -2,7 +2,7 @@ const { referenceBasis, normalizeReferenceItems, referenceNextNo, referenceSaveF
 const { request } = require('../../../utils/request.js')
 const { handleMaintainerAuthRequired } = require('../../../utils/session.js')
 const { PUBLISH_DISCLAIMER_CONTENT } = require('./portfolio-publish-disclaimer')
-const { ADVANCED_API_PREFIX, advancedEndpoint, advancedQuery, captureBasis, clone, normalizeContext, makeKey, text } = require('./advanced-portfolios')
+const { CLIENT_ADVANCED_VERSION, AI_CONTRACT_VERSION, SOURCE_MODES, candidateVersionError, ADVANCED_API_PREFIX, advancedEndpoint, advancedQuery, captureBasis, clone, normalizeContext, makeKey, text } = require('./advanced-portfolios')
 const SAVE_INCOMPLETE_MESSAGE = '草稿已创建，当前内容尚未完整保存，请重试'
 const ADVANCED_PUBLISH_SCENE = 'MAINTAIN_ADVANCED_PORTFOLIO'
 const SOURCE_PAGE_SIZE = 100
@@ -116,7 +116,15 @@ function editorRequest(page, options, requestFn = request) {
   const match = url.match(/^\/api\/mine\/(?:portfolios|team-portfolios)\/([^/]+)(\/.*)?$/)
   if (match && /^\d+$/.test(match[1]) && /^(?:|\/draft|\/publish|\/delete|\/preview|\/published-preview|\/asset\/upload-ticket|\/fonts\/prepare|\/share-records|\/miniapp-code|\/schedule-options|\/schedule-query-preview)$/.test(match[2] || '')) url = advancedEndpoint(match[1], match[2] || '')
   if (url === '/api/mine/portfolios/hyperlink-targets') url = `${ADVANCED_API_PREFIX}/hyperlink-targets`
-  return requestFn({ ...options, url })
+  let data = options.data
+  if (/\/component-library$/.test(url)) {
+    data = { ...(data || {}), templateType: 'ADVANCED', clientAdvancedVersion: CLIENT_ADVANCED_VERSION }
+    delete data.portfolioTimeline
+  } else if (/\/fonts\/prepare$/.test(url)) {
+    const capabilities = { ...((data || {}).clientCapabilities || {}) }; delete capabilities.portfolioTimeline
+    data = { ...(data || {}), clientAdvancedVersion: CLIENT_ADVANCED_VERSION, clientCapabilities: capabilities }
+  }
+  return requestFn({ ...options, url, ...(data === undefined ? {} : { data }) })
 }
 
 /** 高级成员作品集选择使用独立授权来源；普通组件控件仍消费原来的字段结构。 */
@@ -150,7 +158,7 @@ async function advancedTeamComponentSources(page, route, options, requestFn) {
 }
 
 function editorState(page) {
-  return { ownerType: page.data.advancedOwnerType, ownerId: page.data.advancedOwnerId || page.data.teamId,
+  return { clientAdvancedVersion: CLIENT_ADVANCED_VERSION, aiContractVersion: AI_CONTRACT_VERSION, sourceMode: SOURCE_MODES.SELECTED, ownerType: page.data.advancedOwnerType, ownerId: page.data.advancedOwnerId || page.data.teamId,
     portfolioId: page.data.portfolioId || null, draftRevision: page.data.draftRevision, config: page.data.config,
     aiContext: page.data.aiContext, ...(hasReferenceState(page.data) ? { aiReferenceAttachments: page.data.aiReferenceAttachments, aiReferenceNextNo: page.data.aiReferenceNextNo } : {}), localEditRevision: page.data.localEditRevision }
 }
@@ -160,7 +168,7 @@ function installAdvancedEditor(page, options = {}, team = false) {
   if (options.templateType !== 'ADVANCED') return
   page.setData({ advancedEditing: true, templateType: 'ADVANCED', advancedOwnerType: team ? 'TEAM' : 'USER',
     advancedOwnerId: options.teamId || options.ownerId || '', aiContext: normalizeContext(), aiPrompt: '', localEditRevision: 0,
-    advancedDirty: false, advancedCanUndo: false, advancedSourceItems: [], aiReferenceAttachments: [], aiReferenceNextNo: 1 })
+    savedAdvancedVersion: 1, advancedDirty: false, advancedCanUndo: false, advancedSourceItems: [], aiReferenceAttachments: [], aiReferenceNextNo: 1 })
   const onUnload = page.onUnload
   page.onUnload = function (...args) {
     this.advancedSourceDisposed = true
@@ -190,6 +198,8 @@ function installAdvancedEditor(page, options = {}, team = false) {
   if (typeof wx !== 'undefined' && wx.enableAlertBeforeUnload) wx.enableAlertBeforeUnload({ message: '当前编辑尚未保存，离开后将丢失' })
   const channel = page.getOpenerEventChannel && page.getOpenerEventChannel()
   if (channel && channel.on) channel.on('advancedInitial', initial => {
+    const versionError = candidateVersionError(initial)
+    if (versionError) { wx.showToast({ title: versionError, icon: 'none' }); return }
     page.advancedApplying = true
     page.setData({ advancedOwnerId: initial.ownerId, aiContext: normalizeContext(initial.aiContext), aiPrompt: initial.prompt || '', aiReferenceAttachments: normalizeReferenceItems(initial.aiReferenceAttachments), aiReferenceNextNo: referenceNextNo(initial.aiReferenceAttachments, initial.aiReferenceNextNo), localEditRevision: initial.localEditRevision || 1 })
     refreshAdvancedSourceItems(page, initial.sourceItems)
@@ -204,7 +214,7 @@ function installAdvancedEditor(page, options = {}, team = false) {
 
 function loadAdvancedMetadata(page, detail) {
   if (!page.data.advancedEditing) return
-  page.setData({ advancedOwnerId: detail.ownerId || page.data.advancedOwnerId,
+  page.setData({ savedAdvancedVersion: (detail.config || {}).advancedPortfolioVersion || 1, advancedOwnerId: detail.ownerId || page.data.advancedOwnerId,
     aiContext: normalizeContext(detail.aiContext), aiPrompt: detail.aiPrompt || '', aiReferenceAttachments: normalizeReferenceItems((detail.aiReferenceAttachments || []).map(item => ({ ...item, saved: true }))), aiReferenceNextNo: referenceNextNo(detail.aiReferenceAttachments, detail.aiReferenceNextNo) })
   markAdvancedSaved(page)
   return page.advancedSourceHydration = hydrateAdvancedSourceItems(page)
@@ -227,10 +237,19 @@ const advancedEditorPageMethods = {
     this.setData({ backgroundAudioSelected: backgroundAudio })
   },
   advancedDraftPayload(payload) {
-    return this.data.advancedEditing ? { ...payload,
+    if (!this.data.advancedEditing) return payload
+    const clientCapabilities = { ...(payload.clientCapabilities || { portfolioRemoteFont: 1 }) }; delete clientCapabilities.portfolioTimeline
+    return this.data.advancedEditing ? { ...payload, clientAdvancedVersion: CLIENT_ADVANCED_VERSION, clientCapabilities,
       ...referenceSaveFields(Object.prototype.hasOwnProperty.call(payload, 'aiReferenceAttachments') ? payload : this.data),
       aiContext: normalizeContext(Object.prototype.hasOwnProperty.call(payload, 'aiContext') ? payload.aiContext : this.data.aiContext),
       aiPrompt: Object.prototype.hasOwnProperty.call(payload, 'aiPrompt') ? payload.aiPrompt : this.data.aiPrompt || '' } : payload
+  },
+  /** 服务端只回填保存元数据，保存期间的新正文保持原样。 */
+  applyAdvancedSavedMetadata(response = {}) {
+    if (!this.data.advancedEditing) return
+    const version = response.config && response.config.advancedPortfolioVersion
+    if (!Number.isInteger(version) || version < 1) return
+    this.setData({ config: { ...this.data.config, advancedPortfolioVersion: version }, savedAdvancedVersion: version })
   },
   /** 只标记本次成功请求包含的附件，期间新编辑仍由脏状态保留。 */
   advancedReferencesSaved(payload) {
@@ -251,7 +270,7 @@ const advancedEditorPageMethods = {
   createAdvancedDraft() {
     if (this.advancedCreationResultUnknown) return Promise.reject(new Error('创建结果暂无法确认，请先核对列表中的草稿'))
     return this.advancedRequest({ url: ADVANCED_API_PREFIX, method: 'POST', data: { ownerType: this.data.advancedOwnerType,
-      ownerId: this.data.advancedOwnerId || this.data.teamId || null } })
+      ownerId: this.data.advancedOwnerId || this.data.teamId || null, clientAdvancedVersion: CLIENT_ADVANCED_VERSION } })
       .then(result => {
         if (!result || !result.portfolioId) throw new Error('创建响应缺少作品集 ID')
         this.advancedDraftCreatedLocally = true
@@ -307,6 +326,8 @@ const advancedEditorPageMethods = {
           refreshAdvancedSourceItems(this, detail.sourceItems)
         },
         adopt: detail => {
+          const versionError = candidateVersionError(detail)
+          if (versionError) { wx.showToast({ title: versionError, icon: 'none' }); return }
           if (captureBasis(editorState(this)) !== detail.basis) { wx.showToast({ title: '当前编辑已变化，请重新生成', icon: 'none' }); return }
           this.advancedUndo = { config: clone(this.data.config), aiContext: clone(this.data.aiContext), prompt: this.data.aiPrompt, aiReferenceAttachments: clone(this.data.aiReferenceAttachments || []), aiReferenceNextNo: this.data.aiReferenceNextNo,
             renderData: { backgroundAudio: this.data.backgroundAudioSelected || null } }
@@ -326,6 +347,7 @@ const advancedEditorPageMethods = {
   handleAdvancedUndo() {
     if (!this.data.advancedCanUndo || !this.advancedUndo) return
     const undo = this.advancedUndo
+    if (this.data.savedAdvancedVersion > 1) undo.config.advancedPortfolioVersion = this.data.savedAdvancedVersion
     this.advancedApplying = true
     if (this.data.advancedOwnerType === 'TEAM') this.updateConfig(undo.config)
     else this.applyEditorConfig(undo.config)

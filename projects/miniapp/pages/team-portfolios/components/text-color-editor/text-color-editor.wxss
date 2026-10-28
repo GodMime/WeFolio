@@ -45,3 +45,7 @@
 .text-color-inline .text-color-pad { height: 320rpx; border-radius: 16rpx; }
 .text-color-inline .text-color-preview-bar { flex-direction: row; border-radius: 16rpx; }
 .text-color-inline .text-color-actions { flex-direction: row; }
+
+.text-color-theme-dark{color:#F8F9FA}.text-color-theme-dark input{background:#343a40;color:#F8F9FA}.text-color-theme-dark .text-color-label{color:#C1C7CE}
+
+.text-color-theme-dark .text-color-panel{background:#202327;color:#f8f9fa}.text-color-theme-dark .text-color-option,.text-color-theme-dark .text-color-inline-body{background:#2a2e34;color:#f8f9fa;border-color:#707985}.text-color-theme-dark .text-color-cancel{background:#343941;color:#f8f9fa}.text-color-theme-dark .text-color-confirm{background:#eef0f3;color:#20252c}

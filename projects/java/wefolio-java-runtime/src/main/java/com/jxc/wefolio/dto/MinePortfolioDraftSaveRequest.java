@@ -15,6 +15,11 @@ public class MinePortfolioDraftSaveRequest {
     /** 草稿配置 */
     private PortfolioConfigDto config;
 
+    /** 保存和字体准备共用原始配置边界，其它未知字段保持原转换语义。 */
+    public void setConfig(Object value) {
+        config = PortfolioRequestConfigBoundary.convert(value, PortfolioConfigDto.class);
+    }
+
     /** 客户端看到的草稿版本 */
     private Integer clientRevision;
 

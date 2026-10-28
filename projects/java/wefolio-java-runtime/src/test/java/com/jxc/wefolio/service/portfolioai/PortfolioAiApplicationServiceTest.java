@@ -73,9 +73,24 @@ class PortfolioAiApplicationServiceTest {
                  "enabled":true,"config":{"content":"原始介绍"}}]}}
                 """);
     }
-    /** 能力只公布新建和整体修改，不再暴露已取消的编辑模式。 */
+    /** 默认公布两版协议及纯文字能力，旧端顶层契约仍为 V1，总开关单独表示接单状态。 */
     @Test void capabilitiesExposeOnlyCreateAndPageModification() {
-        assertThat(service.capabilities().get("modes")).isEqualTo(List.of("CREATE", "MODIFY_PAGE"));
+        Map<String, Object> capabilities = service.capabilities();
+        assertThat(capabilities.get("modes")).isEqualTo(List.of("CREATE", "MODIFY_PAGE"));
+        assertThat(capabilities.get("enabled")).isEqualTo(false);
+        assertThat(capabilities.get("aiContractVersion")).isEqualTo(AiPortfolioProtocol.CONTRACT_VERSION);
+        assertThat(capabilities.get("promptVersion")).isEqualTo(AiPortfolioProtocol.PROMPT_VERSION);
+        List<?> protocols = (List<?>) capabilities.get("supportedProtocols");
+        assertThat(protocols).hasSize(2);
+        Map<?, ?> v1 = (Map<?, ?>) protocols.get(0);
+        Map<?, ?> v2 = (Map<?, ?>) protocols.get(1);
+        assertThat(v1.get("aiContractVersion")).isEqualTo(AiPortfolioProtocol.CONTRACT_VERSION);
+        assertThat(v1.get("textOnlyCreate")).isEqualTo(false);
+        assertThat(v1.get("sourceModes")).isEqualTo(List.of(AiPortfolioRunSpecRegistry.SELECTED_SOURCES));
+        assertThat(v2.get("aiContractVersion")).isEqualTo(AiPortfolioRunSpecRegistry.V2_CONTRACT);
+        assertThat(v2.get("timeline")).isEqualTo(true);
+        assertThat(v2.get("textOnlyCreate")).isEqualTo(true);
+        assertThat(v2.get("sourceModes")).isEqualTo(List.of(AiPortfolioRunSpecRegistry.SELECTED_SOURCES, AiPortfolioRunSpecRegistry.TEXT_ONLY));
     }
 
     /** 已取消的模式以及组件级目标均不属于当前请求结构。 */
@@ -139,7 +154,7 @@ class PortfolioAiApplicationServiceTest {
         AiGenerationTaskEntity task = shareCoverTask();
         String originalRequest = task.getRequestJson();
         String snapshotUrl = "https://cdn.test/WFOWNER/protfolio/snapshot.jpg";
-        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
         when(configs.render(any(), isNull(), any())).thenAnswer(invocation ->
                 Map.of("coverUrl", ((ObjectNode) invocation.getArgument(2)).path("share").path("coverUrl").asText()));
         when(shareImages.snapshot(anyLong(), any(), any())).thenAnswer(invocation -> {
@@ -156,17 +171,17 @@ class PortfolioAiApplicationServiceTest {
         assertThat(result.get("candidate").toString()).contains(snapshotUrl).doesNotContain("work/image/photo.jpg");
         assertThat(task.getRequestJson()).isEqualTo(originalRequest);
         var order = inOrder(configs, shareImages);
-        order.verify(configs).validate(any(), isNull(), any());
+        order.verify(configs).validateCandidate(any(), isNull(), any());
         order.verify(configs).render(any(), isNull(), any());
         order.verify(shareImages).snapshot(eq(7001L), any(), any());
-        order.verify(configs).validate(any(), isNull(), any());
+        order.verify(configs).validateCandidate(any(), isNull(), any());
         order.verify(configs).render(any(), isNull(), any());
     }
 
     /** 分享图片复制失败不能把原始作品地址作为可采用候选返回。 */
     @Test void shareImageSnapshotFailureLeavesCandidateUnavailable() {
         shareCoverTask();
-        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
         when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
         when(shareImages.snapshot(anyLong(), any(), any())).thenThrow(new IllegalStateException("内部 COS 信息"));
         Map<?, ?> result = (Map<?, ?>) service.query(7001L).get("result");
@@ -178,7 +193,7 @@ class PortfolioAiApplicationServiceTest {
     /** 普通配置校验失败的结果不生成未采用的远端图片快照。 */
     @Test void invalidCandidateNeverCreatesShareImageSnapshot() {
         shareCoverTask();
-        when(configs.validate(any(), isNull(), any())).thenThrow(new BusinessException(PortfolioAiMessage.CANDIDATE_INVALID));
+        when(configs.validateCandidate(any(), isNull(), any())).thenThrow(new BusinessException(PortfolioAiMessage.CANDIDATE_INVALID));
         Map<?, ?> result = (Map<?, ?>) service.query(7001L).get("result");
         assertThat(result.get("available")).isEqualTo(false);
         verifyNoInteractions(shareImages);
@@ -199,7 +214,7 @@ class PortfolioAiApplicationServiceTest {
     /** 可采用的成功候选新增安全用量，既有候选、渲染和修订语义不变。 */
     @Test void succeededCandidateAddsOptionalSafeTokenUsage() {
         AiGenerationTaskEntity task = succeededTask(); task.setMediaBudgetJson(knownUsageLedger());
-        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
         when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
         Map<String, Object> response = service.query(7001L);
         assertThat(response.get("usage")).isEqualTo(Map.of("complete", true, "totalTokens", 400L));
@@ -241,7 +256,7 @@ class PortfolioAiApplicationServiceTest {
     /** 损坏费用账本降级为未知用量，不影响合法候选重验和可采用状态。 */
     @Test void malformedUsageNeverBreaksSuccessfulCandidate() {
         AiGenerationTaskEntity task = succeededTask(); task.setMediaBudgetJson("{不展示的内部账本");
-        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
         when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
         Map<String, Object> response = service.query(7001L);
         Map<?, ?> usage = (Map<?, ?>) response.get("usage");
@@ -254,7 +269,7 @@ class PortfolioAiApplicationServiceTest {
     @Test void inconsistentUsageIndexDoesNotRejectCandidate() {
         AiGenerationTaskEntity task = succeededTask(); task.setMediaBudgetJson(knownUsageLedger());
         task.setMediaBudgetUnknownCount(1);
-        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
         when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
         Map<String, Object> response = service.query(7001L);
         Map<?, ?> usage = (Map<?, ?>) response.get("usage");
@@ -366,7 +381,7 @@ class PortfolioAiApplicationServiceTest {
     @Test void trustedComponentValidationReasonsArePreserved() {
         succeededTask();
         for (String message : List.of(PortfolioTextMessage.BACKGROUND_UNAVAILABLE, TeamPortfolioMessage.VIDEO_CAROUSEL_ITEM_COUNT_INVALID)) {
-            doThrow(new BusinessException(message)).when(configs).validate(any(), isNull(), any());
+            doThrow(new BusinessException(message)).when(configs).validateCandidate(any(), isNull(), any());
             Map<?, ?> result = (Map<?, ?>) service.query(7001L).get("result");
             assertThat(result.get("unavailableReason")).isEqualTo(PortfolioAiMessage.CANDIDATE_INVALID);
             assertThat(result.get("error")).isEqualTo(Map.of("code", "CONFIG_INVALID", "message", "生成结果不符合组件要求：" + message));
@@ -377,7 +392,7 @@ class PortfolioAiApplicationServiceTest {
     /** 非白名单业务异常仅显示当前处理阶段，不能把内部原文带到客户端。 */
     @Test void untrustedValidationReasonOnlyExposesSafeStage() {
         succeededTask();
-        when(configs.validate(any(), isNull(), any())).thenThrow(new BusinessException("未知键、资源地址和用户原文"));
+        when(configs.validateCandidate(any(), isNull(), any())).thenThrow(new BusinessException("未知键、资源地址和用户原文"));
         Map<?, ?> result = (Map<?, ?>) service.query(7001L).get("result");
         assertThat(result.get("error")).isEqualTo(Map.of("code", "CONFIG_INVALID", "message", "生成结果未通过作品集组件配置校验，请重新生成"));
         assertThat(result.toString()).doesNotContain("未知键", "资源地址", "用户原文");
@@ -395,7 +410,7 @@ class PortfolioAiApplicationServiceTest {
     /** 普通渲染意外异常也显示固定失败阶段，不能留下可采用半成品或抛出内部细节。 */
     @Test void unexpectedRenderingFailureHasSpecificSafeReason() {
         succeededTask();
-        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
         when(configs.render(any(), isNull(), any())).thenThrow(new IllegalStateException("不能展示的内部堆栈原因"));
         Map<?, ?> result = (Map<?, ?>) service.query(7001L).get("result");
         assertThat(result.get("error")).isEqualTo(Map.of("code", "RENDER_FAILED", "message", "生成结果未能完成页面展示，请重新生成"));
@@ -420,7 +435,7 @@ class PortfolioAiApplicationServiceTest {
     /** 规范化静默丢字段不能算无改动成功，新增原因指出兼容性拒绝且不包含字段名。 */
     @Test void normalizationMismatchHasSpecificSafeReason() {
         succeededTask();
-        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> {
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> {
             ObjectNode normalized = ((ObjectNode) invocation.getArgument(2)).deepCopy();
             ((ObjectNode) normalized.path("components").get(0).path("config")).remove("content");
             return normalized;
@@ -552,7 +567,7 @@ class PortfolioAiApplicationServiceTest {
         ObjectNode output = node("{\"schemaVersion\":\"ai-portfolio-v1\",\"promptVersion\":\"portfolio-ai-2026-10-10.2\",\"status\":\"CANDIDATE\",\"mode\":\"MODIFY_PAGE\",\"page\":null,\"operations\":[],\"questions\":[],\"notes\":[]}");
         ObjectNode stored = node("{\"kind\":\"CANDIDATE\"}"); stored.set("output", output); task.setResultJson(stored.toString());
         when(tasks.selectById(7001L)).thenReturn(task);
-        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
         when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
         Map<String, Object> response = service.query(7001L);
         Map<?, ?> result = (Map<?, ?>) response.get("result");
@@ -699,11 +714,97 @@ class PortfolioAiApplicationServiceTest {
         AiGenerationTaskEntity task = task(); task.setStatus(AiTaskStatusDict.SUCCEEDED.getCode());
         ObjectNode stored = node("{\"kind\":\"CANDIDATE\",\"output\":{\"schemaVersion\":\"ai-portfolio-v1\",\"promptVersion\":\"portfolio-ai-2026-10-10.2\",\"status\":\"CANDIDATE\",\"mode\":\"MODIFY_PAGE\",\"page\":null,\"operations\":[],\"questions\":[],\"notes\":[]}}");
         task.setResultJson(stored.toString()); when(tasks.selectById(7001L)).thenReturn(task);
-        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
         when(configs.render(any(), isNull(), any())).thenThrow(new BusinessException("内部敏感详情"));
         Map<?, ?> result = (Map<?, ?>) service.query(7001L).get("result");
         assertThat(result.get("available")).isEqualTo(false); assertThat(result.get("candidate")).isNull();
         assertThat(result.get("hasChanges")).isNull(); assertThat(result.containsKey("renderData")).isFalse();
         assertThat(result.toString()).doesNotContain("内部敏感详情");
+    }
+
+    /** 新请求固定 C 与协议一致，只有 V2 规范化来源模式且不改写原请求。 */
+    @Test void v2InputDefaultsSourceModeWithoutChangingV1FingerprintOrBase() {
+        ObjectNode old = http(); ObjectNode expected = old.deepCopy(); expected.remove("idempotencyKey");
+        assertThat(PortfolioAiInput.normalize(old, properties)).isEqualTo(expected);
+        ObjectNode request = http().put("clientAdvancedVersion", 2).put("aiContractVersion", "ai-portfolio-v2").put("editorSchemaRevision", 15);
+        String original = request.toString();
+        ObjectNode implicit = PortfolioAiInput.normalize(request, properties);
+        assertThat(request.toString()).isEqualTo(original);
+        request.put("sourceMode", "SELECTED_SOURCES");
+        assertThat(PortfolioAiInput.normalize(request, properties)).isEqualTo(implicit);
+        request.putNull("sourceMode"); assertThatThrownBy(() -> PortfolioAiInput.normalize(request, properties)).isInstanceOf(BusinessException.class);
+        request.remove("sourceMode"); request.withObject("clientCapabilities").put("portfolioTimeline", 1);
+        assertThatThrownBy(() -> PortfolioAiInput.normalize(request, properties)).isInstanceOf(BusinessException.class);
+    }
+
+    /** 无内容变更的 V2 修改任务仍受任务版本门槛，文档自身 V1 不能绕过。 */
+    @Test void lowClientCannotReceiveV2CandidateOrTriggerShareImageSnapshot() {
+        AiGenerationTaskEntity task = succeededTask(); ObjectNode request = node(task.getRequestJson());
+        request.withObject("input").put("clientAdvancedVersion", 2).put("aiContractVersion", "ai-portfolio-v2").put("editorSchemaRevision", 15).put("sourceMode", "SELECTED_SOURCES");
+        request.put("runSpecId", AiPortfolioRunSpecRegistry.forVersion(2).id()).put("contractVersion", "ai-portfolio-v2").put("promptVersion", "portfolio-ai-2026-10-28.1");
+        request.withObject("facts").withObject("baseConfig").put("advancedPortfolioVersion", 1);
+        task.setRequestJson(request.toString());
+        ObjectNode stored = node(task.getResultJson()); stored.withObject("output").put("schemaVersion", "ai-portfolio-v2").put("promptVersion", "portfolio-ai-2026-10-28.1"); task.setResultJson(stored.toString());
+        Map<String, Object> response = service.query(7001L);
+        assertThat(response.get("taskAdvancedVersion")).isEqualTo(2);
+        assertThat(response.get("status")).isEqualTo("SUCCEEDED");
+        assertThat(((Map<?, ?>) response.get("result")).get("available")).isEqualTo(false);
+        verifyNoInteractions(configs); verify(shareImages, never()).snapshot(anyLong(), any(), any());
+        when(configs.validateCandidate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(configs.render(any(), isNull(), any())).thenReturn(Map.of("preview", true));
+        Map<?, ?> result = (Map<?, ?>) service.query(7001L, "2").get("result");
+        assertThat(result.get("available")).isEqualTo(true); assertThat(result.get("hasChanges")).isEqualTo(false);
+        assertThat(((Map<?, ?>) result.get("candidate")).get("advancedPortfolioVersion")).isEqualTo(1);
+    }
+
+    /** 原总开关关闭时两种 V2 新建均拒绝接单，同键重放仍返回原状态。 */
+    @ParameterizedTest
+    @CsvSource({"SELECTED_SOURCES", "TEXT_ONLY"})
+    void v2NewSubmissionRequiresGlobalSwitchButReplayKeepsFrozenSpec(String sourceMode) {
+        ObjectNode request = http().put("mode", "CREATE").put("clientAdvancedVersion", 2)
+                .put("aiContractVersion", AiPortfolioRunSpecRegistry.V2_CONTRACT).put("editorSchemaRevision", 15)
+                .put("sourceMode", sourceMode);
+        if (AiPortfolioRunSpecRegistry.SELECTED_SOURCES.equals(sourceMode)) {
+            request.withObject("aiContext").put("nextSourceNo", 2).withArray("sources")
+                    .addObject().put("sourceNo", 1).put("kind", "WORK").put("sourceId", "201");
+        }
+        assertThatThrownBy(() -> service.submit(request.toString())).hasMessage(PortfolioAiMessage.DISABLED);
+        verifyNoInteractions(configs);
+        AiGenerationTaskEntity task = task(); when(transactions.find(101L, "test-key")).thenReturn(task);
+        assertThat(service.submit(request.toString()).get("taskId")).isEqualTo("7001");
+        verify(transactions).requireSame(eq(task), any(ObjectNode.class));
+    }
+
+    /** 只启用原总开关即可提交两种 V2 新建；纯文字仍保持空来源，已有来源模式沿原授权事实冻结。 */
+    @ParameterizedTest
+    @CsvSource({"SELECTED_SOURCES, 1", "TEXT_ONLY, 0"})
+    void v2CreateUsesGlobalSwitchAndFreezesSelectedSourceMode(String sourceMode, int sourceCount) {
+        properties.setEnabled(true);
+        ObjectNode request = http().put("mode", "CREATE").put("clientAdvancedVersion", 2).put("aiContractVersion", AiPortfolioRunSpecRegistry.V2_CONTRACT)
+                .put("editorSchemaRevision", 15).put("sourceMode", sourceMode);
+        request.withObject("baseConfig").put("editorSchemaRevision", 15);
+        if (sourceCount > 0) {
+            request.withObject("aiContext").put("nextSourceNo", 2).withArray("sources")
+                    .addObject().put("sourceNo", 1).put("kind", "WORK").put("sourceId", "201");
+        }
+        when(configs.validate(any(), isNull(), any())).thenAnswer(invocation -> invocation.getArgument(2));
+        when(facts.freeze(any(), any())).thenAnswer(invocation -> {
+            ObjectNode frozen = node("{\"sources\":[],\"bindings\":[]}");
+            if (sourceCount > 0) {
+                frozen.withArray("sources").addObject().put("sourceNo", 1).put("kind", "WORK").put("canBind", true);
+            }
+            frozen.set("baseConfig", invocation.getArgument(1, ObjectNode.class).deepCopy());
+            return frozen;
+        });
+        when(transactions.submit(eq(101L), eq("test-key"), any())).thenReturn(task());
+        assertThat(service.submit(request.toString()).get("taskId")).isEqualTo("7001");
+        ArgumentCaptor<ObjectNode> captured = ArgumentCaptor.forClass(ObjectNode.class); verify(transactions).submit(eq(101L), eq("test-key"), captured.capture());
+        assertThat(captured.getValue().path("runSpecId").asText()).isEqualTo(AiPortfolioRunSpecRegistry.forVersion(2).id());
+        assertThat(captured.getValue().path("input").path("sourceMode").asText()).isEqualTo(sourceMode);
+        assertThat(captured.getValue().path("facts").path("sources").size()).isEqualTo(sourceCount);
+        if (AiPortfolioRunSpecRegistry.TEXT_ONLY.equals(sourceMode)) {
+            request.put("mode", "MODIFY_PAGE");
+            assertThatThrownBy(() -> PortfolioAiInput.normalize(request, properties)).isInstanceOf(BusinessException.class);
+        }
     }
 }

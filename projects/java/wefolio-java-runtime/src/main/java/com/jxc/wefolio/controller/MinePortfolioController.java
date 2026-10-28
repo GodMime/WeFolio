@@ -60,7 +60,17 @@ public class MinePortfolioController {
      */
     @GetMapping("/api/mine/portfolios/component-library")
     public Response<PortfolioComponentLibraryResponse> componentLibrary(
-            @RequestParam(value = "editorSchemaRevision", required = false) Integer editorSchemaRevision
+            @RequestParam(value = "editorSchemaRevision", required = false) Integer editorSchemaRevision,
+            @RequestParam(value = "templateType", required = false) String templateType,
+            @RequestParam(value = "portfolioTimeline", required = false) String portfolioTimeline,
+            @RequestParam(value = "clientAdvancedVersion", required = false) String clientAdvancedVersion
+    ) {
+        return Response.success(minePortfolioService.getComponentLibrary(editorSchemaRevision, templateType,
+                portfolioTimeline, clientAdvancedVersion));
+    }
+
+    /** 保留现有内部调用的参数委派。 */
+    public Response<PortfolioComponentLibraryResponse> componentLibrary(Integer editorSchemaRevision
     ) {
         return Response.success(minePortfolioService.getComponentLibrary(editorSchemaRevision));
     }

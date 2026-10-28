@@ -99,6 +99,7 @@
         <portfolio-text-section text-section="{{item.textSection}}" background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" theme-mode="{{portfolio.themeMode}}" font-context="{{fontContext}}"></portfolio-text-section>
       </block>
       <block wx:elif="{{item.componentType === 'TEXT_GRID'}}"><portfolio-text-grid class="portfolio-font-grid" config="{{item.textGrid}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/></block>
+      <block wx:elif="{{item.componentType === 'TIMELINE'}}"><portfolio-timeline class="portfolio-font-grid" config="{{item.timeline}}" owner-type="USER" theme-mode="{{portfolio.themeMode}}" background-color="{{portfolio.style.backgroundColor}}" font-context="{{fontContext}}" /></block>
         <block wx:elif="{{item.componentType === 'CONTACT_INFO'}}"><portfolio-contact-info config="{{item.contactInfo}}" theme-mode="{{portfolio.themeMode}}" /></block>
         <block wx:elif="{{item.componentType === 'STRUCTURED_TEXT_SECTION'}}">
         <portfolio-structured-text-section background-video-paused="{{videoPreviewVisible || fontOpening || loading}}" structured-text-section="{{item.structuredTextSection}}" theme-mode="{{portfolio.themeMode}}"  font-context="{{fontContext}}"/>

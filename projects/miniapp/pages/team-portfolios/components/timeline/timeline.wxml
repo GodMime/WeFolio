@@ -1,0 +1,31 @@
+<template name="timeline-nodes">
+    <view class="timeline-frame" style="{{frameStyle}}">
+      <view wx:for="{{nodes}}" wx:key="nodeKey" class="timeline-node" style="{{item.style}}">
+        <view class="timeline-date {{item.customDate ? 'timeline-custom-date' : ''}}" style="{{item.dateStyle}}{{item.dateBoxStyle}}{{!horizontal && configView.variant === 'DATE_COLUMN' && !compact ? item.dateColumnStyle : ''}}">
+          <block wx:if="{{!horizontal && configView.variant === 'DATE_COLUMN' && !item.customDate}}"><text>{{item.year}}</text><text wx:if="{{item.monthDay}}" class="timeline-month-day" style="{{item.monthDayStyle}}">{{item.monthDay}}</text></block>
+          <text wx:else>{{item.displayDate}}</text>
+        </view>
+        <view class="timeline-dot" style="{{item.dotStyle}}" aria-hidden="true"></view>
+        <view wx:if="{{!item.last}}" class="timeline-line" style="{{item.lineStyle}}" aria-hidden="true"></view>
+        <view wx:else class="timeline-tail" style="{{item.tailStyle}}" aria-hidden="true"><view wx:for="{{item.tailDashes}}" wx:for-item="dash" wx:key="key" class="timeline-tail-dash" style="{{dash.style}}"></view></view>
+        <view class="timeline-body" style="{{item.bodyStyle}}"><text wx:if="{{item.title}}" class="timeline-title" style="{{item.titleStyle}}">{{item.title}}</text><text wx:if="{{item.description}}" class="timeline-description" style="{{item.descriptionStyle}}">{{item.description}}</text></view>
+      </view>
+    </view>
+</template>
+<view class="timeline-root timeline-theme-{{theme}} timeline-{{configView.variant}} {{horizontal ? 'timeline-horizontal' : 'timeline-vertical'}} {{compact ? 'timeline-compact' : ''}} {{natural ? 'timeline-natural' : ''}}">
+  <text wx:if="{{configView.showKicker}}" class="timeline-kicker">{{kicker}}</text>
+  <text wx:if="{{configView.title}}" class="timeline-heading" style="{{headingStyle}}">{{configView.title}}</text>
+  <scroll-view wx:if="{{horizontal && !natural}}" scroll-x type="list" show-scrollbar="{{false}}" class="timeline-scroll" style="{{viewportStyle}}">
+    <template is="timeline-nodes" data="{{nodes, frameStyle, horizontal, configView, compact}}" />
+  </scroll-view>
+  <view wx:else class="timeline-scroll">
+    <template is="timeline-nodes" data="{{nodes, frameStyle, horizontal, configView, compact}}" />
+  </view>
+  <text wx:if="{{overflow}}" class="timeline-hint">{{hint}}</text>
+  <view class="timeline-probes" aria-hidden="true">
+    <view wx:for="{{probes}}" wx:key="nodeKey" class="timeline-probe-node" style="{{item.probeStyle}}">
+      <view class="timeline-probe-date timeline-date {{item.customDate ? 'timeline-custom-date' : ''}}" style="{{item.dateStyle}}{{!horizontal && configView.variant === 'DATE_COLUMN' && !compact ? item.dateColumnStyle : ''}}"><block wx:if="{{!horizontal && configView.variant === 'DATE_COLUMN' && !item.customDate}}"><text>{{item.year}}</text><text wx:if="{{item.monthDay}}" class="timeline-month-day" style="{{item.monthDayStyle}}">{{item.monthDay}}</text></block><text wx:else>{{item.displayDate}}</text></view>
+      <view class="timeline-probe-body timeline-body" style="{{item.bodyStyle}}"><text wx:if="{{item.title}}" class="timeline-title" style="{{item.titleStyle}}">{{item.title}}</text><text wx:if="{{item.description}}" class="timeline-description" style="{{item.descriptionStyle}}">{{item.description}}</text></view>
+    </view>
+  </view>
+</view>

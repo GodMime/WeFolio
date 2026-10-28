@@ -9,6 +9,14 @@ import com.jxc.wefolio.service.portfoliofont.PortfolioFontPlan;
 import com.jxc.wefolio.config.PortfolioFontProperties;
 import com.jxc.wefolio.dto.PortfolioClientCapabilities;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSaveMetadata;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioVersionSupport;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioApplicationService;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioSourceService;
+import com.jxc.wefolio.service.teamportfolio.MineTeamPortfolioService;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAccessService;
+import com.jxc.wefolio.service.teamportfolio.TeamPortfolioAssetService;
+import com.jxc.wefolio.service.miniappcode.PortfolioMiniappCodeApplicationService;
+import com.jxc.wefolio.message.AdvancedPortfolioMessage;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import com.alibaba.fastjson2.JSON;
@@ -97,6 +105,82 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class MinePortfolioServiceTest {
+
+    /** 真实高级请求适配到保存边界，正文不变也升版；重放不重复写历史且不改发布快照。 */
+    @Test void advancedV2EmptyEditUpgradesAtomicallyAndReplaysOriginalRequest() {
+        PortfolioEntity portfolio = ownedPortfolio();
+        portfolio.setDeleted(0L); portfolio.setSchemaVersion(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
+        portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        PortfolioConfigDto original = config(); original.setEditorSchemaRevision(15);
+        String oldJson = AdvancedPortfolioVersionSupport.serializeSaved(original, portfolio.getTemplateType(), 1);
+        portfolio.setDraftConfigJson(oldJson); portfolio.setPublishedConfigJson(oldJson);
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(portfolioHyperlinkGraphService.lockAdvancedUserGraph(7L, 88L))
+                .thenReturn(new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(), any(), eq(new PortfolioEditingCapabilities(true, false))))
+                .thenAnswer(invocation -> invocation.getArgument(1));
+        when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
+        AdvancedPortfolioApplicationService application = advancedApplication(service());
+        String raw = "{\"clientAdvancedVersion\":2,\"config\":" + oldJson + ",\"clientRevision\":0,\"idempotencyKey\":\"upgrade-v2\"}";
+        JSONObject response = application.saveDraft(88L, raw);
+        assertThat(response.getJSONObject("config").getInteger("advancedPortfolioVersion")).isEqualTo(2);
+        assertThat(response.getInteger("draftRevision")).isEqualTo(1);
+        assertThat(portfolio.getPublishedConfigJson()).isEqualTo(oldJson);
+        assertThat(JSON.parseObject(portfolio.getDraftConfigJson()).getInteger("advancedPortfolioVersion")).isEqualTo(2);
+        ArgumentCaptor<PortfolioHistoryEntity> history = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(portfolioHistoryEntityMapper).insert(history.capture());
+        assertThat(JSON.parseObject(history.getValue().getSnapshotJson()).getJSONObject("config")
+                .getInteger("advancedPortfolioVersion")).isEqualTo(2);
+        when(portfolioHistoryEntityMapper.selectOne(any())).thenReturn(history.getValue());
+        assertThat(application.saveDraft(88L, raw).getInteger("draftRevision")).isEqualTo(1);
+        verify(portfolioEntityMapper, times(1)).updateById(any(PortfolioEntity.class));
+        verify(portfolioHistoryEntityMapper, times(1)).insert(any(PortfolioHistoryEntity.class));
+        assertThatThrownBy(() -> application.saveDraft(88L, raw.replace("\"clientAdvancedVersion\":2,", "")))
+                .hasMessage(PortfolioMessage.DRAFT_REVISION_CHANGED_SAVE_MESSAGE);
+    }
+
+    /** 旧端删除或改低回传元数据都不能绕过数据库版本，失败前不生成字体或历史。 */
+    @Test void legacyAdvancedWriteCannotOverwriteHigherPersistedVersion() {
+        PortfolioEntity portfolio = ownedPortfolio(); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
+        portfolio.setDeleted(0L); portfolio.setSchemaVersion(PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
+        portfolio.setDraftConfigJson("{\"advancedPortfolioVersion\":2}");
+        String saved = portfolio.getDraftConfigJson();
+        when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
+        when(portfolioHyperlinkGraphService.lockAdvancedUserGraph(7L, 88L))
+                .thenReturn(new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
+        AdvancedPortfolioApplicationService application = advancedApplication(service());
+        for (String metadata : List.of("", ",\"advancedPortfolioVersion\":1", ",\"advancedPortfolioVersion\":2")) {
+            String raw = "{\"config\":{\"schemaVersion\":\"standard-personal-v1\",\"editorSchemaRevision\":15,\"components\":[]"
+                    + metadata + "},\"clientRevision\":0,\"idempotencyKey\":\"legacy\"}";
+            assertThatThrownBy(() -> application.saveDraft(88L, raw)).hasMessage(AdvancedPortfolioMessage.CLIENT_UPGRADE_REQUIRED);
+        }
+        assertThat(portfolio.getDraftConfigJson()).isEqualTo(saved);
+        verify(portfolioEntityMapper, never()).updateById(any(PortfolioEntity.class));
+        verify(portfolioHistoryEntityMapper, never()).insert(any(PortfolioHistoryEntity.class));
+        verifyNoInteractions(portfolioConfigValidator);
+    }
+
+    /** 高级应用层使用真实个人服务，只有无关的团队和外部能力被隔离。 */
+    private AdvancedPortfolioApplicationService advancedApplication(MinePortfolioService personal) {
+        return new AdvancedPortfolioApplicationService(aiReferences, personal, mock(MineTeamPortfolioService.class),
+                portfolioEntityMapper, mock(TeamPortfolioAccessService.class), mock(TeamPortfolioAssetService.class),
+                mock(AdvancedPortfolioSourceService.class), mock(PortfolioMiniappCodeApplicationService.class));
+    }
+
+    /** 旧目录保持原内容，高修订不能代替标准时间轴或高级版本声明。 */
+    @Test void componentLibrarySeparatesStandardTimelineAndAdvancedVersionCapabilities() {
+        MinePortfolioService service = service();
+        assertThat(service.getComponentLibrary(15).getComponents()).extracting("componentType").doesNotContain("TIMELINE");
+        assertThat(service.getComponentLibrary(15, "STANDARD", "1", null).getComponents())
+                .extracting("componentType").contains("TIMELINE");
+        assertThat(service.getComponentLibrary(15, "ADVANCED", null, "2").getComponents())
+                .extracting("componentType").contains("TIMELINE");
+        assertThat(service.getComponentLibrary(15, "ADVANCED", null, null).getComponents())
+                .extracting("componentType").doesNotContain("TIMELINE");
+        assertThatThrownBy(() -> service.getComponentLibrary(14, "STANDARD", "1", null)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.getComponentLibrary(15, "ADVANCED", "1", "2")).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.getComponentLibrary(15, "STANDARD", null, "2")).isInstanceOf(BusinessException.class);
+    }
 
     /** 初始化 Lambda 查询列缓存。 */
     @BeforeAll
@@ -260,7 +344,7 @@ class MinePortfolioServiceTest {
         when(portfolioHyperlinkGraphService.lockAdvancedUserGraph(7L, 88L))
                 .thenReturn(new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
         PortfolioConfigDto config = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(config), any())).thenReturn(config);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(config), any(), any(PortfolioEditingCapabilities.class))).thenReturn(config);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), config)).thenReturn(List.of());
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
@@ -287,7 +371,7 @@ class MinePortfolioServiceTest {
         when(portfolioHyperlinkGraphService.lockAdvancedUserGraph(7L, 88L))
                 .thenReturn(new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
         PortfolioConfigDto config = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(config), any())).thenReturn(config);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(config), any(), any(PortfolioEditingCapabilities.class))).thenReturn(config);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), config)).thenReturn(List.of());
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
@@ -323,16 +407,22 @@ class MinePortfolioServiceTest {
     @Test
     void advancedPublishSelectsAdvancedBillingScene() {
         PortfolioEntity portfolio = ownedPortfolio(); portfolio.setTemplateType(PortfolioTemplateTypeDict.ADVANCED.getCode());
-        portfolio.setDraftRevision(1); portfolio.setDraftConfigJson(JSON.toJSONString(config()));
+        portfolio.setDraftRevision(1); portfolio.setDraftConfigJson(
+                AdvancedPortfolioVersionSupport.serializeSaved(config(), portfolio.getTemplateType(), 2));
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         when(portfolioHyperlinkGraphService.lockAdvancedUserGraph(7L, 88L))
                 .thenReturn(new PortfolioHyperlinkGraphService.LockedGraph(7L, portfolio, List.of(portfolio)));
         PortfolioConfigDto config = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(), any())).thenReturn(config);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(), any(), any(PortfolioEditingCapabilities.class))).thenReturn(config);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), config)).thenReturn(List.of());
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         MinePortfolioPublishRequest request = new MinePortfolioPublishRequest(); request.setDraftRevision(1); request.setIdempotencyKey("adv-publish");
         service().publish(88L, request, PortfolioTemplateTypeDict.ADVANCED.getCode());
+        assertThat(JSON.parseObject(portfolio.getPublishedConfigJson()).getInteger("advancedPortfolioVersion")).isEqualTo(2);
+        ArgumentCaptor<PortfolioHistoryEntity> versionHistory = ArgumentCaptor.forClass(PortfolioHistoryEntity.class);
+        verify(portfolioHistoryEntityMapper).insert(versionHistory.capture());
+        assertThat(JSON.parseObject(versionHistory.getValue().getSnapshotJson()).getJSONObject("config")
+                .getInteger("advancedPortfolioVersion")).isEqualTo(2);
         verify(pointService).assertCanConsume(7L, PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode(), "PORTFOLIO", "88", 1, "adv-publish");
         verify(pointService).consume(eq(7L), eq(PointSceneCodeDict.MAINTAIN_ADVANCED_PORTFOLIO.getCode()), eq("PORTFOLIO"), eq("88"), eq(1), eq("adv-publish"), any());
     }
@@ -595,7 +685,7 @@ class MinePortfolioServiceTest {
         portfolio.setDraftRevision(3);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any(), any(PortfolioEditingCapabilities.class))).thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized))
                 .thenReturn(List.of(reference(88L, PortfolioConfigScopeDict.DRAFT.getCode(), 11L)));
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
@@ -643,7 +733,7 @@ class MinePortfolioServiceTest {
         portfolio.setDraftRevision(2);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any(), any(PortfolioEditingCapabilities.class))).thenReturn(normalized);
         PortfolioReferenceEntity newTargetReference = reference(
                 88L, PortfolioConfigScopeDict.DRAFT.getCode(), 100L);
         newTargetReference.setReferenceType(ReferenceTypeDict.LINKED_PORTFOLIO.getCode());
@@ -684,7 +774,7 @@ class MinePortfolioServiceTest {
         portfolio.setPublicationStatus(PortfolioPublicationStatusDict.PUBLISHED.getCode());
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any(), any(PortfolioEditingCapabilities.class))).thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized))
                 .thenReturn(List.of());
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
@@ -712,7 +802,7 @@ class MinePortfolioServiceTest {
         portfolio.setCurrentRevision(8);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto incoming = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any())).thenAnswer(invocation -> JSON.parseObject(JSON.toJSONString(incoming), PortfolioConfigDto.class));
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any(), any(PortfolioEditingCapabilities.class))).thenAnswer(invocation -> JSON.parseObject(JSON.toJSONString(incoming), PortfolioConfigDto.class));
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
         request.setConfig(incoming);
@@ -751,7 +841,7 @@ class MinePortfolioServiceTest {
         assertThat(replay.getDraftRevision()).isEqualTo(4);
         verify(portfolioEntityMapper, times(1)).updateById(any(PortfolioEntity.class));
         verify(portfolioHistoryEntityMapper, times(1)).insert(any(PortfolioHistoryEntity.class));
-        verify(portfolioConfigValidator, times(1)).normalizeForDraft(any(), any(), any());
+        verify(portfolioConfigValidator, times(1)).normalizeForDraft(any(), any(), any(), any(PortfolioEditingCapabilities.class));
         verify(portfolioHistoryEntityMapper, never()).selectList(any());
         request.getConfig().setFonts(null);
         assertThatThrownBy(() -> service().saveDraft(88L, request))
@@ -772,7 +862,7 @@ class MinePortfolioServiceTest {
             portfolio.setCurrentRevision(7);
             when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
             when(portfolioHistoryEntityMapper.selectOne(any())).thenReturn(null);
-            when(portfolioConfigValidator.normalizeForDraft(any(), any(), any())).thenAnswer(invocation ->
+            when(portfolioConfigValidator.normalizeForDraft(any(), any(), any(), any(PortfolioEditingCapabilities.class))).thenAnswer(invocation ->
                     JSON.parseObject(JSON.toJSONString(request.getConfig()), PortfolioConfigDto.class));
             when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
             service().saveDraft(88L, request);
@@ -800,7 +890,7 @@ class MinePortfolioServiceTest {
         portfolio.setDraftFontAssetsJson(assets);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFUSER01");
-        when(portfolioConfigValidator.normalizeForDraft(any(), any(), any())).thenAnswer(call -> config());
+        when(portfolioConfigValidator.normalizeForDraft(any(), any(), any(), any(PortfolioEditingCapabilities.class))).thenAnswer(call -> config());
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         when(portfolioEntityMapper.update(any(PortfolioEntity.class), any())).thenReturn(1);
         when(fonts.prepare(any(), any(), eq(prefix))).thenAnswer(call -> {
@@ -835,7 +925,7 @@ class MinePortfolioServiceTest {
 
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
-        when(portfolioConfigValidator.normalizeForDraft(any(), any(), any())).thenAnswer(invocation -> config());
+        when(portfolioConfigValidator.normalizeForDraft(any(), any(), any(), any(PortfolioEditingCapabilities.class))).thenAnswer(invocation -> config());
         when(fonts.prepare(any(), any(), eq("WFA3B1E7A2/others/fonts/88/"))).thenReturn(prepared);
         when(fonts.accept(any(), any(), eq(prepared))).thenThrow(new PortfolioFontService.PlanConflict());
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
@@ -858,7 +948,7 @@ class MinePortfolioServiceTest {
         PortfolioEntity portfolio = ownedPortfolio();
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto incoming = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any())).thenReturn(incoming);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any(), any(PortfolioEditingCapabilities.class))).thenReturn(incoming);
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(1);
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
         request.setConfig(incoming);
@@ -919,7 +1009,7 @@ class MinePortfolioServiceTest {
                 """.formatted(cosUrl(publishedQr)));
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = configWithPortfolioAssets("", "", "");
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any(), any(PortfolioEditingCapabilities.class))).thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(
                 88L, 7L, PortfolioConfigScopeDict.DRAFT.getCode(), normalized)).thenReturn(List.of());
         when(miniappAuthService.getUniqueCodeByUserId(7L)).thenReturn("WFA3B1E7A2");
@@ -941,7 +1031,7 @@ class MinePortfolioServiceTest {
         portfolio.setDraftRevision(3);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any())).thenReturn(normalized);
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(normalized), any(), any(PortfolioEditingCapabilities.class))).thenReturn(normalized);
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(0);
         MinePortfolioDraftSaveRequest request = new MinePortfolioDraftSaveRequest();
         request.setConfig(normalized);
@@ -968,7 +1058,7 @@ class MinePortfolioServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage(PortfolioMessage.DRAFT_CLIENT_REVISION_REQUIRED_MESSAGE);
 
-        verify(portfolioConfigValidator, never()).normalizeForDraft(any(), any(), any());
+        verify(portfolioConfigValidator, never()).normalizeForDraft(any(), any(), any(), any(PortfolioEditingCapabilities.class));
         verify(portfolioEntityMapper, never()).updateById(any(PortfolioEntity.class));
     }
 
@@ -992,7 +1082,7 @@ class MinePortfolioServiceTest {
         PortfolioConfigDto.Style style = new PortfolioConfigDto.Style();
         style.setBackgroundColor("#151515");
         normalized.setStyle(style);
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any()))
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), eq(incoming), any(), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(
                 88L,
@@ -1012,7 +1102,7 @@ class MinePortfolioServiceTest {
                 eq(7L),
                 eq(incoming),
                 existingDraftCaptor.capture()
-        );
+        , any(PortfolioEditingCapabilities.class));
         assertThat(existingDraftCaptor.getValue().getEditorSchemaRevision()).isEqualTo(2);
         assertThat(existingDraftCaptor.getValue().getStyle().getBackgroundColor()).isEqualTo("#151515");
     }
@@ -1134,7 +1224,7 @@ class MinePortfolioServiceTest {
         portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}");
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any(), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of(reference(88L, PortfolioConfigScopeDict.PUBLISHED.getCode(), 11L)));
@@ -1190,7 +1280,7 @@ class MinePortfolioServiceTest {
         PortfolioConfigDto normalized = config();
         List<PortfolioReferenceEntity> references = List.of(
                 reference(88L, PortfolioConfigScopeDict.PUBLISHED.getCode(), 99L));
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any(), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(
                 88L,
@@ -1272,7 +1362,7 @@ class MinePortfolioServiceTest {
         portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}");
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any(), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of());
@@ -1301,7 +1391,7 @@ class MinePortfolioServiceTest {
         portfolio.setDraftConfigJson("{\"schemaVersion\":\"standard-personal-v1\",\"share\":{\"title\":\"林安婚礼司仪\"},\"components\":[]}");
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any(), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(normalized);
         when(portfolioEntityMapper.updateById(any(PortfolioEntity.class))).thenReturn(0);
         MinePortfolioPublishRequest request = new MinePortfolioPublishRequest();
@@ -1332,7 +1422,7 @@ class MinePortfolioServiceTest {
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = config();
         normalized.getShare().setCoverUrl("https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/cover-88-20260702120000-d4c3b2a1.png");
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any(), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of());
@@ -1362,7 +1452,7 @@ class MinePortfolioServiceTest {
                 """);
         when(portfolioEntityMapper.selectById(88L)).thenReturn(portfolio);
         PortfolioConfigDto normalized = configWithPortfolioAssets("", "", "");
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any(), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(
                 88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized)).thenReturn(List.of());
@@ -1409,7 +1499,7 @@ class MinePortfolioServiceTest {
                 "https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-88-20260702121000-d4c3b2a1.jpg",
                 "https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/qr-contact-88-20260702122000-d4c3b2a1.png"
         );
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any(), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of());
@@ -1445,7 +1535,7 @@ class MinePortfolioServiceTest {
                 "https://cos.we-folio.dingchenyong.top/WFA3B1E7A2/protfolio/profile-avatar-88-20260701111000-a1b2c3d4.jpg",
                 ""
         );
-        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any()))
+        when(portfolioConfigValidator.normalizeForDraft(eq(7L), any(PortfolioConfigDto.class), any(), any(PortfolioEditingCapabilities.class)))
                 .thenReturn(normalized);
         when(portfolioConfigValidator.buildReferences(88L, 7L, PortfolioConfigScopeDict.PUBLISHED.getCode(), normalized))
                 .thenReturn(List.of());

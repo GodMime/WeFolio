@@ -29,9 +29,9 @@ for (const [name, api] of [['个人', personal], ['团队', team]]) {
     for (const mode of api.AI_TASK_MODES) {
       const payload = api.buildTaskPayload(current, { mode, prompt: '整体更简洁' }, 'overall')
       assert.equal(payload.mode, mode)
-      assert.deepEqual(Object.keys(payload).sort(), ['aiContext', 'aiContractVersion', 'baseConfig', 'baseDraftRevision',
+      assert.deepEqual(Object.keys(payload).sort(), ['aiContext', 'aiContractVersion', 'baseConfig', 'baseDraftRevision', 'clientAdvancedVersion',
         'clientCapabilities', 'editorSchemaRevision', 'idempotencyKey', 'localEditRevision', 'mode', 'ownerId', 'ownerType',
-        'portfolioId', 'prompt', 'targetMenuKey'])
+        'portfolioId', 'prompt', 'sourceMode', 'targetMenuKey'])
       assert.deepEqual(payload.baseConfig, mode === 'CREATE' ? null : current.config)
     }
     assert.equal(api.buildTaskPayload({ ...current, config: null }, { prompt: '整体需求' }, 'create').mode, 'CREATE')

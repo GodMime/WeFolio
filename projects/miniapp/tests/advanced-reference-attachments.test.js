@@ -10,7 +10,7 @@ const { createAdvancedAiPage: createTeamPage } = require('../pages/team-portfoli
 const { installAdvancedEditor, editorState, advancedEditorPageMethods, loadAdvancedMetadata, markAdvancedSaved } = require('../pages/portfolios/utils/advanced-editor-page')
 const ID1 = 'a'.repeat(32)
 const ID2 = 'b'.repeat(32)
-const caps = { enabled: true, referenceAttachments: { enabled: true, ...personal.LIMITS } }
+const caps = { enabled: true, supportedProtocols: [{ aiContractVersion: 'ai-portfolio-v2', sourceModes: ['SELECTED_SOURCES'] }], referenceAttachments: { enabled: true, ...personal.LIMITS } }
 const reference = (patch = {}) => ({ attachmentId: ID1, referenceNo: 'A1', mediaType: 'IMAGE', note: '参考留白',
   attachmentToken: 'receipt', status: 'READY', originalFileName: '参考.jpg', sizeBytes: 1000, ...patch })
 const state = (patch = {}) => ({ ownerType: 'USER', ownerId: '1', portfolioId: null, draftRevision: 0, localEditRevision: 0,

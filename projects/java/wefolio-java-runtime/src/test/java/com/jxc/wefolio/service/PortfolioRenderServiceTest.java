@@ -35,6 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -54,6 +55,26 @@ class PortfolioRenderServiceTest {
     /** COS 服务模拟 */
     @Mock
     private CosService cosService;
+
+    /** 个人草稿预览与访客渲染均保留自定义节点原文，日期节点维持原有契约。 */
+    @Test void rendersCustomTimelineLabelsWithoutDateConversion() {
+        String customLabel = " 筹备 - v1.0 ";
+        var nodes = List.of(
+                Map.of("nodeKey", "custom", "datePrecision", PortfolioTimelineConfigSupport.CUSTOM, "date", customLabel, "title", "筹备"),
+                Map.of("nodeKey", "day", "datePrecision", PortfolioTimelineConfigSupport.DAY, "date", "2024-05-20", "title", "纪念"));
+        var input = config(component("journey", PortfolioComponentTypeDict.TIMELINE.getCode(), 1000, Map.of("nodes", nodes)));
+        for (boolean preview : List.of(false, true)) {
+            var persisted = JSON.parseObject(JSON.toJSONString(input), PortfolioConfigDto.class);
+            var rendered = service().render(portfolio(), persisted, preview, false, null, null)
+                    .getComponents().getFirst().getTimeline();
+            var actual = JSON.parseObject(JSON.toJSONString(rendered)).getJSONArray("nodes");
+            assertThat(actual.getJSONObject(0)).containsEntry("datePrecision", PortfolioTimelineConfigSupport.CUSTOM)
+                    .containsEntry("date", customLabel).doesNotContainKey("customLabel");
+            assertThat(actual.getJSONObject(1)).containsEntry("datePrecision", PortfolioTimelineConfigSupport.DAY)
+                    .containsEntry("date", "2024-05-20");
+        }
+        verifyNoInteractions(workEntityMapper, cosService);
+    }
 
     /** 草稿预览与正式访客响应输出相同组件间距，保留零值，旧快照缺省时维持三十二。 */
     @Test

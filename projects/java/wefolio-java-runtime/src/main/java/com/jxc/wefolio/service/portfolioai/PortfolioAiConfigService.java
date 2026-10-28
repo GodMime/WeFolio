@@ -17,6 +17,9 @@ import com.jxc.wefolio.entity.PortfolioEntity;
 import com.jxc.wefolio.exception.BusinessException;
 import com.jxc.wefolio.message.PortfolioAiMessage;
 import com.jxc.wefolio.service.PortfolioConfigValidator;
+import com.jxc.wefolio.service.PortfolioEditingCapabilities;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedVersionRegistry;
+import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioVersionSupport;
 import com.jxc.wefolio.service.PortfolioHyperlinkGraphService;
 import com.jxc.wefolio.service.PortfolioRenderService;
 import com.jxc.wefolio.service.advancedportfolio.AdvancedPortfolioConfigGuard;
@@ -29,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static com.jxc.wefolio.service.portfolioai.PortfolioAiConstants.*;
 
@@ -40,6 +44,24 @@ public class PortfolioAiConfigService {
     private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
     /** 三类文字组件的行高字段路径后缀，普通规范化固定使用一位小数。 */
     private static final String LINE_HEIGHT_PATH_SUFFIX = "." + PortfolioTextLineHeightSupport.LINE_HEIGHT;
+    /** 时间轴角色的原子字体选择字段。 */
+    private static final String KEY_FONT_FAMILY = "fontFamily";
+    /** 时间轴保真递归位置：ROLE。 */
+    private static final String POSITION_ROLE = "ROLE";
+    /** 时间轴保真递归位置：NODES。 */
+    private static final String POSITION_NODES = "NODES";
+    /** 时间轴保真递归位置：NODE。 */
+    private static final String POSITION_NODE = "NODE";
+    /** 时间轴保真递归位置：CONFIG。 */
+    private static final String POSITION_CONFIG = "CONFIG";
+    /** 时间轴保真递归位置：UNIFORM_STYLES。 */
+    private static final String POSITION_UNIFORM_STYLES = "UNIFORM_STYLES";
+    /** 时间轴保真递归位置：NODE_STYLES。 */
+    private static final String POSITION_NODE_STYLES = "NODE_STYLES";
+    /** 时间轴统一样式的固定文字角色。 */
+    private static final Set<String> TIMELINE_UNIFORM_ROLES = Set.of("heading", "date", "title", "description");
+    /** 时间轴节点只能覆盖日期、标题和描述。 */
+    private static final Set<String> TIMELINE_NODE_ROLES = Set.of("date", "title", "description");
     /** AI 独立运行预算。 */
     private final PortfolioAiProperties properties;
     /** 个人完整业务校验器。 */
@@ -56,19 +78,45 @@ public class PortfolioAiConfigService {
     /** 检查并规范化完整配置，精确拒绝被普通兼容规则悄悄丢弃或强转的显式值。 */
     @Transactional(rollbackFor = Exception.class)
     public ObjectNode validate(ObjectNode input, PortfolioEntity portfolio, ObjectNode config) {
+        int version = AdvancedVersionRegistry.requestVersion(input);
+        AdvancedPortfolioVersionSupport.Metadata metadata = AdvancedPortfolioVersionSupport.extract(config, version);
+        if (MODE_CREATE.equals(input.path(KEY_MODE).asText())) { metadata = new AdvancedPortfolioVersionSupport.Metadata(true, version); }
+        if (portfolio != null) {
+            AdvancedPortfolioVersionSupport.requireCanWrite(version, portfolio.getDraftConfigJson());
+            metadata = AdvancedPortfolioVersionSupport.stored(portfolio.getDraftConfigJson());
+        }
+        ObjectNode expected = AdvancedPortfolioVersionSupport.restore(config, metadata);
+        return normalize(input, portfolio, expected, portfolio == null ? null : portfolio.getDraftConfigJson(), AiPortfolioRunSpecRegistry.forVersion(version));
+    }
+
+    /** 生产查询从完整冻结请求取得限制，不能重新选择同一 C 的当前默认规格。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ObjectNode validateCandidate(ObjectNode request, PortfolioEntity portfolio, ObjectNode candidate) {
+        var spec = AiPortfolioRunSpecRegistry.resolve(request);
+        ObjectNode frozenBase = AiPortfolioProtocol.baseConfig(request);
+        if (!AdvancedPortfolioVersionSupport.stored(frozenBase).equals(AdvancedPortfolioVersionSupport.stored(candidate))) { throw invalid(); }
+        return normalize((ObjectNode) request.path(KEY_INPUT), portfolio, candidate, frozenBase.toString(), spec);
+    }
+
+    /** 高级外层元数据与普通内容严格分离，完整保真在恢复元数据之后执行。 */
+    private ObjectNode normalize(ObjectNode input, PortfolioEntity portfolio, ObjectNode config, String previousJson, AiPortfolioRunSpecRegistry.Spec spec) {
+        int version = AdvancedVersionRegistry.requestVersion(input);
         boolean isTeam = PortfolioOwnerTypeDict.TEAM.getCode().equals(input.path(KEY_OWNER_TYPE).asText());
-        AdvancedPortfolioConfigGuard.validate(config, isTeam);
+        var metadata = AdvancedPortfolioVersionSupport.extract(config, version);
+        AdvancedPortfolioConfigGuard.validate(config, isTeam, version);
+        ObjectNode content = AdvancedPortfolioVersionSupport.content(config);
+        var capabilities = PortfolioEditingCapabilities.advanced(input.path(KEY_EDITOR_SCHEMA_REVISION).intValue(), version, isTeam);
         StrictAiJson.parseObject(config.toString(), properties.getMaxConfigBytes(), properties.getMaxJsonDepth());
         Long owner = PortfolioAiInput.id(input, KEY_OWNER_ID, false);
         ObjectNode normalized;
         if (isTeam) {
-            TeamPortfolioConfigDto dto = JSON.parseObject(config.toString(), TeamPortfolioConfigDto.class);
-            TeamPortfolioConfigDto previous = portfolio == null ? null : JSON.parseObject(portfolio.getDraftConfigJson(), TeamPortfolioConfigDto.class);
-            normalized = node(team.normalizeForDraft(dto, previous, context(input, portfolio)));
+            TeamPortfolioConfigDto dto = JSON.parseObject(content.toString(), TeamPortfolioConfigDto.class);
+            TeamPortfolioConfigDto previous = previousJson == null ? null : JSON.parseObject(previousJson, TeamPortfolioConfigDto.class);
+            normalized = node(team.normalizeForDraft(dto, previous, context(input, portfolio), capabilities));
         } else {
-            PortfolioConfigDto dto = JSON.parseObject(config.toString(), PortfolioConfigDto.class);
-            PortfolioConfigDto previous = portfolio == null ? null : JSON.parseObject(portfolio.getDraftConfigJson(), PortfolioConfigDto.class);
-            PortfolioConfigDto value = personal.normalizeForDraft(owner, dto, previous);
+            PortfolioConfigDto dto = JSON.parseObject(content.toString(), PortfolioConfigDto.class);
+            PortfolioConfigDto previous = previousJson == null ? null : JSON.parseObject(previousJson, PortfolioConfigDto.class);
+            PortfolioConfigDto value = personal.normalizeForDraft(owner, dto, previous, capabilities);
             normalized = node(value);
             if (portfolio != null) {
                 var locked = graph.lockAdvancedUserGraph(owner, portfolio.getId());
@@ -76,8 +124,9 @@ public class PortfolioAiConfigService {
                         personal.buildReferences(portfolio.getId(), owner, PortfolioConfigScopeDict.DRAFT.getCode(), value), value);
             } else { requireUnsavedHyperlinkTargets(owner, normalized); }
         }
+        normalized = AdvancedPortfolioVersionSupport.restore(normalized, metadata);
         requireExplicitValuesPreserved(config, normalized, "");
-        if (countComponents(normalized) > AiPortfolioProtocol.limits().path(KEY_MAX_COMPONENTS).intValue()) { throw new BusinessException(PortfolioAiMessage.CONFIG_LIMIT); }
+        if (countComponents(normalized) > spec.limit(KEY_MAX_COMPONENTS)) { throw new BusinessException(PortfolioAiMessage.CONFIG_LIMIT); }
         return normalized;
     }
 
@@ -101,6 +150,7 @@ public class PortfolioAiConfigService {
     public ObjectNode initialConfig(ObjectNode input) {
         boolean isTeam = PortfolioOwnerTypeDict.TEAM.getCode().equals(input.path(KEY_OWNER_TYPE).asText());
         ObjectNode config = NODES.objectNode();
+        config.put(AdvancedPortfolioVersionSupport.FIELD, AdvancedVersionRegistry.requestVersion(input));
         config.put(KEY_SCHEMA_VERSION, isTeam ? TeamPortfolioConstants.SCHEMA_VERSION_STANDARD_TEAM_V1 : PortfolioConfigDto.SCHEMA_VERSION_STANDARD_PERSONAL_V1);
         config.put(KEY_EDITOR_SCHEMA_REVISION, input.path(KEY_EDITOR_SCHEMA_REVISION).intValue());
         config.putObject(KEY_FONTS);
@@ -143,22 +193,35 @@ public class PortfolioAiConfigService {
 
     /** 逐个显式字段核对；仅允许已声明的 ID、颜色、标题与行高表示等价。 */
     static void requireExplicitValuesPreserved(JsonNode before, JsonNode after, String path) {
+        requireExplicitValuesPreserved(before, after, path, null, "");
+    }
+
+    /** 仅为时间轴真实角色登记字体派生，正文和补丁继承仍保持完整保真。 */
+    private static void requireExplicitValuesPreserved(JsonNode before, JsonNode after, String path,
+                                                        String componentType, String position) {
+        String currentType = before.isObject() && before.path(KEY_COMPONENT_TYPE).isTextual()
+                ? before.path(KEY_COMPONENT_TYPE).asText() : componentType;
+        boolean timeline = AiTimelineProtocol.TYPE.equals(currentType);
         if (path.equals(FONTS_PATH) && before.isObject() && before.isEmpty() && after.isNull()) {
             return; // 普通规范化把无依赖字体表保存为空值，不改变任何字体选择。
         }
         if (before.isObject()) {
             if (!after.isObject()) { throw normalization(ERROR_NORMALIZATION_TYPE_CHANGED); }
-            before.fields().forEachRemaining(e -> {
+            JsonNode expected = timeline && POSITION_ROLE.equals(position) ? timelineFontExpectation(before, after) : before;
+            expected.fields().forEachRemaining(e -> {
                 if (KEY_NAME.equals(e.getKey()) && path.endsWith(COMPONENT_ITEM_PATH_SUFFIX) && !after.has(KEY_NAME)) {
                     return; // 已明确登记的编辑器组件名称元数据不进入普通持久 DTO。
                 }
                 if (!after.has(e.getKey())) { throw normalization(ERROR_NORMALIZATION_FIELD_DROPPED); }
-                requireExplicitValuesPreserved(e.getValue(), after.get(e.getKey()), path + "." + e.getKey());
+                requireExplicitValuesPreserved(e.getValue(), after.get(e.getKey()), path + "." + e.getKey(), currentType,
+                        timelinePosition(before, e.getKey(), position, timeline));
             });
         } else if (before.isArray()) {
             if (!after.isArray()) { throw normalization(ERROR_NORMALIZATION_TYPE_CHANGED); }
             if (before.size() != after.size()) { throw normalization(ERROR_NORMALIZATION_ARRAY_CHANGED); }
-            for (int i = 0; i < before.size(); i++) { requireExplicitValuesPreserved(before.get(i), after.get(i), path + "[]"); }
+            for (int i = 0; i < before.size(); i++) {
+                requireExplicitValuesPreserved(before.get(i), after.get(i), path + "[]", currentType, POSITION_NODES.equals(position) ? POSITION_NODE : "");
+            }
         } else if (before.isIntegralNumber() && after.isIntegralNumber() && before.longValue() == after.longValue()) {
             // 整数容器宽度变化没有改变实际值。
         } else if (path.endsWith(LINE_HEIGHT_PATH_SUFFIX) && before.isNumber() && after.isNumber()
@@ -170,13 +233,42 @@ public class PortfolioAiConfigService {
         } else if (before.isTextual() && after.isTextual() && path.toLowerCase(Locale.ROOT).endsWith(KEY_COLOR)
                 && before.textValue().equalsIgnoreCase(after.textValue())) {
             // 普通颜色规范化只调整十六进制大小写，实际颜色保持不变。
-        } else if (before.isTextual() && after.isTextual() && path.endsWith(TITLE_PATH_SUFFIX)
+        } else if (before.isTextual() && after.isTextual() && path.endsWith(TITLE_PATH_SUFFIX) && !timeline
                 && before.textValue().strip().equals(after.textValue())) {
             // 分享标题沿普通规则去掉首尾空白。
         } else if (!before.equals(after)) {
             throw normalization(before.getNodeType() != after.getNodeType()
                     ? ERROR_NORMALIZATION_TYPE_CHANGED : ERROR_NORMALIZATION_VALUE_CHANGED);
         }
+    }
+
+    /** 真实角色的远程字体只派生 SYSTEM 兜底，不能补出继承选择或改变身份。 */
+    private static JsonNode timelineFontExpectation(JsonNode before, JsonNode after) {
+        boolean selected = before.path(KEY_FONT_ID).isTextual() && !before.path(KEY_FONT_ID).asText().isBlank();
+        if (!selected) {
+            if (after.has(KEY_FONT_ID) || !before.has(KEY_FONT_FAMILY) && after.has(KEY_FONT_FAMILY)) {
+                throw normalization(ERROR_NORMALIZATION_VALUE_CHANGED);
+            }
+            return before;
+        }
+        if (!before.path(KEY_FONT_ID).equals(after.path(KEY_FONT_ID))) { throw normalization(ERROR_NORMALIZATION_VALUE_CHANGED); }
+        if (before.path(KEY_FONT_FAMILY).equals(after.path(KEY_FONT_FAMILY))) { return before; }
+        if (!SYSTEM_FONT_ID.equals(after.path(KEY_FONT_FAMILY).asText())) { throw normalization(ERROR_NORMALIZATION_VALUE_CHANGED); }
+        ObjectNode expected = (ObjectNode) before.deepCopy();
+        if (expected.has(KEY_FONT_FAMILY)) { expected.put(KEY_FONT_FAMILY, SYSTEM_FONT_ID); }
+        return expected;
+    }
+
+    /** 结构位置显式迁移，不按模糊路径后缀放行任意嵌套对象。 */
+    private static String timelinePosition(JsonNode parent, String field, String position, boolean timeline) {
+        if (!timeline) { return ""; }
+        if (parent.has(KEY_COMPONENT_TYPE) && KEY_CONFIG.equals(field)) { return POSITION_CONFIG; }
+        if (POSITION_CONFIG.equals(position) && AiTimelineProtocol.NODES.equals(field)) { return POSITION_NODES; }
+        if (POSITION_CONFIG.equals(position) && AiTimelineProtocol.STYLES.equals(field)) { return POSITION_UNIFORM_STYLES; }
+        if (POSITION_NODE.equals(position) && AiTimelineProtocol.STYLES.equals(field)) { return POSITION_NODE_STYLES; }
+        if (POSITION_UNIFORM_STYLES.equals(position) && TIMELINE_UNIFORM_ROLES.contains(field)
+                || POSITION_NODE_STYLES.equals(position) && TIMELINE_NODE_ROLES.contains(field)) { return POSITION_ROLE; }
+        return "";
     }
 
     /** 由普通 DTO 序列化到受限 JSON，不丢失显式空值。 */
