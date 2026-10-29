@@ -1,12 +1,13 @@
 const { selectMockWorksFor } = require('./mock-work-media')
-const MOCK_COMPONENT_TYPES = ['CAROUSEL', 'PROFILE', 'SCHEDULE_QUERY', 'WORK_GRID', 'WORK_LIST', 'SINGLE_WORK', 'QR_CONTACT', 'CONTACT_FORM', 'TEXT_SECTION', 'DIVIDER', 'VIDEO_CAROUSEL', 'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'CONTACT_INFO', 'HYPERLINK']
+const MOCK_COMPONENT_TYPES = ['CAROUSEL', 'PROFILE', 'SCHEDULE_QUERY', 'WORK_GRID', 'WORK_LIST', 'SINGLE_WORK', 'QR_CONTACT', 'CONTACT_FORM', 'TEXT_SECTION', 'DIVIDER', 'VIDEO_CAROUSEL', 'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'CONTACT_INFO', 'HYPERLINK', 'TIMELINE']
 const NEW_DEFAULTS = {
   VIDEO_CAROUSEL: { title: '视频作品', workIds: [107, 110, 111], showComponentTitle: true, showTitle: true, showDescription: false, displayStyle: 'STACKED', showSwipeHint: true },
   STRUCTURED_TEXT_SECTION: { blocks: [{blockKey:'intro',type:'TITLE',content:'用影像记录故事',fontFamily:'SYSTEM',fontSizeRpx:40,fontWeight:'BOLD',color:'AUTO',alignment:'LEFT',marginTopRpx:0,marginBottomRpx:16,lineHeight:1.5}], backgroundEnabled:false,backgroundTreatment:'GRADIENT' },
   CONTACT_INFO: {contactPhone:'示例电话',contactWechat:'demo_wefolio',borderEnabled:true,borderWidthRpx:1,borderColor:'AUTO',horizontalPaddingRpx:24,verticalPaddingRpx:24},
   HYPERLINK: {workId:109,actionType:'INTERNAL_PORTFOLIO',targetPortfolioId:9002,showClickIcon:true,iconPosition:'OVERLAY'}
 }
-function createMockComponentConfig(type) {
+function createMockComponentConfig(type, ownerType = 'USER') {
+  if (type === 'TIMELINE') return require('./mock-portfolio-timeline').createTimeline(ownerType)
   if (type === 'CONTACT_INFO') return require('./mock-portfolio-hyperlink').createMockContactInfoConfig()
   if (type === 'HYPERLINK') return require('./mock-portfolio-hyperlink').createMockHyperlinkConfig()
   if (type === 'TEXT_GRID') return require('./mock-portfolio-text-grid').createMockTextGrid()
@@ -38,6 +39,7 @@ function validateMockComponentConfig(type, config = {}, works = []) {
     }
   }
   let message = ''
+  if (type === 'TIMELINE') message = require('./mock-portfolio-timeline').validateTimeline(config)
   if (type === 'TEXT_SECTION' || type === 'STRUCTURED_TEXT_SECTION') {
     const text = require('./mock-portfolio-text')
     message = type === 'TEXT_SECTION' ? text.validateMockSimpleTextConfig(config,works) : text.validateMockStructuredTextConfig(config,works)

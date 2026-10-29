@@ -22,11 +22,13 @@ Component({
   methods: {
     waitForFontLayout() {
       const grid = this.selectComponent('.mock-opening-grid')
-      return grid ? grid.waitForFontLayout() : Promise.resolve()
+      const timeline = this.selectComponent('.mock-opening-timeline')
+      return Promise.all([grid, timeline].filter(Boolean).map(component => component.waitForFontLayout()))
     },
     useNaturalFontLayout() {
       const grid = this.selectComponent('.mock-opening-grid')
-      return grid ? grid.useNaturalFontLayout() : Promise.resolve()
+      const timeline = this.selectComponent('.mock-opening-timeline')
+      return Promise.all([grid, timeline].filter(Boolean).map(component => component.useNaturalFontLayout()))
     },
     handleCopy(event) { this.triggerEvent('copy',Object.assign({componentKey:this.data.component.componentKey},event.detail || {})) },
     handleHyperlink() { this.triggerEvent('hyperlink',{componentKey:this.data.component.componentKey}) },

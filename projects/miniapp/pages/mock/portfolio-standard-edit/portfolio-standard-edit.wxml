@@ -286,8 +286,8 @@
     </view>
   </view>
 
-  <view class="mock-component-edit-mask component-work-picker-mask pe-sheet-mask {{componentEditSheetVisible ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseComponentEditSheet">
-    <view class="mock-component-edit-panel component-work-picker-panel pe-sheet-panel pe-sheet-size-long {{componentEditSheetVisible ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
+  <view class="mock-component-edit-mask component-work-picker-mask pe-sheet-mask {{componentEditSheetVisible && selectedComponentType !== 'TIMELINE' ? 'pe-sheet-mask-visible' : ''}}" catchtap="handleCloseComponentEditSheet">
+    <view class="mock-component-edit-panel component-work-picker-panel pe-sheet-panel pe-sheet-size-long {{componentEditSheetVisible && selectedComponentType !== 'TIMELINE' ? 'pe-sheet-panel-visible' : ''}}" catchtap="noop">
       <view class="component-picker-grabber pe-sheet-grabber"></view>
       <view class="component-picker-heading pe-sheet-heading">
         <view class="component-picker-title pe-sheet-title">{{selectedComponentName || '编辑组件'}}</view>
@@ -635,6 +635,25 @@
       </view>
     </view>
   </view>
+
+  <mock-timeline-editor
+    visible="{{componentEditSheetVisible && selectedComponentType === 'TIMELINE'}}"
+    config="{{complexConfig}}"
+    owner-type="{{draft.portfolio.ownerType}}"
+    theme-mode="{{draft.renderData.themeMode}}"
+    background-color="{{draft.config.style.backgroundColor}}"
+    font-context="{{mockFontContext}}"
+    font-options="{{mockFontChoices}}"
+    font-availability="{{mockFontAvailability}}"
+    remote-font-available="{{true}}"
+    more-fonts-expanded="{{mockFontsExpanded}}"
+    font-edit-session-id="{{mockTimelineSessionId}}"
+    bindfontdraft="handleTimelineFontDraft"
+    bindfontselect="handleTimelineFontSelect"
+    bindfontexpand="handleMoreMockFonts"
+    bindconfirm="handleTimelineConfirm"
+    bindcancel="handleCloseComponentEditSheet"
+  />
 
   <view class="profile-tag-dialog pe-sheet-mask {{profileTagDialogVisible ? 'pe-sheet-mask-visible' : ''}}">
     <view class="profile-tag-dialog-backdrop" catchtap="handleCloseProfileTagDialog"></view>

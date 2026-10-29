@@ -140,7 +140,12 @@ Page({
       this.refreshMockFontRender()
     } })
     this.mockFontSession=createMockFontSession({wxApi:wx})
-    registerMockTextFont(wx)
+    registerMockTextFont(wx, () => {
+      // 冷启动时内置字体晚于节点首轮测量就绪，需要重新计算时间轴的文字宽高。
+      if (this.mockPreviewDisposed) return
+      this.mockBuiltInFontRevision = (this.mockBuiltInFontRevision || 0) + 1
+      this.refreshMockFontRender()
+    })
     this.demoTarget = options.demoTarget || ''
     this.previewPortfolioId = options.portfolioId
     this.previewScope = options.scope
@@ -252,11 +257,14 @@ Page({
     if(!this.mockFontConfig || !this.mockFontSession)return
     const current=this.data.portfolio
     if(!current)return
-    const rendered=buildMockPortfolioRenderData(this.mockFontConfig,this.mockFontSession.context(this.mockFontConfig.fonts))
+    const context={...this.mockFontSession.context(this.mockFontConfig.fonts),revision:this.mockBuiltInFontRevision || 0}
+    const rendered=buildMockPortfolioRenderData(this.mockFontConfig,context)
     const components=[...rendered.components,...rendered.bottomNav.items.flatMap(item=>item.components || [])]
-    const byKey=new Map(components.filter(item=>['TEXT_SECTION','STRUCTURED_TEXT_SECTION','TEXT_GRID'].includes(item.componentType)).map(item=>[item.componentKey,item]))
+    const byKey=new Map(components.filter(item=>['TEXT_SECTION','STRUCTURED_TEXT_SECTION','TEXT_GRID','TIMELINE'].includes(item.componentType)).map(item=>[item.componentKey,item]))
     // 字体回调只更新文字节点，不覆盖用户刚切换的菜单、作品分组及播放状态。
-    const update=list=>(list || []).map(item=>byKey.has(item.componentKey)?{...item,viewModel:byKey.get(item.componentKey).viewModel,...(item.textSection?{textSection:byKey.get(item.componentKey).textSection}:{})}:item)
+    const update=list=>(list || []).map(item=>byKey.has(item.componentKey)?{...item,viewModel:byKey.get(item.componentKey).viewModel,
+      ...(item.componentType === 'TIMELINE' ? {fontContext:byKey.get(item.componentKey).fontContext} : {}),
+      ...(item.textSection?{textSection:byKey.get(item.componentKey).textSection}:{})}:item)
     this.setData({portfolio:{...current,components:update(current.components),activeComponents:update(current.activeComponents),
       bottomNav:{...current.bottomNav,items:current.bottomNav.items.map(item=>item.components?{...item,components:update(item.components)}:item)}}})
   },

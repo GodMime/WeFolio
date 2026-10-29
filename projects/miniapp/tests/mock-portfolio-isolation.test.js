@@ -17,7 +17,7 @@ const DISPLAY_BASELINE = new Set([
 ])
 const TYPES = ['CAROUSEL', 'PROFILE', 'SCHEDULE_QUERY', 'WORK_GRID', 'WORK_LIST', 'SINGLE_WORK',
   'QR_CONTACT', 'CONTACT_FORM', 'TEXT_SECTION', 'DIVIDER', 'VIDEO_CAROUSEL',
-  'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'CONTACT_INFO', 'HYPERLINK']
+  'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'CONTACT_INFO', 'HYPERLINK', 'TIMELINE']
 const event = (dataset = {}, value) => ({ currentTarget: { dataset }, detail: { value } })
 const copy = value => JSON.parse(JSON.stringify(value))
 const isMock = relative => MOCK_ROOTS.some(prefix => relative.startsWith(prefix))
@@ -151,7 +151,11 @@ for (const type of TYPES) {
     if (type === 'SINGLE_WORK') edit.handleWorkToggle(event({ id: 109 }))
     else if (type === 'CAROUSEL') edit.handleWorkOrder(event({ index: 0, offset: 1 }))
     else if (type === 'QR_CONTACT') edit.handleQrWork(event({ id: 101 }))
-    else if (type === 'TEXT_GRID') {
+    else if (type === 'TIMELINE') {
+      const config = copy(edit.data.complexConfig)
+      config.nodes[0] = { ...config.nodes[0], date: '2026', title: '本地历程' }
+      edit.handleTimelineConfirm({ detail: config })
+    } else if (type === 'TEXT_GRID') {
       const config = copy(edit.data.complexConfig)
       config.cells[0].blocks[0].runs[0].text = '本地网格编辑'
       edit.handleGridChange({ detail: { config } })
@@ -242,4 +246,113 @@ test('mock 筛选显示加载过渡，快速切换和离开页面不回写旧结
   await third
   assert.equal(page.data.publicationFilter, 'DRAFT_ONLY')
   assert.deepEqual(runtime.calls, [])
+})
+
+for (const [portfolioId, menuIndex] of [[9001, 0], [9002, 1]]) {
+  test(`时间轴在样本 ${portfolioId} 菜单 ${menuIndex} 中取消恢复快照，确认后仅通过本地草稿预览`, () => {
+    const runtime = createRuntime()
+    const edit = runtime.page('portfolio-standard-edit')
+    edit.onLoad({ portfolioId })
+    const menuKey = edit.data.draft.config.bottomNav.items[menuIndex].key
+    if (menuIndex) edit.handleEditorMenuTap(event({ key: menuKey }))
+    const before = copy(edit.data.draft.config)
+    edit.handleSelectComponent(event({ type: 'TIMELINE' }))
+    const firstSession = edit.data.mockTimelineSessionId
+    const canceled = copy(edit.data.complexConfig)
+    canceled.title = '不会保存的标题'
+    edit.handleTimelineFontDraft({ detail: { config: canceled, sessionId: firstSession } })
+    edit.handleCloseComponentEditSheet()
+    assert.deepEqual(copy(edit.data.draft.config), before)
+    assert.equal(runtime.storage.size, 0)
+
+    edit.handleSelectComponent(event({ type: 'TIMELINE' }))
+    const key = edit.data.selectedComponentKey
+    const sessionId = edit.data.mockTimelineSessionId
+    assert.notEqual(sessionId, firstSession)
+    const initial = copy(edit.data.complexConfig)
+    edit.handleTimelineFontDraft({ detail: { config: canceled, sessionId: firstSession } })
+    assert.deepEqual(copy(edit.data.complexConfig), initial, '旧编辑会话不能写入新时间轴')
+    const candidate = copy(initial)
+    candidate.title = '婚礼影像历程'
+    candidate.variant = 'MILESTONE_CARD'
+    candidate.direction = 'VERTICAL'
+    candidate.nodes[0] = { ...candidate.nodes[0], datePrecision: 'DAY', date: '2024-02-29', title: '开始记录', description: '第一场婚礼' }
+    candidate.nodes.push({ nodeKey: 'local_future', datePrecision: 'CUSTOM', date: '持续创作', title: '未来', description: '留下更多温暖瞬间' })
+    edit.handleTimelineFontDraft({ detail: { config: candidate, sessionId } })
+    const unconfirmed = menuIndex ? edit.data.draft.config.bottomNav.items[menuIndex].components : edit.data.draft.config.components
+    assert.equal(unconfirmed.find(item => item.componentKey === key).config.title, initial.title)
+    edit.handleTimelineConfirm({ detail: candidate })
+    assert.equal(edit.data.componentEditSheetVisible, false, edit.data.complexError)
+    const confirmed = menuIndex ? edit.data.draft.config.bottomNav.items[menuIndex].components : edit.data.draft.config.components
+    assert.deepEqual(copy(confirmed.find(item => item.componentKey === key).config), candidate)
+    assert.equal(runtime.storage.size, 0)
+    edit.handleTimelineFontDraft({ detail: { config: canceled, sessionId } })
+    assert.deepEqual(copy(confirmed.find(item => item.componentKey === key).config), candidate)
+
+    edit.handlePreview()
+    if (portfolioId === 9002) edit.handlePreviewVersionSelect(event({ scope: 'draft' }))
+    edit.onHide()
+    assert.deepEqual([...runtime.storage.keys()], [portfolioId === 9001 ? STORAGE_KEY : `${STORAGE_KEY}_${portfolioId}`])
+    const preview = runtime.page('portfolio-standard-preview')
+    preview.onLoad({ portfolioId, scope: 'draft' }); preview.onShow()
+    if (menuIndex) preview.handlePortfolioMenuChange({ detail: { menuKey } })
+    const rendered = preview.data.portfolio.activeComponents.find(item => item.componentKey === key)
+    assert.equal(rendered.componentType, 'TIMELINE')
+    assert.notEqual(rendered.unsupported, true)
+    assert.deepEqual(copy(rendered.config), candidate)
+    preview.onHide(); preview.onUnload(); edit.onShow()
+    const restored = menuIndex ? edit.data.draft.config.bottomNav.items[menuIndex].components : edit.data.draft.config.components
+    assert.deepEqual(copy(restored.find(item => item.componentKey === key).config), candidate)
+    edit.handleComponentTap(event({ key }))
+    const changed = copy(candidate)
+    changed.nodes.reverse()
+    edit.handleTimelineFontDraft({ detail: { config: changed, sessionId: edit.data.mockTimelineSessionId } })
+    edit.handleCloseComponentEditSheet()
+    const retained = menuIndex ? edit.data.draft.config.bottomNav.items[menuIndex].components : edit.data.draft.config.components
+    assert.deepEqual(copy(retained.find(item => item.componentKey === key).config), candidate)
+    edit.handleSaveDraft(); edit.handlePublish()
+    assert.deepEqual(runtime.calls.slice(-2), ['请去“我的”页面注册登录', '请去“我的”页面注册登录'])
+    edit.onUnload()
+  })
+}
+
+test('时间轴非法日期拒绝确认且保留编辑，改为有效日期后可确认', () => {
+  const runtime = createRuntime()
+  const edit = runtime.page('portfolio-standard-edit')
+  edit.onLoad()
+  edit.handleSelectComponent(event({ type: 'TIMELINE' }))
+  const candidate = copy(edit.data.complexConfig)
+  candidate.nodes[0] = { ...candidate.nodes[0], datePrecision: 'DAY', date: '2025-02-29', title: '无效闰日' }
+  edit.handleTimelineConfirm({ detail: candidate })
+  assert.equal(edit.data.componentEditSheetVisible, true)
+  assert.match(edit.data.complexError, /日期/)
+  assert.equal(runtime.storage.size, 0)
+  candidate.nodes[0].date = '2024-02-29'
+  edit.handleTimelineConfirm({ detail: candidate })
+  assert.equal(edit.data.componentEditSheetVisible, false)
+  edit.onUnload()
+})
+
+test('个人与团队发布和草稿预览包含独立的本地时间轴，团队编辑仍提示登录', () => {
+  const runtime = createRuntime()
+  for (const portfolioId of [9002, 9902]) {
+    for (const scope of ['draft', 'published']) {
+      const page = runtime.page('portfolio-standard-preview')
+      page.onLoad({ portfolioId, scope }); page.onShow()
+      assert.equal(page.data.errorMessage, '')
+      const timeline = page.data.portfolio.activeComponents.find(item => item.componentType === 'TIMELINE')
+      assert.ok(timeline)
+      assert.notEqual(timeline.unsupported, true)
+      assert.equal(timeline.ownerType, portfolioId === 9902 ? 'TEAM' : 'USER')
+      assert.equal(timeline.config.title, portfolioId === 9902 ? '团队里程碑' : '我的历程')
+      assert.equal(timeline.config.nodes.length, 3)
+      page.onHide(); page.onUnload()
+    }
+  }
+  const edit = runtime.page('portfolio-standard-edit')
+  edit.onLoad({ portfolioId: 9902 })
+  assert.equal(edit.mockPreviewUnavailable, true)
+  assert.equal(runtime.calls.at(-1), '请去“我的”页面注册登录')
+  assert.equal(runtime.storage.size, 0)
+  edit.onUnload()
 })

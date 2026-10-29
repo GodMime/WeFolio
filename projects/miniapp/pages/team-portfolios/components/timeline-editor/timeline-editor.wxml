@@ -1,85 +1,103 @@
 <view class="timeline-editor-mask {{visible ? 'is-visible' : ''}}" catchtap="{{styleDetail ? 'handleCancelTextStyle' : 'handleCancel'}}" catchtouchmove="noop"></view>
 <view class="timeline-editor-sheet timeline-editor-{{theme}} {{visible ? 'is-visible' : ''}}" catchtouchmove="noop">
   <view class="timeline-editor-grabber"></view>
-  <view class="timeline-editor-header"><text>{{styleDetail ? '编辑文字样式' : '编辑时间轴'}}</text><text class="timeline-meta">{{styleDetail ? (styleScope === 'node' ? '当前节点' : '统一样式') : draft.nodes.length + ' 个节点'}}</text></view>
-  <view wx:if="{{!styleDetail}}" class="timeline-editor-tabs">
-    <view class="timeline-tab-indicator {{tab === 'style' ? 'style-active' : ''}}" aria-hidden="true"></view>
-    <view class="timeline-tab {{tab === 'content' ? 'selected' : ''}}" data-value="content" bindtap="handleTab" aria-role="tab" aria-selected="{{tab === 'content'}}">内容</view>
-    <view class="timeline-tab {{tab === 'style' ? 'selected' : ''}}" data-value="style" bindtap="handleTab" aria-role="tab" aria-selected="{{tab === 'style'}}">样式</view>
-  </view>
-  <scroll-view class="timeline-editor-scroll" scroll-y="{{!draggingKey}}" scroll-top="{{editorScrollTop}}" bindscroll="handleEditorScroll" type="list">
-    <view class="timeline-editor-body">
-      <view wx:if="{{!styleDetail && tab === 'content'}}" class="timeline-editor-content">
-        <block wx:if="{{!nodeDetail}}">
-          <view class="timeline-field-group">
-            <view class="timeline-editor-row"><view class="timeline-kicker-copy"><text class="timeline-label">显示英文小标题</text><text class="timeline-kicker-example">{{ownerType === 'TEAM' ? 'OUR STORY' : 'MY JOURNEY'}}</text></view><switch class="timeline-switch" color="{{theme === 'dark' ? '#737C88' : '#212529'}}" checked="{{draft.showKicker}}" data-field="showKicker" bindchange="handleField" aria-label="显示英文小标题" /></view>
-            <text class="timeline-help">关闭后不影响时间轴标题和节点内容。</text>
-          </view>
-          <view class="timeline-field-group"><text class="timeline-label">时间轴标题</text><input class="timeline-input" value="{{draft.title}}" maxlength="-1" data-field="title" bindinput="handleField" placeholder="留空则隐藏" placeholder-class="timeline-placeholder" /></view>
-          <view class="timeline-field-group">
-            <view class="timeline-label-row"><text class="timeline-label">时间节点</text><text class="timeline-help">按列表顺序展示</text></view>
-            <view wx:if="{{!nodeRows.length}}" class="timeline-empty">添加一个节点，记录你的故事</view>
-            <view class="timeline-node-list">
-              <view wx:for="{{nodeRows}}" wx:key="nodeKey" class="timeline-node-row {{dragTargetKey === item.nodeKey && draggingKey !== item.nodeKey ? 'drag-target' : ''}} {{draggingKey === item.nodeKey ? 'row-dragging' : ''}}" data-key="{{item.nodeKey}}">
-                <view class="timeline-node-main {{draggingKey === item.nodeKey ? 'dragging' : ''}}" style="{{draggingKey === item.nodeKey ? dragStyle : ''}}">
-                  <view class="timeline-drag-handle {{nodeRows.length < 2 ? 'disabled' : ''}}" data-key="{{item.nodeKey}}" catchtouchstart="handleDragStart" catchtouchmove="handleDragMove" catchtouchend="handleDragEnd" catchtouchcancel="handleDragCancel" catchtap="noop" aria-role="button" aria-label="拖动节点 {{index + 1}} 排序" aria-disabled="{{nodeRows.length < 2}}"><view></view><view></view><view></view></view>
-                  <view class="timeline-node-edit" data-key="{{item.nodeKey}}" data-index="{{index}}" catchtap="handleNode" aria-role="button" aria-label="编辑节点 {{index + 1}}"><text class="timeline-node-number">{{index + 1}}</text><view class="timeline-node-copy"><text class="timeline-node-mark">{{item.displayDate}}</text><text class="timeline-node-title">{{item.title || item.description || '待填写节点'}}</text></view><text class="timeline-chevron">›</text></view>
+  <!-- 顶栏随各自面板一起过渡，保留列表与节点的滚动位置和视口高度。 -->
+  <view class="timeline-editor-stage {{animateNodes ? 'is-node-navigation' : ''}}">
+    <view class="timeline-editor-panel timeline-list-panel {{nodeDetail && !styleDetail && tab === 'content' ? '' : 'is-active'}}" aria-hidden="{{nodeDetail && !styleDetail && tab === 'content'}}">
+      <view class="timeline-editor-header"><text>{{styleDetail ? '编辑文字样式' : '编辑时间轴'}}</text><text class="timeline-meta">{{styleDetail ? (styleScope === 'node' ? '当前节点' : '统一样式') : draft.nodes.length + ' 个节点'}}</text></view>
+      <view wx:if="{{!styleDetail}}" class="timeline-editor-tabs">
+        <view class="timeline-tab-indicator {{tab === 'style' ? 'style-active' : ''}}" aria-hidden="true"></view>
+        <view class="timeline-tab {{tab === 'content' ? 'selected' : ''}}" data-value="content" bindtap="handleTab" aria-role="tab" aria-selected="{{tab === 'content'}}">内容</view>
+        <view class="timeline-tab {{tab === 'style' ? 'selected' : ''}}" data-value="style" bindtap="handleTab" aria-role="tab" aria-selected="{{tab === 'style'}}">样式</view>
+      </view>
+      <scroll-view class="timeline-editor-scroll" scroll-y="{{!draggingKey}}" scroll-top="{{editorScrollTop}}" data-panel="main" bindscroll="handleEditorScroll" type="list">
+        <view class="timeline-editor-body">
+          <view wx:if="{{!styleDetail && tab === 'content'}}" class="timeline-editor-content">
+            <view class="timeline-field-group">
+              <view class="timeline-editor-row"><view class="timeline-kicker-copy"><text class="timeline-label">显示英文小标题</text><text class="timeline-kicker-example">{{ownerType === 'TEAM' ? 'OUR STORY' : 'MY JOURNEY'}}</text></view><switch disabled="{{nodeDetail}}" class="timeline-switch" color="{{theme === 'dark' ? '#737C88' : '#212529'}}" checked="{{draft.showKicker}}" data-field="showKicker" bindchange="handleField" aria-label="显示英文小标题" /></view>
+              <text class="timeline-help">关闭后不影响时间轴标题和节点内容。</text>
+            </view>
+            <view class="timeline-field-group"><text class="timeline-label">时间轴标题</text><input disabled="{{nodeDetail}}" class="timeline-input" value="{{draft.title}}" maxlength="-1" data-field="title" bindinput="handleField" placeholder="留空则隐藏" placeholder-class="timeline-placeholder" /></view>
+            <view class="timeline-field-group">
+              <view class="timeline-label-row"><text class="timeline-label">时间节点</text><text class="timeline-help">按列表顺序展示</text></view>
+              <view wx:if="{{!nodeRows.length}}" class="timeline-empty">添加一个节点，记录你的故事</view>
+              <view class="timeline-node-list">
+                <view wx:for="{{nodeRows}}" wx:key="nodeKey" class="timeline-node-row {{dragTargetKey === item.nodeKey && draggingKey !== item.nodeKey ? 'drag-target' : ''}} {{draggingKey === item.nodeKey ? 'row-dragging' : ''}}" data-key="{{item.nodeKey}}">
+                  <view class="timeline-node-main {{draggingKey === item.nodeKey ? 'dragging' : ''}}" style="{{draggingKey === item.nodeKey ? dragStyle : ''}}">
+                    <view class="timeline-drag-handle {{nodeRows.length < 2 ? 'disabled' : ''}}" data-key="{{item.nodeKey}}" catchtouchstart="handleDragStart" catchtouchmove="handleDragMove" catchtouchend="handleDragEnd" catchtouchcancel="handleDragCancel" catchtap="noop" aria-role="button" aria-label="拖动节点 {{index + 1}} 排序" aria-disabled="{{nodeRows.length < 2}}"><view></view><view></view><view></view></view>
+                    <view class="timeline-node-edit" data-key="{{item.nodeKey}}" data-index="{{index}}" catchtap="handleNode" aria-role="button" aria-label="编辑节点 {{index + 1}}"><text class="timeline-node-number">{{index + 1}}</text><view class="timeline-node-copy"><text class="timeline-node-mark">{{item.displayDate}}</text><text class="timeline-node-title">{{item.title || item.description || '待填写节点'}}</text></view><text class="timeline-chevron">›</text></view>
+                  </view>
                 </view>
               </view>
+              <button class="timeline-add" bindtap="handleAddNode" disabled="{{draft.nodes.length >= 20 || !!draggingKey}}">＋ 添加节点</button>
+              <text class="timeline-help">点按节点编辑，拖动左侧手柄调整顺序。</text>
             </view>
-            <button class="timeline-add" bindtap="handleAddNode" disabled="{{draft.nodes.length >= 20 || !!draggingKey}}">＋ 添加节点</button>
-            <text class="timeline-help">点按节点编辑，拖动左侧手柄调整顺序。</text>
           </view>
-        </block>
-        <view wx:if="{{node.nodeKey && nodeDetail}}">
-          <view class="timeline-detail-heading"><view class="timeline-back" bindtap="handleBackNodes" aria-role="button" aria-label="返回节点列表">‹ 返回</view><text>编辑节点 {{nodeIndex + 1}}</text></view>
-          <view class="timeline-field-group">
-            <text class="timeline-label">节点标记</text>
-            <view class="timeline-options timeline-precision-options"><view wx:for="{{precisions}}" wx:key="value" class="timeline-option {{node.datePrecision === item.value ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="handlePrecision">{{item.label}}</view></view>
-            <view wx:if="{{node.datePrecision !== 'CUSTOM'}}" class="timeline-date-inputs">
-              <view class="timeline-date-part"><text class="timeline-date-label">年</text><input class="timeline-input" type="number" value="{{dates.year}}" data-field="year" data-node-key="{{node.nodeKey}}" bindinput="handleDate" bindblur="handleDateBlur" placeholder="输入年份" placeholder-class="timeline-placeholder" /></view>
-              <view wx:if="{{node.datePrecision !== 'YEAR'}}" class="timeline-date-part"><text class="timeline-date-label">月</text><input class="timeline-input" type="number" value="{{dates.month}}" data-field="month" data-node-key="{{node.nodeKey}}" bindinput="handleDate" bindblur="handleDateBlur" placeholder="月" placeholder-class="timeline-placeholder" /></view>
-              <view wx:if="{{node.datePrecision === 'DAY'}}" class="timeline-date-part"><text class="timeline-date-label">日</text><input class="timeline-input" type="number" value="{{dates.day}}" data-field="day" data-node-key="{{node.nodeKey}}" bindinput="handleDate" bindblur="handleDateBlur" placeholder="日" placeholder-class="timeline-placeholder" /></view>
+          <view wx:elif="{{!styleDetail}}" class="timeline-editor-content">
+            <view class="timeline-field-group">
+              <text class="timeline-label">时间轴样式</text>
+              <view class="timeline-variants"><view wx:for="{{variants}}" wx:key="value" class="timeline-variant {{draft.variant === item.value ? 'selected' : ''}}" data-field="variant" data-value="{{item.value}}" bindtap="handleField" aria-role="radio" aria-checked="{{draft.variant === item.value}}" aria-label="{{item.label}}"><view class="variant-label"><text>{{index === 0 ? 'A' : index === 1 ? 'B' : 'C'}}</text><text class="variant-check {{draft.variant === item.value ? 'checked' : ''}}">✓</text></view><view class="variant-sketch variant-sketch-{{item.value}}"><view class="sketch-line"></view><view class="sketch-node sketch-first"><text wx:if="{{item.value === 'DATE_COLUMN'}}">2024</text><view class="sketch-dot"></view><view class="sketch-copy"><view></view><view></view></view></view><view class="sketch-node sketch-second"><text wx:if="{{item.value === 'DATE_COLUMN'}}">2025</text><view class="sketch-dot"></view><view class="sketch-copy"><view></view><view></view></view></view></view><text>{{item.label}}</text></view></view>
+              <text class="timeline-help">三种样式均支持横向与纵向排布，切换后保留内容和文字设置。</text>
             </view>
-            <view wx:else><view class="timeline-label-row timeline-custom-label-row"><text class="timeline-label">自定义标签</text><text class="timeline-help">{{customDateCount}} / {{maxCustomLabelLength}}</text></view><input class="timeline-input" value="{{customDate}}" maxlength="-1" data-node-key="{{node.nodeKey}}" bindinput="handleCustomDate" placeholder="如：筹备期、至今、未来" placeholder-class="timeline-placeholder" /><text class="timeline-help">最多 20 个字符，原样显示在节点日期的位置。</text></view>
-            <view class="timeline-date-preview {{datePreviewValid ? '' : 'timeline-date-pending'}}"><text>展示为：</text><text class="timeline-date-value">{{datePreview}}</text></view><text class="timeline-help">日期和自定义标签可以混用，按列表顺序展示。切换类型会保留本次编辑的输入。</text>
+            <view class="timeline-field-group"><text class="timeline-label">排布方向</text><view class="timeline-directions"><view wx:for="{{directions}}" wx:key="value" class="timeline-direction {{draft.direction === item.value ? 'selected' : ''}}" data-field="direction" data-value="{{item.value}}" bindtap="handleField" aria-role="radio" aria-checked="{{draft.direction === item.value}}"><view class="direction-sketch direction-{{item.value}}"><view></view><view></view><view></view></view><text>{{item.label}}排布</text></view></view></view>
+            <view class="timeline-field-group">
+              <view class="timeline-label-row"><text class="timeline-label">节点最小间距</text><view class="timeline-spacing-value"><input type="number" value="{{draft.direction === 'HORIZONTAL' ? draft.minGapRpx.horizontal : draft.minGapRpx.vertical}}" data-direction="{{draft.direction === 'HORIZONTAL' ? 'horizontal' : 'vertical'}}" bindinput="handleGap" aria-label="节点最小间距，120 至 640 rpx" /><text>rpx</text></view></view>
+              <slider class="timeline-slider" min="120" max="640" step="10" value="{{draft.direction === 'HORIZONTAL' ? draft.minGapRpx.horizontal : draft.minGapRpx.vertical}}" data-direction="{{draft.direction === 'HORIZONTAL' ? 'horizontal' : 'vertical'}}" bindchange="handleGap" activeColor="{{theme === 'dark' ? '#EEF0F3' : '#212529'}}" backgroundColor="{{theme === 'dark' ? '#51565E' : '#E9ECEF'}}" block-color="{{theme === 'dark' ? '#EEF0F3' : '#212529'}}" block-size="18" />
+              <view class="timeline-range-labels"><text>紧凑 · 120</text><text>舒展 · 640</text></view><text class="timeline-help">相邻节点圆点之间的最小距离，横向与纵向可分别设置。</text>
+              <view class="timeline-spacing-note"><text class="timeline-auto-icon">↔</text><view><text>长内容自动撑开 · 始终生效</text><text class="timeline-help">文字完整展示，不与下一个节点重叠。</text></view></view>
+            </view>
+            <view class="timeline-field-group"><text class="timeline-label">统一文字样式</text><view class="timeline-style-entries"><view wx:for="{{styleEntries}}" wx:key="value" class="timeline-style-entry" data-scope="component" data-role="{{item.value}}" bindtap="handleEditTextStyle" aria-role="button"><text>{{item.label}}</text><text class="timeline-entry-summary">{{item.summary}}</text><text class="timeline-chevron">›</text></view></view><text class="timeline-help">默认应用到所有节点，可在节点编辑中单独修改。</text></view>
+            <view class="timeline-field-group"><text class="timeline-label">效果预览</text><view class="timeline-preview" style="background:{{backgroundColor}}"><portfolio-timeline config="{{draft}}" owner-type="{{ownerType}}" theme-mode="{{theme}}" background-color="{{backgroundColor}}" font-context="{{fontContext}}" /></view></view>
           </view>
-          <view class="timeline-field-group"><text class="timeline-label">节点标题</text><input class="timeline-input" value="{{node.title}}" maxlength="-1" data-field="title" bindinput="handleNodeField" placeholder="给这段经历一个名字" placeholder-class="timeline-placeholder" /><text class="timeline-help">最多 60 字</text></view>
-          <view class="timeline-field-group"><text class="timeline-label">内容描述</text><textarea class="timeline-textarea" value="{{node.description}}" maxlength="-1" auto-height data-field="description" bindinput="handleNodeField" placeholder="记录这段经历……" placeholder-class="timeline-placeholder" /><text class="timeline-help">最多 1000 字；标题和描述至少填写一项。</text></view>
-          <view class="timeline-field-group"><text class="timeline-label">当前节点文字样式</text><view class="timeline-style-entries"><view wx:for="{{nodeStyleEntries}}" wx:key="value" class="timeline-style-entry" data-scope="node" data-role="{{item.value}}" bindtap="handleEditTextStyle" aria-role="button"><text>{{item.label}}</text><text class="timeline-entry-summary">{{item.summary}}</text><text class="timeline-chevron">›</text></view></view><text class="timeline-help">默认跟随统一样式，单独修改只影响当前节点。</text></view>
-          <button class="timeline-delete" bindtap="handleRemoveNode">删除这个节点</button>
+          <view wx:else class="timeline-editor-content">
+            <view class="timeline-detail-heading"><view class="timeline-back" bindtap="handleBackTextStyle" aria-role="button" aria-label="返回时间轴设置">‹ 返回</view><text>{{styleScope === 'node' ? '第 ' + (nodeIndex + 1) + ' 个节点' : '统一文字样式'}}</text></view>
+            <view class="timeline-options timeline-role-options"><view wx:for="{{roles}}" wx:key="value" class="timeline-option {{styleRole === item.value ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="handleStyleRole">{{item.label}}</view></view><text class="timeline-help">{{inherited ? '当前继承样式' : '当前包含单独设置'}}</text>
+            <view class="timeline-field-group">
+              <view class="timeline-label-row"><text class="timeline-label">字体</text><button wx:if="{{!moreFontsExpanded}}" class="timeline-more-fonts" bindtap="handleExpandFonts">更多字体</button></view><text wx:if="{{fontMessage}}" class="timeline-help">{{fontMessage}}</text>
+              <view class="timeline-fonts"><view wx:for="{{fonts}}" wx:key="value" wx:if="{{!item.remote || moreFontsExpanded || item.value === fontValue}}" class="timeline-font {{item.value === fontValue ? 'selected' : ''}} {{!item.available ? 'disabled' : ''}}" data-value="{{item.value}}" bindtap="handleFont" aria-role="radio" aria-checked="{{item.value === fontValue}}" aria-disabled="{{!item.available}}"><text class="timeline-font-name">{{item.label}}</text><text wx:if="{{item.languageLabel}}" class="timeline-font-language">{{item.languageLabel}}</text><image wx:if="{{item.previewImageUrl}}" class="timeline-font-preview" src="{{item.previewImageUrl}}" mode="widthFix" /><text wx:else class="timeline-font-sample {{item.fontClass}}">{{item.sample}}</text><text wx:if="{{!item.available}}" class="timeline-help">{{item.value === fontValue ? '已保存字体保留，当前设备以系统字体预览' : '当前设备不可用'}}</text></view></view>
+            </view>
+            <view class="timeline-field-group"><view class="timeline-label-row"><text class="timeline-label">字号</text><view class="timeline-stepper"><button data-delta="-1" bindtap="handleFontSizeStep" disabled="{{effectiveStyle.fontSizeRpx <= 10}}" aria-label="减小字号">−</button><input type="number" value="{{effectiveStyle.fontSizeRpx}}" bindinput="handleFontSize" aria-label="字号，10 至 96 rpx" /><text>rpx</text><button data-delta="1" bindtap="handleFontSizeStep" disabled="{{effectiveStyle.fontSizeRpx >= 96}}" aria-label="增大字号">＋</button></view></view><text class="timeline-help">10–96 rpx · 每次 1 rpx · 可输入整数</text></view>
+            <view class="timeline-field-group"><text class="timeline-label">文字颜色</text><text-color-editor color="{{effectiveStyle.color}}" active="{{visible && styleDetail}}" theme-mode="{{theme}}" background-color="{{backgroundColor}}" bindchange="handleColor" /><view class="timeline-link" bindtap="handleAutoColor" aria-role="button">颜色跟随主题</view></view>
+            <view class="timeline-reset-options"><view data-field="font" bindtap="handleResetStyle" aria-role="button">恢复字体继承</view><view data-field="fontSizeRpx" bindtap="handleResetStyle" aria-role="button">恢复字号继承</view><view data-field="color" bindtap="handleResetStyle" aria-role="button">恢复颜色继承</view></view><view class="timeline-link" bindtap="handleResetStyle" aria-role="button">{{styleScope === 'component' ? '恢复默认样式' : '恢复统一样式'}}</view>
+          </view>
+          <text wx:if="{{!styleDetail}}" class="timeline-help timeline-total">总文字 {{count}} / 6000 · 节点 {{draft.nodes.length}} / 20</text><text wx:if="{{error}}" class="timeline-error">{{error}}</text>
         </view>
-      </view>
-      <view wx:elif="{{!styleDetail}}" class="timeline-editor-content">
-        <view class="timeline-field-group">
-          <text class="timeline-label">时间轴样式</text>
-          <view class="timeline-variants"><view wx:for="{{variants}}" wx:key="value" class="timeline-variant {{draft.variant === item.value ? 'selected' : ''}}" data-field="variant" data-value="{{item.value}}" bindtap="handleField" aria-role="radio" aria-checked="{{draft.variant === item.value}}" aria-label="{{item.label}}"><view class="variant-label"><text>{{index === 0 ? 'A' : index === 1 ? 'B' : 'C'}}</text><text class="variant-check {{draft.variant === item.value ? 'checked' : ''}}">✓</text></view><view class="variant-sketch variant-sketch-{{item.value}}"><view class="sketch-line"></view><view class="sketch-node sketch-first"><text wx:if="{{item.value === 'DATE_COLUMN'}}">2024</text><view class="sketch-dot"></view><view class="sketch-copy"><view></view><view></view></view></view><view class="sketch-node sketch-second"><text wx:if="{{item.value === 'DATE_COLUMN'}}">2025</text><view class="sketch-dot"></view><view class="sketch-copy"><view></view><view></view></view></view></view><text>{{item.label}}</text></view></view>
-          <text class="timeline-help">三种样式均支持横向与纵向排布，切换后保留内容和文字设置。</text>
-        </view>
-        <view class="timeline-field-group"><text class="timeline-label">排布方向</text><view class="timeline-directions"><view wx:for="{{directions}}" wx:key="value" class="timeline-direction {{draft.direction === item.value ? 'selected' : ''}}" data-field="direction" data-value="{{item.value}}" bindtap="handleField" aria-role="radio" aria-checked="{{draft.direction === item.value}}"><view class="direction-sketch direction-{{item.value}}"><view></view><view></view><view></view></view><text>{{item.label}}排布</text></view></view></view>
-        <view class="timeline-field-group">
-          <view class="timeline-label-row"><text class="timeline-label">节点最小间距</text><view class="timeline-spacing-value"><input type="number" value="{{draft.direction === 'HORIZONTAL' ? draft.minGapRpx.horizontal : draft.minGapRpx.vertical}}" data-direction="{{draft.direction === 'HORIZONTAL' ? 'horizontal' : 'vertical'}}" bindinput="handleGap" aria-label="节点最小间距，120 至 640 rpx" /><text>rpx</text></view></view>
-          <slider class="timeline-slider" min="120" max="640" step="10" value="{{draft.direction === 'HORIZONTAL' ? draft.minGapRpx.horizontal : draft.minGapRpx.vertical}}" data-direction="{{draft.direction === 'HORIZONTAL' ? 'horizontal' : 'vertical'}}" bindchange="handleGap" activeColor="{{theme === 'dark' ? '#EEF0F3' : '#212529'}}" backgroundColor="{{theme === 'dark' ? '#51565E' : '#E9ECEF'}}" block-color="{{theme === 'dark' ? '#EEF0F3' : '#212529'}}" block-size="18" />
-          <view class="timeline-range-labels"><text>紧凑 · 120</text><text>舒展 · 640</text></view><text class="timeline-help">相邻节点圆点之间的最小距离，横向与纵向可分别设置。</text>
-          <view class="timeline-spacing-note"><text class="timeline-auto-icon">↔</text><view><text>长内容自动撑开 · 始终生效</text><text class="timeline-help">文字完整展示，不与下一个节点重叠。</text></view></view>
-        </view>
-        <view class="timeline-field-group"><text class="timeline-label">统一文字样式</text><view class="timeline-style-entries"><view wx:for="{{styleEntries}}" wx:key="value" class="timeline-style-entry" data-scope="component" data-role="{{item.value}}" bindtap="handleEditTextStyle" aria-role="button"><text>{{item.label}}</text><text class="timeline-entry-summary">{{item.summary}}</text><text class="timeline-chevron">›</text></view></view><text class="timeline-help">默认应用到所有节点，可在节点编辑中单独修改。</text></view>
-        <view class="timeline-field-group"><text class="timeline-label">效果预览</text><view class="timeline-preview" style="background:{{backgroundColor}}"><portfolio-timeline config="{{draft}}" owner-type="{{ownerType}}" theme-mode="{{theme}}" background-color="{{backgroundColor}}" font-context="{{fontContext}}" /></view></view>
-      </view>
-      <view wx:else class="timeline-editor-content">
-        <view class="timeline-detail-heading"><view class="timeline-back" bindtap="handleBackTextStyle" aria-role="button" aria-label="返回时间轴设置">‹ 返回</view><text>{{styleScope === 'node' ? '第 ' + (nodeIndex + 1) + ' 个节点' : '统一文字样式'}}</text></view>
-        <view class="timeline-options timeline-role-options"><view wx:for="{{roles}}" wx:key="value" class="timeline-option {{styleRole === item.value ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="handleStyleRole">{{item.label}}</view></view><text class="timeline-help">{{inherited ? '当前继承样式' : '当前包含单独设置'}}</text>
-        <view class="timeline-field-group">
-          <view class="timeline-label-row"><text class="timeline-label">字体</text><button wx:if="{{!moreFontsExpanded}}" class="timeline-more-fonts" bindtap="handleExpandFonts">更多字体</button></view><text wx:if="{{fontMessage}}" class="timeline-help">{{fontMessage}}</text>
-          <view class="timeline-fonts"><view wx:for="{{fonts}}" wx:key="value" wx:if="{{!item.remote || moreFontsExpanded || item.value === fontValue}}" class="timeline-font {{item.value === fontValue ? 'selected' : ''}} {{!item.available ? 'disabled' : ''}}" data-value="{{item.value}}" bindtap="handleFont" aria-role="radio" aria-checked="{{item.value === fontValue}}" aria-disabled="{{!item.available}}"><text class="timeline-font-name">{{item.label}}</text><text wx:if="{{item.languageLabel}}" class="timeline-font-language">{{item.languageLabel}}</text><image wx:if="{{item.previewImageUrl}}" class="timeline-font-preview" src="{{item.previewImageUrl}}" mode="widthFix" /><text wx:else class="timeline-font-sample {{item.fontClass}}">{{item.sample}}</text><text wx:if="{{!item.available}}" class="timeline-help">{{item.value === fontValue ? '已保存字体保留，当前设备以系统字体预览' : '当前设备不可用'}}</text></view></view>
-        </view>
-        <view class="timeline-field-group"><view class="timeline-label-row"><text class="timeline-label">字号</text><view class="timeline-stepper"><button data-delta="-1" bindtap="handleFontSizeStep" disabled="{{effectiveStyle.fontSizeRpx <= 10}}" aria-label="减小字号">−</button><input type="number" value="{{effectiveStyle.fontSizeRpx}}" bindinput="handleFontSize" aria-label="字号，10 至 96 rpx" /><text>rpx</text><button data-delta="1" bindtap="handleFontSizeStep" disabled="{{effectiveStyle.fontSizeRpx >= 96}}" aria-label="增大字号">＋</button></view></view><text class="timeline-help">10–96 rpx · 每次 1 rpx · 可输入整数</text></view>
-        <view class="timeline-field-group"><text class="timeline-label">文字颜色</text><text-color-editor color="{{effectiveStyle.color}}" active="{{visible && styleDetail}}" theme-mode="{{theme}}" background-color="{{backgroundColor}}" bindchange="handleColor" /><view class="timeline-link" bindtap="handleAutoColor" aria-role="button">颜色跟随主题</view></view>
-        <view class="timeline-reset-options"><view data-field="font" bindtap="handleResetStyle" aria-role="button">恢复字体继承</view><view data-field="fontSizeRpx" bindtap="handleResetStyle" aria-role="button">恢复字号继承</view><view data-field="color" bindtap="handleResetStyle" aria-role="button">恢复颜色继承</view></view><view class="timeline-link" bindtap="handleResetStyle" aria-role="button">{{styleScope === 'component' ? '恢复默认样式' : '恢复统一样式'}}</view>
-      </view>
-      <text wx:if="{{!styleDetail}}" class="timeline-help timeline-total">总文字 {{count}} / 6000 · 节点 {{draft.nodes.length}} / 20</text><text wx:if="{{error}}" class="timeline-error">{{error}}</text>
+      </scroll-view>
     </view>
-  </scroll-view>
+    <view class="timeline-editor-panel timeline-node-panel {{nodeDetail && !styleDetail && tab === 'content' ? 'is-active' : ''}}" aria-hidden="{{!nodeDetail || styleDetail || tab !== 'content'}}">
+      <view class="timeline-node-header">
+        <view class="timeline-node-header-side">
+          <view class="timeline-header-back" bindtap="handleBackNodes" hover-class="timeline-header-back-pressed" hover-stay-time="100" aria-role="button" aria-label="返回节点列表">
+            <view class="timeline-header-back-circle"><view class="timeline-header-back-icon" aria-hidden="true"></view></view>
+          </view>
+        </view>
+        <text class="timeline-node-header-title">编辑节点{{node.nodeKey ? ' ' + (nodeIndex + 1) : ''}}</text>
+        <view class="timeline-node-header-side timeline-node-header-meta"><text wx:if="{{node.nodeKey}}" class="timeline-meta">{{nodeIndex + 1}} / {{draft.nodes.length}}</text></view>
+      </view>
+      <scroll-view class="timeline-editor-scroll" scroll-y scroll-top="{{nodeScrollTop}}" data-panel="node" bindscroll="handleEditorScroll" type="list">
+        <view class="timeline-editor-body">
+          <view wx:if="{{node.nodeKey}}" class="timeline-editor-content">
+            <view class="timeline-field-group">
+              <text class="timeline-label">节点标记</text>
+              <view class="timeline-options timeline-precision-options"><view wx:for="{{precisions}}" wx:key="value" class="timeline-option {{node.datePrecision === item.value ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="handlePrecision">{{item.label}}</view></view>
+              <view wx:if="{{node.datePrecision !== 'CUSTOM'}}" class="timeline-date-inputs">
+                <view class="timeline-date-part"><text class="timeline-date-label">年</text><input disabled="{{!nodeDetail || styleDetail || tab !== 'content'}}" class="timeline-input" type="number" value="{{dates.year}}" data-field="year" data-node-key="{{node.nodeKey}}" bindinput="handleDate" bindblur="handleDateBlur" placeholder="输入年份" placeholder-class="timeline-placeholder" /></view>
+                <view wx:if="{{node.datePrecision !== 'YEAR'}}" class="timeline-date-part"><text class="timeline-date-label">月</text><input disabled="{{!nodeDetail || styleDetail || tab !== 'content'}}" class="timeline-input" type="number" value="{{dates.month}}" data-field="month" data-node-key="{{node.nodeKey}}" bindinput="handleDate" bindblur="handleDateBlur" placeholder="月" placeholder-class="timeline-placeholder" /></view>
+                <view wx:if="{{node.datePrecision === 'DAY'}}" class="timeline-date-part"><text class="timeline-date-label">日</text><input disabled="{{!nodeDetail || styleDetail || tab !== 'content'}}" class="timeline-input" type="number" value="{{dates.day}}" data-field="day" data-node-key="{{node.nodeKey}}" bindinput="handleDate" bindblur="handleDateBlur" placeholder="日" placeholder-class="timeline-placeholder" /></view>
+              </view>
+              <view wx:else><view class="timeline-label-row timeline-custom-label-row"><text class="timeline-label">自定义标签</text><text class="timeline-help">{{customDateCount}} / {{maxCustomLabelLength}}</text></view><input disabled="{{!nodeDetail || styleDetail || tab !== 'content'}}" class="timeline-input" value="{{customDate}}" maxlength="-1" data-node-key="{{node.nodeKey}}" bindinput="handleCustomDate" placeholder="如：筹备期、至今、未来" placeholder-class="timeline-placeholder" /><text class="timeline-help">最多 20 个字符，原样显示在节点日期的位置。</text></view>
+              <view class="timeline-date-preview {{datePreviewValid ? '' : 'timeline-date-pending'}}"><text>展示为：</text><text class="timeline-date-value">{{datePreview}}</text></view><text class="timeline-help">日期和自定义标签可以混用，按列表顺序展示。切换类型会保留本次编辑的输入。</text>
+            </view>
+            <view class="timeline-field-group"><text class="timeline-label">节点标题</text><input disabled="{{!nodeDetail || styleDetail || tab !== 'content'}}" class="timeline-input" value="{{node.title}}" maxlength="-1" data-field="title" bindinput="handleNodeField" placeholder="给这段经历一个名字" placeholder-class="timeline-placeholder" /><text class="timeline-help">最多 60 字</text></view>
+            <view class="timeline-field-group"><text class="timeline-label">内容描述</text><textarea disabled="{{!nodeDetail || styleDetail || tab !== 'content'}}" class="timeline-textarea" value="{{node.description}}" maxlength="-1" auto-height data-field="description" bindinput="handleNodeField" placeholder="记录这段经历……" placeholder-class="timeline-placeholder" /><text class="timeline-help">最多 1000 字；标题和描述至少填写一项。</text></view>
+            <view class="timeline-field-group"><text class="timeline-label">当前节点文字样式</text><view class="timeline-style-entries"><view wx:for="{{nodeStyleEntries}}" wx:key="value" class="timeline-style-entry" data-scope="node" data-role="{{item.value}}" bindtap="handleEditTextStyle" aria-role="button"><text>{{item.label}}</text><text class="timeline-entry-summary">{{item.summary}}</text><text class="timeline-chevron">›</text></view></view><text class="timeline-help">默认跟随统一样式，单独修改只影响当前节点。</text></view>
+            <button class="timeline-delete" bindtap="handleRemoveNode">删除这个节点</button>
+          </view>
+          <text class="timeline-help timeline-total">总文字 {{count}} / 6000 · 节点 {{draft.nodes.length}} / 20</text><text wx:if="{{error}}" class="timeline-error">{{error}}</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
   <view wx:if="{{styleDetail}}" class="timeline-editor-footer"><button bindtap="handleCancelTextStyle">取消</button><button class="timeline-confirm" bindtap="handleSaveTextStyle">保存样式</button></view>
   <view wx:else class="timeline-editor-footer"><button bindtap="handleCancel" disabled="{{!!draggingKey}}">取消</button><button class="timeline-confirm" bindtap="handleConfirm" disabled="{{!!draggingKey}}">完成</button></view>
 </view>

@@ -111,7 +111,7 @@ const EXPECTED_SHEET_TIERS = {
   'pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml': {
     backgroundColorSheetVisible: 'compact',
     componentSheetVisible: 'compact',
-    componentEditSheetVisible: 'long',
+    "componentEditSheetVisible && selectedComponentType !== 'TIMELINE'": 'long',
     profileTagDialogVisible: 'compact'
   }
 }
@@ -657,7 +657,7 @@ test('mock portfolio editor and profile tag dialog consume shared sheets without
   assert.doesNotMatch(wxml, /class="input pe-page-field"/)
   assertNoLegacyChoiceStateClasses(wxml, 'Mock 作品集编辑器')
   assertLongSheetScrollContracts(wxml, {
-    componentEditSheetVisible: 'mock-component-edit-scroll'
+    "componentEditSheetVisible && selectedComponentType !== 'TIMELINE'": 'mock-component-edit-scroll'
   }, 'pages/mock/portfolio-standard-edit/portfolio-standard-edit.wxml')
   assert.ok(classTokenCount(wxml, 'pe-sheet-actions') >= 3)
   assert.ok(classTokenCount(wxml, 'pe-sheet-action-cancel') >= 3)

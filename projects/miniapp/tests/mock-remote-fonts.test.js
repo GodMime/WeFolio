@@ -344,3 +344,130 @@ test('Mock 字体迟到回调不重置预览菜单和作品分组', () => {
   assert.equal(page.data.portfolio.activeMenuKey,target.key)
   assert.equal(page.data.portfolio.activeComponents.find(item=>item.componentKey===component.componentKey).activeGroup.groupKey,groupKey)
 })
+
+test('Mock 时间轴字体候选取消不落根版本，迟到回调不污染下一会话，确认后预览使用本地字体', async () => {
+  const { presentTimeline } = require('../pages/mock/utils/mock-portfolio-timeline')
+  const version = 'gf-809e4d8b8d7e-r1'
+  const localCatalog = [{ ...catalog[0], fontVersion: version }]
+  const calls = [], storage = new Map()
+  const previousWx = global.wx
+  const forbidden = () => { throw new Error('时间轴体验不允许调用后端或登录') }
+  global.wx = {
+    request: forbidden, uploadFile: forbidden, login: forbidden,
+    getStorageSync: key => storage.get(key),
+    setStorageSync(key, value) { assert.match(key, /^wefolio_mock_portfolio_draft/); storage.set(key, structuredClone(value)) },
+    loadFontFace(options) { calls.push(options) }, showToast() {}, navigateTo() {}
+  }
+  let page, preview
+  try {
+    page = loadPage('portfolio-standard-edit')
+    page.onLoad()
+    page.mockFontSession.destroy()
+    page.mockFontSession = createMockFontSession({ catalog: localCatalog, wxApi: wx, onChange: () => page.refreshMockFonts(false) })
+    const initial = structuredClone(page.data.draft.config)
+    page.handleSelectComponent({ currentTarget: { dataset: { type: 'TIMELINE' } } })
+    const oldSession = page.data.mockTimelineSessionId
+    const candidate = structuredClone(page.data.complexConfig)
+    candidate.title = 'My Journey'
+    candidate.nodes[0] = { ...candidate.nodes[0], date: '2026', title: 'First Story', description: 'A timeless moment' }
+    candidate.textStyles = { heading: { fontFamily: 'SYSTEM', fontId: 'ALLURA' }, description: { fontFamily: 'SYSTEM', fontId: 'ALLURA' } }
+    page.handleTimelineFontSelect({ detail: { fontId: 'ALLURA', sessionId: oldSession } })
+    page.handleTimelineFontDraft({ detail: { config: candidate, sessionId: oldSession } })
+    assert.equal(page.mockCandidateVersions.ALLURA.fontVersion, version)
+    assert.equal(page.data.draft.config.fonts, undefined)
+    assert.equal(calls.length, 1)
+    page.handleCloseComponentEditSheet()
+    calls[0].success()
+    await Promise.resolve()
+    assert.deepEqual(page.data.draft.config, initial)
+    assert.equal(page.mockCandidateVersions, null)
+    assert.equal(storage.size, 0)
+
+    page.handleSelectComponent({ currentTarget: { dataset: { type: 'TIMELINE' } } })
+    const sessionId = page.data.mockTimelineSessionId
+    const key = page.data.selectedComponentKey
+    page.handleTimelineFontSelect({ detail: { fontId: 'ALLURA', sessionId: oldSession } })
+    page.handleTimelineFontDraft({ detail: { config: candidate, sessionId: oldSession } })
+    assert.equal(page.mockCandidateVersions.ALLURA, undefined)
+    assert.equal(page.data.complexConfig.title, '我的历程')
+    page.handleTimelineFontSelect({ detail: { fontId: 'ALLURA', sessionId } })
+    page.handleTimelineFontDraft({ detail: { config: candidate, sessionId } })
+    page.handleTimelineConfirm({ detail: candidate })
+    assert.equal(page.data.componentEditSheetVisible, false)
+    assert.equal(page.data.draft.config.fonts.ALLURA.fontVersion, version)
+    assert.equal(calls.length, 1, '页面已加载的静态字体在重开编辑时复用')
+    page.handlePreview()
+
+    preview = loadPage('portfolio-standard-preview')
+    preview.mockFontSession = createMockFontSession({ catalog: localCatalog, wxApi: wx, onChange: () => preview.refreshMockFontRender() })
+    preview.refreshPreview()
+    assert.equal(calls.length, 2, '预览使用独立页面字体会话')
+    calls[1].success()
+    await Promise.resolve()
+    preview.refreshMockFontRender()
+    const component = preview.data.portfolio.components.find(item => item.componentKey === key)
+    assert.equal(component.fontContext.versions.ALLURA.fontVersion, version)
+    const view = presentTimeline(component.config, component.ownerType, preview.data.portfolio.themeMode, component.backgroundColor, component.fontContext)
+    assert.match(view.headingStyle, /WF_MOCK_/)
+    assert.match(view.nodes[0].descriptionStyle, /WF_MOCK_/)
+    assert.equal(storage.size, 1)
+  } finally {
+    if (page) page.onUnload()
+    if (preview && preview.mockFontSession) preview.mockFontSession.destroy()
+    if (previousWx === undefined) delete global.wx
+    else global.wx = previousWx
+  }
+})
+
+test('Mock 时间轴预览冷启动内置字体完成后刷新布局版本，保持交互状态且卸载后不回写', async () => {
+  const mock = require('../pages/mock/utils/mock-experience')
+  const previousWx = global.wx
+  const callbacks = []
+  const sample = mock.getMockPortfolioDraft()
+  sample.config.components.find(item => item.componentType === 'TIMELINE').config.textStyles = {
+    heading: { fontFamily: 'WECHAT_SANS_SS' }
+  }
+  global.wx = {
+    getStorageSync: () => structuredClone(sample),
+    loadBuiltInFontFace(options) { callbacks.push(options) },
+    createVideoContext: () => ({ pause() {} }),
+    getWindowInfo: () => ({ windowWidth: 375, windowHeight: 812 })
+  }
+  const pages = []
+  try {
+    const page = loadPage('portfolio-standard-preview')
+    pages.push(page)
+    page.onLoad(); page.onShow()
+    await Promise.resolve()
+    const initialTimeline = page.data.portfolio.activeComponents.find(item => item.componentType === 'TIMELINE')
+    const initialRevision = initialTimeline.fontContext.revision || 0
+    const activeMenuKey = page.data.portfolio.activeMenuKey
+    const workGrid = page.data.portfolio.bottomNav.items[1].components.find(item => item.componentType === 'WORK_GRID')
+    workGrid.activeGroup = { groupKey: 'local-selection', works: [] }
+    page.data.activeSingleWorkVideoKey = 'playing-local-video'
+    callbacks[0].success()
+    await Promise.resolve()
+    const loadedTimeline = page.data.portfolio.activeComponents.find(item => item.componentType === 'TIMELINE')
+    assert.ok(loadedTimeline.fontContext.revision > initialRevision, '字体完成必须触发时间轴属性观察器重新测量')
+    assert.equal(page.data.portfolio.activeMenuKey, activeMenuKey)
+    assert.equal(page.data.portfolio.bottomNav.items[1].components.find(item => item.componentType === 'WORK_GRID').activeGroup.groupKey, 'local-selection')
+    assert.equal(page.data.activeSingleWorkVideoKey, 'playing-local-video')
+    assert.equal(loadedTimeline.config.textStyles.heading.fontFamily, 'WECHAT_SANS_SS')
+
+    const disposed = loadPage('portfolio-standard-preview')
+    pages.push(disposed)
+    disposed.onLoad(); disposed.onShow()
+    await Promise.resolve()
+    disposed.onUnload()
+    const snapshot = structuredClone(disposed.data)
+    const revision = disposed.mockBuiltInFontRevision
+    callbacks[1].success()
+    await Promise.resolve()
+    assert.deepEqual(disposed.data, snapshot)
+    assert.equal(disposed.mockBuiltInFontRevision, revision)
+  } finally {
+    pages.forEach(page => { if (!page.mockPreviewDisposed) page.onUnload() })
+    if (previousWx === undefined) delete global.wx
+    else global.wx = previousWx
+  }
+})

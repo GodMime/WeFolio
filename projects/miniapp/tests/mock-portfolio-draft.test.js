@@ -57,10 +57,10 @@ test('revision2草稿无损升级且不插入新组件', () => {
   assert.equal(result.backgroundAudio.enabled,false)
   assert.equal(before.editorSchemaRevision,2)
 })
-test('默认覆盖15类，未知组件保留并使用明确占位', () => {
+test('默认覆盖16类，未知组件保留并使用明确占位', () => {
   const draft = mock.buildStandardPortfolio()
   const components = draft.config.components.concat(...draft.config.bottomNav.items.slice(1).map(x=>x.components))
-  assert.equal(new Set(components.map(x=>x.componentType)).size,15)
+  assert.equal(new Set(components.map(x=>x.componentType)).size,16)
   const render = mock.buildMockPortfolioRenderData({components:[{componentKey:'unknown',componentType:'FUTURE',config:{foo:1}}]})
   assert.equal(render.components[0].unsupported,true)
   assert.equal(render.components[0].contactForm,undefined)

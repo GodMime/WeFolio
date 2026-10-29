@@ -112,6 +112,40 @@ test('mock 颜色编辑器只依赖自身目录的纯颜色工具', () => {
   assert.deepEqual(dependencies, ['./text-color'])
 })
 
+test('mock 颜色预览跟随作品集背景，切换背景不改变未确认 HEX 或外部颜色', () => {
+  const harness = loadComponent('components/mock/text-color-editor/text-color-editor.js', {
+    color: '#123456', themeMode: 'dark', backgroundColor: '#202327'
+  })
+  const { definition, instance, events } = harness
+  definition.lifetimes.attached.call(instance)
+  assert.equal(instance.data.previewBackground, '#202327')
+  harness.run(() => instance.handleOpenCustom())
+  harness.tick()
+  instance.handleHexInput({ detail: { value: '#abcdef' } })
+  harness.property('backgroundColor', '#aabbcc')
+  assert.equal(instance.data.previewBackground, '#AABBCC')
+  assert.equal(instance.data.hexInput, '#ABCDEF')
+  assert.equal(instance.data.selectedColor, '#123456')
+  assert.equal(instance.data.pickerVisible, true)
+  assert.deepEqual(events, [])
+  harness.property('backgroundColor', 'invalid')
+  assert.equal(instance.data.previewBackground, '#FFFFFF')
+  harness.run(() => instance.handleConfirmCustom())
+  assert.deepEqual(events, [{ name: 'change', detail: { color: '#ABCDEF' } }])
+})
+
+test('mock 颜色编辑器的深色样式和预览结构与正式版一致，默认仍为浅色', () => {
+  const { definition, instance } = loadComponent('components/mock/text-color-editor/text-color-editor.js')
+  definition.lifetimes.attached.call(instance)
+  assert.equal(instance.properties.themeMode, 'light')
+  assert.equal(instance.data.previewBackground, '#FFFFFF')
+  for (const extension of ['wxml', 'wxss']) {
+    const filename = `text-color-editor.${extension}`
+    assert.equal(fs.readFileSync(path.join(MINIAPP_ROOT, 'components/mock/text-color-editor', filename), 'utf8'),
+      fs.readFileSync(path.join(MINIAPP_ROOT, 'pages/portfolios/components/text-color-editor', filename), 'utf8'))
+  }
+})
+
 test('mock 联系信息编辑器用颜色组件映射边框颜色并忽略关闭后的迟到事件', () => {
   const markupPath = path.join(MINIAPP_ROOT, 'components/mock/contact-info-editor/contact-info-editor.wxml')
   const manifestPath = path.join(MINIAPP_ROOT, 'components/mock/contact-info-editor/contact-info-editor.json')

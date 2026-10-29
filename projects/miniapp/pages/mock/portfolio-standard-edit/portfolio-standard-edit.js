@@ -41,8 +41,9 @@ const { createMockAudioController } = require('../utils/mock-portfolio-audio')
 const textTools = require('../utils/mock-portfolio-text')
 const { createMockFontSession, collectMockFontNodes } = require('../utils/mock-portfolio-fonts')
 const gridTools = require('../utils/mock-portfolio-text-grid')
+const { timelineSummary } = require('../utils/mock-portfolio-timeline')
 const { MOCK_CONTACT_PROFILE } = require('../utils/mock-portfolio-hyperlink')
-const COMPLEX_TYPES = ['VIDEO_CAROUSEL','STRUCTURED_TEXT_SECTION','TEXT_GRID','CONTACT_INFO','HYPERLINK']
+const COMPLEX_TYPES = ['VIDEO_CAROUSEL','STRUCTURED_TEXT_SECTION','TEXT_GRID','CONTACT_INFO','HYPERLINK','TIMELINE']
 const PROFILE_TAG_COLOR_OPTIONS = [
   {
     name: '青绿',
@@ -217,6 +218,7 @@ function findConfig(component) {
 }
 
 function getComponentSummary(component, workIds) {
+  if (component.componentType === 'TIMELINE') return timelineSummary(component.config)
   if (component.componentType === 'PROFILE') {
     return trimText(component.config && component.config.profile && component.config.profile.displayName) || '个人资料'
   }
@@ -413,6 +415,7 @@ Page({
     componentOptions: MOCK_COMPONENT_OPTIONS,
     componentSheetVisible: false,
     componentEditSheetVisible: false,
+    mockTimelineSessionId: 0,
     editScrollTop: 0,
     previewReturnPending: false,
     previewVersionMenu: null,
@@ -555,6 +558,35 @@ Page({
     // 网格第一个字体动作前记录原根表，撤销能够恢复旧版本。
     if(this.data.selectedComponentType==='TEXT_GRID'&&!this.gridHistory)this.gridHistory=gridTools.createMockGridHistory(this.data.complexConfig,this.mockCandidateVersions || this.data.draft.config.fonts || {})
     this.mockCandidateVersions=this.mockFontSession.versions({fontId},this.mockCandidateVersions || this.data.draft.config.fonts || {})
+  },
+
+  /** 时间轴候选只在当前编辑会话内生效，取消后迟到的字体事件不能回写。 */
+  isActiveTimelineEvent(event) {
+    return !this.mockFontDisposed && this.data.componentEditSheetVisible &&
+      this.data.selectedComponentType === 'TIMELINE' && event.detail &&
+      event.detail.sessionId === this.data.mockTimelineSessionId
+  },
+
+  handleTimelineFontDraft(event) {
+    if (!this.isActiveTimelineEvent(event) || !event.detail.config) return
+    const config = JSON.parse(JSON.stringify(event.detail.config))
+    if (this.mockFontSession) {
+      this.mockCandidateVersions = this.mockFontSession.versions(config,
+        this.mockCandidateVersions || this.data.draft.config.fonts || {})
+    }
+    this.setData({ complexConfig: config, complexError: '' })
+    this.refreshMockFonts()
+  },
+
+  handleTimelineFontSelect(event) {
+    if (!this.isActiveTimelineEvent(event)) return
+    this.handleMockFontSelect(event)
+    this.refreshMockFonts()
+  },
+
+  handleTimelineConfirm(event) {
+    if (!this.data.componentEditSheetVisible || this.data.selectedComponentType !== 'TIMELINE') return
+    this.handleConfirmComponentEditSheet({ detail: { config: event.detail } })
   },
 
   handleMockFontRepair(event) {
@@ -798,7 +830,8 @@ Page({
     this.setData({mockFontsExpanded:false})
     this.componentEditSnapshot = JSON.parse(JSON.stringify(this.data.draft))
     this.setDraftState(this.data.draft, componentKey, {
-      componentEditSheetVisible: true
+      componentEditSheetVisible: true,
+      mockTimelineSessionId: this.data.mockTimelineSessionId + 1
     })
   },
 
@@ -1127,6 +1160,7 @@ Page({
     this.setDraftState(draft, addedComponent.componentKey, {
       componentSheetVisible: false,
       componentEditSheetVisible: true,
+      mockTimelineSessionId: this.data.mockTimelineSessionId + 1,
       revealedComponentKey: ''
     })
   },

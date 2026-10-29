@@ -50,7 +50,7 @@ const COMPONENT_TYPES = {
   QR_CONTACT: 'QR_CONTACT',
   CONTACT_FORM: 'CONTACT_FORM',
   TEXT_SECTION: 'TEXT_SECTION',
-  DIVIDER: 'DIVIDER', VIDEO_CAROUSEL:'VIDEO_CAROUSEL', STRUCTURED_TEXT_SECTION:'STRUCTURED_TEXT_SECTION', TEXT_GRID:'TEXT_GRID', CONTACT_INFO:'CONTACT_INFO', HYPERLINK:'HYPERLINK'
+  DIVIDER: 'DIVIDER', VIDEO_CAROUSEL:'VIDEO_CAROUSEL', STRUCTURED_TEXT_SECTION:'STRUCTURED_TEXT_SECTION', TEXT_GRID:'TEXT_GRID', CONTACT_INFO:'CONTACT_INFO', HYPERLINK:'HYPERLINK', TIMELINE:'TIMELINE'
 }
 const COMPONENT_NAMES = {
   CAROUSEL: '轮播图',
@@ -62,7 +62,7 @@ const COMPONENT_NAMES = {
   QR_CONTACT: '二维码联系',
   CONTACT_FORM: '预留联系信息',
   TEXT_SECTION: '文字说明',
-  DIVIDER: '分割线', VIDEO_CAROUSEL:'视频轮播', STRUCTURED_TEXT_SECTION:'结构化文字', TEXT_GRID:'文字网格', CONTACT_INFO:'联系信息', HYPERLINK:'超链接'
+  DIVIDER: '分割线', VIDEO_CAROUSEL:'视频轮播', STRUCTURED_TEXT_SECTION:'结构化文字', TEXT_GRID:'文字网格', CONTACT_INFO:'联系信息', HYPERLINK:'超链接', TIMELINE:'时间轴'
 }
 const MOCK_COMPONENT_DESCRIPTIONS = {
   CAROUSEL: '展示已选择的图片作品',
@@ -74,7 +74,7 @@ const MOCK_COMPONENT_DESCRIPTIONS = {
   QR_CONTACT: '展示二维码联系方式',
   CONTACT_FORM: '收集访客预留联系信息',
   TEXT_SECTION: '添加服务说明文字',
-  DIVIDER: '分隔不同内容区块', VIDEO_CAROUSEL:'滑动展示视频作品', STRUCTURED_TEXT_SECTION:'自由编排文字区块', TEXT_GRID:'合并与编排文字网格', CONTACT_INFO:'复制演示联系信息', HYPERLINK:'图片入口与本地跳转'
+  DIVIDER: '分隔不同内容区块', VIDEO_CAROUSEL:'滑动展示视频作品', STRUCTURED_TEXT_SECTION:'自由编排文字区块', TEXT_GRID:'合并与编排文字网格', CONTACT_INFO:'复制演示联系信息', HYPERLINK:'图片入口与本地跳转', TIMELINE:'记录历程与重要时刻'
 }
 const MOCK_COMPONENT_SORT_ORDER_STEP = 1000
 const MOCK_SINGLE_WORK_MEDIA_WIDTH_RPX = 710
@@ -102,7 +102,7 @@ const MOCK_COMPONENT_KEY_PREFIXES = {
   QR_CONTACT: 'mock_qr_contact',
   CONTACT_FORM: 'mock_contact_form',
   TEXT_SECTION: 'mock_text_section',
-  DIVIDER: 'mock_divider', VIDEO_CAROUSEL:'mock_video_carousel', STRUCTURED_TEXT_SECTION:'mock_structured_text', TEXT_GRID:'mock_text_grid', CONTACT_INFO:'mock_contact_info', HYPERLINK:'mock_hyperlink'
+  DIVIDER: 'mock_divider', VIDEO_CAROUSEL:'mock_video_carousel', STRUCTURED_TEXT_SECTION:'mock_structured_text', TEXT_GRID:'mock_text_grid', CONTACT_INFO:'mock_contact_info', HYPERLINK:'mock_hyperlink', TIMELINE:'mock_timeline'
 }
 const MOCK_COMPONENT_DEFAULT_CONFIGS = {
   CAROUSEL: {
@@ -718,7 +718,7 @@ const MOCK_PORTFOLIO_CONFIG = {
 }
 
 
-const MOCK_DEMO_HOME_TYPES = ['TEXT_SECTION','STRUCTURED_TEXT_SECTION','TEXT_GRID','DIVIDER','CONTACT_INFO','QR_CONTACT']
+const MOCK_DEMO_HOME_TYPES = ['TEXT_SECTION','STRUCTURED_TEXT_SECTION','TEXT_GRID','TIMELINE','DIVIDER','CONTACT_INFO','QR_CONTACT']
 const MOCK_DEMO_WORK_TYPES = ['VIDEO_CAROUSEL','SINGLE_WORK','WORK_LIST','HYPERLINK']
 function createMockDemoComponent(type,index) {
   const config = clone(MOCK_COMPONENT_DEFAULT_CONFIGS[type] || createMockComponentConfig(type))
@@ -726,6 +726,13 @@ function createMockDemoComponent(type,index) {
   if (type === 'TEXT_GRID') {
     const labels = ['婚礼纪实', '自然光影', '温暖叙事', '用心记录']
     config.cells.forEach((cell,index) => {cell.blocks[0].runs[0].text = labels[index] || ''})
+  }
+  if (type === COMPONENT_TYPES.TIMELINE) {
+    config.nodes = [
+      { nodeKey: 'mock_timeline_start', datePrecision: 'YEAR', date: '2018', title: '开始记录', description: '从第一次婚礼拍摄出发，记录每一份真挚的情感。' },
+      { nodeKey: 'mock_timeline_growth', datePrecision: 'MONTH', date: '2022-06', title: '一路成长', description: '与更多新人相遇，用自然光影讲述独特的故事。' },
+      { nodeKey: 'mock_timeline_future', datePrecision: 'CUSTOM', date: '未来', title: '继续前行', description: '期待下一次相遇，留下值得珍藏的温暖瞬间。' }
+    ]
   }
   return {componentKey:MOCK_COMPONENT_KEY_PREFIXES[type],componentType:type,name:COMPONENT_NAMES[type],sortOrder:(index+1)*1000,enabled:true,config}
 }
@@ -1072,7 +1079,7 @@ function listMockPortfolioComponents(config = {}) {
   return allComponents
 }
 
-function buildMockRenderComponents(sourceComponents = [], allSourceComponents = sourceComponents, themeMode = 'light', fontContext = {}) {
+function buildMockRenderComponents(sourceComponents = [], allSourceComponents = sourceComponents, themeMode = 'light', fontContext = {}, ownerType = 'USER', backgroundColor = MOCK_DEFAULT_BACKGROUND_COLOR) {
   return sourceComponents
     .filter((component) => component.enabled !== false)
     .map(normalizeComponentConfig)
@@ -1184,6 +1191,13 @@ function buildMockRenderComponents(sourceComponents = [], allSourceComponents = 
         try { return Object.assign(base,{viewModel:require('./mock-portfolio-text-grid').buildMockGridViewModel(componentConfig,themeMode,undefined,{},fontContext)}) }
         catch(error) { return Object.assign(base,{unsupported:true,errorMessage:'文字网格配置暂不可用，请重新编辑'}) }
       }
+      if (component.componentType === COMPONENT_TYPES.TIMELINE) {
+        const timeline = require('./mock-portfolio-timeline')
+        if (timeline.validateTimeline(componentConfig, { allowIncomplete: true })) {
+          return Object.assign(base, { unsupported: true, errorMessage: '时间轴配置暂不可用，请重新编辑' })
+        }
+        return Object.assign(base, { config: timeline.normalizeTimeline(componentConfig), ownerType, backgroundColor, fontContext: clone(fontContext) })
+      }
       if (component.componentType === 'CONTACT_INFO') return base
       if (component.componentType === 'HYPERLINK') return Object.assign(base,{work:findWorksByIds([componentConfig.workId]).find(work=>['IMAGE','ANIMATION'].includes(work.mediaType)) || null})
       return Object.assign(base,{unsupported:true})
@@ -1196,7 +1210,8 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG, fontContex
   const allSourceComponents = listMockPortfolioComponents(sourceConfig)
   const backgroundColor = sourceConfig.style.backgroundColor
   const themeMode = getMockThemeMode(backgroundColor)
-  const components = buildMockRenderComponents(sourceComponents, allSourceComponents,themeMode,fontContext)
+  const ownerType = sourceConfig.ownerType === 'TEAM' ? 'TEAM' : 'USER'
+  const components = buildMockRenderComponents(sourceComponents, allSourceComponents,themeMode,fontContext,ownerType,backgroundColor)
   const bottomNav = sourceConfig.bottomNav.enabled
     ? {
         enabled: true,
@@ -1206,7 +1221,7 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG, fontContex
             title: item.title
           }
           if (index > 0) {
-            renderedItem.components = buildMockRenderComponents(item.components || [], allSourceComponents,themeMode,fontContext)
+            renderedItem.components = buildMockRenderComponents(item.components || [], allSourceComponents,themeMode,fontContext,ownerType,backgroundColor)
           }
           return renderedItem
         })
@@ -1215,6 +1230,7 @@ function buildMockPortfolioRenderData(config = MOCK_PORTFOLIO_CONFIG, fontContex
 
   return {
     preview: true,
+    ownerType,
     shareCode: 'MOCK9001',
     title: sourceConfig.share && sourceConfig.share.title ? sourceConfig.share.title : '风景标准个人作品集',
     share: Object.assign({}, sourceConfig.share || {}),
@@ -1263,6 +1279,10 @@ function buildPublishedMockSample(metadata, scope) {
     publishedRevision: 1
   })
   sample.config.share.title = metadata.title
+  sample.config.ownerType = metadata.ownerType
+  if (metadata.ownerType === 'TEAM') {
+    sample.config.components.find(component => component.componentType === COMPONENT_TYPES.TIMELINE).config.title = '团队里程碑'
+  }
   sample.config.share.coverUrl = metadata.coverUrl
   const profile = sample.config.components.find(component => component.componentType === COMPONENT_TYPES.PROFILE)
   profile.config.profile.displayName = metadata.teamName || '映期婚礼纪实'
@@ -1323,17 +1343,17 @@ function buildMockComponentKey(components = [], componentType) {
   return `${prefix}_${maxIndex + 1}`
 }
 
-function buildMockComponent(componentType, existingComponents = []) {
+function buildMockComponent(componentType, existingComponents = [], ownerType = 'USER') {
   const resolvedType = resolveMockComponentType(componentType)
   const option = MOCK_COMPONENT_OPTIONS.find((item) => item.componentType === resolvedType) || MOCK_COMPONENT_OPTIONS[0]
-  const template = MOCK_PORTFOLIO_CONFIG.components.find((component) => component.componentType === resolvedType)
+  const template = resolvedType === COMPONENT_TYPES.TIMELINE ? null : MOCK_PORTFOLIO_CONFIG.components.find((component) => component.componentType === resolvedType)
   const component = template
     ? clone(template)
     : {
         componentType: resolvedType,
         name: option.name,
         enabled: true,
-        config: clone(MOCK_COMPONENT_DEFAULT_CONFIGS[resolvedType] || createMockComponentConfig(resolvedType))
+        config: clone(MOCK_COMPONENT_DEFAULT_CONFIGS[resolvedType] || createMockComponentConfig(resolvedType, ownerType))
       }
   return Object.assign({}, component, {
     componentKey: buildMockComponentKey(existingComponents, resolvedType),
@@ -1346,6 +1366,7 @@ function buildMockComponent(componentType, existingComponents = []) {
 function cloneMockDraft(portfolioDraft) {
   const nextDraft = Object.assign({}, clone(portfolioDraft || MOCK_STANDARD_PORTFOLIO))
   nextDraft.config = normalizeMockPortfolioConfig(nextDraft.config)
+  nextDraft.config.ownerType = nextDraft.portfolio && nextDraft.portfolio.ownerType === 'TEAM' ? 'TEAM' : nextDraft.config.ownerType || 'USER'
   return nextDraft
 }
 
@@ -1373,7 +1394,7 @@ function addMockComponent(portfolioDraft, componentType, menuKey) {
   const allComponents = listMockPortfolioComponents(nextDraft.config)
   return applyMockComponentOrder(
     nextDraft,
-    components.concat(buildMockComponent(componentType, allComponents)),
+    components.concat(buildMockComponent(componentType, allComponents, nextDraft.config.ownerType)),
     menuKey
   )
 }
@@ -1515,7 +1536,9 @@ function getMockPortfolioDraft(portfolioId = MOCK_PORTFOLIO_ID) {
   try {
     const storedDraft = runtimeWx.getStorageSync(getMockPortfolioStorageKey(sampleId))
     if (storedDraft && storedDraft.config && Array.isArray(storedDraft.config.components)) {
-      const draft = refreshMockDraftRenderData(storedDraft)
+      const draft = refreshMockDraftRenderData(Object.assign({}, storedDraft, {
+        config: Object.assign({}, storedDraft.config, { ownerType: sample.portfolio.ownerType })
+      }))
       draft.portfolio = sampleId === MOCK_PORTFOLIO_ID
         ? Object.assign({}, sample.portfolio, draft.portfolio || {})
         : clone(sample.portfolio)
@@ -1534,6 +1557,7 @@ function saveMockPortfolioDraft(draft, portfolioId = MOCK_PORTFOLIO_ID) {
   const nextDraft = Object.assign({}, clone(draft || sample))
   if (sample.portfolio.portfolioId !== MOCK_PORTFOLIO_ID) nextDraft.portfolio = clone(sample.portfolio)
   nextDraft.config = normalizeMockPortfolioConfig(nextDraft.config)
+  nextDraft.config.ownerType = sample.portfolio.ownerType
   nextDraft.renderData = buildMockPortfolioRenderData(nextDraft.config)
   delete nextDraft.draftWarning
   const runtimeWx = getRuntimeWx()
@@ -1596,6 +1620,7 @@ function applyMockComponentConfig(draft,componentKey,nextConfig,menuKey) {
   const result = validateMockComponentConfig(component.componentType,nextConfig,MOCK_WORK_LIBRARY.works)
   if (!result.valid) return Object.assign({},result,{draft})
   let config = clone(nextConfig)
+  if (component.componentType === COMPONENT_TYPES.TIMELINE) config = require('./mock-portfolio-timeline').normalizeTimeline(config)
   if(component.componentType === 'HYPERLINK') config = require('./mock-portfolio-hyperlink').normalizeMockHyperlinkConfig(config)
   if(component.componentType === 'CONTACT_INFO') config = require('./mock-portfolio-hyperlink').normalizeMockContactInfoConfig(config)
   if (['TEXT_SECTION','STRUCTURED_TEXT_SECTION'].includes(component.componentType) && !config.backgroundEnabled) delete config.backgroundWorkId

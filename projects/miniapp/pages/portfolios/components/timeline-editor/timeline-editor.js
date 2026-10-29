@@ -9,7 +9,7 @@ const ROLE_LABELS = Object.freeze({ heading: '时间轴标题', date: '节点标
 Component({
   properties: { visible: { type: Boolean, value: false }, config: { type: Object, value: {} }, ownerType: { type: String, value: 'USER' }, themeMode: { type: String, value: '' }, backgroundColor: { type: String, value: '#FFFFFF' },
     fontContext: { type: Object, value: {} }, fontOptions: { type: Array, value: [] }, remoteFontAvailable: { type: Boolean, value: false }, moreFontsExpanded: { type: Boolean, value: false }, fontEditSessionId: { type: Number, value: 0 }, fontMessage: { type: String, value: '' } },
-  data: { draft: {}, tab: 'content', nodeDetail: false, styleDetail: false, styleEntries: [], nodeStyleEntries: [], editorScrollTop: 0, draggingKey: '', dragTargetKey: '', dragStyle: '', nodeIndex: 0, node: {}, dates: {}, customDate: '', customDateCount: 0, maxCustomLabelLength: MAX_CUSTOM_LABEL_CODE_POINTS, datePreview: '', datePreviewValid: false, nodeRows: [], theme: 'light', count: 0, error: '', styleScope: 'component', styleRole: 'heading', stylePatch: {}, effectiveStyle: {}, fontValue: 'SYSTEM', fonts: [],
+  data: { draft: {}, tab: 'content', nodeDetail: false, styleDetail: false, animateNodes: false, styleEntries: [], nodeStyleEntries: [], editorScrollTop: 0, nodeScrollTop: 0, draggingKey: '', dragTargetKey: '', dragStyle: '', nodeIndex: 0, node: {}, dates: {}, customDate: '', customDateCount: 0, maxCustomLabelLength: MAX_CUSTOM_LABEL_CODE_POINTS, datePreview: '', datePreviewValid: false, nodeRows: [], theme: 'light', count: 0, error: '', styleScope: 'component', styleRole: 'heading', stylePatch: {}, effectiveStyle: {}, fontValue: 'SYSTEM', fonts: [],
     variants: Object.keys(VARIANT_LABELS).map(value => ({ value, label: VARIANT_LABELS[value] })), directions: [{ value: 'HORIZONTAL', label: '横向' }, { value: 'VERTICAL', label: '纵向' }],
     precisions: [{ value: 'YEAR', label: '年份' }, { value: 'MONTH', label: '年月' }, { value: 'DAY', label: '年月日' }, { value: 'CUSTOM', label: '自定义' }], roles: [], inherited: true },
   observers: {
@@ -21,7 +21,8 @@ Component({
       this._dates = {}
       this._textStyleSnapshot = null
       this._nodeListScrollTop = 0
-      this.setData({ tab: 'content', nodeDetail: false, styleDetail: false, nodeIndex: 0, styleScope: 'component', styleRole: 'heading', error: '' })
+      this._panelScrollTop = this._panelScrollTop || { main: 0, node: 0 }
+      this.setData({ tab: 'content', nodeDetail: false, styleDetail: false, animateNodes: false, nodeIndex: 0, styleScope: 'component', styleRole: 'heading', error: '' })
       this.refresh(normalizeTimeline(this.properties.config))
       this.setEditorScrollTop(0)
     },
@@ -31,21 +32,26 @@ Component({
   lifetimes: { detached() { this.closeSession() } },
   methods: {
     noop() {},
-    closeSession() { this.clearDrag(); this._session = (this._session || 0) + 1; this._dates = null; this._textStyleSnapshot = null; this._scrollRequest = (this._scrollRequest || 0) + 1; this.setData({ styleDetail: false }) },
+    closeSession() { this.clearDrag(); this._session = (this._session || 0) + 1; this._dates = null; this._textStyleSnapshot = null; this._scrollRequest = (this._scrollRequest || 0) + 1; this.setData({ styleDetail: false, animateNodes: false }) },
     active() { return this.properties.visible && this._dates !== null },
+    activeScrollPanel() { return !this.data.styleDetail && this.data.tab === 'content' && this.data.nodeDetail ? 'node' : 'main' },
     handleEditorScroll(event) {
+      const panel = event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.panel || this.activeScrollPanel()
       const top = Number(event.detail.scrollTop)
-      if (this.active() && Number.isFinite(top)) this._scrollTop = Math.max(0, top)
+      if (!this.active() || panel !== this.activeScrollPanel() || !Number.isFinite(top)) return
+      this._scrollTop = this._panelScrollTop[panel] = Math.max(0, top)
     },
-    /** 先同步实际滚动值，再写目标值，避免相同 scroll-top 无法触发复位。 */
+    /** 仅复位目标面板，保留退场面板的位置；先同步实际值避免相同 scroll-top 无法复位。 */
     setEditorScrollTop(top) {
       const request = this._scrollRequest = (this._scrollRequest || 0) + 1
-      const session = this._session
+      const session = this._session, panel = this.activeScrollPanel()
+      const field = panel === 'node' ? 'nodeScrollTop' : 'editorScrollTop'
       const next = Math.max(0, Number(top) || 0)
-      this.setData({ editorScrollTop: this._scrollTop || 0 }, () => {
-        if (!this.active() || this._session !== session || this._scrollRequest !== request) return
-        this._scrollTop = next
-        this.setData({ editorScrollTop: next })
+      this._scrollTop = next
+      this.setData({ [field]: this._panelScrollTop[panel] || 0 }, () => {
+        if (!this.active() || this._session !== session || this._scrollRequest !== request || this.activeScrollPanel() !== panel) return
+        this._scrollTop = this._panelScrollTop[panel] = next
+        this.setData({ [field]: next })
       })
     },
     refreshFonts() {
@@ -74,7 +80,7 @@ Component({
       this.triggerEvent('fontdraft', { componentType: 'TIMELINE', config: clone(draft), sessionId: this.properties.fontEditSessionId, operation: 'edit' })
     },
     edit(mutator) { if (!this.active()) return; const draft = clone(this.data.draft); mutator(draft); this.refresh(draft); this.setData({ error: validateTimeline(draft, { allowIncomplete: true }) }) },
-    handleTab(event) { if (!this.active() || this.data.styleDetail) return; this.clearDrag(); this.setData({ tab: event.currentTarget.dataset.value }); this.setEditorScrollTop(0) },
+    handleTab(event) { if (!this.active() || this.data.styleDetail) return; this.clearDrag(); this.setData({ tab: event.currentTarget.dataset.value, animateNodes: false }); this.setEditorScrollTop(0) },
     handleField(event) { const { field, value } = event.currentTarget.dataset; this.edit(draft => { draft[field] = value === undefined ? event.detail.value : value }) },
     handleGap(event) { const direction = event.currentTarget.dataset.direction; this.edit(draft => { draft.minGapRpx[direction] = Number(event.detail.value) }) },
     handleNode(event) {
@@ -83,11 +89,11 @@ Component({
       const nodeIndex = key ? this.data.draft.nodes.findIndex(node => node.nodeKey === key) : Number(index)
       if (!Number.isInteger(nodeIndex) || !this.data.draft.nodes[nodeIndex]) return
       this._nodeListScrollTop = this._scrollTop || 0
-      this.setData({ nodeDetail: true, styleDetail: false, nodeIndex })
+      this.setData({ nodeDetail: true, styleDetail: false, animateNodes: true, nodeIndex })
       this.refresh(this.data.draft)
       this.setEditorScrollTop(0)
     },
-    handleBackNodes() { if (!this.active() || this.data.styleDetail) return; this.setData({ nodeDetail: false }); this.setEditorScrollTop(this._nodeListScrollTop) },
+    handleBackNodes() { if (!this.active() || this.data.styleDetail) return; this.setData({ nodeDetail: false, animateNodes: true }); this.setEditorScrollTop(this._nodeListScrollTop) },
     handleNodeField(event) { const field = event.currentTarget.dataset.field; this.edit(draft => { const node = draft.nodes[this.data.nodeIndex]; if (node) node[field] = event.detail.value }) },
     writeDate(node, values) {
       if (node.datePrecision === 'CUSTOM') { node.date = values.customDate || ''; return }
@@ -127,7 +133,7 @@ Component({
       this.edit(draft => this.writeDate(draft.nodes[this.data.nodeIndex], values))
       if (invalidDay) this.setData({ error: '当前日期不存在，请重新选择日' })
     },
-    handleAddNode() { if (!this.active() || this._drag) return; if (this.data.draft.nodes.length >= 20) { this.setData({ error: '时间轴最多 20 个节点' }); return }; this._nodeListScrollTop = this._scrollTop || 0; this.setData({ nodeDetail: true, styleDetail: false, nodeIndex: this.data.draft.nodes.length }); this.edit(draft => draft.nodes.push(createTimelineNode())); this.setEditorScrollTop(0) },
+    handleAddNode() { if (!this.active() || this._drag) return; if (this.data.draft.nodes.length >= 20) { this.setData({ error: '时间轴最多 20 个节点' }); return }; this._nodeListScrollTop = this._scrollTop || 0; this.setData({ nodeDetail: true, styleDetail: false, animateNodes: true, nodeIndex: this.data.draft.nodes.length }); this.edit(draft => draft.nodes.push(createTimelineNode())); this.setEditorScrollTop(0) },
     /** 列表删除按稳定身份定位，避免删掉当前编辑的另一个节点。 */
     handleRemoveNode(event) {
       if (!this.active() || this._drag) return
@@ -140,7 +146,7 @@ Component({
       this.edit(draft => {
         draft.nodes.splice(index, 1)
         const selectedIndex = draft.nodes.findIndex(node => node.nodeKey === selectedKey)
-        this.setData({ nodeIndex: selectedIndex < 0 ? Math.min(index, draft.nodes.length - 1) : selectedIndex, nodeDetail: false, styleDetail: false })
+        this.setData({ nodeIndex: selectedIndex < 0 ? Math.min(index, draft.nodes.length - 1) : selectedIndex, nodeDetail: false, styleDetail: false, animateNodes: returnToList })
       })
       if (returnToList) this.setEditorScrollTop(this._nodeListScrollTop)
     },
@@ -218,7 +224,7 @@ Component({
       const target = scope === 'node' ? this.data.node : this.data.draft
       this._textStyleSnapshot = { scope, nodeKey: target.nodeKey, scrollTop: this._scrollTop || 0,
         present: Object.prototype.hasOwnProperty.call(target, 'textStyles'), textStyles: clone(target.textStyles || {}) }
-      this.setData({ styleDetail: true, styleScope: scope, styleRole: role, error: '' })
+      this.setData({ styleDetail: true, animateNodes: false, styleScope: scope, styleRole: role, error: '' })
       this.refresh(this.data.draft)
       this.setEditorScrollTop(0)
     },
@@ -251,7 +257,7 @@ Component({
     },
     finishTextStyle(draft, scrollTop) {
       this._textStyleSnapshot = null
-      this.setData({ styleDetail: false, error: validateTimeline(draft, { allowIncomplete: true }) })
+      this.setData({ styleDetail: false, animateNodes: false, error: validateTimeline(draft, { allowIncomplete: true }) })
       this.refresh(draft)
       this.setEditorScrollTop(scrollTop)
     },

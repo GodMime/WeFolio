@@ -5,6 +5,7 @@
     "mock-text-color-editor": "/components/mock/text-color-editor/text-color-editor",
     "mock-structured-text-editor": "/components/mock/structured-text-editor/structured-text-editor",
     "mock-text-grid-editor": "/components/mock/text-grid-editor/text-grid-editor",
+    "mock-timeline-editor": "/components/mock/timeline-editor/timeline-editor",
     "mock-text-background-editor": "/components/mock/text-background-editor/text-background-editor",
     "mock-contact-info-editor": "/components/mock/contact-info-editor/contact-info-editor",
     "mock-hyperlink-editor": "/components/mock/hyperlink-editor/hyperlink-editor",

@@ -36,6 +36,26 @@ function collectMockFontNodes(config) {
   return nodes
 }
 
+/** 时间轴文字继承角色样式，按实际内容及字重加载；空的样式选择仍由版本收集保留。 */
+function collectMockFontDemands(config) {
+  const nodes = []
+  function visit(value) {
+    if (!value || typeof value !== 'object') return
+    if (value.componentType === 'TIMELINE') {
+      const timeline = require('./mock-portfolio-timeline')
+      const candidate = value.config || {}
+      if (!timeline.validateTimeline(candidate, { allowIncomplete: true })) {
+        nodes.push(...timeline.timelineFontDemands(candidate))
+      }
+      return
+    }
+    if (typeof value.fontId === 'string' && value.fontId) nodes.push(value)
+    Object.entries(value).forEach(([key, child]) => { if (key !== 'fonts') visit(child) })
+  }
+  visit(config)
+  return nodes
+}
+
 /** 一个页面一份实例，失败也保留尝试记录，卸载后的回调不再更新页面。 */
 function createMockFontSession({wxApi, catalog = DEFAULT_CATALOG, onChange = () => {}} = {}) {
   const states = new Map()
@@ -108,7 +128,7 @@ function createMockFontSession({wxApi, catalog = DEFAULT_CATALOG, onChange = () 
   function load(config) {
     if (!alive || !supported) return Promise.resolve()
     const pending = []
-    collectMockFontNodes(config).forEach(node => {
+    collectMockFontDemands(config).forEach(node => {
       const font = find(node.fontId)
       const version = config.fonts && config.fonts[node.fontId]
       if (!valid(font) || !version || version.fontVersion !== font.fontVersion) return
@@ -144,4 +164,4 @@ function createMockFontSession({wxApi, catalog = DEFAULT_CATALOG, onChange = () 
     states.clear()
   }}
 }
-module.exports = {createMockFontSession,collectMockFontNodes}
+module.exports = {createMockFontSession,collectMockFontNodes,collectMockFontDemands}

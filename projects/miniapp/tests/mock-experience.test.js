@@ -566,7 +566,7 @@ test('mock portfolio edit page mirrors production component orchestration intera
   assert.match(wxml, /class="component-row[\s\S]*catchtap="handleComponentTap"/)
   assert.match(wxml, /class="component-picker-mask pe-sheet-mask \{\{componentSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}"/)
   assert.match(wxml, /wx:for="\{\{componentOptions\}\}"[\s\S]*data-type="\{\{item\.componentType\}\}"[\s\S]*handleSelectComponent/)
-  assert.match(wxml, /class="mock-component-edit-mask component-work-picker-mask pe-sheet-mask \{\{componentEditSheetVisible \? 'pe-sheet-mask-visible' : ''\}\}"/)
+  assert.match(wxml, /class="mock-component-edit-mask component-work-picker-mask pe-sheet-mask \{\{componentEditSheetVisible && selectedComponentType !== 'TIMELINE' \? 'pe-sheet-mask-visible' : ''\}\}"/)
   assert.match(wxml, /class="mock-component-edit-panel component-work-picker-panel pe-sheet-panel pe-sheet-size-long/)
   assert.match(wxml, /handleCloseComponentEditSheet/)
   assert.match(wxml, /handleConfirmComponentEditSheet/)
@@ -616,30 +616,31 @@ test('mock dark portfolio display tags use theme variables', () => {
 test('mock portfolio draft helpers add, remove, and reorder components locally', () => {
   const mock = loadMockExperience()
   const original = mock.clone(mock.MOCK_STANDARD_PORTFOLIO)
+  const originalCount = original.config.components.length
   const added = mock.addMockComponent(original, mock.COMPONENT_TYPES.CAROUSEL)
   const addedComponent = added.config.components[added.config.components.length - 1]
 
-  assert.equal(original.config.components.length, 10)
-  assert.equal(added.config.components.length, 11)
+  assert.equal(original.config.components.length, originalCount)
+  assert.equal(added.config.components.length, originalCount + 1)
   assert.equal(addedComponent.componentType, mock.COMPONENT_TYPES.CAROUSEL)
-  assert.equal(addedComponent.sortOrder, 11000)
+  assert.equal(addedComponent.sortOrder, (originalCount + 1) * 1000)
   assert.deepEqual(mock.getWorkIdsFromComponent(addedComponent), [101, 102, 103])
   assert.equal(
     new Set(added.config.components.map((component) => component.componentKey)).size,
     added.config.components.length
   )
-  assert.equal(added.renderData.components.length, 11)
+  assert.equal(added.renderData.components.length, originalCount + 1)
 
-  const reordered = mock.reorderMockComponent(added, 10, 0)
+  const reordered = mock.reorderMockComponent(added, originalCount, 0)
   assert.equal(reordered.config.components[0].componentKey, addedComponent.componentKey)
   assert.deepEqual(
     reordered.config.components.map((component) => component.sortOrder),
-    Array.from({ length: 11 }, (_, index) => (index + 1) * 1000)
+    Array.from({ length: originalCount + 1 }, (_, index) => (index + 1) * 1000)
   )
   assert.equal(reordered.renderData.components[0].componentKey, addedComponent.componentKey)
 
   const removed = mock.removeMockComponent(reordered, addedComponent.componentKey)
-  assert.equal(removed.config.components.length, 10)
+  assert.equal(removed.config.components.length, originalCount)
   assert.equal(
     removed.config.components.some((component) => component.componentKey === addedComponent.componentKey),
     false
@@ -650,7 +651,7 @@ test('mock portfolio draft helpers add, remove, and reorder components locally',
   )
 })
 
-test('mock portfolio add component sheet preserves the original component catalog without timeline', () => {
+test('mock portfolio add component sheet includes the same timeline catalog as production', () => {
   const mock = loadMockExperience()
   const expectedTypes = [
     'CAROUSEL',
@@ -667,7 +668,8 @@ test('mock portfolio add component sheet preserves the original component catalo
     'STRUCTURED_TEXT_SECTION',
     'TEXT_GRID',
     'CONTACT_INFO',
-    'HYPERLINK'
+    'HYPERLINK',
+    'TIMELINE'
   ]
 
   assert.deepEqual(
@@ -681,8 +683,8 @@ test('mock portfolio add component sheet preserves the original component catalo
     return match[2]
   })
   assert.equal(formalTypes.length, 16)
-  assert.equal(mock.MOCK_COMPONENT_OPTIONS.some(item => item.componentType === 'TIMELINE'), false)
-  assert.deepEqual([...expectedTypes].sort(), formalTypes.filter(type => type !== 'TIMELINE').sort())
+  assert.equal(mock.MOCK_COMPONENT_OPTIONS.some(item => item.componentType === 'TIMELINE'), true)
+  assert.deepEqual([...expectedTypes].sort(), formalTypes.sort())
   expectedTypes.forEach((componentType) => {
     assert.equal(mock.COMPONENT_TYPES[componentType], componentType)
     const added = mock.addMockComponent(mock.MOCK_STANDARD_PORTFOLIO, componentType)
@@ -848,7 +850,7 @@ test('mock singular work editor and preview expose title switch, width-fix image
 test('mock standard portfolio renders complete component json in fixed order', () => {
   const mock = loadMockExperience()
   const portfolio = mock.MOCK_STANDARD_PORTFOLIO
-  const expectedOrder = ['CAROUSEL', 'PROFILE', 'SCHEDULE_QUERY', 'CONTACT_FORM', 'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'DIVIDER', 'CONTACT_INFO', 'QR_CONTACT']
+  const expectedOrder = ['CAROUSEL', 'PROFILE', 'SCHEDULE_QUERY', 'CONTACT_FORM', 'TEXT_SECTION', 'STRUCTURED_TEXT_SECTION', 'TEXT_GRID', 'TIMELINE', 'DIVIDER', 'CONTACT_INFO', 'QR_CONTACT']
   const expectedWorkOrder = ['VIDEO_CAROUSEL', 'SINGLE_WORK', 'WORK_LIST', 'HYPERLINK', 'WORK_GRID']
 
   assert.deepEqual(
